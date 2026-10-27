@@ -3,7 +3,7 @@
 > **An Autonomous Knowledge Game & Workspace Powered by Meta AI**  
 > *Meta Global AI Developer Hackathon (Indie Developer Track)*
 
-[![CI Status](https://img.shields.io/badge/CI-passing-22c55e?style=flat-square)](https://github.com/0Pxyz/meta-hackathon-indie)
+[![CI Status](https://img.shields.io/badge/CI-passing-22c55e?style=flat-square)](https://github.com/0Pxyz/polymax)
 [![Meta Model API](https://img.shields.io/badge/Meta_Model_API-muse--spark--1.3-blue?style=flat-square)](https://dev.meta.ai/docs)
 [![Docker](https://img.shields.io/badge/Docker-compose_ready-2496ed?style=flat-square)](docker-compose.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -57,8 +57,8 @@ The fastest way to experience Polymax with zero local tool dependencies:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/0Pxyz/meta-hackathon-indie.git
-cd meta-hackathon-indie
+git clone https://github.com/0Pxyz/polymax.git
+cd polymax
 
 # 2. Configure environment variables
 cp .env.example .env
@@ -81,8 +81,8 @@ For local development or when using native workspace access:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/0Pxyz/meta-hackathon-indie.git
-cd meta-hackathon-indie
+git clone https://github.com/0Pxyz/polymax.git
+cd polymax
 
 # 2. Install dependencies
 bun install
