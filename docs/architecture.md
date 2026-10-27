@@ -126,39 +126,36 @@ The Muse agent does not operate blind. It can inspect active tabs, read their op
 
 ---
 
-## 4. TinyFish Web Discovery & City Feeds
+## 4. TinyFish Web Discovery, Research Skill & City Feeds
 
-When a user discovers or enters a city, Polymax initiates automated web discovery powered by TinyFish:
+When a user discovers or enters a city—or prompts the agent to explore a topic—Polymax initiates autonomous web research powered by TinyFish (following the [TinyFish for Coding Agents Guide](https://docs.tinyfish.ai/for-coding-agents)):
 
 ```
-[City Entered] ──> TinyFish Search API ──> Filter Top 5-10 URLs ──> TinyFish Fetch (Markdown) 
-                       │                                                    │
-                       v                                                    v
-                 Cached in SQLite                                    Parsed by Muse Agent
-                                                                            │
-                                                                            v
-                                                       workspace/<city>/feed.json & sources/
+[City Entered / Prompt] ──> Muse Agent activates web-research skill
+                                       │
+                                       v
+                               TinyFish Search API (1-3s) ──> Top 5-10 URLs (papers, videos, guides)
+                                       │
+                                       v
+                               TinyFish Batch Fetch (1-20s) ──> Chromium Clean Markdown
+                                       │
+                                       v
+                       Muse Agent parses & curates structured items
+                                       │
+           ┌───────────────────────────┴───────────────────────────┐
+           v                                                       v
+  workspace/<city>/feed.json                              workspace/<city>/sources/*.json
+           │
+           v
+  Agentic Dock "Feed Tab"
+  - Interactive cards with badges (Paper, Video, Guide)
+  - One-click "Open in Browser", "Open in Papers", "Add to Quest"
 ```
 
-- **Search:** `GET https://api.search.tinyfish.ai` targeting `web`, `news`, or `research_paper`.
-- **Fetch:** `POST https://api.fetch.tinyfish.ai` (up to 10 URLs batched, format: markdown).
-- **City Feed Generation:** Muse synthesizes incoming sources into a structured feed:
-  ```json
-  {
-    "cityId": "distributed-systems",
-    "updatedAt": "2026-10-27T22:00:00Z",
-    "items": [
-      {
-        "id": "feed-1",
-        "title": "Raft Consensus Algorithm Explained",
-        "url": "https://raft.github.io/",
-        "kind": "article",
-        "summary": "Visual guide to consensus in fault-tolerant clusters.",
-        "difficulty": "intermediate"
-      }
-    ]
-  }
-  ```
+- **Search:** `GET https://api.search.tinyfish.ai` targeting `web`, `news`, or `research_paper` (1–3s latency).
+- **Fetch:** `POST https://api.fetch.tinyfish.ai` (up to 10 URLs batched, format: markdown via Chromium render, 1–20s latency).
+- **Agent Skill (`web-research.md`):** Muse knows when to search, how to select authoritative primary sources, and how to structure them into learning paths.
+- **The Feed Tab Plugin:** A first-class Dock plugin that renders the curated content cards directly into the viewport, allowing users to launch the Browser or study papers with a single click.
 - **Untrusted Content Guard:** Web fetched content is treated as untrusted data, capped at 16KB per page, and strictly insulated from system execution.
 
 ---
