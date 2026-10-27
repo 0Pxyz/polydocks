@@ -1,13 +1,23 @@
 {
-  "name": "vite-scaffold",
+  "name": "polymax",
+  "version": "0.1.0",
+  "description": "The Agentic Dock for Polymaths - Autonomous Knowledge Game & Workspace",
   "private": true,
-  "version": "0.0.0",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -p '[{name}]' -n 'web,server' -c 'cyan,yellow' \"bun run dev:web\" \"bun run dev:server\"",
+    "dev:web": "vite",
+    "dev:server": "bun --watch server/index.ts",
     "build": "tsc -b && vite build",
+    "start": "bun server/index.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "check": "bun run typecheck && bun run lint && bun run build"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -18,7 +28,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "oxlint": "^1.89.0",
+    "concurrently": "^10.0.6",
+    "oxlint": "^1.90.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.5"
   }
