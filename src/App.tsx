@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
-import { AgenticDock } from "@/features/dock/AgenticDock";
+import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { WorldView } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
+import { AgentSheet } from "@/features/agent/AgentSheet";
 import { useThemeStore } from "@/lib/theme";
+import { Sparkles } from "lucide-react";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("theme");
+  const [isAgentSheetOpen, setIsAgentSheetOpen] = useState<boolean>(false);
+  const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>("Neural Networks");
 
   const {
@@ -30,17 +34,27 @@ export default function App() {
     }
   };
 
+  const handleSelectTool = (toolId: string) => {
+    if (toolId === "agent") {
+      setIsAgentSheetOpen((prev) => !prev);
+      return;
+    }
+    setActiveToolId(toolId);
+  };
+
   useEffect(() => {
-    if (activeToolId === "theme") {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === "Escape") {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isAgentSheetOpen) {
+          setIsAgentSheetOpen(false);
+        } else if (activeToolId === "theme") {
           handleDismissTool("theme");
         }
-      };
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [activeToolId]);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isAgentSheetOpen, activeToolId]);
 
   return (
     <AppProviders>
@@ -80,7 +94,34 @@ export default function App() {
           {/* Pinned Agentic Dock at the top edge of the screen */}
           <AgenticDock
             activeToolId={activeToolId}
-            onSelectTool={(toolId) => setActiveToolId(toolId)}
+            isAgentSheetOpen={isAgentSheetOpen}
+            extraTools={extraTools}
+            onSelectTool={handleSelectTool}
+          />
+
+          {/* Agent Conversation Sheet (Anchored at bottom, expandable to full screen) */}
+          <AgentSheet
+            isOpen={isAgentSheetOpen}
+            onClose={() => setIsAgentSheetOpen(false)}
+            cityId={selectedCity}
+            onExperienceCreated={(exp) => {
+              setExtraTools((prev) => {
+                if (prev.some((t) => t.id === exp.id)) return prev;
+                return [
+                  ...prev,
+                  {
+                    id: exp.id,
+                    label: exp.title,
+                    type: "icon",
+                    icon: Sparkles,
+                  },
+                ];
+              });
+            }}
+            onOpenExperience={(expId) => {
+              setActiveToolId(expId);
+              setIsAgentSheetOpen(false);
+            }}
           />
 
           {/* Main Active Workspace Content (rendered clear of the dock via DockSurface) */}
@@ -114,7 +155,8 @@ export default function App() {
             )}
             {activeToolId !== "theme" &&
               activeToolId !== "world" &&
-              activeToolId !== "city" && (
+              activeToolId !== "city" &&
+              activeToolId !== "agent" && (
                 <DockSurface>
                   <div className="w-full max-w-2xl mx-auto py-16 text-center space-y-4">
                     <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card border border-border/80 text-[var(--accent-lime)] shadow-[0_0_20px_rgba(200,255,87,0.15)] font-mono text-xl font-bold">
