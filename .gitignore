@@ -68,3 +68,10 @@ pnpm-debug.log*
 .gemini/
 .maestri/
 .system_generated/
+
+# Runtime SQLite & Data Directory
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
