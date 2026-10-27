@@ -127,6 +127,17 @@ export default {
 };
 
 if (import.meta.main) {
+  if (
+    !config.MODEL_API_KEY ||
+    config.MODEL_API_KEY.trim().length === 0 ||
+    config.MODEL_API_KEY === "dummy-meta-key-unconfigured" ||
+    config.MODEL_API_KEY.includes("placeholder")
+  ) {
+    console.warn(
+      "[Polymax Server] Warning: MODEL_API_KEY is not configured or uses a placeholder. Upstream agent calls will return model_unauthorized."
+    );
+  }
+
   console.log(
     `[Polymax Server] Running on http://localhost:${config.PORT} (env: ${config.NODE_ENV})`
   );

@@ -63,6 +63,7 @@ export type UIEvent =
   | {
       type: "agent.error";
       step: number;
+      code?: string;
       message: string;
     };
 
@@ -203,7 +204,11 @@ export function adaptBackendEvent(raw: {
       return {
         type: "agent.error",
         step,
-        message: String(payload.message || "An unexpected error occurred."),
+        code: payload.code ? String(payload.code) : undefined,
+        message:
+          payload.code === "model_unauthorized"
+            ? "Model access isn't set up. Check your API key."
+            : String(payload.message || "An unexpected error occurred."),
       };
 
     default:
