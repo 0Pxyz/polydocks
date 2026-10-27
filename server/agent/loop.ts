@@ -3,6 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
+import { loadSkill, isTabSynthesisIntent } from "./skills";
 
 export interface AgentStepEvent {
   step: number;
@@ -86,13 +87,38 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       };
     });
 
+    // Context-aware dynamic skill injection
+    let activeSystemPrompt = systemPrompt;
+
+    if (isTabSynthesisIntent(prompt)) {
+      try {
+        const tabSkillPrompt = await loadSkill("create-tab");
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Dynamic Tab Synthesis\n${tabSkillPrompt}`;
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    if (
+      prompt.toLowerCase().includes("research") ||
+      prompt.toLowerCase().includes("find paper") ||
+      prompt.toLowerCase().includes("feed")
+    ) {
+      try {
+        const researchSkillPrompt = await loadSkill("web-research");
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Discovery\n${researchSkillPrompt}`;
+      } catch {
+        // Non-fatal
+      }
+    }
+
     // Initialize conversation messages
     const messages: any[] = [
       {
         role: "system",
         content: cityId
-          ? `${systemPrompt}\nActive City Workspace: ${cityId}`
-          : systemPrompt,
+          ? `${activeSystemPrompt}\nActive City Workspace: ${cityId}`
+          : activeSystemPrompt,
       },
       ...history,
       {
