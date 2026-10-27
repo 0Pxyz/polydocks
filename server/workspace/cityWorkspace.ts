@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { db } from "./db";
 
 /**
  * Resolves a target path safely inside the specified city workspace.
@@ -125,3 +126,102 @@ export async function deleteCityFile(cityId: string, relativePath: string): Prom
   const safePath = await resolveSafeCityPath(cityId, relativePath);
   await fs.unlink(safePath);
 }
+
+export interface OpenSourceItem {
+  title?: string;
+  url: string;
+  kind?: string;
+  openedAt: string;
+  questId?: string;
+}
+
+export interface WorkspaceState {
+  activeTab?: string;
+  currentURL?: string;
+  openSources?: OpenSourceItem[];
+  activeQuestId?: string;
+  lastIntent?: {
+    tabId: string;
+    url?: string;
+    payload?: Record<string, unknown>;
+    timestamp: string;
+  };
+  pinnedTabs?: string[];
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Retrieves the persisted workspace.json state of a city.
+ */
+export async function getWorkspaceState(cityId: string): Promise<WorkspaceState> {
+  try {
+    const raw = await readCityFile(cityId, "workspace.json");
+    return JSON.parse(raw) as WorkspaceState;
+  } catch {
+    return {
+      activeTab: "browser",
+      openSources: [],
+    };
+  }
+}
+
+/**
+ * Updates the persisted workspace.json state of a city.
+ */
+export async function updateWorkspaceState(
+  cityId: string,
+  updates: Partial<WorkspaceState>
+): Promise<WorkspaceState> {
+  const current = await getWorkspaceState(cityId);
+  const updated: WorkspaceState = {
+    ...current,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (updates.openSources) {
+    const mergedMap = new Map<string, OpenSourceItem>();
+    for (const src of current.openSources || []) {
+      mergedMap.set(src.url, src);
+    }
+    for (const src of updates.openSources) {
+      mergedMap.set(src.url, src);
+    }
+    updated.openSources = Array.from(mergedMap.values());
+  }
+
+  await writeCityFile(cityId, "workspace.json", JSON.stringify(updated, null, 2));
+  return updated;
+}
+
+/**
+ * Appends an entry to both the SQLite audit trail and the file-based audit log.
+ */
+export async function appendAuditLog(
+  cityId: string,
+  action: string,
+  details: Record<string, unknown>
+): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const serialized = JSON.stringify(details);
+
+  try {
+    const stmt = db.prepare(
+      "INSERT INTO audit_log (city_id, action, details, created_at) VALUES (?, ?, ?, ?)"
+    );
+    stmt.run(cityId, action, serialized, timestamp);
+  } catch {
+    // Non-fatal if DB write encounters issues
+  }
+
+  try {
+    const workspaceRoot = path.resolve(process.cwd(), "workspace");
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    const logLine = `[${timestamp}] [city:${cityId}] [${action}] ${serialized}\n`;
+    await fs.appendFile(path.join(workspaceRoot, ".audit.log"), logLine, "utf-8");
+  } catch {
+    // Non-fatal
+  }
+}
+

@@ -43,6 +43,8 @@ export interface AgentLoopResult {
 const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Dock Agent, powered by Meta Muse Spark.
 Polymax is an Agentic Dock workspace and knowledge game for mastery.
 The Dock is the user's persistent control surface: Browser, Notes, Papers, Files, Terminal, and dynamically synthesized tools.
+- When opening or directing tabs to study or work content, call open_intent to prime the tab (e.g., Browser with a tutorial/paper URL, Notes with a target markdown file, attaching active quest XP).
+- Inspect active tab and workspace state at any time using inspect_tab.
 - When creating tools, synthesize self-contained HTML/CSS/JS micro-apps adhering to dark theme tokens (#0A0A0C, #C8FF57, Inter/Syne).
 - In a city workspace, knowledge files live in workspace/<city>/ (notes, sources, feed.json).
 - Pedagogical autonomy: Guide, question, and surface authoritative primary sources; never rob the user of learning.
@@ -256,10 +258,18 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
-        if (toolName === "open_tab" && toolOutput && typeof toolOutput === "object") {
+        if ((toolName === "open_tab" || toolName === "open_intent") && toolOutput && typeof toolOutput === "object") {
           await onEvent({
             step: currentStep,
             type: "tray.open",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        if (toolName === "open_intent" && toolOutput && typeof toolOutput === "object") {
+          await onEvent({
+            step: currentStep,
+            type: "tab.prime",
             payload: toolOutput as Record<string, unknown>,
           });
         }
