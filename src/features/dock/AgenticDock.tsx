@@ -208,15 +208,11 @@ export function AgenticDock({
                   !isActive &&
                     "text-[#9aa5b8] hover:text-white hover:bg-white/[0.08] hover:-translate-y-0.5",
                   isActive &&
-                    isAgent &&
-                    "bg-[#1d68fe] text-white shadow-[0_0_18px_rgba(29,104,254,0.6),0_2px_6px_rgba(0,0,0,0.4)]",
+                    "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/40 shadow-[0_0_12px_rgba(200,255,87,0.25)]",
                   !isActive &&
                     isAgent &&
                     isAgentWorking &&
-                    "text-[var(--accent-lime)] animate-pulse shadow-[0_0_12px_rgba(200,255,87,0.4)]",
-                  isActive &&
-                    !isAgent &&
-                    "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/40 shadow-[0_0_12px_rgba(200,255,87,0.25)]"
+                    "text-[var(--accent-lime)] animate-pulse shadow-[0_0_12px_rgba(200,255,87,0.4)]"
                 )}
                 aria-label={tool.label}
               >
