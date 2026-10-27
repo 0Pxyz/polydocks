@@ -7,3 +7,4 @@
 | 2026-10-27 | Design tokens, Appearance frameless customizer, and wallpaper system | [#10](https://github.com/0Pxyz/polymax/pull/10) |
 | 2026-10-27 | Agent skills: dynamic UI synthesis skill (create-tab) with Flashcards and Comparator | [#23](https://github.com/0Pxyz/polymax/pull/23) |
 | 2026-10-27 | Agent Conversation Sheet, Orb, Web Speech & SSE tool execution loop | [#24](https://github.com/0Pxyz/polymax/pull/24) |
+| 2026-10-27 | Immersive full-screen chat, side-by-side dock layout, and 401 resolution | [#27](https://github.com/0Pxyz/polymax/pull/27) |
