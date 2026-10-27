@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
+import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 
 export interface AgentStepEvent {
@@ -54,7 +55,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     prompt,
     cityId,
     history = [],
-    tools = [],
+    tools = defaultTools,
     onEvent = () => {},
     maxSteps = config.MAX_STEPS,
     llmClient = llm,
