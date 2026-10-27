@@ -17,7 +17,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
-    "check": "bun run typecheck && bun run lint && bun run build"
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",
