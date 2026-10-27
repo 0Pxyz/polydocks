@@ -547,7 +547,7 @@ export function ThemeCustomizerView() {
                   min={5}
                   max={80}
                   step={5}
-                  onValueChange={(vals) => setWallpaperOpacity(vals[0] / 100)}
+                  onValueChange={(vals: number[]) => setWallpaperOpacity(vals[0] / 100)}
                   className="flex-1 cursor-pointer"
                 />
               </div>
@@ -562,7 +562,7 @@ export function ThemeCustomizerView() {
                   min={0}
                   max={16}
                   step={1}
-                  onValueChange={(vals) => setWallpaperBlur(vals[0])}
+                  onValueChange={(vals: number[]) => setWallpaperBlur(vals[0])}
                   className="flex-1 cursor-pointer"
                 />
               </div>
