@@ -1,4 +1,4 @@
-import { useState, useRef, type KeyboardEvent, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
 import { RotateCcw, Plus, Check, Ban, Upload } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { THEMES, useThemeStore } from "@/lib/theme";
@@ -49,7 +49,31 @@ export const PRESET_WALLPAPERS = [
   },
 ];
 
-export function ThemeCustomizerView() {
+interface ThemeCustomizerViewProps {
+  onDismiss?: () => void;
+}
+
+export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!onDismiss) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        // Only dismiss if click is not inside the dock
+        const dockEl = document.querySelector("header");
+        if (dockEl && dockEl.contains(e.target as Node)) {
+          return;
+        }
+        onDismiss();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onDismiss]);
   const {
     theme,
     customAccentColor,
@@ -153,6 +177,7 @@ export function ThemeCustomizerView() {
   return (
     <TooltipProvider delayDuration={150}>
       <div
+        ref={containerRef}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);

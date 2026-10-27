@@ -93,10 +93,11 @@ export function AgenticDock({
   const activeToolId = controlledActiveToolId ?? internalActiveToolId;
 
   const handleToolClick = (toolId: string) => {
+    const nextToolId = activeToolId === toolId ? "" : toolId;
     if (controlledActiveToolId === undefined) {
-      setInternalActiveToolId(toolId);
+      setInternalActiveToolId(nextToolId);
     }
-    onSelectTool?.(toolId);
+    onSelectTool?.(nextToolId);
   };
 
   return (
@@ -151,6 +152,7 @@ export function AgenticDock({
               <button
                 key={tool.id}
                 type="button"
+                data-dock-tool-id={tool.id}
                 onClick={() => handleToolClick(tool.id)}
                 className={cn(
                   "group relative w-11 h-[38px] flex items-center justify-center rounded-[10px] transition-all duration-200 cursor-pointer",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock } from "@/features/dock/AgenticDock";
@@ -17,6 +17,29 @@ export default function App() {
     wallpaperOpacity,
     wallpaperBlur,
   } = useThemeStore();
+
+  const handleDismissTool = (toolIdToDismiss?: string) => {
+    const targetTool = toolIdToDismiss ?? activeToolId;
+    setActiveToolId("");
+    if (targetTool) {
+      const dockBtn = document.querySelector<HTMLButtonElement>(
+        `[data-dock-tool-id="${targetTool}"]`
+      );
+      dockBtn?.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (activeToolId === "theme") {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          handleDismissTool("theme");
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [activeToolId]);
 
   return (
     <AppProviders>
@@ -60,8 +83,10 @@ export default function App() {
           />
 
           {/* Main Active Workspace Content (rendered under the top dock HUD) */}
-          <main className="relative z-10 pt-28 pb-12 min-h-screen flex flex-col items-center">
-            {activeToolId === "theme" && <ThemeCustomizerView />}
+          <main className="relative z-10 pt-24 pb-12 min-h-screen flex flex-col items-center">
+            {activeToolId === "theme" && (
+              <ThemeCustomizerView onDismiss={() => handleDismissTool("theme")} />
+            )}
             {activeToolId === "world" && (
               <div className="w-full max-w-5xl px-4">
                 <WorldView
