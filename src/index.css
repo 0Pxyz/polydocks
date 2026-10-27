@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./styles/tokens.css";
 
 @theme {
   --font-display: "Syne Variable", sans-serif;
@@ -30,29 +31,6 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-}
-
-:root {
-  --background: #0a0a0c;
-  --foreground: #f1f3f9;
-  --card: #12151d;
-  --card-foreground: #f1f3f9;
-  --popover: #12151d;
-  --popover-foreground: #f1f3f9;
-  --primary: #c8ff57;
-  --primary-foreground: #0a0a0c;
-  --secondary: #1a1f2c;
-  --secondary-foreground: #f1f3f9;
-  --muted: #1e2433;
-  --muted-foreground: #8b95a8;
-  --accent: #c8ff57;
-  --accent-foreground: #0a0a0c;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #222938;
-  --input: #222938;
-  --ring: #c8ff57;
-  --radius: 0.5rem;
 }
 
 body {

@@ -1,0 +1,141 @@
+/* ==============================================================================
+   Polymax Design Tokens & Theme Palettes
+   Dark-only system with swappable accent and surface schemes
+   ============================================================================== */
+
+:root,
+[data-theme="void"] {
+  --bg-void: #0a0a0c;
+  --bg-surface: #12151d;
+  --bg-card: #161a24;
+  --border-subtle: #222938;
+  --border-hover: #2e374d;
+  --accent-lime: #c8ff57;
+  --text-main: #f1f3f9;
+  --text-muted: #8b95a8;
+  --text-dim: #545f75;
+
+  /* shadcn semantic tokens */
+  --background: var(--bg-void);
+  --foreground: var(--text-main);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-main);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-main);
+  --primary: var(--accent-lime);
+  --primary-foreground: #0a0a0c;
+  --secondary: #1a1f2c;
+  --secondary-foreground: var(--text-main);
+  --muted: #1e2433;
+  --muted-foreground: var(--text-muted);
+  --accent: var(--accent-lime);
+  --accent-foreground: #0a0a0c;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--accent-lime);
+  --radius: 0.5rem;
+}
+
+[data-theme="cyber"] {
+  --bg-void: #060912;
+  --bg-surface: #0e1424;
+  --bg-card: #131b30;
+  --border-subtle: #1c2742;
+  --border-hover: #29385c;
+  --accent-lime: #00e5ff;
+  --text-main: #f0f6fc;
+  --text-muted: #8394b0;
+  --text-dim: #4d5c78;
+
+  /* shadcn semantic tokens */
+  --background: var(--bg-void);
+  --foreground: var(--text-main);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-main);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-main);
+  --primary: var(--accent-lime);
+  --primary-foreground: #060912;
+  --secondary: #141e33;
+  --secondary-foreground: var(--text-main);
+  --muted: #18233b;
+  --muted-foreground: var(--text-muted);
+  --accent: var(--accent-lime);
+  --accent-foreground: #060912;
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--accent-lime);
+  --radius: 0.5rem;
+}
+
+[data-theme="amber"] {
+  --bg-void: #0d0a07;
+  --bg-surface: #17130e;
+  --bg-card: #201a14;
+  --border-subtle: #2d241c;
+  --border-hover: #3e3226;
+  --accent-lime: #f59e0b;
+  --text-main: #faf5ee;
+  --text-muted: #9e9182;
+  --text-dim: #635748;
+
+  /* shadcn semantic tokens */
+  --background: var(--bg-void);
+  --foreground: var(--text-main);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-main);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-main);
+  --primary: var(--accent-lime);
+  --primary-foreground: #0d0a07;
+  --secondary: #221c15;
+  --secondary-foreground: var(--text-main);
+  --muted: #272018;
+  --muted-foreground: var(--text-muted);
+  --accent: var(--accent-lime);
+  --accent-foreground: #0d0a07;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--accent-lime);
+  --radius: 0.5rem;
+}
+
+[data-theme="amethyst"] {
+  --bg-void: #0a0712;
+  --bg-surface: #140e24;
+  --bg-card: #1a1330;
+  --border-subtle: #261c42;
+  --border-hover: #37295e;
+  --accent-lime: #b388ff;
+  --text-main: #f5f2fa;
+  --text-muted: #948aa3;
+  --text-dim: #5c526b;
+
+  /* shadcn semantic tokens */
+  --background: var(--bg-void);
+  --foreground: var(--text-main);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-main);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--text-main);
+  --primary: var(--accent-lime);
+  --primary-foreground: #0a0712;
+  --secondary: #1d1533;
+  --secondary-foreground: var(--text-main);
+  --muted: #22193d;
+  --muted-foreground: var(--text-muted);
+  --accent: var(--accent-lime);
+  --accent-foreground: #0a0712;
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+  --border: var(--border-subtle);
+  --input: var(--border-subtle);
+  --ring: var(--accent-lime);
+  --radius: 0.5rem;
+}
