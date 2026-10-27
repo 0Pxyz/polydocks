@@ -1,15 +1,48 @@
+import { useState } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock } from "@/features/dock/AgenticDock";
+import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
+import { WorldView } from "@/features/views/WorldView";
+import { CityView } from "@/features/views/CityView";
+import { useThemeStore } from "@/lib/theme";
 
 export default function App() {
+  const [activeToolId, setActiveToolId] = useState<string>("theme");
+  const [selectedCity, setSelectedCity] = useState<string>("Neural Networks");
+
+  const {
+    wallpaperUrl,
+    wallpaperFit,
+    wallpaperOpacity,
+    wallpaperBlur,
+  } = useThemeStore();
+
   return (
     <AppProviders>
       <RootLayout>
-        <div className="relative min-h-screen w-full bg-background text-foreground overflow-hidden select-none">
-          {/* Subtle ambient glow & grid pattern */}
+        <div className="relative min-h-screen w-full bg-background text-foreground overflow-x-hidden select-none">
+          {/* Custom Wallpaper Layer (Image / GIF) */}
+          {wallpaperUrl && (
+            <div
+              className="pointer-events-none fixed inset-0 z-0 transition-all duration-300"
+              style={{
+                backgroundImage: `url(${wallpaperUrl})`,
+                backgroundSize:
+                  wallpaperFit === "tile" ? "auto" : wallpaperFit,
+                backgroundRepeat:
+                  wallpaperFit === "tile" ? "repeat" : "no-repeat",
+                backgroundPosition: "center",
+                opacity: wallpaperOpacity,
+                filter:
+                  wallpaperBlur > 0 ? `blur(${wallpaperBlur}px)` : undefined,
+              }}
+            />
+          )}
+
+          {/* Ambient lighting & subtle grid pattern */}
           <div
-            className="pointer-events-none absolute inset-0 opacity-40"
+            className="pointer-events-none fixed inset-0 z-0 opacity-40"
             style={{
               backgroundImage: `
                 radial-gradient(circle at 50% 0%, rgba(200, 255, 87, 0.08) 0%, transparent 60%),
@@ -21,7 +54,57 @@ export default function App() {
           />
 
           {/* Pinned Agentic Dock at the top edge of the screen */}
-          <AgenticDock />
+          <AgenticDock
+            activeToolId={activeToolId}
+            onSelectTool={(toolId) => setActiveToolId(toolId)}
+          />
+
+          {/* Main Active Workspace Content (rendered under the top dock HUD) */}
+          <main className="relative z-10 pt-28 pb-12 min-h-screen flex flex-col items-center">
+            {activeToolId === "theme" && <ThemeCustomizerView />}
+            {activeToolId === "world" && (
+              <div className="w-full max-w-5xl px-4">
+                <WorldView
+                  onEnterCity={(cityName) => {
+                    setSelectedCity(cityName);
+                    setActiveToolId("city");
+                  }}
+                />
+              </div>
+            )}
+            {activeToolId === "city" && (
+              <div className="w-full max-w-5xl px-4">
+                <CityView
+                  cityName={selectedCity}
+                  onBackToWorld={() => setActiveToolId("world")}
+                />
+              </div>
+            )}
+            {activeToolId !== "theme" &&
+              activeToolId !== "world" &&
+              activeToolId !== "city" && (
+                <div className="w-full max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card border border-border/80 text-[var(--accent-lime)] shadow-[0_0_20px_rgba(200,255,87,0.15)] font-mono text-xl font-bold">
+                    {activeToolId === "terminal" ? ">_" : "✦"}
+                  </div>
+                  <h2 className="text-xl font-bold font-display tracking-tight text-foreground capitalize">
+                    {activeToolId} Experience Active
+                  </h2>
+                  <p className="text-sm text-muted-foreground font-sans max-w-md mx-auto">
+                    The agent mounts this tool workspace on demand. You can customize the look and feel or switch tools directly from the dock.
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveToolId("theme")}
+                      className="px-4 py-2 rounded-lg text-xs font-mono border border-[var(--accent-lime)]/40 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/10 transition-colors cursor-pointer"
+                    >
+                      Open Theme & Wallpaper Customizer →
+                    </button>
+                  </div>
+                </div>
+              )}
+          </main>
         </div>
       </RootLayout>
     </AppProviders>
