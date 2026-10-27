@@ -169,24 +169,6 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     (p) => p.url === wallpaperUrl
   );
 
-  // Active status line strings
-  const currentThemeObj = THEMES.find((t) => t.id === theme);
-  const currentAccentName = isCustomAccentActive
-    ? `Custom (${customAccentColor})`
-    : PRESET_ACCENTS.find(
-        (p) =>
-          p.color.toLowerCase() ===
-          (customAccentColor ?? currentThemeObj?.accentColor)?.toLowerCase()
-      )?.label ?? "Default";
-
-  const currentWallpaperName = !wallpaperUrl
-    ? null
-    : PRESET_WALLPAPERS.find((p) => p.url === wallpaperUrl)?.name ?? "Custom";
-
-  const defaultStatusLine = `${currentThemeObj?.name ?? "Theme"} • ${currentAccentName}${
-    currentWallpaperName ? ` • ${currentWallpaperName}` : ""
-  }`;
-
   const containerVariants: Variants = {
     initial: {
       opacity: 0,
@@ -199,7 +181,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
       scale: 1,
       transition: {
         ...spring.soft,
-        staggerChildren: isReduced ? 0 : 0.035, // 35ms unfold stagger
+        staggerChildren: isReduced ? 0 : 0.035,
         delayChildren: 0.01,
       },
     },
@@ -235,25 +217,17 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
       exit="exit"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
-      className="relative flex flex-col items-center justify-center select-none pt-1"
+      className="relative flex flex-col items-center justify-center select-none"
     >
-      {/* Soft radial scrim for legibility without any rectangle or sharp border */}
-      <div
-        className="pointer-events-none absolute -inset-x-24 -inset-y-12 -z-10 opacity-70"
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% 35%, rgba(10, 10, 12, 0.85) 0%, rgba(10, 10, 12, 0.45) 55%, transparent 85%)",
-        }}
-      />
-
-      <div className="flex flex-col items-center gap-3 max-w-md w-full px-2">
-        {/* Row 1: Base Theme Swatches + Reset */}
+      {/* One aligned column: exactly 336px wide with 24px vertical rhythm */}
+      <div className="flex flex-col items-center space-y-6 w-[calc(100vw-32px)] sm:w-[336px] max-w-[336px] mx-auto px-1">
+        {/* Row 1: Base Theme Swatches (40px) + Reset (40px) */}
         <motion.div
           variants={rowVariants}
           ref={themeRowRef}
           role="radiogroup"
           aria-label="Base theme"
-          className="flex items-center justify-center gap-2.5"
+          className="w-full flex items-center justify-between"
         >
           {THEMES.map((item, idx) => {
             const isSelected = theme === item.id;
@@ -272,47 +246,45 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                 onMouseEnter={() => setHoveredLabel(item.name)}
                 onMouseLeave={() => setHoveredLabel(null)}
                 className={cn(
-                  "relative w-8 h-8 rounded-full transition-all duration-150 cursor-pointer overflow-hidden border border-white/20 backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "relative w-10 h-10 rounded-full transition-all duration-150 cursor-pointer overflow-hidden border border-white/20 backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isSelected
                     ? "ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-110 shadow-[0_0_12px_rgba(200,255,87,0.4)]"
                     : "opacity-80 hover:opacity-100 hover:scale-105"
                 )}
                 style={{ backgroundColor: item.bgColor }}
               >
-                {/* Diagonal split accent preview */}
                 <span
                   className="absolute inset-y-0 right-0 w-1/2 opacity-95"
                   style={{ backgroundColor: item.accentColor }}
                 />
                 {isSelected && (
                   <span className="absolute inset-0 flex items-center justify-center">
-                    <Check className="w-3.5 h-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+                    <Check className="w-4 h-4 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
                   </span>
                 )}
               </button>
             );
           })}
 
-          {/* Reset icon button aligned at the end of Row 1 */}
           <button
             type="button"
             onClick={resetTheme}
             aria-label="Reset appearance"
-            onMouseEnter={() => setHoveredLabel("Reset to defaults")}
+            onMouseEnter={() => setHoveredLabel("Reset")}
             onMouseLeave={() => setHoveredLabel(null)}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground border border-white/10 hover:border-white/30 backdrop-blur-md bg-white/[0.03] hover:bg-white/[0.08] transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground border border-white/15 hover:border-white/35 backdrop-blur-md bg-white/[0.04] hover:bg-white/[0.09] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-4 h-4" />
           </button>
         </motion.div>
 
-        {/* Row 2: Accent Color Dots */}
+        {/* Row 2: Accent Color Dots (28px each, spanning full column width) */}
         <motion.div
           variants={rowVariants}
           ref={accentRowRef}
           role="radiogroup"
           aria-label="Accent color"
-          className="flex items-center justify-center gap-2 sm:gap-2.5"
+          className="w-full flex items-center justify-between"
         >
           {PRESET_ACCENTS.map((item, idx) => {
             const isCurrent =
@@ -340,10 +312,10 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                   )
                 }
                 onClick={() => setCustomAccentColor(item.color)}
-                onMouseEnter={() => setHoveredLabel(`Accent: ${item.label}`)}
+                onMouseEnter={() => setHoveredLabel(item.label)}
                 onMouseLeave={() => setHoveredLabel(null)}
                 className={cn(
-                  "w-6 h-6 rounded-full transition-all duration-150 cursor-pointer border border-white/25 backdrop-blur-md shadow-[0_2px_6px_rgba(0,0,0,0.4)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "w-7 h-7 rounded-full transition-all duration-150 cursor-pointer border border-white/25 backdrop-blur-md shadow-[0_2px_6px_rgba(0,0,0,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isCurrent
                     ? "ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-115 shadow-[0_0_10px_rgba(200,255,87,0.5)]"
                     : "opacity-75 hover:opacity-100 hover:scale-110"
@@ -353,7 +325,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
             );
           })}
 
-          {/* Custom color dot + popover */}
+          {/* Custom color dot (28px) */}
           <Popover
             open={isColorPopoverOpen}
             onOpenChange={setIsColorPopoverOpen}
@@ -372,10 +344,10 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                     accentRowRef
                   )
                 }
-                onMouseEnter={() => setHoveredLabel("Custom Accent Color")}
+                onMouseEnter={() => setHoveredLabel("Custom Color")}
                 onMouseLeave={() => setHoveredLabel(null)}
                 className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "w-7 h-7 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isCustomAccentActive
                     ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-115"
                     : "border-dashed border-white/40 opacity-75 hover:opacity-100 hover:scale-110 hover:border-white/70"
@@ -383,12 +355,12 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                 style={{
                   background: isCustomAccentActive
                     ? customAccentColor ?? undefined
-                    : "radial-gradient(circle, rgba(255,255,255,0.18) 0%, transparent 80%)",
+                    : "radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 80%)",
                 }}
               >
                 <Plus
                   className={cn(
-                    "w-3 h-3",
+                    "w-3.5 h-3.5",
                     isCustomAccentActive ? "text-black" : "text-muted-foreground"
                   )}
                 />
@@ -428,13 +400,13 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
           </Popover>
         </motion.div>
 
-        {/* Row 3: Wallpaper Thumbnails */}
+        {/* Row 3: Wallpaper Thumbnails (50px each, 12px radius) */}
         <motion.div
           variants={rowVariants}
           ref={wallpaperRowRef}
           role="radiogroup"
           aria-label="Wallpaper"
-          className="flex items-center justify-center gap-2.5"
+          className="w-full flex items-center justify-between"
         >
           {/* None Thumbnail */}
           <button
@@ -452,16 +424,16 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
               )
             }
             onClick={clearWallpaper}
-            onMouseEnter={() => setHoveredLabel("Wallpaper: None")}
+            onMouseEnter={() => setHoveredLabel("None")}
             onMouseLeave={() => setHoveredLabel(null)}
             className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "w-[50px] h-[50px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               !wallpaperUrl
-                ? "border-[var(--accent-lime)] ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_10px_rgba(200,255,87,0.3)]"
-                : "border-white/15 bg-card/40 text-muted-foreground opacity-70 hover:opacity-100 hover:border-white/30"
+                ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_12px_rgba(200,255,87,0.35)]"
+                : "border-dashed border-white/20 bg-card/40 text-muted-foreground opacity-70 hover:opacity-100 hover:border-white/40"
             )}
           >
-            <Ban className="w-3.5 h-3.5" />
+            <Ban className="w-4 h-4" />
           </button>
 
           {/* 4 Preset Thumbnails */}
@@ -484,13 +456,13 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                   )
                 }
                 onClick={() => setWallpaper(preset.url, { fit: "cover" })}
-                onMouseEnter={() => setHoveredLabel(`Wallpaper: ${preset.name}`)}
+                onMouseEnter={() => setHoveredLabel(preset.name)}
                 onMouseLeave={() => setHoveredLabel(null)}
                 className={cn(
-                  "w-8 h-8 rounded-lg transition-all duration-150 cursor-pointer overflow-hidden border bg-cover bg-center backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "w-[50px] h-[50px] rounded-xl transition-all duration-150 cursor-pointer overflow-hidden border bg-cover bg-center backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isSelected
-                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background shadow-[0_0_10px_rgba(200,255,87,0.35)]"
-                    : "border-white/15 opacity-75 hover:opacity-100 hover:scale-105"
+                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background shadow-[0_0_12px_rgba(200,255,87,0.4)]"
+                    : "border-white/15 opacity-80 hover:opacity-100 hover:scale-105"
                 )}
                 style={{ backgroundImage: `url(${preset.url})` }}
               />
@@ -516,16 +488,16 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                     wallpaperRowRef
                   )
                 }
-                onMouseEnter={() => setHoveredLabel("Upload Image or GIF")}
+                onMouseEnter={() => setHoveredLabel("Upload or URL")}
                 onMouseLeave={() => setHoveredLabel(null)}
                 className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer border border-dashed backdrop-blur-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "w-[50px] h-[50px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border border-dashed backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   wallpaperUrl && !isPresetWallpaperActive
-                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_10px_rgba(200,255,87,0.3)]"
+                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_12px_rgba(200,255,87,0.35)]"
                     : "border-white/30 bg-card/40 text-muted-foreground opacity-75 hover:opacity-100 hover:border-white/60 hover:scale-105"
                 )}
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
               </button>
             </PopoverTrigger>
 
@@ -583,11 +555,11 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="w-full max-w-xs space-y-2 pt-0.5"
+              className="w-full space-y-3 pt-1"
             >
-              {/* Opacity slider */}
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-[11px] font-mono text-muted-foreground w-12">
+              {/* Opacity slider with 56px fixed left label */}
+              <div className="flex items-center gap-3 w-full">
+                <span className="w-14 shrink-0 text-left text-xs font-mono text-muted-foreground">
                   Opacity
                 </span>
                 <Slider
@@ -600,9 +572,9 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                 />
               </div>
 
-              {/* Blur slider */}
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-[11px] font-mono text-muted-foreground w-12">
+              {/* Blur slider with 56px fixed left label */}
+              <div className="flex items-center gap-3 w-full">
+                <span className="w-14 shrink-0 text-left text-xs font-mono text-muted-foreground">
                   Blur
                 </span>
                 <Slider
@@ -618,9 +590,9 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
           )}
         </AnimatePresence>
 
-        {/* Row 5: Fixed Non-Overlapping Name Label Line */}
-        <div className="h-5 flex items-center justify-center text-[11px] font-mono text-muted-foreground/90 tracking-wide text-center">
-          {hoveredLabel ?? defaultStatusLine}
+        {/* Row 5: Fixed Label Slot */}
+        <div className="h-5 flex items-center justify-center text-[12px] font-sans text-muted-foreground/90 tracking-wide text-center">
+          {hoveredLabel}
         </div>
       </div>
     </motion.div>
