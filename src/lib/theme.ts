@@ -179,12 +179,26 @@ function persistConfig(config: StoredThemeConfig) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    // If storing full config fails due to storage quota (e.g. large DataURL/GIF),
+    // persist other preferences safely so nothing breaks
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ ...config, wallpaperUrl: null })
+      );
+    } catch {
+      // Storage completely full or restricted
+    }
+  }
+
+  try {
     // Dispatch custom event for plugins or dynamic iframes
     window.dispatchEvent(
       new CustomEvent("polymax:theme-change", { detail: config })
     );
   } catch {
-    // Storage quota or restriction
+    // Ignore event dispatch errors
   }
 }
 

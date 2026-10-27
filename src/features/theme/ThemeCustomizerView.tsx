@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { RotateCcw, Plus, Check, Ban, Upload } from "lucide-react";
+import { RotateCcw, Plus, Check, Ban, Upload, Clipboard } from "lucide-react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { THEMES, useThemeStore } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
@@ -116,15 +116,14 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onDismiss]);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && (file.type.startsWith("image/") || file.name.endsWith(".gif"))) {
+  const processImageFile = (file: File) => {
+    if (file.type.startsWith("image/") || /\.(gif|png|jpe?g|webp|svg|bmp)$/i.test(file.name)) {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
           setWallpaper(reader.result, { fit: "cover" });
-          showTransientLabel("Custom Wallpaper");
+          setIsWallpaperPopoverOpen(false);
+          showTransientLabel(file.name ? `Wallpaper: ${file.name}` : "Custom Wallpaper");
         }
       };
       reader.readAsDataURL(file);
@@ -134,15 +133,118 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setWallpaper(reader.result, { fit: "cover" });
-        setIsWallpaperPopoverOpen(false);
-        showTransientLabel("Custom Wallpaper");
+    processImageFile(file);
+    // Reset file input so selecting the same file again triggers change event
+    e.target.value = "";
+  };
+
+  // Window-wide drag and drop listener from local filesystem
+  useEffect(() => {
+    const handleWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        processImageFile(files[0]);
       }
     };
-    reader.readAsDataURL(file);
+
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("drop", handleWindowDrop);
+    return () => {
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("drop", handleWindowDrop);
+    };
+  }, []);
+
+  // Global paste handler for images, GIFs, and URLs (Ctrl+V / Cmd+V)
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const activeEl = document.activeElement;
+      const isInputFocused =
+        activeEl &&
+        (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA");
+
+      // 1. Check for image files in clipboard
+      const files = e.clipboardData?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        if (file.type.startsWith("image/") || file.name.endsWith(".gif")) {
+          e.preventDefault();
+          processImageFile(file);
+          return;
+        }
+      }
+
+      // 2. Check for image items (e.g. copied from web page or screenshot)
+      const items = e.clipboardData?.items;
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.startsWith("image/")) {
+            const blob = item.getAsFile();
+            if (blob) {
+              e.preventDefault();
+              processImageFile(blob);
+              return;
+            }
+          }
+        }
+      }
+
+      // 3. Check for image URL text (if not inside an input)
+      if (!isInputFocused) {
+        const text = e.clipboardData?.getData("text")?.trim();
+        if (
+          text &&
+          (text.startsWith("http://") ||
+            text.startsWith("https://") ||
+            text.startsWith("data:image/") ||
+            /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(text))
+        ) {
+          e.preventDefault();
+          setWallpaper(text, { fit: "cover" });
+          setIsWallpaperPopoverOpen(false);
+          showTransientLabel("Pasted Wallpaper URL");
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imageType = item.types.find((t) => t.startsWith("image/"));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const file = new File([blob], "clipboard-image.png", { type: imageType });
+            processImageFile(file);
+            return;
+          }
+        }
+      }
+
+      if (navigator.clipboard?.readText) {
+        const text = (await navigator.clipboard.readText()).trim();
+        if (text) {
+          setWallpaper(text, { fit: "cover" });
+          setIsWallpaperPopoverOpen(false);
+          showTransientLabel("Pasted Wallpaper");
+        }
+      }
+    } catch {
+      // Clipboard read permission declined or not supported
+    }
   };
 
   const handleApplyUrl = () => {
@@ -240,9 +342,23 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
       animate="animate"
       exit="exit"
       onDragOver={(e) => e.preventDefault()}
-      onDrop={handleDrop}
+      onDrop={(e) => {
+        e.preventDefault();
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+          processImageFile(files[0]);
+        }
+      }}
       className="relative flex flex-col items-center justify-center select-none"
     >
+      {/* Permanent file input in DOM (never unmounted by Popover focus/blur) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.gif,.webp"
+        onChange={handleFileUpload}
+        className="hidden"
+      />
       {/* Soft radial scrim fading completely within ~120px without visible edges */}
       <div
         className="pointer-events-none absolute -inset-x-24 -inset-y-16 -z-10 opacity-80"
@@ -545,15 +661,8 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
             <PopoverContent
               side="bottom"
               align="center"
-              className="w-56 p-3 bg-card/95 backdrop-blur-xl border-border/80 shadow-xl space-y-2.5"
+              className="w-60 p-3 bg-card/95 backdrop-blur-xl border-border/80 shadow-2xl space-y-2.5"
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,.gif,.webp"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
               <Button
                 variant="outline"
                 size="sm"
@@ -562,6 +671,15 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
               >
                 <Upload className="w-3.5 h-3.5" />
                 Upload Image or GIF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePasteFromClipboard}
+                className="w-full text-xs font-sans gap-2 h-8 border-border/80 hover:bg-muted/40 cursor-pointer"
+              >
+                <Clipboard className="w-3.5 h-3.5" />
+                Paste Image or URL
               </Button>
               <div className="flex gap-1.5 pt-0.5">
                 <Input
@@ -579,11 +697,14 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                   variant="secondary"
                   onClick={handleApplyUrl}
                   disabled={!urlInput.trim()}
-                  className="h-7 text-xs px-2.5 cursor-pointer"
+                  className="h-7 text-xs px-2.5 cursor-pointer font-bold"
                 >
                   Load
                 </Button>
               </div>
+              <p className="text-[10px] font-mono text-muted-foreground/75 text-center pt-0.5">
+                Press Ctrl+V anywhere or Drag & Drop
+              </p>
             </PopoverContent>
           </Popover>
         </motion.div>
