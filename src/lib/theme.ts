@@ -114,6 +114,25 @@ function loadInitialConfig(): StoredThemeConfig {
   if (typeof window === "undefined") return DEFAULT_CONFIG;
 
   try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("wallpaper") === "bright") {
+      const brightConfig: StoredThemeConfig = {
+        theme: "cyber",
+        customAccentColor: "#00FF66",
+        wallpaperUrl:
+          "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1600&q=80",
+        wallpaperFit: "cover",
+        wallpaperOpacity: 0.6,
+        wallpaperBlur: 2,
+      };
+      applyThemeDom(brightConfig.theme, brightConfig.customAccentColor);
+      return brightConfig;
+    }
+  } catch {
+    // Ignore URL parse error
+  }
+
+  try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<StoredThemeConfig>;
