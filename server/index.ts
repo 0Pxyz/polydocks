@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { config } from "./config";
+import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
+import { mcpRouter } from "./api/mcp";
+import { citiesRouter } from "./routes/cities";
+import { db } from "./workspace/db";
 
 const app = new Hono();
 
@@ -21,8 +27,41 @@ app.use(
   })
 );
 
+// Agentic Discovery: /.well-known/llms.txt and /.well-known/llms-full.txt
+app.get("/.well-known/llms.txt", async (c) => {
+  try {
+    const filePath = path.resolve(process.cwd(), "public/.well-known/llms.txt");
+    const content = await fs.readFile(filePath, "utf-8");
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    return c.body(content);
+  } catch {
+    return c.text("# Polymax\nAgentic Dock knowledge game and workspace.", 200, {
+      "Content-Type": "text/markdown",
+    });
+  }
+});
+
+app.get("/.well-known/llms-full.txt", async (c) => {
+  try {
+    const filePath = path.resolve(process.cwd(), "docs/architecture.md");
+    const content = await fs.readFile(filePath, "utf-8");
+    c.header("Content-Type", "text/markdown; charset=utf-8");
+    return c.body(content);
+  } catch {
+    return c.text("# Polymax Full Specification", 200);
+  }
+});
+
 // Health check endpoint
 app.get("/api/health", (c) => {
+  let sqliteOk = false;
+  try {
+    const test = db.query("SELECT 1 as alive;").get() as any;
+    sqliteOk = test?.alive === 1;
+  } catch {
+    sqliteOk = false;
+  }
+
   return c.json({
     status: "ok",
     timestamp: new Date().toISOString(),
@@ -34,15 +73,44 @@ app.get("/api/health", (c) => {
     tinyfish: {
       configured: Boolean(config.TINYFISH_API_KEY && config.TINYFISH_API_KEY.trim().length > 0),
     },
+    sqlite: {
+      ok: sqliteOk,
+    },
   });
 });
 
-// SSE Streaming stub for agent tool-calling loop
-app.post("/api/agent", (c) => {
+// Mount Model Context Protocol (MCP) router
+app.route("/api/mcp", mcpRouter);
+
+// Mount Cities & Workspaces router
+app.route("/api/cities", citiesRouter);
+
+// SSE Streaming endpoint for agent tool-calling loop
+app.post("/api/agent", async (c) => {
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON request body" }, 400);
+  }
+
+  const { prompt, cityId, history } = body;
+
+  if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+    return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
+  }
+
   return streamSSE(c, async (stream) => {
-    await stream.writeSSE({
-      event: "status",
-      data: JSON.stringify({ message: "Agent loop initialized" }),
+    await runAgentLoop({
+      prompt: prompt.trim(),
+      cityId: typeof cityId === "string" ? cityId : undefined,
+      history: Array.isArray(history) ? history : [],
+      onEvent: async (event: AgentStepEvent) => {
+        await stream.writeSSE({
+          event: event.type,
+          data: JSON.stringify(event),
+        });
+      },
     });
   });
 });
