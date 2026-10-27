@@ -17,3 +17,14 @@ export const db = new Database(dbPath, { create: true });
 
 // Enable Write-Ahead Logging (WAL) for high concurrency
 db.exec("PRAGMA journal_mode = WAL;");
+
+// Initialize schema
+try {
+  const schemaPath = path.join(import.meta.dir, "schema.sql");
+  if (fs.existsSync(schemaPath)) {
+    const schemaSql = fs.readFileSync(schemaPath, "utf-8");
+    db.exec(schemaSql);
+  }
+} catch (err: any) {
+  console.error("[SQLite] Error initializing database schema:", err.message);
+}
