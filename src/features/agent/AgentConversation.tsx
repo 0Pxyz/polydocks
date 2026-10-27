@@ -1,0 +1,622 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import {
+  X,
+  Maximize2,
+  Minimize2,
+  Volume2,
+  VolumeX,
+  Send,
+  Square,
+  ArrowDown,
+  Copy,
+  Check,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
+import { cn } from "@/lib/cn";
+import { Orb } from "./Orb";
+import { useConversationStore } from "@/lib/agent/conversationStore";
+import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
+import { spring, prefersReducedMotion } from "@/lib/motion";
+
+interface AgentConversationProps {
+  cityId?: string;
+  onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
+  onOpenExperience?: (expId: string) => void;
+}
+
+export function AgentConversation({
+  cityId,
+  onExperienceCreated,
+  onOpenExperience,
+}: AgentConversationProps) {
+  const {
+    layoutState,
+    sideWidth,
+    messages,
+    draft,
+    isStreaming,
+    statusText,
+    activeApproval,
+    soundEnabled,
+    audioLevel,
+    orbState,
+    setLayoutState,
+    setSideWidth,
+    setDraft,
+    setSoundEnabled,
+    setAudioLevel,
+    setOrbState,
+    sendMessage,
+    retryLast,
+    abortStream,
+    handleApproval,
+  } = useConversationStore();
+
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState<boolean>(false);
+  const [isKeyboardInSheet, setIsKeyboardInSheet] = useState<boolean>(false);
+  const [isDraggingWidth, setIsDraggingWidth] = useState<boolean>(false);
+
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sheetInputRef = useRef<HTMLInputElement>(null);
+  const voiceHandleRef = useRef<VoiceRecognitionHandle | null>(null);
+
+  // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
+  const adjustTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const nextHeight = Math.min(Math.max(el.scrollHeight, 24), 144);
+    el.style.height = `${nextHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [draft, adjustTextareaHeight]);
+
+  // Handle auto-scroll during streaming
+  useEffect(() => {
+    if (layoutState === "closed" || layoutState === "sheet") return;
+    const el = transcriptRef.current;
+    if (!el) return;
+
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isNearBottom || isStreaming) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      setShowScrollBottom(false);
+    }
+  }, [messages, isStreaming, statusText, layoutState]);
+
+  const handleScroll = () => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBottom(distanceToBottom > 150);
+  };
+
+  const scrollToBottom = () => {
+    const el = transcriptRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setShowScrollBottom(false);
+  };
+
+  const handleCopyMessage = (id: string, content: string) => {
+    navigator.clipboard.writeText(content).catch(() => {});
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const toggleVoice = () => {
+    if (orbState === "listening") {
+      voiceHandleRef.current?.stop();
+      voiceHandleRef.current = null;
+      setOrbState("idle");
+      return;
+    }
+
+    setOrbState("listening");
+    const handle = startVoiceInput(
+      (transcript, isFinal) => {
+        setDraft(transcript);
+        if (isFinal) {
+          sendMessage(transcript, cityId, { onExperienceCreated, onOpenExperience });
+        }
+      },
+      (level) => setAudioLevel(level),
+      () => {
+        setOrbState("idle");
+      },
+      () => {
+        setOrbState("idle");
+      }
+    );
+
+    if (handle) {
+      voiceHandleRef.current = handle;
+    } else {
+      setOrbState("idle");
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (isStreaming) return;
+      sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
+    }
+  };
+
+  // Drag-to-resize side width
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingWidth(true);
+    const startX = e.clientX;
+    const startWidth = sideWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      setSideWidth(startWidth + deltaX);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingWidth(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  if (layoutState === "closed") return null;
+
+  // =========================================================================
+  // 1. SHEET MODE (Bottom-anchored capsule, map/tools visible behind)
+  // =========================================================================
+  if (layoutState === "sheet") {
+    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
+    const displayText = isStreaming ? statusText : lastAssistantMsg?.content || "";
+
+    return (
+      <AnimatePresence>
+        <motion.div
+          layoutId="polymax-agent-surface"
+          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 28, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
+          exit={{ opacity: 0, y: 20, scale: 0.95, transition: { duration: 0.16 } }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none"
+        >
+          <div className="relative w-full rounded-[28px] bg-[#0c1017]/92 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-5 overflow-hidden">
+            {/* Top Left: Close */}
+            <button
+              type="button"
+              onClick={() => setLayoutState("closed")}
+              className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer z-10"
+              title="Close to dock"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Top Right: Expand to Full */}
+            <button
+              type="button"
+              onClick={() => setLayoutState("full")}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer z-10"
+              title="Expand to full chat"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+
+            {/* Upper text: Only stream reply or approval when active */}
+            <div className="pt-2 px-10 pb-2 min-h-[44px] flex items-center justify-center text-center">
+              {activeApproval ? (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-sm font-medium text-amber-300">
+                    {activeApproval.message}
+                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleApproval(true, cityId, { onExperienceCreated, onOpenExperience })}
+                      className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+                    >
+                      Allow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApproval(false, cityId, { onExperienceCreated, onOpenExperience })}
+                      className="px-3 py-1 rounded-lg text-xs font-mono bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : displayText ? (
+                <p className="text-sm line-clamp-3 text-foreground font-sans transition-colors">
+                  {displayText}
+                </p>
+              ) : null}
+            </div>
+
+            {/* Center Area: Orb (or compact mic when in keyboard mode) */}
+            <div className="py-2 flex justify-center items-center">
+              {!isKeyboardInSheet ? (
+                <Orb
+                  state={orbState}
+                  size="md"
+                  audioLevel={audioLevel}
+                  onClick={() => {
+                    if (isStreaming) abortStream();
+                    else toggleVoice();
+                  }}
+                />
+              ) : null}
+            </div>
+
+            {/* Input row in keyboard mode */}
+            {isKeyboardInSheet && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
+                }}
+                className="mt-3 flex items-center gap-2 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+              >
+                <button
+                  type="button"
+                  onClick={toggleVoice}
+                  className={cn(
+                    "w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer",
+                    orbState === "listening"
+                      ? "bg-red-500/20 text-red-400"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                  title="Voice input"
+                >
+                  <Orb state={orbState} size="sm" className="scale-60" />
+                </button>
+                <input
+                  ref={sheetInputRef}
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything, or give a dock command…"
+                  className="flex-1 bg-transparent px-2 py-1 text-sm text-white placeholder-muted-foreground focus:outline-none font-sans"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={!draft.trim() || isStreaming}
+                  className="p-2 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer font-bold"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            )}
+
+            {/* Bottom Actions */}
+            <div className="mt-3 flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer"
+                title={soundEnabled ? "Mute audio" : "Unmute audio"}
+              >
+                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsKeyboardInSheet(!isKeyboardInSheet)}
+                className={cn(
+                  "w-9 h-9 rounded-full border border-white/5 flex items-center justify-center transition-all cursor-pointer",
+                  isKeyboardInSheet
+                    ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border-[var(--accent-lime)]/30"
+                    : "bg-white/[0.06] text-muted-foreground hover:text-white"
+                )}
+                title={isKeyboardInSheet ? "Switch to Orb" : "Type prompt"}
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
+  // =========================================================================
+  // 2. FULL-SCREEN OR SIDE-BY-SIDE CHAT COLUMN
+  // =========================================================================
+  const isSide = layoutState === "side";
+
+  return (
+    <motion.div
+      layoutId="polymax-agent-surface"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1, transition: spring.soft }}
+      exit={{ opacity: 0, transition: { duration: 0.16 } }}
+      style={isSide ? { width: `${sideWidth}px` } : undefined}
+      className={cn(
+        "relative flex flex-col justify-between bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
+        isSide
+          ? "fixed top-0 bottom-0 left-0 z-40 border-r border-white/5 shadow-2xl"
+          : "fixed inset-0 z-40 w-full"
+      )}
+    >
+      {/* Resizable drag edge for side-by-side mode */}
+      {isSide && (
+        <div
+          onMouseDown={handleMouseDownResize}
+          className={cn(
+            "absolute top-0 bottom-0 -right-1.5 w-3 cursor-col-resize z-50 group hover:bg-[var(--accent-lime)]/20 transition-colors",
+            isDraggingWidth && "bg-[var(--accent-lime)]/30"
+          )}
+          title="Drag to resize chat width"
+        >
+          <div className="w-[2px] h-full mx-auto bg-transparent group-hover:bg-[var(--accent-lime)] transition-colors" />
+        </div>
+      )}
+
+      {/* Top soft fade under dock */}
+      <div className="pointer-events-none absolute top-0 left-0 right-0 h-[calc(var(--dock-bottom,88px)+24px)] bg-gradient-to-b from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent z-20" />
+
+      {/* Top Corner Controls (aligned with dock line, no headers/titles) */}
+      <div className="absolute top-[calc(var(--dock-bottom,88px)-44px)] right-4 sm:right-8 z-30 flex items-center gap-1.5">
+        {!isSide && (
+          <button
+            type="button"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+            title={soundEnabled ? "Mute spoken replies" : "Unmute spoken replies"}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setLayoutState(isSide ? "full" : "sheet")}
+          className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+          title={isSide ? "Expand to full screen" : "Collapse to sheet"}
+        >
+          {isSide ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setLayoutState("closed")}
+          className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+          title="Close conversation"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Transcript Area */}
+      <div
+        ref={transcriptRef}
+        onScroll={handleScroll}
+        className={cn(
+          "flex-1 overflow-y-auto px-4 sm:px-6 pt-[calc(var(--dock-bottom,88px)+32px)] pb-36",
+          !isSide && "w-full max-w-[720px] mx-auto"
+        )}
+      >
+        {/* Empty State: centered composer with idle orb */}
+        {messages.length === 0 && (
+          <div className="h-full min-h-[360px] flex flex-col items-center justify-center">
+            <Orb state="idle" size="md" className="opacity-80 hover:opacity-100 transition-opacity" />
+          </div>
+        )}
+
+        {/* Message items */}
+        <div className="space-y-6">
+          {messages.map((msg, idx) => {
+            const isUser = msg.role === "user";
+            const isTool = msg.role === "tool";
+            const isLastMessage = idx === messages.length - 1;
+
+            if (isTool) {
+              return (
+                <div
+                  key={msg.id}
+                  className="flex items-center gap-2 text-xs font-mono text-muted-foreground/80 py-1"
+                >
+                  <span className="text-[var(--accent-lime)] text-[10px]">✦</span>
+                  <span>{msg.content}</span>
+                </div>
+              );
+            }
+
+            if (isUser) {
+              return (
+                <div key={msg.id} className="flex flex-col items-end gap-1.5 w-full">
+                  <div className="max-w-[75%] rounded-[20px] px-4 py-2.5 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed shadow-sm">
+                    {msg.content}
+                  </div>
+
+                  {/* Inline Error under user message */}
+                  {msg.error && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono pt-0.5">
+                      <span className={msg.error.code === "model_unauthorized" ? "text-amber-400" : "text-red-400"}>
+                        {msg.error.message}
+                      </span>
+                      {msg.error.code !== "model_unauthorized" && (
+                        <button
+                          type="button"
+                          onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience })}
+                          className="underline hover:text-white transition-colors cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Agent Message: Plain text on backdrop, no bubble, markdown, copy & retry on hover
+            return (
+              <div key={msg.id} className="group relative w-full text-base leading-relaxed text-[#f1f3f9] font-sans">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[var(--accent-lime)] hover:underline underline-offset-4"
+                      >
+                        {children}
+                      </a>
+                    ),
+                    code({ className, children, ...props }) {
+                      const match = /language-(\w+)/.exec(className || "");
+                      const isInline = !match && !String(children).includes("\n");
+                      if (isInline) {
+                        return (
+                          <code
+                            className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-xs text-[var(--accent-lime)]"
+                            {...props}
+                          >
+                            {children}
+                          </code>
+                        );
+                      }
+                      return (
+                        <div className="relative my-3 rounded-xl bg-black/60 border border-white/10 overflow-hidden font-mono text-xs">
+                          <div className="flex items-center justify-between px-3.5 py-1.5 bg-white/5 border-b border-white/5 text-muted-foreground text-[11px]">
+                            <span>{match?.[1] || "code"}</span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ""))}
+                              className="hover:text-white transition-colors cursor-pointer"
+                            >
+                              Copy
+                            </button>
+                          </div>
+                          <pre className="p-3.5 overflow-x-auto text-[#e2e8f0]">
+                            <code>{children}</code>
+                          </pre>
+                        </div>
+                      );
+                    },
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
+
+                {/* Hover actions: Copy & Retry on last message */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyMessage(msg.id, msg.content)}
+                    className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+                    title="Copy response"
+                  >
+                    {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedId === msg.id ? "Copied" : "Copy"}</span>
+                  </button>
+
+                  {isLastMessage && !isStreaming && (
+                    <button
+                      type="button"
+                      onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience })}
+                      className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
+                      title="Retry message"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Retry</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Transient status line during streaming */}
+          {isStreaming && statusText && (
+            <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)] py-1">
+              <span className="animate-spin text-xs">✦</span>
+              <span>{statusText}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Floating Scroll to Bottom button */}
+      {showScrollBottom && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 p-2 rounded-full bg-[#181d28]/90 border border-white/10 shadow-lg text-muted-foreground hover:text-white hover:scale-105 transition-all cursor-pointer"
+          title="Scroll to bottom"
+        >
+          <ArrowDown className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Floating Composer Area */}
+      <div
+        className={cn(
+          "absolute bottom-0 left-0 right-0 z-20 pb-6 px-4 pointer-events-auto bg-gradient-to-t from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent pt-8",
+          !isSide && "w-full max-w-[720px] mx-auto"
+        )}
+      >
+        <div className="relative flex items-end bg-[#10141d]/90 border border-white/10 rounded-[24px] p-2 shadow-2xl backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask anything"
+            className="flex-1 bg-transparent px-3.5 py-2 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
+          />
+
+          {/* Right Composer Controls: 36px mic orb + Send/Stop */}
+          <div className="flex items-center gap-1.5 pb-1 pr-1">
+            <button
+              type="button"
+              onClick={toggleVoice}
+              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
+              title="Voice input"
+            >
+              <Orb state={orbState} size="sm" className="scale-75" />
+            </button>
+
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={abortStream}
+                className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
+                title="Stop generation"
+              >
+                <Square className="w-4 h-4 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience })}
+                disabled={!draft.trim()}
+                className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
+                title="Send message"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
