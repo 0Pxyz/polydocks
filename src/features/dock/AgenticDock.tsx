@@ -7,6 +7,7 @@ import {
   Globe,
   PenTool,
   Flame,
+  Palette,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -69,18 +70,32 @@ export const DOCK_TOOLS: DockToolItem[] = [
     type: "icon",
     icon: PenTool,
   },
+  {
+    id: "theme",
+    label: "Theme & Wallpaper",
+    type: "icon",
+    icon: Palette,
+  },
 ];
 
 interface AgenticDockProps {
+  activeToolId?: string;
   onSelectTool?: (toolId: string) => void;
   className?: string;
 }
 
-export function AgenticDock({ onSelectTool, className }: AgenticDockProps) {
-  const [activeToolId, setActiveToolId] = useState<string>("agent");
+export function AgenticDock({
+  activeToolId: controlledActiveToolId,
+  onSelectTool,
+  className,
+}: AgenticDockProps) {
+  const [internalActiveToolId, setInternalActiveToolId] = useState<string>("agent");
+  const activeToolId = controlledActiveToolId ?? internalActiveToolId;
 
   const handleToolClick = (toolId: string) => {
-    setActiveToolId(toolId);
+    if (controlledActiveToolId === undefined) {
+      setInternalActiveToolId(toolId);
+    }
     onSelectTool?.(toolId);
   };
 
