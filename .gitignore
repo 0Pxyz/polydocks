@@ -11,9 +11,6 @@
 # (Kept hidden from public repository / judges until final release)
 internal-docs/
 .internal/
-NEW_WORK.md
-new_work*
-NEW_WORK*
 brainstorm/
 scratch/
 notes/
