@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
   Clock,
@@ -89,8 +89,34 @@ export function AgenticDock({
   onSelectTool,
   className,
 }: AgenticDockProps) {
+  const headerRef = useRef<HTMLElement>(null);
   const [internalActiveToolId, setInternalActiveToolId] = useState<string>("agent");
   const activeToolId = controlledActiveToolId ?? internalActiveToolId;
+
+  // Measure dock bottom edge dynamically and publish --dock-bottom to :root
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const updateDockBottom = () => {
+      const rect = el.getBoundingClientRect();
+      const bottom = Math.round(rect.bottom);
+      document.documentElement.style.setProperty("--dock-bottom", `${bottom}px`);
+    };
+
+    updateDockBottom();
+
+    const ro = new ResizeObserver(() => {
+      updateDockBottom();
+    });
+    ro.observe(el);
+
+    window.addEventListener("resize", updateDockBottom);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateDockBottom);
+    };
+  }, []);
 
   const handleToolClick = (toolId: string) => {
     const nextToolId = activeToolId === toolId ? "" : toolId;
@@ -102,6 +128,7 @@ export function AgenticDock({
 
   return (
     <header
+      ref={headerRef}
       className={cn(
         "fixed top-0 left-0 right-0 z-50 flex flex-col items-center select-none pt-0",
         className
