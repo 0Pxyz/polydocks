@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
   Clock,
@@ -89,18 +89,46 @@ export function AgenticDock({
   onSelectTool,
   className,
 }: AgenticDockProps) {
+  const headerRef = useRef<HTMLElement>(null);
   const [internalActiveToolId, setInternalActiveToolId] = useState<string>("agent");
   const activeToolId = controlledActiveToolId ?? internalActiveToolId;
 
+  // Measure dock bottom edge dynamically and publish --dock-bottom to :root
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const updateDockBottom = () => {
+      const rect = el.getBoundingClientRect();
+      const bottom = Math.round(rect.bottom);
+      document.documentElement.style.setProperty("--dock-bottom", `${bottom}px`);
+    };
+
+    updateDockBottom();
+
+    const ro = new ResizeObserver(() => {
+      updateDockBottom();
+    });
+    ro.observe(el);
+
+    window.addEventListener("resize", updateDockBottom);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateDockBottom);
+    };
+  }, []);
+
   const handleToolClick = (toolId: string) => {
+    const nextToolId = activeToolId === toolId ? "" : toolId;
     if (controlledActiveToolId === undefined) {
-      setInternalActiveToolId(toolId);
+      setInternalActiveToolId(nextToolId);
     }
-    onSelectTool?.(toolId);
+    onSelectTool?.(nextToolId);
   };
 
   return (
     <header
+      ref={headerRef}
       className={cn(
         "fixed top-0 left-0 right-0 z-50 flex flex-col items-center select-none pt-0",
         className
@@ -151,9 +179,10 @@ export function AgenticDock({
               <button
                 key={tool.id}
                 type="button"
+                data-dock-tool-id={tool.id}
                 onClick={() => handleToolClick(tool.id)}
                 className={cn(
-                  "group relative w-11 h-[38px] flex items-center justify-center rounded-[10px] transition-all duration-200 cursor-pointer",
+                  "group relative w-11 h-[38px] flex items-center justify-center rounded-[10px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1118]",
                   !isActive &&
                     "text-[#9aa5b8] hover:text-white hover:bg-white/[0.08] hover:-translate-y-0.5",
                   isActive &&
@@ -161,7 +190,7 @@ export function AgenticDock({
                     "bg-[#1d68fe] text-white shadow-[0_0_18px_rgba(29,104,254,0.6),0_2px_6px_rgba(0,0,0,0.4)]",
                   isActive &&
                     !isAgent &&
-                    "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/30 shadow-[0_0_12px_rgba(200,255,87,0.25)]"
+                    "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/40 shadow-[0_0_12px_rgba(200,255,87,0.25)]"
                 )}
                 aria-label={tool.label}
               >

@@ -1,22 +1,16 @@
-import { useState, useRef, type KeyboardEvent, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
 import { RotateCcw, Plus, Check, Ban, Upload } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, type Variants } from "motion/react";
 import { THEMES, useThemeStore } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { slideUp } from "@/lib/motion";
+import { spring, prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 
 export const PRESET_ACCENTS = [
@@ -49,7 +43,18 @@ export const PRESET_WALLPAPERS = [
   },
 ];
 
-export function ThemeCustomizerView() {
+interface ThemeCustomizerViewProps {
+  onDismiss?: () => void;
+}
+
+export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const themeRowRef = useRef<HTMLDivElement>(null);
+  const accentRowRef = useRef<HTMLDivElement>(null);
+  const wallpaperRowRef = useRef<HTMLDivElement>(null);
+  const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const {
     theme,
     customAccentColor,
@@ -65,26 +70,61 @@ export function ThemeCustomizerView() {
     resetTheme,
   } = useThemeStore();
 
-  const [isDragging, setIsDragging] = useState(false);
+  const [activeLabel, setActiveLabel] = useState<string | null>(() => {
+    return THEMES.find((t) => t.id === theme)?.name ?? "Void Lime";
+  });
   const [customHex, setCustomHex] = useState(customAccentColor ?? "#00FF66");
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [isWallpaperPopoverOpen, setIsWallpaperPopoverOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const themeRowRef = useRef<HTMLDivElement>(null);
-  const accentRowRef = useRef<HTMLDivElement>(null);
-  const wallpaperRowRef = useRef<HTMLDivElement>(null);
+  const isReduced = prefersReducedMotion();
+
+  // Show transient name label that fades out after 1.2s of inactivity
+  const showTransientLabel = (text: string) => {
+    setActiveLabel(text);
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+    }
+    fadeTimeoutRef.current = setTimeout(() => {
+      setActiveLabel(null);
+    }, 1200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+    };
+  }, []);
+
+  // Outside click dismiss
+  useEffect(() => {
+    if (!onDismiss) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        const dockEl = document.querySelector("header");
+        if (dockEl && dockEl.contains(e.target as Node)) {
+          return;
+        }
+        onDismiss();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onDismiss]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file && (file.type.startsWith("image/") || file.name.endsWith(".gif"))) {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
           setWallpaper(reader.result, { fit: "cover" });
+          showTransientLabel("Custom Wallpaper");
         }
       };
       reader.readAsDataURL(file);
@@ -99,6 +139,7 @@ export function ThemeCustomizerView() {
       if (typeof reader.result === "string") {
         setWallpaper(reader.result, { fit: "cover" });
         setIsWallpaperPopoverOpen(false);
+        showTransientLabel("Custom Wallpaper");
       }
     };
     reader.readAsDataURL(file);
@@ -109,24 +150,25 @@ export function ThemeCustomizerView() {
     setWallpaper(urlInput.trim(), { fit: "cover" });
     setUrlInput("");
     setIsWallpaperPopoverOpen(false);
+    showTransientLabel("Remote Wallpaper");
   };
 
   const handleRowKeyNavigation = (
     e: KeyboardEvent<HTMLButtonElement>,
     index: number,
     total: number,
-    containerRef: React.RefObject<HTMLDivElement | null>
+    ref: React.RefObject<HTMLDivElement | null>
   ) => {
     if (e.key === "ArrowRight") {
       e.preventDefault();
       const next = (index + 1) % total;
-      const btns = containerRef.current?.querySelectorAll<HTMLButtonElement>("button");
+      const btns = ref.current?.querySelectorAll<HTMLButtonElement>("button");
       btns?.[next]?.focus();
       btns?.[next]?.click();
     } else if (e.key === "ArrowLeft") {
       e.preventDefault();
       const prev = (index - 1 + total) % total;
-      const btns = containerRef.current?.querySelectorAll<HTMLButtonElement>("button");
+      const btns = ref.current?.querySelectorAll<HTMLButtonElement>("button");
       btns?.[prev]?.focus();
       btns?.[prev]?.click();
     }
@@ -136,6 +178,7 @@ export function ThemeCustomizerView() {
     setCustomHex(hex);
     if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex)) {
       setCustomAccentColor(hex);
+      showTransientLabel(`Custom (${hex.toUpperCase()})`);
     }
   };
 
@@ -150,99 +193,135 @@ export function ThemeCustomizerView() {
     (p) => p.url === wallpaperUrl
   );
 
-  return (
-    <TooltipProvider delayDuration={150}>
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={cn(
-          "w-full max-w-sm sm:max-w-md mx-auto p-5 rounded-2xl bg-card/65 backdrop-blur-xl border border-border/80 shadow-2xl transition-all duration-200 space-y-4",
-          isDragging && "border-[var(--accent-lime)] ring-2 ring-[var(--accent-lime)]/40"
-        )}
-      >
-        {/* Title row */}
-        <div className="flex items-center justify-between pb-1 border-b border-border/40">
-          <h1 className="text-sm font-semibold tracking-wide text-foreground font-display">
-            Appearance
-          </h1>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={resetTheme}
-                aria-label="Reset appearance to defaults"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="text-[11px] font-sans">
-              Reset
-            </TooltipContent>
-          </Tooltip>
-        </div>
+  const containerVariants: Variants = {
+    initial: {
+      opacity: 0,
+      y: isReduced ? 0 : -8,
+      scale: isReduced ? 1 : 0.98,
+    },
+    animate: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        ...spring.soft,
+        staggerChildren: isReduced ? 0 : 0.035,
+        delayChildren: 0.01,
+      },
+    },
+    exit: {
+      opacity: 0,
+      y: isReduced ? 0 : -6,
+      transition: { duration: 0.12 },
+    },
+  };
 
-        {/* 1. Base Theme Swatches Row */}
-        <div
+  const rowVariants: Variants = {
+    initial: {
+      opacity: 0,
+      y: isReduced ? 0 : -6,
+    },
+    animate: {
+      opacity: 1,
+      y: 0,
+      transition: spring.soft,
+    },
+    exit: {
+      opacity: 0,
+      transition: { duration: 0.1 },
+    },
+  };
+
+  return (
+    <motion.div
+      ref={containerRef}
+      variants={containerVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
+      className="relative flex flex-col items-center justify-center select-none"
+    >
+      {/* Soft radial scrim fading completely within ~120px without visible edges */}
+      <div
+        className="pointer-events-none absolute -inset-x-24 -inset-y-16 -z-10 opacity-80"
+        style={{
+          background:
+            "radial-gradient(ellipse 260px 180px at 50% 45%, rgba(10, 10, 12, 0.92) 0%, rgba(10, 10, 12, 0.5) 60%, transparent 100%)",
+        }}
+      />
+
+      {/* One aligned column: exactly 336px wide with 24px vertical rhythm */}
+      <div className="flex flex-col items-center space-y-6 w-[calc(100vw-32px)] sm:w-[336px] max-w-[336px] mx-auto px-1">
+        {/* Row 1: Base Theme Swatches (40px) + Reset (40px) */}
+        <motion.div
+          variants={rowVariants}
           ref={themeRowRef}
           role="radiogroup"
           aria-label="Base theme"
-          className="flex items-center justify-between gap-2 px-1"
+          className="w-full flex items-center justify-between"
         >
           {THEMES.map((item, idx) => {
             const isSelected = theme === item.id;
             return (
-              <Tooltip key={item.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    aria-label={item.name}
-                    tabIndex={isSelected ? 0 : -1}
-                    onKeyDown={(e) =>
-                      handleRowKeyNavigation(e, idx, THEMES.length, themeRowRef)
-                    }
-                    onClick={() => setTheme(item.id)}
-                    className={cn(
-                      "group relative w-10 h-10 rounded-full transition-all duration-200 cursor-pointer overflow-hidden border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      isSelected
-                        ? "ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-105 shadow-[0_0_12px_rgba(200,255,87,0.3)]"
-                        : "opacity-80 hover:opacity-100 hover:scale-105"
-                    )}
-                    style={{ backgroundColor: item.bgColor }}
-                  >
-                    {/* Ringed / split accent preview */}
-                    <span
-                      className="absolute inset-y-0 right-0 w-1/2 opacity-95 transition-opacity"
-                      style={{ backgroundColor: item.accentColor }}
-                    />
-                    {isSelected && (
-                      <span className="absolute inset-0 flex items-center justify-center">
-                        <Check className="w-3.5 h-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
-                      </span>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-[11px] font-sans">
-                  {item.name}
-                </TooltipContent>
-              </Tooltip>
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                aria-label={item.name}
+                tabIndex={isSelected ? 0 : -1}
+                onKeyDown={(e) =>
+                  handleRowKeyNavigation(e, idx, THEMES.length + 1, themeRowRef)
+                }
+                onClick={() => {
+                  setTheme(item.id);
+                  showTransientLabel(item.name);
+                }}
+                onMouseEnter={() => showTransientLabel(item.name)}
+                className={cn(
+                  "relative w-10 h-10 rounded-full transition-all duration-150 cursor-pointer overflow-hidden border border-white/20 backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  isSelected
+                    ? "ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-110 shadow-[0_0_12px_rgba(200,255,87,0.4)]"
+                    : "opacity-80 hover:opacity-100 hover:scale-105"
+                )}
+                style={{ backgroundColor: item.bgColor }}
+              >
+                <span
+                  className="absolute inset-y-0 right-0 w-1/2 opacity-95"
+                  style={{ backgroundColor: item.accentColor }}
+                />
+                {isSelected && (
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    <Check className="w-4 h-4 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]" />
+                  </span>
+                )}
+              </button>
             );
           })}
-        </div>
 
-        {/* 2. Accent Color Dots Row */}
-        <div
+          <button
+            type="button"
+            onClick={() => {
+              resetTheme();
+              showTransientLabel("Reset");
+            }}
+            aria-label="Reset appearance"
+            onMouseEnter={() => showTransientLabel("Reset")}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground border border-white/15 hover:border-white/35 backdrop-blur-md bg-white/[0.04] hover:bg-white/[0.09] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </motion.div>
+
+        {/* Row 2: Accent Color Dots (28px each, spanning full column width) */}
+        <motion.div
+          variants={rowVariants}
           ref={accentRowRef}
           role="radiogroup"
           aria-label="Accent color"
-          className="flex items-center justify-between gap-1.5 px-1"
+          className="w-full flex items-center justify-between"
         >
           {PRESET_ACCENTS.map((item, idx) => {
             const isCurrent =
@@ -254,89 +333,81 @@ export function ThemeCustomizerView() {
                     item.color.toLowerCase()));
 
             return (
-              <Tooltip key={item.color}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={isCurrent}
-                    aria-label={item.label}
-                    tabIndex={isCurrent ? 0 : -1}
-                    onKeyDown={(e) =>
-                      handleRowKeyNavigation(
-                        e,
-                        idx,
-                        PRESET_ACCENTS.length + 1,
-                        accentRowRef
-                      )
-                    }
-                    onClick={() => setCustomAccentColor(item.color)}
-                    className={cn(
-                      "w-6 h-6 rounded-full transition-all duration-150 cursor-pointer border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      isCurrent
-                        ? "ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-110 shadow-[0_0_8px_rgba(200,255,87,0.4)]"
-                        : "opacity-75 hover:opacity-100 hover:scale-105"
-                    )}
-                    style={{ backgroundColor: item.color }}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-[11px] font-sans">
-                  {item.label}
-                </TooltipContent>
-              </Tooltip>
+              <button
+                key={item.color}
+                type="button"
+                role="radio"
+                aria-checked={isCurrent}
+                aria-label={item.label}
+                tabIndex={isCurrent ? 0 : -1}
+                onKeyDown={(e) =>
+                  handleRowKeyNavigation(
+                    e,
+                    idx,
+                    PRESET_ACCENTS.length + 1,
+                    accentRowRef
+                  )
+                }
+                onClick={() => {
+                  setCustomAccentColor(item.color);
+                  showTransientLabel(item.label);
+                }}
+                onMouseEnter={() => showTransientLabel(item.label)}
+                className={cn(
+                  "w-7 h-7 rounded-full transition-all duration-150 cursor-pointer border border-white/25 backdrop-blur-md shadow-[0_2px_6px_rgba(0,0,0,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  isCurrent
+                    ? "ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-115 shadow-[0_0_10px_rgba(200,255,87,0.5)]"
+                    : "opacity-75 hover:opacity-100 hover:scale-110"
+                )}
+                style={{ backgroundColor: item.color }}
+              />
             );
           })}
 
-          {/* Custom color dot + popover */}
+          {/* Custom color dot (28px) */}
           <Popover
             open={isColorPopoverOpen}
             onOpenChange={setIsColorPopoverOpen}
           >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Custom accent color"
-                    aria-pressed={isCustomAccentActive}
-                    tabIndex={isCustomAccentActive ? 0 : -1}
-                    onKeyDown={(e) =>
-                      handleRowKeyNavigation(
-                        e,
-                        PRESET_ACCENTS.length,
-                        PRESET_ACCENTS.length + 1,
-                        accentRowRef
-                      )
-                    }
-                    className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      isCustomAccentActive
-                        ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-110"
-                        : "border-dashed border-white/40 opacity-75 hover:opacity-100 hover:scale-105 hover:border-white/70"
-                    )}
-                    style={{
-                      background: isCustomAccentActive
-                        ? customAccentColor ?? undefined
-                        : "radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 80%)",
-                    }}
-                  >
-                    <Plus
-                      className={cn(
-                        "w-3 h-3",
-                        isCustomAccentActive ? "text-black" : "text-muted-foreground"
-                      )}
-                    />
-                  </button>
-                </PopoverTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-[11px] font-sans">
-                Custom Color
-              </TooltipContent>
-            </Tooltip>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Custom accent color"
+                aria-pressed={isCustomAccentActive}
+                tabIndex={isCustomAccentActive ? 0 : -1}
+                onKeyDown={(e) =>
+                  handleRowKeyNavigation(
+                    e,
+                    PRESET_ACCENTS.length,
+                    PRESET_ACCENTS.length + 1,
+                    accentRowRef
+                  )
+                }
+                onMouseEnter={() => showTransientLabel("Custom Color")}
+                className={cn(
+                  "w-7 h-7 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  isCustomAccentActive
+                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background scale-115"
+                    : "border-dashed border-white/40 opacity-75 hover:opacity-100 hover:scale-110 hover:border-white/70"
+                )}
+                style={{
+                  background: isCustomAccentActive
+                    ? customAccentColor ?? undefined
+                    : "radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 80%)",
+                }}
+              >
+                <Plus
+                  className={cn(
+                    "w-3.5 h-3.5",
+                    isCustomAccentActive ? "text-black" : "text-muted-foreground"
+                  )}
+                />
+              </button>
+            </PopoverTrigger>
 
             <PopoverContent
               side="bottom"
-              align="end"
+              align="center"
               className="w-44 p-2.5 bg-card/95 backdrop-blur-xl border-border/80 shadow-xl space-y-2"
             >
               <div className="flex items-center gap-2">
@@ -365,82 +436,78 @@ export function ThemeCustomizerView() {
               </div>
             </PopoverContent>
           </Popover>
-        </div>
+        </motion.div>
 
-        {/* 3. Wallpaper Thumbnails Row */}
-        <div
+        {/* Row 3: Wallpaper Thumbnails (50px each, 12px radius) */}
+        <motion.div
+          variants={rowVariants}
           ref={wallpaperRowRef}
           role="radiogroup"
           aria-label="Wallpaper"
-          className="flex items-center justify-between gap-1.5 px-1 pt-1 border-t border-border/30"
+          className="w-full flex items-center justify-between"
         >
           {/* None Thumbnail */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={!wallpaperUrl}
-                aria-label="None"
-                tabIndex={!wallpaperUrl ? 0 : -1}
-                onKeyDown={(e) =>
-                  handleRowKeyNavigation(
-                    e,
-                    0,
-                    PRESET_WALLPAPERS.length + 2,
-                    wallpaperRowRef
-                  )
-                }
-                onClick={clearWallpaper}
-                className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                  !wallpaperUrl
-                    ? "border-[var(--accent-lime)] ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_10px_rgba(200,255,87,0.25)]"
-                    : "border-border/70 bg-card/40 text-muted-foreground opacity-70 hover:opacity-100 hover:border-border"
-                )}
-              >
-                <Ban className="w-4 h-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-[11px] font-sans">
-              None
-            </TooltipContent>
-          </Tooltip>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!wallpaperUrl}
+            aria-label="None"
+            tabIndex={!wallpaperUrl ? 0 : -1}
+            onKeyDown={(e) =>
+              handleRowKeyNavigation(
+                e,
+                0,
+                PRESET_WALLPAPERS.length + 2,
+                wallpaperRowRef
+              )
+            }
+            onClick={() => {
+              clearWallpaper();
+              showTransientLabel("None");
+            }}
+            onMouseEnter={() => showTransientLabel("None")}
+            className={cn(
+              "w-[50px] h-[50px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              !wallpaperUrl
+                ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_12px_rgba(200,255,87,0.35)]"
+                : "border-dashed border-white/20 bg-card/40 text-muted-foreground opacity-70 hover:opacity-100 hover:border-white/40"
+            )}
+          >
+            <Ban className="w-4 h-4" />
+          </button>
 
           {/* 4 Preset Thumbnails */}
           {PRESET_WALLPAPERS.map((preset, idx) => {
             const isSelected = wallpaperUrl === preset.url;
             return (
-              <Tooltip key={preset.name}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    aria-label={preset.name}
-                    tabIndex={isSelected ? 0 : -1}
-                    onKeyDown={(e) =>
-                      handleRowKeyNavigation(
-                        e,
-                        idx + 1,
-                        PRESET_WALLPAPERS.length + 2,
-                        wallpaperRowRef
-                      )
-                    }
-                    onClick={() => setWallpaper(preset.url, { fit: "cover" })}
-                    className={cn(
-                      "w-10 h-10 rounded-lg transition-all duration-150 cursor-pointer overflow-hidden border bg-cover bg-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      isSelected
-                        ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background shadow-[0_0_10px_rgba(200,255,87,0.3)]"
-                        : "border-border/60 opacity-75 hover:opacity-100 hover:border-border"
-                    )}
-                    style={{ backgroundImage: `url(${preset.url})` }}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-[11px] font-sans">
-                  {preset.name}
-                </TooltipContent>
-              </Tooltip>
+              <button
+                key={preset.name}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                aria-label={preset.name}
+                tabIndex={isSelected ? 0 : -1}
+                onKeyDown={(e) =>
+                  handleRowKeyNavigation(
+                    e,
+                    idx + 1,
+                    PRESET_WALLPAPERS.length + 2,
+                    wallpaperRowRef
+                  )
+                }
+                onClick={() => {
+                  setWallpaper(preset.url, { fit: "cover" });
+                  showTransientLabel(preset.name);
+                }}
+                onMouseEnter={() => showTransientLabel(preset.name)}
+                className={cn(
+                  "w-[50px] h-[50px] rounded-xl transition-all duration-150 cursor-pointer overflow-hidden border bg-cover bg-center backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  isSelected
+                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background shadow-[0_0_12px_rgba(200,255,87,0.4)]"
+                    : "border-white/15 opacity-80 hover:opacity-100 hover:scale-105"
+                )}
+                style={{ backgroundImage: `url(${preset.url})` }}
+              />
             );
           })}
 
@@ -449,41 +516,35 @@ export function ThemeCustomizerView() {
             open={isWallpaperPopoverOpen}
             onOpenChange={setIsWallpaperPopoverOpen}
           >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Upload custom wallpaper"
-                    aria-pressed={Boolean(wallpaperUrl && !isPresetWallpaperActive)}
-                    tabIndex={wallpaperUrl && !isPresetWallpaperActive ? 0 : -1}
-                    onKeyDown={(e) =>
-                      handleRowKeyNavigation(
-                        e,
-                        PRESET_WALLPAPERS.length + 1,
-                        PRESET_WALLPAPERS.length + 2,
-                        wallpaperRowRef
-                      )
-                    }
-                    className={cn(
-                      "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-150 cursor-pointer border border-dashed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                      wallpaperUrl && !isPresetWallpaperActive
-                        ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_10px_rgba(200,255,87,0.25)]"
-                        : "border-border/80 bg-card/40 text-muted-foreground opacity-75 hover:opacity-100 hover:border-white/50"
-                    )}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </PopoverTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-[11px] font-sans">
-                Upload or URL
-              </TooltipContent>
-            </Tooltip>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="Upload custom wallpaper"
+                aria-pressed={Boolean(wallpaperUrl && !isPresetWallpaperActive)}
+                tabIndex={wallpaperUrl && !isPresetWallpaperActive ? 0 : -1}
+                onKeyDown={(e) =>
+                  handleRowKeyNavigation(
+                    e,
+                    PRESET_WALLPAPERS.length + 1,
+                    PRESET_WALLPAPERS.length + 2,
+                    wallpaperRowRef
+                  )
+                }
+                onMouseEnter={() => showTransientLabel("Upload or URL")}
+                className={cn(
+                  "w-[50px] h-[50px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border border-dashed backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  wallpaperUrl && !isPresetWallpaperActive
+                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background bg-card text-[var(--accent-lime)] shadow-[0_0_12px_rgba(200,255,87,0.35)]"
+                    : "border-white/30 bg-card/40 text-muted-foreground opacity-75 hover:opacity-100 hover:border-white/60 hover:scale-105"
+                )}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </PopoverTrigger>
 
             <PopoverContent
               side="bottom"
-              align="end"
+              align="center"
               className="w-56 p-3 bg-card/95 backdrop-blur-xl border-border/80 shadow-xl space-y-2.5"
             >
               <input
@@ -525,21 +586,21 @@ export function ThemeCustomizerView() {
               </div>
             </PopoverContent>
           </Popover>
-        </div>
+        </motion.div>
 
-        {/* 4. Conditional Wallpaper Controls (Opacity & Blur) */}
+        {/* Row 4: Conditional Wallpaper Controls (Opacity & Blur) */}
         <AnimatePresence>
           {wallpaperUrl && (
             <motion.div
-              variants={slideUp}
+              variants={rowVariants}
               initial="initial"
               animate="animate"
               exit="exit"
-              className="space-y-3 pt-3 border-t border-border/40"
+              className="w-full space-y-3 pt-1"
             >
-              {/* Opacity slider */}
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-[11px] font-sans text-muted-foreground w-12">
+              {/* Opacity slider with 56px fixed left label */}
+              <div className="flex items-center gap-3 w-full">
+                <span className="w-14 shrink-0 text-left text-xs font-mono text-muted-foreground">
                   Opacity
                 </span>
                 <Slider
@@ -547,14 +608,17 @@ export function ThemeCustomizerView() {
                   min={5}
                   max={80}
                   step={5}
-                  onValueChange={(vals: number[]) => setWallpaperOpacity(vals[0] / 100)}
+                  onValueChange={(vals) => {
+                    setWallpaperOpacity(vals[0] / 100);
+                    showTransientLabel(`Opacity ${vals[0]}%`);
+                  }}
                   className="flex-1 cursor-pointer"
                 />
               </div>
 
-              {/* Blur slider */}
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-[11px] font-sans text-muted-foreground w-12">
+              {/* Blur slider with 56px fixed left label */}
+              <div className="flex items-center gap-3 w-full">
+                <span className="w-14 shrink-0 text-left text-xs font-mono text-muted-foreground">
                   Blur
                 </span>
                 <Slider
@@ -562,14 +626,29 @@ export function ThemeCustomizerView() {
                   min={0}
                   max={16}
                   step={1}
-                  onValueChange={(vals: number[]) => setWallpaperBlur(vals[0])}
+                  onValueChange={(vals) => {
+                    setWallpaperBlur(vals[0]);
+                    showTransientLabel(`Blur ${vals[0]}px`);
+                  }}
                   className="flex-1 cursor-pointer"
                 />
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Row 5: Fixed Non-Overlapping Transient Name Label (13px, sans, fades after 1.2s) */}
+        <div className="h-6 flex items-center justify-center text-[13px] font-sans font-medium text-foreground/80 tracking-normal text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] transition-opacity duration-300">
+          <span
+            className={cn(
+              "transition-opacity duration-300",
+              activeLabel ? "opacity-100" : "opacity-0"
+            )}
+          >
+            {activeLabel ?? ""}
+          </span>
+        </div>
       </div>
-    </TooltipProvider>
+    </motion.div>
   );
 }

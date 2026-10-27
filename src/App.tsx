@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock } from "@/features/dock/AgenticDock";
+import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { WorldView } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
@@ -17,6 +18,29 @@ export default function App() {
     wallpaperOpacity,
     wallpaperBlur,
   } = useThemeStore();
+
+  const handleDismissTool = (toolIdToDismiss?: string) => {
+    const targetTool = toolIdToDismiss ?? activeToolId;
+    setActiveToolId("");
+    if (targetTool) {
+      const dockBtn = document.querySelector<HTMLButtonElement>(
+        `[data-dock-tool-id="${targetTool}"]`
+      );
+      dockBtn?.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (activeToolId === "theme") {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          handleDismissTool("theme");
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [activeToolId]);
 
   return (
     <AppProviders>
@@ -59,50 +83,60 @@ export default function App() {
             onSelectTool={(toolId) => setActiveToolId(toolId)}
           />
 
-          {/* Main Active Workspace Content (rendered under the top dock HUD) */}
-          <main className="relative z-10 pt-28 pb-12 min-h-screen flex flex-col items-center">
-            {activeToolId === "theme" && <ThemeCustomizerView />}
+          {/* Main Active Workspace Content (rendered clear of the dock via DockSurface) */}
+          <main className="relative z-10 min-h-screen w-full flex flex-col items-center">
+            {activeToolId === "theme" && (
+              <DockSurface frameless>
+                <ThemeCustomizerView onDismiss={() => handleDismissTool("theme")} />
+              </DockSurface>
+            )}
             {activeToolId === "world" && (
-              <div className="w-full max-w-5xl px-4">
-                <WorldView
-                  onEnterCity={(cityName) => {
-                    setSelectedCity(cityName);
-                    setActiveToolId("city");
-                  }}
-                />
-              </div>
+              <DockSurface>
+                <div className="w-full max-w-5xl">
+                  <WorldView
+                    onEnterCity={(cityName) => {
+                      setSelectedCity(cityName);
+                      setActiveToolId("city");
+                    }}
+                  />
+                </div>
+              </DockSurface>
             )}
             {activeToolId === "city" && (
-              <div className="w-full max-w-5xl px-4">
-                <CityView
-                  cityName={selectedCity}
-                  onBackToWorld={() => setActiveToolId("world")}
-                />
-              </div>
+              <DockSurface>
+                <div className="w-full max-w-5xl">
+                  <CityView
+                    cityName={selectedCity}
+                    onBackToWorld={() => setActiveToolId("world")}
+                  />
+                </div>
+              </DockSurface>
             )}
             {activeToolId !== "theme" &&
               activeToolId !== "world" &&
               activeToolId !== "city" && (
-                <div className="w-full max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card border border-border/80 text-[var(--accent-lime)] shadow-[0_0_20px_rgba(200,255,87,0.15)] font-mono text-xl font-bold">
-                    {activeToolId === "terminal" ? ">_" : "✦"}
+                <DockSurface>
+                  <div className="w-full max-w-2xl mx-auto py-16 text-center space-y-4">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card border border-border/80 text-[var(--accent-lime)] shadow-[0_0_20px_rgba(200,255,87,0.15)] font-mono text-xl font-bold">
+                      {activeToolId === "terminal" ? ">_" : "✦"}
+                    </div>
+                    <h2 className="text-xl font-bold font-display tracking-tight text-foreground capitalize">
+                      {activeToolId} Experience Active
+                    </h2>
+                    <p className="text-sm text-muted-foreground font-sans max-w-md mx-auto">
+                      The agent mounts this tool workspace on demand. You can customize the look and feel or switch tools directly from the dock.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveToolId("theme")}
+                        className="px-4 py-2 rounded-lg text-xs font-mono border border-[var(--accent-lime)]/40 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/10 transition-colors cursor-pointer"
+                      >
+                        Open Theme & Wallpaper Customizer →
+                      </button>
+                    </div>
                   </div>
-                  <h2 className="text-xl font-bold font-display tracking-tight text-foreground capitalize">
-                    {activeToolId} Experience Active
-                  </h2>
-                  <p className="text-sm text-muted-foreground font-sans max-w-md mx-auto">
-                    The agent mounts this tool workspace on demand. You can customize the look and feel or switch tools directly from the dock.
-                  </p>
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveToolId("theme")}
-                      className="px-4 py-2 rounded-lg text-xs font-mono border border-[var(--accent-lime)]/40 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/10 transition-colors cursor-pointer"
-                    >
-                      Open Theme & Wallpaper Customizer →
-                    </button>
-                  </div>
-                </div>
+                </DockSurface>
               )}
           </main>
         </div>
