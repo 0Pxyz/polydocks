@@ -6,21 +6,24 @@ import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { WorldView } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
-import { AgentSheet } from "@/features/agent/AgentSheet";
+import { AgentConversation } from "@/features/agent/AgentConversation";
+import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { Sparkles } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 export default function App() {
-  const [activeToolId, setActiveToolId] = useState<string>("theme");
-  const [isAgentSheetOpen, setIsAgentSheetOpen] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("agent") === "open" || params.get("agent") === "expanded";
-    }
-    return false;
-  });
+  const [activeToolId, setActiveToolId] = useState<string>("");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>("Neural Networks");
+
+  const {
+    layoutState,
+    sideWidth,
+    isStreaming,
+    setLayoutState,
+    toggleAgent,
+  } = useConversationStore();
 
   const {
     wallpaperUrl,
@@ -42,17 +45,49 @@ export default function App() {
 
   const handleSelectTool = (toolId: string) => {
     if (toolId === "agent") {
-      setIsAgentSheetOpen((prev) => !prev);
+      toggleAgent(activeToolId);
       return;
     }
-    setActiveToolId(toolId);
+
+    const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+
+    // If chat is full and a tool is clicked, split to side
+    if (layoutState === "full") {
+      if (isWide) {
+        setLayoutState("side");
+        setActiveToolId(toolId);
+      } else {
+        setLayoutState("sheet");
+        setActiveToolId(toolId);
+      }
+      return;
+    }
+
+    // If chat is in side mode and same tool is re-clicked, close tool and chat goes to full
+    if (layoutState === "side" && activeToolId === toolId) {
+      setActiveToolId("");
+      setLayoutState("full");
+      return;
+    }
+
+    // Toggle tool selection normally
+    setActiveToolId((prev) => (prev === toolId ? "" : toolId));
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (isAgentSheetOpen) {
-          setIsAgentSheetOpen(false);
+        if (layoutState === "full") {
+          setLayoutState("sheet");
+        } else if (layoutState === "sheet") {
+          setLayoutState("closed");
+        } else if (layoutState === "side") {
+          if (activeToolId) {
+            setActiveToolId("");
+            setLayoutState("full");
+          } else {
+            setLayoutState("closed");
+          }
         } else if (activeToolId === "theme") {
           handleDismissTool("theme");
         }
@@ -60,7 +95,9 @@ export default function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isAgentSheetOpen, activeToolId]);
+  }, [layoutState, activeToolId, setLayoutState]);
+
+  const isSideLayout = layoutState === "side";
 
   return (
     <AppProviders>
@@ -100,15 +137,14 @@ export default function App() {
           {/* Pinned Agentic Dock at the top edge of the screen */}
           <AgenticDock
             activeToolId={activeToolId}
-            isAgentSheetOpen={isAgentSheetOpen}
+            isAgentSheetOpen={layoutState !== "closed"}
+            isAgentWorking={isStreaming}
             extraTools={extraTools}
             onSelectTool={handleSelectTool}
           />
 
-          {/* Agent Conversation Sheet (Anchored at bottom, expandable to full screen) */}
-          <AgentSheet
-            isOpen={isAgentSheetOpen}
-            onClose={() => setIsAgentSheetOpen(false)}
+          {/* Single Agent Conversation Instance (Never unmounted; survives layout transitions) */}
+          <AgentConversation
             cityId={selectedCity}
             onExperienceCreated={(exp) => {
               setExtraTools((prev) => {
@@ -126,18 +162,32 @@ export default function App() {
             }}
             onOpenExperience={(expId) => {
               setActiveToolId(expId);
-              setIsAgentSheetOpen(false);
             }}
           />
 
-          {/* Main Active Workspace Content (rendered clear of the dock via DockSurface) */}
-          <main className="relative z-10 min-h-screen w-full flex flex-col items-center">
-            {activeToolId === "theme" && (
+          {/* Main Active Workspace Content (rendered side-by-side or full width) */}
+          <main
+            style={isSideLayout ? { marginLeft: `${sideWidth}px` } : undefined}
+            className={cn(
+              "relative z-10 min-h-screen w-full flex flex-col items-center transition-[margin] duration-150",
+              isSideLayout && "w-[calc(100%-${sideWidth}px)] max-w-full"
+            )}
+          >
+            {activeToolId === "theme" ? (
               <DockSurface frameless>
                 <ThemeCustomizerView onDismiss={() => handleDismissTool("theme")} />
               </DockSurface>
-            )}
-            {activeToolId === "world" && (
+            ) : activeToolId === "city" ? (
+              <DockSurface>
+                <div className="w-full max-w-5xl">
+                  <CityView
+                    cityName={selectedCity}
+                    onBackToWorld={() => setActiveToolId("world")}
+                  />
+                </div>
+              </DockSurface>
+            ) : (
+              /* Living World/Map View is the base canvas (always visible behind sheet or as default view) */
               <DockSurface>
                 <div className="w-full max-w-5xl">
                   <WorldView
@@ -149,43 +199,6 @@ export default function App() {
                 </div>
               </DockSurface>
             )}
-            {activeToolId === "city" && (
-              <DockSurface>
-                <div className="w-full max-w-5xl">
-                  <CityView
-                    cityName={selectedCity}
-                    onBackToWorld={() => setActiveToolId("world")}
-                  />
-                </div>
-              </DockSurface>
-            )}
-            {activeToolId !== "theme" &&
-              activeToolId !== "world" &&
-              activeToolId !== "city" &&
-              activeToolId !== "agent" && (
-                <DockSurface>
-                  <div className="w-full max-w-2xl mx-auto py-16 text-center space-y-4">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card border border-border/80 text-[var(--accent-lime)] shadow-[0_0_20px_rgba(200,255,87,0.15)] font-mono text-xl font-bold">
-                      {activeToolId === "terminal" ? ">_" : "✦"}
-                    </div>
-                    <h2 className="text-xl font-bold font-display tracking-tight text-foreground capitalize">
-                      {activeToolId} Experience Active
-                    </h2>
-                    <p className="text-sm text-muted-foreground font-sans max-w-md mx-auto">
-                      The agent mounts this tool workspace on demand. You can customize the look and feel or switch tools directly from the dock.
-                    </p>
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveToolId("theme")}
-                        className="px-4 py-2 rounded-lg text-xs font-mono border border-[var(--accent-lime)]/40 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/10 transition-colors cursor-pointer"
-                      >
-                        Open Theme & Wallpaper Customizer →
-                      </button>
-                    </div>
-                  </div>
-                </DockSurface>
-              )}
           </main>
         </div>
       </RootLayout>

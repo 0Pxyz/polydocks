@@ -243,4 +243,43 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
     expect(result.error).toBe("Meta API rate limit exceeded");
     expect(events.some((e) => e.type === "error")).toBe(true);
   });
+
+  it("should map upstream 401 Unauthorized to typed model_unauthorized event with no secrets leaked", async () => {
+    const events: AgentStepEvent[] = [];
+    const SECRET_KEY = "sk-meta-supersecret-token-123456";
+
+    const mockLlmClient: any = {
+      chat: {
+        completions: {
+          create: async () => {
+            const authError: any = new Error(
+              `401 Unauthorized: Invalid API key '${SECRET_KEY}' passed in Authorization header`
+            );
+            authError.status = 401;
+            authError.name = "AuthenticationError";
+            throw authError;
+          },
+        },
+      },
+    };
+
+    const result = await runAgentLoop({
+      prompt: "Hello",
+      llmClient: mockLlmClient,
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.error).toBe("model_unauthorized");
+
+    const errEvent = events.find((e) => e.type === "error");
+    expect(errEvent).toBeDefined();
+    expect(errEvent?.payload?.code).toBe("model_unauthorized");
+    expect(errEvent?.payload?.message).toBe("Model access isn't set up. Check your API key.");
+
+    // Critical security check: Ensure raw secret key is never leaked
+    const fullPayloadString = JSON.stringify(events);
+    expect(fullPayloadString).not.toContain(SECRET_KEY);
+    expect(fullPayloadString).not.toContain("Authorization");
+  });
 });

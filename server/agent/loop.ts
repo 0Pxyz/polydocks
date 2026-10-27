@@ -282,6 +282,35 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       steps: currentStep,
     };
   } catch (err: any) {
+    const isUnauthorized =
+      err?.status === 401 ||
+      err?.status === 403 ||
+      err?.statusCode === 401 ||
+      err?.statusCode === 403 ||
+      err?.name === "AuthenticationError" ||
+      (typeof err?.message === "string" &&
+        (err.message.includes("401") ||
+          err.message.toLowerCase().includes("unauthorized") ||
+          err.message.toLowerCase().includes("authentication error") ||
+          err.message.toLowerCase().includes("incorrect api key")));
+
+    if (isUnauthorized) {
+      await onEvent({
+        step: currentStep,
+        type: "error",
+        payload: {
+          code: "model_unauthorized",
+          message: "Model access isn't set up. Check your API key.",
+        },
+      });
+
+      return {
+        status: "error",
+        error: "model_unauthorized",
+        steps: currentStep,
+      };
+    }
+
     const errorMessage = err?.message || String(err);
     await onEvent({
       step: currentStep,
