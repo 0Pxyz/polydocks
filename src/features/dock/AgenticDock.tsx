@@ -82,16 +82,34 @@ interface AgenticDockProps {
   activeToolId?: string;
   onSelectTool?: (toolId: string) => void;
   className?: string;
+  isAgentWorking?: boolean;
+  isAgentSheetOpen?: boolean;
+  extraTools?: DockToolItem[];
 }
 
 export function AgenticDock({
   activeToolId: controlledActiveToolId,
   onSelectTool,
   className,
+  isAgentWorking = false,
+  isAgentSheetOpen = false,
+  extraTools = [],
 }: AgenticDockProps) {
   const headerRef = useRef<HTMLElement>(null);
-  const [internalActiveToolId, setInternalActiveToolId] = useState<string>("agent");
+  const [internalActiveToolId, setInternalActiveToolId] = useState<string>("");
   const activeToolId = controlledActiveToolId ?? internalActiveToolId;
+
+  // Global ⌘K shortcut for agent conversation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        onSelectTool?.("agent");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onSelectTool]);
 
   // Measure dock bottom edge dynamically and publish --dock-bottom to :root
   useEffect(() => {
@@ -125,6 +143,8 @@ export function AgenticDock({
     }
     onSelectTool?.(nextToolId);
   };
+
+  const allTools = [...DOCK_TOOLS, ...extraTools];
 
   return (
     <header
@@ -171,9 +191,11 @@ export function AgenticDock({
 
         {/* Floating Dock Capsule */}
         <div className="bg-[#0d1118]/95 border border-border/80 rounded-[14px] p-1.5 flex items-center gap-1.5 shadow-[0_14px_35px_rgba(0,0,0,0.7),inset_0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur-xl transition-all duration-200">
-          {DOCK_TOOLS.map((tool) => {
-            const isActive = activeToolId === tool.id;
+          {allTools.map((tool) => {
             const isAgent = tool.isAgent;
+            const isActive = isAgent
+              ? activeToolId === tool.id || isAgentSheetOpen
+              : activeToolId === tool.id;
 
             return (
               <button
@@ -188,6 +210,10 @@ export function AgenticDock({
                   isActive &&
                     isAgent &&
                     "bg-[#1d68fe] text-white shadow-[0_0_18px_rgba(29,104,254,0.6),0_2px_6px_rgba(0,0,0,0.4)]",
+                  !isActive &&
+                    isAgent &&
+                    isAgentWorking &&
+                    "text-[var(--accent-lime)] animate-pulse shadow-[0_0_12px_rgba(200,255,87,0.4)]",
                   isActive &&
                     !isAgent &&
                     "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/40 shadow-[0_0_12px_rgba(200,255,87,0.25)]"
