@@ -9,6 +9,8 @@ import { get_city_context } from "./get_city_context";
 import { read_city_file } from "./read_city_file";
 import { write_city_file } from "./write_city_file";
 import { open_source } from "./open_source";
+import { search_web } from "./search_web";
+import { fetch_page } from "./fetch_page";
 
 export * from "./types";
 export {
@@ -22,6 +24,8 @@ export {
   read_city_file,
   write_city_file,
   open_source,
+  search_web,
+  fetch_page,
 };
 
 /**
@@ -38,4 +42,6 @@ export const defaultTools: AgentTool[] = [
   read_city_file,
   write_city_file,
   open_source,
+  search_web,
+  fetch_page,
 ];
