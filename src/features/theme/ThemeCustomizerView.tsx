@@ -53,6 +53,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
   const themeRowRef = useRef<HTMLDivElement>(null);
   const accentRowRef = useRef<HTMLDivElement>(null);
   const wallpaperRowRef = useRef<HTMLDivElement>(null);
+  const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     theme,
@@ -69,13 +70,32 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     resetTheme,
   } = useThemeStore();
 
-  const [hoveredLabel, setHoveredLabel] = useState<string | null>(null);
+  const [activeLabel, setActiveLabel] = useState<string | null>(() => {
+    return THEMES.find((t) => t.id === theme)?.name ?? "Void Lime";
+  });
   const [customHex, setCustomHex] = useState(customAccentColor ?? "#00FF66");
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [isWallpaperPopoverOpen, setIsWallpaperPopoverOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
 
   const isReduced = prefersReducedMotion();
+
+  // Show transient name label that fades out after 1.2s of inactivity
+  const showTransientLabel = (text: string) => {
+    setActiveLabel(text);
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+    }
+    fadeTimeoutRef.current = setTimeout(() => {
+      setActiveLabel(null);
+    }, 1200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+    };
+  }, []);
 
   // Outside click dismiss
   useEffect(() => {
@@ -104,6 +124,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
       reader.onload = () => {
         if (typeof reader.result === "string") {
           setWallpaper(reader.result, { fit: "cover" });
+          showTransientLabel("Custom Wallpaper");
         }
       };
       reader.readAsDataURL(file);
@@ -118,6 +139,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
       if (typeof reader.result === "string") {
         setWallpaper(reader.result, { fit: "cover" });
         setIsWallpaperPopoverOpen(false);
+        showTransientLabel("Custom Wallpaper");
       }
     };
     reader.readAsDataURL(file);
@@ -128,6 +150,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     setWallpaper(urlInput.trim(), { fit: "cover" });
     setUrlInput("");
     setIsWallpaperPopoverOpen(false);
+    showTransientLabel("Remote Wallpaper");
   };
 
   const handleRowKeyNavigation = (
@@ -155,6 +178,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     setCustomHex(hex);
     if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex)) {
       setCustomAccentColor(hex);
+      showTransientLabel(`Custom (${hex.toUpperCase()})`);
     }
   };
 
@@ -219,6 +243,15 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
       onDrop={handleDrop}
       className="relative flex flex-col items-center justify-center select-none"
     >
+      {/* Soft radial scrim fading completely within ~120px without visible edges */}
+      <div
+        className="pointer-events-none absolute -inset-x-24 -inset-y-16 -z-10 opacity-80"
+        style={{
+          background:
+            "radial-gradient(ellipse 260px 180px at 50% 45%, rgba(10, 10, 12, 0.92) 0%, rgba(10, 10, 12, 0.5) 60%, transparent 100%)",
+        }}
+      />
+
       {/* One aligned column: exactly 336px wide with 24px vertical rhythm */}
       <div className="flex flex-col items-center space-y-6 w-[calc(100vw-32px)] sm:w-[336px] max-w-[336px] mx-auto px-1">
         {/* Row 1: Base Theme Swatches (40px) + Reset (40px) */}
@@ -242,9 +275,11 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                 onKeyDown={(e) =>
                   handleRowKeyNavigation(e, idx, THEMES.length + 1, themeRowRef)
                 }
-                onClick={() => setTheme(item.id)}
-                onMouseEnter={() => setHoveredLabel(item.name)}
-                onMouseLeave={() => setHoveredLabel(null)}
+                onClick={() => {
+                  setTheme(item.id);
+                  showTransientLabel(item.name);
+                }}
+                onMouseEnter={() => showTransientLabel(item.name)}
                 className={cn(
                   "relative w-10 h-10 rounded-full transition-all duration-150 cursor-pointer overflow-hidden border border-white/20 backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isSelected
@@ -268,10 +303,12 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
 
           <button
             type="button"
-            onClick={resetTheme}
+            onClick={() => {
+              resetTheme();
+              showTransientLabel("Reset");
+            }}
             aria-label="Reset appearance"
-            onMouseEnter={() => setHoveredLabel("Reset")}
-            onMouseLeave={() => setHoveredLabel(null)}
+            onMouseEnter={() => showTransientLabel("Reset")}
             className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground border border-white/15 hover:border-white/35 backdrop-blur-md bg-white/[0.04] hover:bg-white/[0.09] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <RotateCcw className="w-4 h-4" />
@@ -311,9 +348,11 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                     accentRowRef
                   )
                 }
-                onClick={() => setCustomAccentColor(item.color)}
-                onMouseEnter={() => setHoveredLabel(item.label)}
-                onMouseLeave={() => setHoveredLabel(null)}
+                onClick={() => {
+                  setCustomAccentColor(item.color);
+                  showTransientLabel(item.label);
+                }}
+                onMouseEnter={() => showTransientLabel(item.label)}
                 className={cn(
                   "w-7 h-7 rounded-full transition-all duration-150 cursor-pointer border border-white/25 backdrop-blur-md shadow-[0_2px_6px_rgba(0,0,0,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isCurrent
@@ -344,8 +383,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                     accentRowRef
                   )
                 }
-                onMouseEnter={() => setHoveredLabel("Custom Color")}
-                onMouseLeave={() => setHoveredLabel(null)}
+                onMouseEnter={() => showTransientLabel("Custom Color")}
                 className={cn(
                   "w-7 h-7 rounded-full flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isCustomAccentActive
@@ -423,9 +461,11 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                 wallpaperRowRef
               )
             }
-            onClick={clearWallpaper}
-            onMouseEnter={() => setHoveredLabel("None")}
-            onMouseLeave={() => setHoveredLabel(null)}
+            onClick={() => {
+              clearWallpaper();
+              showTransientLabel("None");
+            }}
+            onMouseEnter={() => showTransientLabel("None")}
             className={cn(
               "w-[50px] h-[50px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               !wallpaperUrl
@@ -455,9 +495,11 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                     wallpaperRowRef
                   )
                 }
-                onClick={() => setWallpaper(preset.url, { fit: "cover" })}
-                onMouseEnter={() => setHoveredLabel(preset.name)}
-                onMouseLeave={() => setHoveredLabel(null)}
+                onClick={() => {
+                  setWallpaper(preset.url, { fit: "cover" });
+                  showTransientLabel(preset.name);
+                }}
+                onMouseEnter={() => showTransientLabel(preset.name)}
                 className={cn(
                   "w-[50px] h-[50px] rounded-xl transition-all duration-150 cursor-pointer overflow-hidden border bg-cover bg-center backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isSelected
@@ -488,8 +530,7 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                     wallpaperRowRef
                   )
                 }
-                onMouseEnter={() => setHoveredLabel("Upload or URL")}
-                onMouseLeave={() => setHoveredLabel(null)}
+                onMouseEnter={() => showTransientLabel("Upload or URL")}
                 className={cn(
                   "w-[50px] h-[50px] rounded-xl flex items-center justify-center transition-all duration-150 cursor-pointer border border-dashed backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   wallpaperUrl && !isPresetWallpaperActive
@@ -567,7 +608,10 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                   min={5}
                   max={80}
                   step={5}
-                  onValueChange={(vals) => setWallpaperOpacity(vals[0] / 100)}
+                  onValueChange={(vals) => {
+                    setWallpaperOpacity(vals[0] / 100);
+                    showTransientLabel(`Opacity ${vals[0]}%`);
+                  }}
                   className="flex-1 cursor-pointer"
                 />
               </div>
@@ -582,7 +626,10 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
                   min={0}
                   max={16}
                   step={1}
-                  onValueChange={(vals) => setWallpaperBlur(vals[0])}
+                  onValueChange={(vals) => {
+                    setWallpaperBlur(vals[0]);
+                    showTransientLabel(`Blur ${vals[0]}px`);
+                  }}
                   className="flex-1 cursor-pointer"
                 />
               </div>
@@ -590,9 +637,16 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
           )}
         </AnimatePresence>
 
-        {/* Row 5: Fixed Label Slot */}
-        <div className="h-5 flex items-center justify-center text-[12px] font-sans text-muted-foreground/90 tracking-wide text-center">
-          {hoveredLabel}
+        {/* Row 5: Fixed Non-Overlapping Transient Name Label (13px, sans, fades after 1.2s) */}
+        <div className="h-6 flex items-center justify-center text-[13px] font-sans font-medium text-foreground/80 tracking-normal text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] transition-opacity duration-300">
+          <span
+            className={cn(
+              "transition-opacity duration-300",
+              activeLabel ? "opacity-100" : "opacity-0"
+            )}
+          >
+            {activeLabel ?? ""}
+          </span>
         </div>
       </div>
     </motion.div>
