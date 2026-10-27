@@ -43,7 +43,13 @@ export function AgentSheet({
   onOpenExperience,
   className,
 }: AgentSheetProps) {
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("agent") === "expanded";
+    }
+    return false;
+  });
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [inputText, setInputText] = useState<string>("");
   const [showTextInput, setShowTextInput] = useState<boolean>(true);

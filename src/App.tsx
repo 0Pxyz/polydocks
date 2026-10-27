@@ -12,7 +12,13 @@ import { Sparkles } from "lucide-react";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("theme");
-  const [isAgentSheetOpen, setIsAgentSheetOpen] = useState<boolean>(false);
+  const [isAgentSheetOpen, setIsAgentSheetOpen] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("agent") === "open" || params.get("agent") === "expanded";
+    }
+    return false;
+  });
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>("Neural Networks");
 
