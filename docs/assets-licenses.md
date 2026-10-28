@@ -17,5 +17,6 @@ Per project principles, external copyrighted cartography assets (such as user ma
 | :--- | :--- | :--- | :--- |
 | `d3-delaunay` | ISC | Voronoi tessellation & Lloyd relaxation for procedural territory cells | https://github.com/d3/d3-delaunay |
 | `simplex-noise` | MIT | Deterministic heightfield generation & coastline perturbation | https://github.com/jwagner/simplex-noise.js |
-| `lucide-react` | ISC | System and interface navigation icons | https://github.com/lucide-icons/lucide |
+| `lucide-react` | ISC | Legacy system and interface navigation icons (retained only for shadcn/ui primitives) | https://github.com/lucide-icons/lucide |
+| `phosphor-icons` (`@phosphor-icons/react`, `@phosphor-icons/core`) | MIT | Unified dock iconography family, dynamic dock experiences, and agent icon catalog | https://github.com/phosphor-icons/homepage |
 | `mulberry32` (PRNG) | Public Domain / Custom | Seeded 32-bit PRNG implemented in `src/lib/mapgen/prng.ts` | Self-contained implementation |
