@@ -42,6 +42,7 @@ export interface AgentLoopOptions {
   llmClient?: typeof llm;
   modelId?: string;
   systemPrompt?: string;
+  signal?: AbortSignal;
 }
 
 export interface AgentLoopResult {
@@ -82,6 +83,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     llmClient = llm,
     modelId = MODEL_ID,
     systemPrompt = DEFAULT_SYSTEM_PROMPT,
+    signal,
   } = options;
 
   let currentStep = 0;
@@ -230,6 +232,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     const retryCounts = new Map<string, number>();
 
     while (currentStep < maxSteps) {
+      if (signal?.aborted) {
+        await onEvent({
+          step: currentStep,
+          type: "error",
+          payload: { code: "aborted", message: "Task execution cancelled by user." },
+        });
+        return {
+          status: "error",
+          error: "Execution cancelled",
+          steps: currentStep,
+        };
+      }
+
       currentStep++;
 
       const completionParams: any = {
@@ -242,7 +257,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         completionParams.tool_choice = "auto";
       }
 
-      const response = await llmClient.chat.completions.create(completionParams);
+      const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
       const choice = response.choices?.[0];
 
       if (!choice || !choice.message) {
@@ -448,6 +463,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       steps: currentStep,
     };
   } catch (err: any) {
+    if (err?.name === "AbortError" || signal?.aborted) {
+      return {
+        status: "error",
+        error: "Execution cancelled",
+        steps: currentStep,
+      };
+    }
+
     const isUnauthorized =
       err?.status === 401 ||
       err?.status === 403 ||

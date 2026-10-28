@@ -190,4 +190,39 @@ CREATE TABLE IF NOT EXISTS registry_plugins (
   updated_at TEXT NOT NULL
 );
 
+-- Persistent Work Sessions & Background Task Engine (Issue #76)
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  title TEXT,
+  status TEXT NOT NULL DEFAULT 'active', -- 'active' | 'paused' | 'completed' | 'archived'
+  metadata_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'chat' | 'plugin_synthesis' | 'research' | 'background_worker'
+  status TEXT NOT NULL DEFAULT 'queued', -- 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  progress REAL DEFAULT 0.0,
+  input_json TEXT,
+  output_json TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+
 
