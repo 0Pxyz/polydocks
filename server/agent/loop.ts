@@ -126,10 +126,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const imageAttachments = attachments.filter((a) => a.isImage || (a.type && a.type.startsWith("image/")));
   const textAttachments = attachments.filter((a) => !a.isImage && !(a.type && a.type.startsWith("image/")));
 
-  // Automatically route prompts with image attachments to Meta Llama 3.2 Vision if on default agent model
+  // Automatically route prompts with image attachments to the catalog vision model when on the default agent model
+  const VISION_MODEL_ID = process.env.MODEL_VISION_ID || "meta-llama/Llama-3.2-11B-Vision-Instruct";
   let effectiveModel = modelId;
   if (imageAttachments.length > 0 && (!modelId || modelId === MODEL_ID)) {
-    effectiveModel = "meta-llama/Llama-3.2-11B-Vision-Instruct";
+    effectiveModel = VISION_MODEL_ID;
   }
 
   let currentStep = 0;
