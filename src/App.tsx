@@ -9,6 +9,7 @@ import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { HomeScreen } from "@/features/home/HomeScreen";
+import { OnboardingModal } from "@/features/onboarding/OnboardingModal";
 import { WorldView } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
@@ -306,7 +307,10 @@ export default function App() {
             }
           />
 
-          {/* Dynamic Command Palette (⌘K) */}
+          {/* First-launch Guided Onboarding */}
+          <OnboardingModal />
+
+          {/* Dynamic Command Palette (⌘⇧P) */}
           <CommandPalette
             cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             onOpenAgent={() => {
@@ -403,7 +407,11 @@ export default function App() {
             ) : !isMapsOpen ? (
               <DockSurface frameless>
                 <HomeScreen
-                  onSendMessage={(prompt, meta) => handleToolPromptSubmit(prompt, meta)}
+                  onSendMessage={(prompt, meta) => {
+                    handleToolPromptSubmit(prompt, meta);
+                    const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+                    setLayoutState(isWide ? "side" : "sheet");
+                  }}
                   onEnterCity={(cityName) => {
                     setSelectedCity(cityName);
                     enterCity(cityName);
