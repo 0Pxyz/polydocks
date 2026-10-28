@@ -17,7 +17,7 @@ import {
   PuzzlePiece,
   ShieldCheck,
 } from "@phosphor-icons/react";
-import type { IconComponent } from "@/components/icons/adapter";
+import { resolveIcon, type IconComponent } from "@/components/icons/adapter";
 
 /**
  * Icon catalog map for resolving icon names to Phosphor React icon components.
@@ -44,19 +44,22 @@ export const ICON_CATALOG: Record<string, IconComponent> = {
  */
 export function resolveSurfaceIcon(icon: unknown): IconComponent {
   if (typeof icon === "string") {
-    return ICON_CATALOG[icon] || Sparkle;
+    return ICON_CATALOG[icon] || ICON_CATALOG.Sparkle;
   }
   if (icon && typeof icon === "object") {
     return icon as IconComponent;
   }
-  return Sparkle;
+  return ICON_CATALOG.Sparkle;
 }
 
 /**
  * Converts a plugin surface manifest into an active DockToolItem.
  */
 export function surfaceToDockTool(surface: Surface, plugin?: PluginManifest): DockToolItem {
-  const iconComponent = resolveSurfaceIcon(surface.icon);
+  let iconComponent = resolveSurfaceIcon(surface.icon);
+  if (iconComponent === ICON_CATALOG.Sparkle && surface.title) {
+    iconComponent = resolveIcon(surface.title);
+  }
   const isAgent = surface.id === "agent" || plugin?.id === "agent";
 
   return {
