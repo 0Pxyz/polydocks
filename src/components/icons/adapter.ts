@@ -41,6 +41,7 @@ import {
   Sliders,
   Shield,
   Lightbulb,
+  Plus,
 } from "@phosphor-icons/react";
 
 export type IconComponent = ComponentType<{
@@ -59,7 +60,11 @@ const ICON_MAP: Record<string, IconComponent> = {
   world: Compass,
   compass: Compass,
   map: Compass,
+  maps: Compass,
   maptrifold: Compass,
+
+  settings: Sliders,
+  plus: Plus,
 
   files: Folder,
   folder: Folder,
