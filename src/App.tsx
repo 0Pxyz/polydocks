@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { Compass, Sparkle, Cards } from "@phosphor-icons/react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
-import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
+import { AgenticDock, type DockToolItem, STORE_DOCK_TOOL } from "@/features/dock/AgenticDock";
 import { CommandPalette } from "@/features/dock/CommandPalette";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
+import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { WorldView, INITIAL_GLOBAL_CITIES } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
@@ -60,8 +61,9 @@ export default function App() {
     }));
 
   const activeExtraTools = [
-    ...extraTools,
-    ...workspaceDockTools.filter((wt) => !extraTools.some((et) => et.id === wt.id)),
+    STORE_DOCK_TOOL,
+    ...extraTools.filter((t) => t.id !== "store"),
+    ...workspaceDockTools.filter((wt) => wt.id !== "store" && !extraTools.some((et) => et.id === wt.id)),
   ];
 
   const handleDismissTool = (toolIdToDismiss?: string) => {
@@ -358,6 +360,16 @@ export default function App() {
             ) : activeToolId === "plugins" ? (
               <DockSurface frameless>
                 <PluginsView onDismiss={() => handleDismissTool("plugins")} />
+              </DockSurface>
+            ) : activeToolId === "store" ? (
+              <DockSurface frameless>
+                <PluginStoreView
+                  onDismiss={() => handleDismissTool("store")}
+                  onOpenPlugin={(pluginId) => {
+                    setActiveToolId(pluginId);
+                    setDockActiveTool(pluginId);
+                  }}
+                />
               </DockSurface>
             ) : activeExtraTools.some((t) => t.id === activeToolId) ? (
               <DockSurface frameless>
