@@ -295,6 +295,18 @@ export class PluginRegistry {
   }
 
   /**
+   * Alias for recordGrant.
+   */
+  public grantPermission(
+    pluginId: string,
+    permissionType: string,
+    scope: string,
+    status: "allow_once" | "allow_always" | "denied"
+  ): PluginGrantRecord {
+    return this.recordGrant(pluginId, permissionType, scope, status);
+  }
+
+  /**
    * Retrieve active grants for a plugin.
    */
   public getGrants(pluginId: string): PluginGrantRecord[] {
