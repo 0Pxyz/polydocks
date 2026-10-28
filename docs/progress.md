@@ -45,5 +45,5 @@
 | 2026-10-28 | Minimal polydocks CLI for runtime status, sessions, tasks, plugins, and agent execution | [#88](https://github.com/0Pxyz/polymax/pull/88) |
 | 2026-10-28 | Session-aware agent loop with background task dispatch, session transcript streaming, and unified capabilities | [#89](https://github.com/0Pxyz/polymax/pull/89) |
 | 2026-10-28 | Resolve Ctrl+K collision, city knowledge capabilities launchpad, and guided onboarding walkthrough | [#91](https://github.com/0Pxyz/polymax/pull/91) |
-| 2026-10-28 | Intent-driven context-aware agent execution policy, minimal status messaging, and unified chat UX | [#92](https://github.com/0Pxyz/polymax/pull/92) |
 | 2026-10-28 | Unified voice and text chat surface with scrollable transcript and intent-driven agent loop | [#92](https://github.com/0Pxyz/polymax/pull/92) |
+| 2026-10-28 | Persistent agent-home container isolation, loopback port binding, and Docker resource limits | [#93](https://github.com/0Pxyz/polymax/pull/93) |
