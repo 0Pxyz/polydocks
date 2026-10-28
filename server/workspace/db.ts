@@ -17,6 +17,7 @@ export const db = new Database(dbPath, { create: true });
 
 // Enable Write-Ahead Logging (WAL) for high concurrency
 db.exec("PRAGMA journal_mode = WAL;");
+db.exec("PRAGMA busy_timeout = 5000;");
 
 // Initialize schema
 try {

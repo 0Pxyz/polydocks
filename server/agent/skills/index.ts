@@ -147,6 +147,31 @@ export function isTabSynthesisIntent(prompt: string): boolean {
  */
 export function isWorldPlanningIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
+
+  // Negative filter: general informational questions, greetings, explanations
+  if (
+    lower.startsWith("what is") ||
+    lower.startsWith("what are") ||
+    lower.startsWith("o que e") ||
+    lower.startsWith("o que é") ||
+    lower.startsWith("how does") ||
+    lower.startsWith("como funciona") ||
+    lower.startsWith("explain") ||
+    lower.startsWith("explica") ||
+    lower.startsWith("why is") ||
+    lower.startsWith("por que")
+  ) {
+    if (
+      !lower.includes("city") &&
+      !lower.includes("cidade") &&
+      !lower.includes("world map") &&
+      !lower.includes("mapa") &&
+      !lower.includes("territory")
+    ) {
+      return false;
+    }
+  }
+
   const triggers = [
     "nova area",
     "nova área",
@@ -167,19 +192,18 @@ export function isWorldPlanningIntent(prompt: string): boolean {
     "nova cidade",
     "fundar cidade",
     "found city",
+    "knowledge city",
+    "cidade do conhecimento",
+    "create city",
+    "create a city",
+    "create a knowledge city",
     "novo tema",
     "novo topico",
     "novo tópico",
     "new topic",
-    "new subject",
     "new domain",
-    "quero aprender",
-    "quero estudar",
-    "aprender sobre",
-    "estudar sobre",
-    "want to learn",
-    "learn about",
-    "master topic",
+    "quero aprender sobre física quântica",
+    "want to learn neuroscience",
   ];
 
   return triggers.some((t) => lower.includes(t));
@@ -191,6 +215,19 @@ export function isWorldPlanningIntent(prompt: string): boolean {
  */
 export function isResearchIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
+
+  // Negative filter for greetings and general short conversation
+  if (
+    lower === "hey" ||
+    lower === "hi" ||
+    lower === "hello" ||
+    lower === "ola" ||
+    lower === "olá" ||
+    lower.startsWith("what time") ||
+    lower.startsWith("change accent")
+  ) {
+    return false;
+  }
 
   try {
     const searchPlugin = pluginRegistry.get("search");
@@ -205,31 +242,27 @@ export function isResearchIntent(prompt: string): boolean {
 
   const triggers = [
     "research",
-    "search",
+    "search web",
+    "search the web",
+    "pesquisa na web",
+    "pesquise na internet",
+    "pesquise na web",
     "find paper",
     "papers",
     "feed",
     "curate",
     "pesquisa",
     "pesquise",
-    "buscar",
-    "encontrar",
-    "noticias",
+    "buscar fontes",
     "fontes",
     "sources",
     "latest on",
-    "learn about",
-    "explore",
     "tutorial",
     "documentation",
     "docs",
-    "study",
     "quest",
     "quests",
-    "notes",
-    "explain",
-    "what is",
-    "how does",
+    "learn about",
   ];
 
   return triggers.some((t) => lower.includes(t));

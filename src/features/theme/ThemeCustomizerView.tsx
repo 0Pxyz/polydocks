@@ -3,6 +3,7 @@ import { RotateCcw, Plus, Check, Ban, Upload, Clipboard } from "lucide-react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { THEMES, useThemeStore } from "@/lib/theme";
 import { DOCK_STYLES, type DockStyleId } from "@/features/dock/styles";
+import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -842,6 +843,24 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
               Bottom
             </button>
           </div>
+        </motion.div>
+
+        {/* Product Walkthrough Replay */}
+        <motion.div
+          variants={rowVariants}
+          className="w-full flex items-center justify-between pt-1"
+        >
+          <span className="text-xs font-mono text-muted-foreground">Walkthrough</span>
+          <button
+            type="button"
+            onClick={() => {
+              useOnboardingStore.getState().openOnboarding();
+              onDismiss?.();
+            }}
+            className="text-xs text-[#9aa5b8] hover:text-white transition-colors cursor-pointer px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08]"
+          >
+            Replay
+          </button>
         </motion.div>
 
         {/* Row 5: Fixed Non-Overlapping Transient Name Label (13px, sans, fades after 1.2s) */}
