@@ -2,12 +2,13 @@ import { Hono } from "hono";
 import { getCityContext, writeCityFile, readCityFile } from "../workspace/cityWorkspace";
 import { generateCityFeed } from "../discovery/feedGenerator";
 import { defaultTools } from "../agent/tools";
+import { capabilityBus } from "../plugins/bus";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 export const mcpRouter = new Hono();
 
-const MCP_TOOLS = [
+const CORE_MCP_TOOLS = [
   {
     name: "list_cities",
     description: "Lists all knowledge cities and workspaces on the Polymax World Map.",
@@ -70,9 +71,59 @@ const MCP_TOOLS = [
 ];
 
 /**
+ * Verifies loopback origin or bearer token authentication when reachable beyond localhost.
+ */
+function isAuthorizedMcpRequest(c: any): boolean {
+  let hostname = "";
+  try {
+    const url = new URL(c.req.url);
+    hostname = url.hostname;
+  } catch {
+    hostname = "";
+  }
+
+  const hostHeader = c.req.header("host") || "";
+  const authHeader = c.req.header("authorization") || "";
+  const isLoopback =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostHeader.startsWith("localhost") ||
+    hostHeader.startsWith("127.0.0.1") ||
+    hostHeader.startsWith("[::1]");
+
+  const configuredToken = process.env.MCP_TOKEN;
+
+  // If a token is explicitly configured, enforce it regardless
+  if (configuredToken && configuredToken.trim().length > 0) {
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    return bearer === configuredToken.trim();
+  }
+
+  // If request arrives from beyond loopback without local origin, require bearer auth
+  if (!isLoopback) {
+    if (!authHeader) return false;
+    return authHeader.length > 0;
+  }
+
+  return true;
+}
+
+/**
  * Handles Model Context Protocol JSON-RPC 2.0 requests
  */
 mcpRouter.post("/", async (c) => {
+  if (!isAuthorizedMcpRequest(c)) {
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32000, message: "Unauthorized: MCP bearer token required for remote access" },
+      },
+      401
+    );
+  }
+
   let body: any;
   try {
     body = await c.req.json();
@@ -106,11 +157,27 @@ mcpRouter.post("/", async (c) => {
     }
 
     case "tools/list": {
+      // Dynamic catalog from capability bus merged with core tools
+      const busCapabilities = capabilityBus.getCapabilities({ enabledOnly: true }).map((cap) => ({
+        name: cap.id,
+        description: cap.description,
+        inputSchema: cap.inputSchema || { type: "object", properties: {} },
+      }));
+
+      const toolNames = new Set(CORE_MCP_TOOLS.map((t) => t.name));
+      const mergedTools = [...CORE_MCP_TOOLS];
+      for (const cap of busCapabilities) {
+        if (!toolNames.has(cap.name)) {
+          mergedTools.push(cap);
+          toolNames.add(cap.name);
+        }
+      }
+
       return c.json({
         jsonrpc: "2.0",
         id,
         result: {
-          tools: MCP_TOOLS,
+          tools: mergedTools,
         },
       });
     }
@@ -122,7 +189,18 @@ mcpRouter.post("/", async (c) => {
       try {
         let executionResult: unknown;
 
-        if (toolName === "list_cities") {
+        // 1. Try capability bus first if registered
+        const registeredCap = capabilityBus.getCapability(toolName);
+        if (registeredCap) {
+          const res = await capabilityBus.invoke(toolName, args, {
+            actor: "user",
+            cityId: args.cityId,
+          });
+          if (!res.success) {
+            throw new Error(res.error || "Capability execution failed");
+          }
+          executionResult = res.data;
+        } else if (toolName === "list_cities") {
           const workspaceRoot = path.resolve(process.cwd(), "workspace");
           try {
             const entries = await fs.readdir(workspaceRoot, { withFileTypes: true });

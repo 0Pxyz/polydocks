@@ -9,6 +9,8 @@ import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { mcpRouter } from "./api/mcp";
 import { citiesRouter } from "./routes/cities";
 import { mapsRouter } from "./routes/maps";
+import { pluginsRouter } from "./routes/plugins";
+import { capabilityBus } from "./plugins/bus";
 import { db } from "./workspace/db";
 
 const app = new Hono();
@@ -82,6 +84,24 @@ app.get("/api/health", (c) => {
 
 // Mount Model Context Protocol (MCP) router
 app.route("/api/mcp", mcpRouter);
+
+// Mount Plugins and Capabilities router
+app.route("/api/plugins", pluginsRouter);
+app.get("/api/capabilities", (c) => {
+  const enabledOnly = c.req.query("enabled") !== "false";
+  const capabilities = capabilityBus.getCapabilities({ enabledOnly });
+  return c.json({
+    capabilities: capabilities.map((cap) => ({
+      id: cap.id,
+      pluginId: cap.pluginId,
+      title: cap.title,
+      description: cap.description,
+      risk: cap.risk,
+      inputSchema: cap.inputSchema,
+      outputSchema: cap.outputSchema,
+    })),
+  });
+});
 
 // Mount Cities & Workspaces router
 app.route("/api/cities", citiesRouter);
