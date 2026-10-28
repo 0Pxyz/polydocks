@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { Crosshair } from "@phosphor-icons/react";
 import { BUNDLED_MAPS } from "../world/bundledMaps";
 import { IllustratedWorldMap } from "../world/IllustratedWorldMap";
 import { MapMarkersOverlay } from "../world/MapMarkersOverlay";
@@ -39,6 +40,7 @@ export function WorldView({
   const [cityPoints, setCityPoints] = useState<CityPoint[]>([]);
   const [isFlyingIn, setIsFlyingIn] = useState<boolean>(false);
   const [targetCityId, setTargetCityId] = useState<string | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<{ cityId: string; title: string } | null>(null);
 
   // Found a city inline input state
   const [foundCityPrompt, setFoundCityPrompt] = useState<{
@@ -82,9 +84,60 @@ export function WorldView({
       .catch(() => {});
   }, []);
 
+  // Cancel placement or prompt on Esc
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (pendingPlacement) setPendingPlacement(null);
+        if (foundCityPrompt) setFoundCityPrompt(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pendingPlacement, foundCityPrompt]);
+
+  const handleMapClick = (e: React.MouseEvent) => {
+    if (!pendingPlacement) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nx = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    const ny = Math.min(Math.max((e.clientY - rect.top) / rect.height, 0), 1);
+
+    const newPoint: CityPoint = {
+      id: `pt-${activeMap.id}-${pendingPlacement.cityId}`,
+      mapId: activeMap.id,
+      cityId: pendingPlacement.cityId,
+      title: pendingPlacement.title,
+      x: nx,
+      y: ny,
+      status: "discovered",
+    };
+
+    setCityPoints((prev) => [...prev, newPoint]);
+    setPendingPlacement(null);
+
+    // Persist to server
+    fetch(`/api/maps/${activeMap.id}/points`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cityId: newPoint.cityId,
+        title: newPoint.title,
+        x: newPoint.x,
+        y: newPoint.y,
+        status: newPoint.status,
+      }),
+    }).catch(() => {});
+  };
+
   // Sync cities whenever map changes
   useEffect(() => {
-    setCityPoints((prev) => syncCitiesToMap(activeMap, prev, INITIAL_GLOBAL_CITIES));
+    setCityPoints((prev) => {
+      // Check if active map has no sites and cities need placement
+      if ((!activeMap.sites || activeMap.sites.length === 0) && prev.length === 0) {
+        setPendingPlacement({ cityId: INITIAL_GLOBAL_CITIES[0].id, title: INITIAL_GLOBAL_CITIES[0].title });
+      }
+      return syncCitiesToMap(activeMap, prev, INITIAL_GLOBAL_CITIES);
+    });
   }, [activeMap]);
 
   // Focus input when foundCityPrompt opens
@@ -198,12 +251,32 @@ export function WorldView({
 
   return (
     <div
+      onClick={handleMapClick}
       onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="relative w-full h-full min-h-screen flex-1 overflow-hidden select-none bg-[#06080e]"
+      className={`relative w-full h-full min-h-screen flex-1 overflow-hidden select-none bg-[#06080e] ${
+        pendingPlacement ? "cursor-crosshair" : ""
+      }`}
     >
+      {/* Click-to-Place Mode Banner for Maps without Sites */}
+      {pendingPlacement && (
+        <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-xl bg-[#0d121c]/95 border border-[var(--accent-lime)] text-[var(--accent-lime)] font-mono text-xs shadow-2xl backdrop-blur-xl animate-in fade-in select-none">
+          <Crosshair size={16} className="animate-spin" />
+          <span>Click anywhere to place &quot;{pendingPlacement.title}&quot; on this map</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPendingPlacement(null);
+            }}
+            className="text-[#9aa5b8] hover:text-white cursor-pointer px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {/* Illustrated Map Canvas */}
       <motion.div
         animate={{
