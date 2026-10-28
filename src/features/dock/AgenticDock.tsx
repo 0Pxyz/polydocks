@@ -12,6 +12,9 @@ import { DockIcon } from "@/components/icons/DockIcon";
 import { spring } from "@/lib/motion";
 import type { IconComponent } from "@/components/icons/adapter";
 
+export * from "./legacyAdapter";
+export * from "./surfaceResolver";
+
 export interface DockToolItem {
   id: string;
   label: string;
