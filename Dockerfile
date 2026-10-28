@@ -17,6 +17,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATA_DIR=/app/data
+ENV AGENT_HOME_DIR=/app/agent-home
 ENV SERVE_STATIC=true
 
 # Copy runtime manifests and production dependencies
@@ -27,8 +28,8 @@ RUN bun install --frozen-lockfile --production
 COPY --from=builder /app/dist ./dist
 COPY server ./server
 
-# Create data directory and assign non-root ownership
-RUN mkdir -p /app/data && chown -R bun:bun /app
+# Create data and agent-home directories and assign non-root ownership
+RUN mkdir -p /app/data /app/agent-home && chown -R bun:bun /app
 
 USER bun
 
