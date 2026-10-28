@@ -18,6 +18,8 @@ import { build_city } from "./build_city";
 import { list_maps } from "./list_maps";
 import { set_map } from "./set_map";
 import { place_city } from "./place_city";
+import { find_capabilities } from "./find_capabilities";
+import { invoke_capability } from "./invoke_capability";
 
 export * from "./types";
 export {
@@ -40,6 +42,8 @@ export {
   list_maps,
   set_map,
   place_city,
+  find_capabilities,
+  invoke_capability,
 };
 
 /**
@@ -65,4 +69,6 @@ export const defaultTools: AgentTool[] = [
   list_maps,
   set_map,
   place_city,
+  find_capabilities,
+  invoke_capability,
 ];
