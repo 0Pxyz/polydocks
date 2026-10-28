@@ -48,3 +48,40 @@ export function isTabSynthesisIntent(prompt: string): boolean {
 
   return triggers.some((t) => lower.includes(t));
 }
+
+/**
+ * Heuristic detector for whether user prompt involves web research, discovery, or content curation.
+ */
+export function isResearchIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  const triggers = [
+    "research",
+    "search",
+    "find paper",
+    "papers",
+    "feed",
+    "curate",
+    "pesquisa",
+    "pesquise",
+    "buscar",
+    "encontrar",
+    "noticias",
+    "fontes",
+    "sources",
+    "latest on",
+    "learn about",
+    "explore",
+    "tutorial",
+    "documentation",
+    "docs",
+    "study",
+    "quest",
+    "quests",
+    "notes",
+    "explain",
+    "what is",
+    "how does",
+  ];
+
+  return triggers.some((t) => lower.includes(t));
+}
