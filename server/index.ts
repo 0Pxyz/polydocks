@@ -10,6 +10,7 @@ import { mcpRouter } from "./api/mcp";
 import { citiesRouter } from "./routes/cities";
 import { mapsRouter } from "./routes/maps";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
+import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { db } from "./workspace/db";
 
 const app = new Hono();
@@ -93,6 +94,22 @@ app.route("/api/cities", citiesRouter);
 
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);
+
+// Experience runtime error reporting endpoints
+app.post("/api/experiences/:id/errors", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+  const { cityId, error } = body;
+  const recorded = recordExperienceError(id, cityId || "global", error || {});
+  return c.json({ success: true, error: recorded });
+});
+
+app.get("/api/experiences/:id/errors", (c) => {
+  const id = c.req.param("id");
+  const cityId = c.req.query("cityId");
+  const errors = getExperienceErrors(id, cityId);
+  return c.json({ errors });
+});
 
 // SSE Streaming endpoint for agent tool-calling loop
 app.post("/api/agent", async (c) => {

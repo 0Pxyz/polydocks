@@ -20,6 +20,8 @@ import { set_map } from "./set_map";
 import { place_city } from "./place_city";
 import { find_capabilities } from "./find_capabilities";
 import { invoke_capability } from "./invoke_capability";
+import { inspect_experience } from "./inspect_experience";
+import { promote_to_plugin } from "./promote_to_plugin";
 
 export * from "./types";
 export {
@@ -44,6 +46,8 @@ export {
   place_city,
   find_capabilities,
   invoke_capability,
+  inspect_experience,
+  promote_to_plugin,
 };
 
 /**
@@ -71,4 +75,6 @@ export const defaultTools: AgentTool[] = [
   place_city,
   find_capabilities,
   invoke_capability,
+  inspect_experience,
+  promote_to_plugin,
 ];

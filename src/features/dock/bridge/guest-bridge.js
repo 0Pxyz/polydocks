@@ -33,12 +33,40 @@ export const GUEST_BRIDGE_SCRIPT = `
     });
   }
 
+  // Error capture & reporting to host runtime
+  window.addEventListener('error', function(event) {
+    window.parent.postMessage({
+      polymaxAction: 'runtime.error',
+      error: {
+        message: event.message || 'Unknown error',
+        filename: event.filename || '',
+        lineno: event.lineno || 0,
+        colno: event.colno || 0,
+        stack: event.error ? event.error.stack : '',
+        timestamp: new Date().toISOString()
+      }
+    }, '*');
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    const reason = event.reason;
+    window.parent.postMessage({
+      polymaxAction: 'runtime.error',
+      error: {
+        message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
+        stack: reason && reason.stack ? reason.stack : '',
+        timestamp: new Date().toISOString()
+      }
+    }, '*');
+  });
+
   window.polymax = {
     storage: {
       get: (key) => sendHostRequest('storage.get', { key }),
       set: (key, value) => sendHostRequest('storage.set', { key, value }),
       remove: (key) => sendHostRequest('storage.remove', { key }),
     },
+    invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
     openUrl: (url) => sendHostRequest('openUrl', { url }),
     getContext: () => sendHostRequest('getContext', {}),
     submit: (command) => sendHostRequest('submit', { command }),

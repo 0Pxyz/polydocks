@@ -118,5 +118,18 @@ CREATE TABLE IF NOT EXISTS executions (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS experience_errors (
+  id TEXT PRIMARY KEY,
+  experience_id TEXT NOT NULL,
+  city_id TEXT NOT NULL,
+  message TEXT NOT NULL,
+  filename TEXT,
+  lineno INTEGER,
+  colno INTEGER,
+  stack TEXT,
+  created_at TEXT NOT NULL
+);
+
+
 
 
