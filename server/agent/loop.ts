@@ -6,6 +6,7 @@ import type { AgentTool } from "./tools/types";
 import { loadSkill, isTabSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
+import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
 import path from "node:path";
 
 // Auto-register first party plugins
@@ -117,6 +118,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability):\n${summaryLines.join("\n")}`;
     }
 
+    // Reflective Execution & Failure Retry Guidelines
+    activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Execution Introspection & Failure Retry Protocol\n- When a tool or capability invocation returns an error, do NOT fail silently or give up.\n- Use inspect_execution(executionId) or list_recent_executions to inspect the root cause, schema mismatches, or system boundaries.\n- Adjust the input arguments, supply missing required parameters, or invoke a suitable fallback capability.`;
+
     if (origin === "dock-add" || isTabSynthesisIntent(prompt)) {
       try {
         const tabSkillPrompt = await loadSkill("create-tab");
@@ -173,7 +177,22 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    // Initialize conversation messages
+    // Initialize conversation messages with SQLite persistence
+    let effectiveHistory = history;
+    if (cityId && history.length === 0) {
+      const persisted = getCityConversationMessages(cityId, 20);
+      effectiveHistory = persisted.map((m) => ({
+        role: m.role,
+        content: m.content,
+        ...(m.toolCalls ? { tool_calls: m.toolCalls } : {}),
+        ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
+      }));
+    }
+
+    if (cityId) {
+      appendCityMessage(cityId, "user", prompt);
+    }
+
     const messages: any[] = [
       {
         role: "system",
@@ -181,7 +200,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           ? `${activeSystemPrompt}\nActive City Workspace: ${cityId}`
           : activeSystemPrompt,
       },
-      ...history,
+      ...effectiveHistory,
       {
         role: "user",
         content: prompt,
@@ -216,6 +235,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // If no tool calls, the model provided its final textual answer
       if (!toolCalls || toolCalls.length === 0) {
         const finalText = assistantMessage.content || "";
+        if (cityId) {
+          appendCityMessage(cityId, "assistant", finalText);
+        }
         await onEvent({
           step: currentStep,
           type: "agent.finish",
@@ -385,6 +407,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     if (!fallbackText) {
       fallbackText =
         "I've structured your knowledge territory and prepared the workspace. You can explore the cities on the map or ask me to dive into any specific concept.";
+    }
+
+    if (cityId) {
+      appendCityMessage(cityId, "assistant", fallbackText);
     }
 
     await onEvent({

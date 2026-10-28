@@ -13,6 +13,11 @@ import { generateCityFeed } from "../discovery/feedGenerator";
 import { db } from "../workspace/db";
 import { buildCityWorkspace } from "../city-builder/pipeline";
 import { TinyFishClient } from "../discovery/tinyfish";
+import {
+  getCityConversationMessages,
+  appendCityMessage,
+  clearCityConversation,
+} from "../workspace/conversations";
 
 export const citiesRouter = new Hono();
 
@@ -243,4 +248,38 @@ citiesRouter.get("/:id/build/stream", async (c) => {
       });
     }
   });
+});
+
+/**
+ * GET /api/cities/:id/conversation - Get persistent conversation history for city
+ */
+citiesRouter.get("/:id/conversation", (c) => {
+  const cityId = c.req.param("id");
+  const limit = Math.min(Number.parseInt(c.req.query("limit") || "50", 10), 100);
+  const messages = getCityConversationMessages(cityId, limit);
+  return c.json({ success: true, cityId, count: messages.length, messages });
+});
+
+/**
+ * POST /api/cities/:id/conversation - Append a message to city conversation
+ */
+citiesRouter.post("/:id/conversation", async (c) => {
+  const cityId = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+  const { role, content, toolCalls, toolCallId } = body;
+  if (!role || !content) {
+    return c.json({ error: "Missing required role and content fields" }, 400);
+  }
+
+  const msg = appendCityMessage(cityId, role, content, { toolCalls, toolCallId });
+  return c.json({ success: true, message: msg }, 201);
+});
+
+/**
+ * DELETE /api/cities/:id/conversation - Clear conversation history for city
+ */
+citiesRouter.delete("/:id/conversation", (c) => {
+  const cityId = c.req.param("id");
+  const ok = clearCityConversation(cityId);
+  return c.json({ success: ok, cityId });
 });
