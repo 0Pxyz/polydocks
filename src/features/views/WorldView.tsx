@@ -1,73 +1,119 @@
-import { Globe, Compass, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import { generateMapLayout } from "@/lib/mapgen/proceduralWorld";
+import { WorldMapCanvas } from "../world/WorldMapCanvas";
+import type { MapSpec, Point2D } from "../world/types";
 
-interface WorldViewProps {
-  onEnterCity: (cityName: string) => void;
-}
-
-export function WorldView({ onEnterCity }: WorldViewProps) {
-  const mockRegions = [
+export const DEFAULT_DEMO_SPEC: MapSpec = {
+  id: "world-polymax-demo",
+  seed: "meta-hackathon-2026",
+  title: "The World of Knowledge",
+  createdAt: new Date().toISOString(),
+  regions: [
     {
       id: "ai",
-      name: "Artificial Intelligence",
-      cities: ["Neural Networks", "Transformer Architectures"],
+      title: "Artificial Intelligence",
+      topic: "Deep Learning & Neural Architectures",
+      color: "#C8FF57",
+      accentColor: "rgba(200, 255, 87, 0.25)",
+      cities: [
+        { id: "neural-networks", title: "Neural Networks", tags: ["deep learning", "math"], level: 1 },
+        { id: "transformers", title: "Transformers", tags: ["llm", "attention"], level: 3 },
+      ],
     },
     {
-      id: "phil",
-      name: "Philosophy & Mind",
-      cities: ["Stoicism", "Epistemology"],
+      id: "philosophy",
+      title: "Philosophy & Mind",
+      topic: "Epistemology & Classical Thought",
+      color: "#57C8FF",
+      accentColor: "rgba(87, 200, 255, 0.25)",
+      cities: [
+        { id: "stoicism", title: "Stoicism", tags: ["ethics", "virtue"], level: 1 },
+        { id: "consciousness", title: "Consciousness", tags: ["qualia", "mind"], level: 4 },
+      ],
     },
     {
       id: "quantum",
-      name: "Quantum Mechanics",
-      cities: ["Entanglement", "Superposition"],
+      title: "Quantum Mechanics",
+      topic: "Subatomic Physics & Computing",
+      color: "#FFC857",
+      accentColor: "rgba(255, 200, 87, 0.25)",
+      cities: [
+        { id: "superposition", title: "Superposition", tags: ["states", "qubits"], level: 2 },
+        { id: "entanglement", title: "Entanglement", tags: ["spooky action", "bell"], level: 5 },
+      ],
     },
-  ];
+  ],
+  connections: [
+    { fromCityId: "neural-networks", toCityId: "transformers", kind: "highway" },
+    { fromCityId: "stoicism", toCityId: "consciousness", kind: "trail" },
+    { fromCityId: "superposition", toCityId: "entanglement", kind: "highway" },
+  ],
+};
+
+interface WorldViewProps {
+  onEnterCity: (cityName: string, cityId?: string) => void;
+  onFoundCityTopic?: (topic: string) => void;
+  spec?: MapSpec;
+  buildingProgress?: Record<string, number>;
+}
+
+export function WorldView({
+  onEnterCity,
+  onFoundCityTopic,
+  spec: initialSpec = DEFAULT_DEMO_SPEC,
+  buildingProgress = {},
+}: WorldViewProps) {
+  const [spec, setSpec] = useState<MapSpec>(initialSpec);
+
+  // Layout engine: deterministic, seeded layout
+  const layout = useMemo(() => {
+    return generateMapLayout(spec);
+  }, [spec]);
+
+  const handleFoundCity = (topic: string, _position: Point2D) => {
+    const slug = topic.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const newCityId = `city-${slug}-${Date.now()}`;
+
+    // Add city into the spec without moving any existing cities
+    setSpec((prev) => {
+      const updatedRegions = prev.regions.map((reg, idx) => {
+        if (idx === 0) {
+          return {
+            ...reg,
+            cities: [
+              ...reg.cities,
+              {
+                id: newCityId,
+                title: topic,
+                tags: [slug],
+                level: 1,
+              },
+            ],
+          };
+        }
+        return reg;
+      });
+
+      return {
+        ...prev,
+        regions: updatedRegions,
+      };
+    });
+
+    if (onFoundCityTopic) {
+      onFoundCityTopic(topic);
+    }
+  };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 max-w-5xl mx-auto w-full">
-      <div className="text-center mb-8">
-        <Badge variant="outline" className="mb-3 gap-1.5 border-primary/30 text-primary">
-          <Globe className="h-3.5 w-3.5" />
-          Living World Map
-        </Badge>
-        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-          Explore Knowledge Domains
-        </h1>
-        <p className="mt-3 text-muted-foreground text-sm sm:text-base max-w-xl mx-auto">
-          Disciplines form procedural regions. Concepts become explorable cities with active workspaces.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
-        {mockRegions.map((region) => (
-          <div
-            key={region.id}
-            className="rounded-xl border border-border bg-card p-5 hover:border-primary/50 transition-all group"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Region</span>
-              <Compass className="h-4 w-4 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <h3 className="font-display font-semibold text-lg text-foreground mb-4">{region.name}</h3>
-            <div className="space-y-2">
-              {region.cities.map((city) => (
-                <Button
-                  key={city}
-                  variant="secondary"
-                  size="sm"
-                  className="w-full justify-between text-xs"
-                  onClick={() => onEnterCity(city)}
-                >
-                  <span>{city}</span>
-                  <Sparkles className="h-3 w-3 text-primary opacity-70 group-hover:opacity-100 transition-opacity" />
-                </Button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="relative w-full h-full min-h-screen flex-1 overflow-hidden select-none">
+      <WorldMapCanvas
+        layout={layout}
+        onEnterCity={(cityName, cityId) => onEnterCity(cityName, cityId)}
+        onFoundCity={handleFoundCity}
+        buildingProgress={buildingProgress}
+        className="w-full h-full"
+      />
     </div>
   );
 }

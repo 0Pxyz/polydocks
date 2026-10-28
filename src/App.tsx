@@ -9,7 +9,7 @@ import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
-import { Sparkles } from "lucide-react";
+import { resolveIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 export default function App() {
@@ -155,7 +155,7 @@ export default function App() {
                     id: exp.id,
                     label: exp.title,
                     type: "icon",
-                    icon: Sparkles,
+                    icon: resolveIcon(exp.icon),
                   },
                 ];
               });
@@ -187,17 +187,18 @@ export default function App() {
                 </div>
               </DockSurface>
             ) : (
-              /* Living World/Map View is the base canvas (always visible behind sheet or as default view) */
-              <DockSurface>
-                <div className="w-full max-w-5xl">
-                  <WorldView
-                    onEnterCity={(cityName) => {
-                      setSelectedCity(cityName);
-                      setActiveToolId("city");
-                    }}
-                  />
-                </div>
-              </DockSurface>
+              /* Living World/Map View is the base full-bleed procedural canvas */
+              <div className="fixed inset-0 z-0 w-full h-full">
+                <WorldView
+                  onEnterCity={(cityName) => {
+                    setSelectedCity(cityName);
+                    setActiveToolId("city");
+                  }}
+                  onFoundCityTopic={(_topic) => {
+                    setLayoutState("sheet");
+                  }}
+                />
+              </div>
             )}
           </main>
         </div>
