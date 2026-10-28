@@ -14,10 +14,15 @@ import {
   Copy,
   Check,
   RotateCcw,
+  Paperclip,
+  Image as ImageIcon,
+  UploadCloud,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
+import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
@@ -38,6 +43,7 @@ export function AgentConversation({
     layoutState,
     sideWidth,
     messages,
+    stagedAttachments,
     draft,
     isStreaming,
     statusText,
@@ -48,6 +54,8 @@ export function AgentConversation({
     setLayoutState,
     setSideWidth,
     setDraft,
+    addAttachments,
+    removeAttachment,
     setSoundEnabled,
     setAudioLevel,
     setOrbState,
@@ -63,12 +71,47 @@ export function AgentConversation({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState<boolean>(false);
   const [isDraggingWidth, setIsDraggingWidth] = useState<boolean>(false);
+  const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
   const sheetTranscriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sheetInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const voiceHandleRef = useRef<VoiceRecognitionHandle | null>(null);
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const files = Array.from(e.clipboardData.files);
+      if (files.length > 0) {
+        e.preventDefault();
+        addAttachments(files);
+      }
+    },
+    [addAttachments]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDraggingOver(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        addAttachments(Array.from(e.dataTransfer.files));
+      }
+    },
+    [addAttachments]
+  );
 
   // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
   const adjustTextareaHeight = useCallback(() => {
@@ -96,12 +139,22 @@ export function AgentConversation({
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
-  const handleScroll = () => {
+  // Track scroll position natively on the Radix ScrollArea viewport (React
+  // does not delegate scroll events to it)
+  useEffect(() => {
+    if (layoutState !== "side" && layoutState !== "full") return;
     const el = transcriptRef.current;
     if (!el) return;
-    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollBottom(distanceToBottom > 150);
-  };
+
+    const onViewportScroll = () => {
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBottom(distanceToBottom > 150);
+    };
+
+    onViewportScroll();
+    el.addEventListener("scroll", onViewportScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onViewportScroll);
+  }, [layoutState]);
 
   const scrollToBottom = () => {
     const el = transcriptRef.current;
@@ -267,10 +320,11 @@ export function AgentConversation({
             )}
 
             {/* Scrollable Transcript Box */}
-            <div
-              ref={sheetTranscriptRef}
-              className="my-3 max-h-64 min-h-[72px] overflow-y-auto px-1 space-y-2.5 select-text font-sans scroll-smooth"
+            <ScrollArea
+              viewportRef={sheetTranscriptRef}
+              className="my-3 max-h-64 min-h-[72px] [&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0 [&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]"
             >
+              <div className="px-1 space-y-2.5 select-text scroll-smooth">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                   <p className="text-xs text-[#9aa5b8]">
@@ -296,16 +350,20 @@ export function AgentConversation({
 
                   if (isUser) {
                     return (
-                      <div key={msg.id} className="flex justify-end">
+                      <div key={msg.id} className="flex flex-col items-end gap-1">
                         <div className="max-w-[85%] rounded-2xl px-3.5 py-1.5 bg-white/[0.08] text-white text-xs leading-relaxed">
                           {msg.content}
                         </div>
+                        <MessageAttachments attachments={msg.attachments} />
                       </div>
                     );
                   }
 
                   return (
-                    <div key={msg.id} className="text-xs leading-relaxed text-[#f1f3f9] font-sans pr-2">
+                    <div
+                      key={msg.id}
+                      className="prose prose-invert prose-sm max-w-none pr-2 leading-relaxed prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs"
+                    >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -354,9 +412,19 @@ export function AgentConversation({
                   <span className="truncate">{statusText}</span>
                 </div>
               )}
-            </div>
+              </div>
+            </ScrollArea>
 
-            {/* Unified Composer: Voice Orb + Text Input + Send/Stop */}
+            {/* Staging bar for attachments */}
+            {stagedAttachments.length > 0 && (
+              <AttachmentStagingBar
+                attachments={stagedAttachments}
+                onRemove={removeAttachment}
+                className="mb-1 rounded-xl"
+              />
+            )}
+
+            {/* Unified Composer: Attach Button + Voice Orb + Text Input + Send/Stop */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -364,11 +432,20 @@ export function AgentConversation({
                   abortStream();
                   return;
                 }
-                if (!draft.trim()) return;
+                if (!draft.trim() && stagedAttachments.length === 0) return;
                 sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
               }}
-              className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+              className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
             >
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer shrink-0"
+                title="Attach photo or document"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -376,7 +453,7 @@ export function AgentConversation({
                   else toggleVoice();
                 }}
                 className={cn(
-                  "w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0",
+                  "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0",
                   orbState === "listening"
                     ? "bg-red-500/20 text-red-400"
                     : "hover:bg-white/10 text-muted-foreground hover:text-white"
@@ -392,6 +469,7 @@ export function AgentConversation({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder="Ask anything, or give a dock command…"
                 className="flex-1 bg-transparent px-2 py-1 text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans"
                 autoFocus
@@ -409,7 +487,7 @@ export function AgentConversation({
               ) : (
                 <button
                   type="submit"
-                  disabled={!draft.trim()}
+                  disabled={!draft.trim() && stagedAttachments.length === 0}
                   className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
                   title="Send message"
                 >
@@ -436,10 +514,11 @@ export function AgentConversation({
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       style={isSide ? { width: `${sideWidth}px` } : undefined}
       className={cn(
-        "relative flex flex-col justify-between bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
+        "relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
         isSide
           ? "fixed top-0 bottom-0 left-0 z-40 border-r border-white/5 shadow-2xl"
-          : "fixed inset-0 z-40 w-full"
+          : "fixed inset-0 z-40 w-full",
+        isBottom && "pb-[calc(var(--dock-bottom-offset,88px)+8px)]"
       )}
     >
       {/* Resizable drag edge for side-by-side mode */}
@@ -456,16 +535,11 @@ export function AgentConversation({
         </div>
       )}
 
-      {/* Top soft fade under dock */}
-      {!isBottom && (
-        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[calc(var(--dock-top-offset,88px)+24px)] bg-gradient-to-b from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent z-20" />
-      )}
-
-      {/* Top Corner Controls (aligned with dock line, no headers/titles) */}
+      {/* Controls aligned below the dock line, part of the panel layout (no overlay fades) */}
       <div
         className={cn(
-          "absolute right-4 sm:right-8 z-30 flex items-center gap-1.5",
-          isBottom ? "top-4 sm:top-6" : "top-[calc(var(--dock-top-offset,88px)-44px)]"
+          "shrink-0 flex items-center justify-end gap-1.5 px-4 sm:px-8 pb-3",
+          isBottom ? "pt-4" : "pt-[calc(var(--dock-top-offset,88px)+12px)]"
         )}
       >
         <ModelSwitcher className="mr-1" />
@@ -500,17 +574,16 @@ export function AgentConversation({
       </div>
 
       {/* Transcript Area */}
-      <div
-        ref={transcriptRef}
-        onScroll={handleScroll}
+      <ScrollArea
+        viewportRef={transcriptRef}
         className={cn(
-          "flex-1 overflow-y-auto px-4 sm:px-6",
-          isBottom
-            ? "pt-14 pb-[calc(var(--dock-bottom-offset,88px)+96px)]"
-            : "pt-[calc(var(--dock-top-offset,88px)+24px)] pb-36",
-          !isSide && "w-full max-w-[720px] mx-auto"
+          "flex-1 min-h-0 px-4 sm:px-6",
+          "[&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0",
+          "[&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]",
+          !isSide && "max-w-[720px] mx-auto"
         )}
       >
+        <div className="w-full pt-3 pb-8">
         {/* Empty State: centered composer with idle orb */}
         {messages.length === 0 && (
           <div className="h-full min-h-[360px] flex flex-col items-center justify-center">
@@ -543,6 +616,7 @@ export function AgentConversation({
                   <div className="max-w-[75%] rounded-[20px] px-4 py-2.5 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed shadow-sm">
                     {msg.content}
                   </div>
+                  <MessageAttachments attachments={msg.attachments} />
 
                   {/* Inline Error under user message */}
                   {msg.error && (
@@ -567,10 +641,16 @@ export function AgentConversation({
 
             // Agent Message: Plain text on backdrop, no bubble, markdown, copy & retry on hover
             return (
-              <div key={msg.id} className="group relative w-full text-base leading-relaxed text-[#f1f3f9] font-sans">
+              <div
+                key={msg.id}
+                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    // The custom `code` renderer draws its own code block; let it
+                    // through without the default <pre> wrapper (and prose styling)
+                    pre: ({ children }) => <>{children}</>,
                     a: ({ href, children }) => (
                       <a
                         href={href}
@@ -653,7 +733,8 @@ export function AgentConversation({
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </ScrollArea>
 
       {/* Floating Scroll to Bottom button */}
       {showScrollBottom && (
@@ -670,59 +751,130 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Floating Composer Area */}
+      {/* Composer: clean footer aligned with the transcript column */}
       <div
         className={cn(
-          "absolute left-0 right-0 z-20 px-4 pointer-events-auto bg-gradient-to-t from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent pt-8",
-          isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+8px)] pb-2" : "bottom-0 pb-6",
+          "shrink-0 px-4 sm:px-6 pt-4 pb-5 pointer-events-auto",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
-        <div className="relative flex items-end bg-[#10141d]/90 border border-white/10 rounded-[24px] p-2 shadow-2xl backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask anything"
-            className="flex-1 bg-transparent px-3.5 py-2 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
+        {/* Staging bar above composer */}
+        {stagedAttachments.length > 0 && (
+          <AttachmentStagingBar
+            attachments={stagedAttachments}
+            onRemove={removeAttachment}
+            className="mb-1 rounded-t-[24px] rounded-b-none border-b-0"
           />
+        )}
 
-          {/* Right Composer Controls: 36px mic orb + Send/Stop */}
-          <div className="flex items-center gap-1.5 pb-1 pr-1">
-            <button
-              type="button"
-              onClick={toggleVoice}
-              className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-              title="Voice input"
-            >
-              <Orb state={orbState} size="sm" className="scale-75" />
-            </button>
+        <div
+          className={cn(
+            "relative flex flex-col bg-[var(--bg-surface)]/90 border border-white/10 p-2 shadow-lg backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors",
+            stagedAttachments.length > 0 ? "rounded-b-[24px] rounded-t-none" : "rounded-[24px]"
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Drag-and-drop overlay */}
+          {isDraggingOver && (
+            <div className="absolute inset-0 z-10 rounded-[24px] bg-[var(--accent-lime)]/10 border-2 border-dashed border-[var(--accent-lime)]/50 flex items-center justify-center pointer-events-none">
+              <div className="flex items-center gap-2 text-[var(--accent-lime)] text-sm font-medium">
+                <UploadCloud className="w-5 h-5" />
+                <span>Drop files here</span>
+              </div>
+            </div>
+          )}
 
-            {isStreaming ? (
+          <div className="flex items-end">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder="Ask anything"
+              className="flex-1 bg-transparent px-3.5 py-2 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
+            />
+
+            {/* Right Composer Controls */}
+            <div className="flex items-center gap-1.5 pb-1 pr-1">
               <button
                 type="button"
-                onClick={abortStream}
-                className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
-                title="Stop generation"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                title="Attach file"
               >
-                <Square className="w-4 h-4 fill-current" />
+                <Paperclip className="w-4 h-4" />
               </button>
-            ) : (
+
               <button
                 type="button"
-                onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience })}
-                disabled={!draft.trim()}
-                className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
-                title="Send message"
+                onClick={() => imageInputRef.current?.click()}
+                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                title="Attach image"
               >
-                <Send className="w-4 h-4" />
+                <ImageIcon className="w-4 h-4" />
               </button>
-            )}
+
+              <button
+                type="button"
+                onClick={toggleVoice}
+                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
+                title="Voice input"
+              >
+                <Orb state={orbState} size="sm" className="scale-75" />
+              </button>
+
+              {isStreaming ? (
+                <button
+                  type="button"
+                  onClick={abortStream}
+                  className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
+                  title="Stop generation"
+                >
+                  <Square className="w-4 h-4 fill-current" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience })}
+                  disabled={!draft.trim() && stagedAttachments.length === 0}
+                  className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
+                  title="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.yaml,.yml,.sh,.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) addAttachments(Array.from(e.target.files));
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        multiple
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) addAttachments(Array.from(e.target.files));
+          e.target.value = "";
+        }}
+      />
     </motion.div>
   );
 }

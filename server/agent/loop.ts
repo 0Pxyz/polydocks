@@ -38,6 +38,16 @@ export interface AgentStepEvent {
 
 export type AgentEventCallback = (event: AgentStepEvent) => Promise<void> | void;
 
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+  isImage: boolean;
+  textContent?: string;
+}
+
 export interface AgentLoopOptions {
   prompt: string;
   sessionId?: string;
@@ -45,6 +55,7 @@ export interface AgentLoopOptions {
   cityId?: string;
   origin?: "dock-add" | "chat" | "cli" | "task";
   taskId?: string;
+  attachments?: ChatAttachment[];
   history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   tools?: AgentTool[];
   onEvent?: AgentEventCallback;
@@ -111,6 +122,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     signal,
   } = options;
 
+  const attachments = options.attachments || [];
+  const imageAttachments = attachments.filter((a) => a.isImage || (a.type && a.type.startsWith("image/")));
+  const textAttachments = attachments.filter((a) => !a.isImage && !(a.type && a.type.startsWith("image/")));
+
+  // Automatically route prompts with image attachments to the catalog vision model when on the default agent model
+  const VISION_MODEL_ID = process.env.MODEL_VISION_ID || "meta-llama/Llama-3.2-11B-Vision-Instruct";
+  let effectiveModel = modelId;
+  if (imageAttachments.length > 0 && (!modelId || modelId === MODEL_ID)) {
+    effectiveModel = VISION_MODEL_ID;
+  }
+
   let currentStep = 0;
 
   // Resolve session and workspace context
@@ -166,7 +188,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await emit({
       step: 0,
       type: "agent.start",
-      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: modelId },
+      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel },
     });
 
     // Build tool registry map and OpenAI-compatible tools definitions
@@ -311,6 +333,31 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       appendCityMessage(cityId, "user", prompt);
     }
 
+    let userMessageContent: any = prompt;
+    if (imageAttachments.length > 0) {
+      const parts: any[] = [];
+      let text = prompt;
+      for (const doc of textAttachments) {
+        text += `\n\n[Attached File: ${doc.name} (${doc.type})]:\n\`\`\`\n${doc.textContent || ""}\n\`\`\``;
+      }
+      parts.push({ type: "text", text });
+      for (const img of imageAttachments) {
+        parts.push({
+          type: "image_url",
+          image_url: {
+            url: img.dataUrl,
+          },
+        });
+      }
+      userMessageContent = parts;
+    } else if (textAttachments.length > 0) {
+      let text = prompt;
+      for (const doc of textAttachments) {
+        text += `\n\n[Attached File: ${doc.name} (${doc.type})]:\n\`\`\`\n${doc.textContent || ""}\n\`\`\``;
+      }
+      userMessageContent = text;
+    }
+
     const messages: any[] = [
       {
         role: "system",
@@ -321,7 +368,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       ...effectiveHistory,
       {
         role: "user",
-        content: prompt,
+        content: userMessageContent,
       },
     ];
 
@@ -362,7 +409,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
 
       const completionParams: any = {
-        model: modelId,
+        model: effectiveModel,
         messages,
       };
 
@@ -556,7 +603,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       ];
 
       const fallbackResponse = await llmClient.chat.completions.create({
-        model: modelId,
+        model: effectiveModel,
         messages: fallbackMessages,
       });
 

@@ -1,9 +1,11 @@
 import { adaptBackendEvent, type UIEvent } from "./events";
+import type { ChatAttachment } from "./attachments";
 
 export interface SendAgentMessageOptions {
   prompt: string;
   cityId?: string;
   modelId?: string;
+  attachments?: ChatAttachment[];
   origin?: "dock-add" | "chat";
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   onEvent: (event: UIEvent) => void;
@@ -16,7 +18,7 @@ export interface SendAgentMessageOptions {
 export async function streamAgentLoop(
   options: SendAgentMessageOptions
 ): Promise<void> {
-  const { prompt, cityId, modelId, origin, history = [], onEvent, signal } = options;
+  const { prompt, cityId, modelId, attachments, origin, history = [], onEvent, signal } = options;
 
   let response: Response;
   try {
@@ -30,6 +32,7 @@ export async function streamAgentLoop(
         prompt,
         cityId,
         modelId,
+        attachments,
         origin,
         history,
       }),
