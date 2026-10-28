@@ -34,7 +34,7 @@ interface PluginStoreViewProps {
  * tags and download count stay behind the catalog data for a details view.
  */
 export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProps) {
-  const { activeWorkspaceId, workspacePlugins, fetchWorkspacePlugins } = useWorkspaceStore();
+  const { activeWorkspaceId, workspacePlugins, fetchWorkspaces, fetchWorkspacePlugins } = useWorkspaceStore();
   const [plugins, setPlugins] = useState<RegistryPluginCard[]>([]);
   const [search, setSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("All");
@@ -66,7 +66,10 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
 
   useEffect(() => {
     fetchRegistry();
-  }, [fetchRegistry]);
+    // Hydrate the workspace list and its installed plugins; without this the
+    // viewed workspace state stayed empty and installed plugins looked fresh.
+    fetchWorkspaces();
+  }, [fetchRegistry, fetchWorkspaces]);
 
   // Derive categories from the catalog itself. The user's current selection is
   // always kept in the list so an empty result set can never trap them.
