@@ -69,10 +69,10 @@ export function CommandPalette({
     message: string;
   } | null>(null);
 
-  // Global ⌘K / Ctrl+K shortcut
+  // Global ⌘⇧P / Ctrl+Shift+P shortcut (⌘K is reserved for Agent conversation)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
         setOpen(!isOpen);
       }

@@ -43,4 +43,4 @@
 | 2026-10-28 | Unified product API and shared service layer (Workspace, Session, Task, Plugin, Artifact) with idempotency and audit log | [#86](https://github.com/0Pxyz/polymax/pull/86) |
 | 2026-10-28 | Integrated tool surfaces, dock styles, icon catalog backfill, and slop-free home screen | [#87](https://github.com/0Pxyz/polymax/pull/87) |
 | 2026-10-28 | Minimal polydocks CLI for runtime status, sessions, tasks, plugins, and agent execution | [#88](https://github.com/0Pxyz/polymax/pull/88) |
-| 2026-10-28 | Session-aware agent loop with background task dispatch, session transcript streaming, and unified capabilities | #79 |
+| 2026-10-28 | Session-aware agent loop with background task dispatch, session transcript streaming, and unified capabilities | [#89](https://github.com/0Pxyz/polymax/pull/89) |
