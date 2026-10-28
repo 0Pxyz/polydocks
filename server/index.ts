@@ -12,6 +12,7 @@ import { mapsRouter } from "./routes/maps";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
+import { memoryRouter } from "./routes/memory";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
@@ -105,6 +106,9 @@ app.route("/api/registry", registryRouter);
 
 // Mount Cities & Workspaces router
 app.route("/api/cities", citiesRouter);
+
+// Mount Agent Durable Memory router
+app.route("/api/agent/memory", memoryRouter);
 
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);

@@ -33,6 +33,8 @@ import { read_file } from "./read_file";
 import { write_file } from "./write_file";
 import { edit_file } from "./edit_file";
 import { search_files } from "./search_files";
+import { recall_memory } from "./recall_memory";
+import { record_memory } from "./record_memory";
 
 export * from "./types";
 export {
@@ -70,6 +72,8 @@ export {
   write_file,
   edit_file,
   search_files,
+  recall_memory,
+  record_memory,
 };
 
 /**
@@ -110,4 +114,6 @@ export const defaultTools: AgentTool[] = [
   write_file,
   edit_file,
   search_files,
+  recall_memory,
+  record_memory,
 ];

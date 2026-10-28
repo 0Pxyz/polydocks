@@ -7,6 +7,7 @@ import { loadSkill, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchInt
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
+import { getMemoryContext } from "./memory";
 import path from "node:path";
 
 // Auto-register first party plugins
@@ -120,6 +121,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     // Reflective Execution & Failure Retry Guidelines
     activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Execution Introspection & Failure Retry Protocol\n- When a tool or capability invocation returns an error, do NOT fail silently or give up.\n- Use inspect_execution(executionId) or list_recent_executions to inspect the root cause, schema mismatches, or system boundaries.\n- Adjust the input arguments, supply missing required parameters, or invoke a suitable fallback capability.`;
+
+    // Dynamic contextual memory injection (budget-clamped to <= 800 tokens)
+    try {
+      const memoryContext = await getMemoryContext(prompt, 800);
+      if (memoryContext) {
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n${memoryContext}`;
+      }
+    } catch {
+      // Non-fatal if memory retrieval encounters an issue
+    }
 
     if (origin === "dock-add" || isTabSynthesisIntent(prompt)) {
       try {
