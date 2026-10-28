@@ -256,8 +256,8 @@ export default function App() {
                 <ThemeCustomizerView onDismiss={() => handleDismissTool("settings")} />
               </DockSurface>
             ) : isCityMode ? (
-              <DockSurface>
-                <div className="w-full max-w-5xl">
+              <DockSurface frameless>
+                <div className="w-full">
                   <CityView
                     cityName={activeCityId || selectedCity}
                     activeToolId={activeToolId === "city" || !activeToolId ? "overview" : activeToolId}
