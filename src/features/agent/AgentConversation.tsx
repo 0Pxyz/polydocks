@@ -56,7 +56,7 @@ export function AgentConversation({
     handleApproval,
   } = useConversationStore();
 
-  const dockPosition = useThemeStore((s) => s.dockPosition);
+  const { dockPosition } = useThemeStore();
   const isBottom = dockPosition === "bottom";
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -187,12 +187,12 @@ export function AgentConversation({
       <AnimatePresence>
         <motion.div
           layoutId="polymax-agent-surface"
-          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : isBottom ? -28 : 28, scale: 0.96 }}
+          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
-          exit={{ opacity: 0, y: isBottom ? -20 : 20, scale: 0.95, transition: { duration: 0.16 } }}
+          exit={{ opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
           className={cn(
             "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none",
-            isBottom ? "top-6" : "bottom-6"
+            isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
           <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col">
@@ -455,10 +455,17 @@ export function AgentConversation({
       )}
 
       {/* Top soft fade under dock */}
-      <div className="pointer-events-none absolute top-0 left-0 right-0 h-[calc(var(--dock-bottom,88px)+24px)] bg-gradient-to-b from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent z-20" />
+      {!isBottom && (
+        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[calc(var(--dock-top-offset,88px)+24px)] bg-gradient-to-b from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent z-20" />
+      )}
 
       {/* Top Corner Controls (aligned with dock line, no headers/titles) */}
-      <div className="absolute top-[calc(var(--dock-bottom,88px)-44px)] right-4 sm:right-8 z-30 flex items-center gap-1.5">
+      <div
+        className={cn(
+          "absolute right-4 sm:right-8 z-30 flex items-center gap-1.5",
+          isBottom ? "top-4 sm:top-6" : "top-[calc(var(--dock-top-offset,88px)-44px)]"
+        )}
+      >
         {!isSide && (
           <button
             type="button"
@@ -494,7 +501,10 @@ export function AgentConversation({
         ref={transcriptRef}
         onScroll={handleScroll}
         className={cn(
-          "flex-1 overflow-y-auto px-4 sm:px-6 pt-[calc(var(--dock-bottom,88px)+32px)] pb-36",
+          "flex-1 overflow-y-auto px-4 sm:px-6",
+          isBottom
+            ? "pt-14 pb-[calc(var(--dock-bottom-offset,88px)+96px)]"
+            : "pt-[calc(var(--dock-top-offset,88px)+24px)] pb-36",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
@@ -647,7 +657,10 @@ export function AgentConversation({
         <button
           type="button"
           onClick={scrollToBottom}
-          className="absolute bottom-28 left-1/2 -translate-x-1/2 z-30 p-2 rounded-full bg-[#181d28]/90 border border-white/10 shadow-lg text-muted-foreground hover:text-white hover:scale-105 transition-all cursor-pointer"
+          className={cn(
+            "absolute left-1/2 -translate-x-1/2 z-30 p-2 rounded-full bg-[#181d28]/90 border border-white/10 shadow-lg text-muted-foreground hover:text-white hover:scale-105 transition-all cursor-pointer",
+            isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+84px)]" : "bottom-28"
+          )}
           title="Scroll to bottom"
         >
           <ArrowDown className="w-4 h-4" />
@@ -657,7 +670,8 @@ export function AgentConversation({
       {/* Floating Composer Area */}
       <div
         className={cn(
-          "absolute bottom-0 left-0 right-0 z-20 pb-6 px-4 pointer-events-auto bg-gradient-to-t from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent pt-8",
+          "absolute left-0 right-0 z-20 px-4 pointer-events-auto bg-gradient-to-t from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent pt-8",
+          isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+8px)] pb-2" : "bottom-0 pb-6",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >

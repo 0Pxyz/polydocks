@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { DockStyleId, DockPosition } from "@/features/dock/styles";
+import { platformStorage } from "@/lib/platform/storage";
 
 export type ThemeId = "void" | "cyber" | "amber" | "amethyst";
 export type WallpaperFit = "cover" | "contain" | "tile";
@@ -145,9 +146,8 @@ function loadInitialConfig(): StoredThemeConfig {
   }
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<StoredThemeConfig>;
+    const parsed = platformStorage.getItem<Partial<StoredThemeConfig>>(STORAGE_KEY);
+    if (parsed) {
       const config: StoredThemeConfig = {
         theme: THEMES.some((t) => t.id === parsed.theme)
           ? (parsed.theme as ThemeId)
@@ -177,12 +177,13 @@ function loadInitialConfig(): StoredThemeConfig {
         dockStyle:
           parsed.dockStyle === "solid" ||
           parsed.dockStyle === "bare" ||
-          parsed.dockStyle === "lift"
+          parsed.dockStyle === "lift" ||
+          parsed.dockStyle === "glass"
             ? parsed.dockStyle
             : DEFAULT_CONFIG.dockStyle,
         dockPosition:
-          parsed.dockPosition === "bottom"
-            ? "bottom"
+          parsed.dockPosition === "bottom" || parsed.dockPosition === "top"
+            ? parsed.dockPosition
             : DEFAULT_CONFIG.dockPosition,
       };
 
@@ -198,29 +199,27 @@ function loadInitialConfig(): StoredThemeConfig {
 }
 
 function persistConfig(config: StoredThemeConfig) {
-  if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    platformStorage.setItem(STORAGE_KEY, config);
   } catch {
     // If storing full config fails due to storage quota (e.g. large DataURL/GIF),
     // persist other preferences safely so nothing breaks
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ ...config, wallpaperUrl: null })
-      );
+      platformStorage.setItem(STORAGE_KEY, { ...config, wallpaperUrl: null });
     } catch {
       // Storage completely full or restricted
     }
   }
 
-  try {
-    // Dispatch custom event for plugins or dynamic iframes
-    window.dispatchEvent(
-      new CustomEvent("polymax:theme-change", { detail: config })
-    );
-  } catch {
-    // Ignore event dispatch errors
+  if (typeof window !== "undefined") {
+    try {
+      // Dispatch custom event for plugins or dynamic iframes
+      window.dispatchEvent(
+        new CustomEvent("polymax:theme-change", { detail: config })
+      );
+    } catch {
+      // Ignore event dispatch errors
+    }
   }
 }
 
