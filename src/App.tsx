@@ -5,6 +5,7 @@ import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
+import { PluginsView } from "@/features/plugins/PluginsView";
 import { WorldView, INITIAL_GLOBAL_CITIES } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
@@ -317,6 +318,10 @@ export default function App() {
             {activeToolId === "settings" || activeToolId === "theme" ? (
               <DockSurface frameless>
                 <ThemeCustomizerView onDismiss={() => handleDismissTool("settings")} />
+              </DockSurface>
+            ) : activeToolId === "plugins" ? (
+              <DockSurface frameless>
+                <PluginsView onDismiss={() => handleDismissTool("plugins")} />
               </DockSurface>
             ) : isCityMode ? (
               <DockSurface frameless>
