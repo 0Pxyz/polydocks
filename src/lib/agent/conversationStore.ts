@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { streamAgentLoop } from "./client";
 import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
+import { DEFAULT_MODEL_ID, getMetaModel } from "./models";
+import { platformStorage } from "@/lib/platform/storage";
 import type { OrbState } from "@/features/agent/Orb";
 
 export type LayoutState = "closed" | "sheet" | "full" | "side";
@@ -32,6 +34,7 @@ interface ConversationStoreState {
   soundEnabled: boolean;
   audioLevel: number;
   orbState: OrbState;
+  selectedModel: string;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -41,6 +44,7 @@ interface ConversationStoreState {
   setAudioLevel: (level: number) => void;
   setOrbState: (state: OrbState) => void;
   setStatusText: (text: string) => void;
+  setSelectedModel: (modelId: string) => void;
   toggleAgent: (currentActiveToolId?: string) => void;
   sendMessage: (
     prompt?: string,
@@ -73,17 +77,26 @@ interface ConversationStoreState {
 
 const SIDE_WIDTH_KEY = "polymax-agent-side-width";
 const SOUND_KEY = "polymax-agent-sound";
+const MODEL_KEY = "polymax-agent-model";
+
+function getInitialModel(): string {
+  const stored = platformStorage.getItem<string>(MODEL_KEY);
+  if (stored) {
+    const valid = getMetaModel(stored);
+    if (valid) return valid.id;
+  }
+  return DEFAULT_MODEL_ID;
+}
 
 function getInitialSideWidth(): number {
-  if (typeof window === "undefined") return 400;
-  const val = Number(localStorage.getItem(SIDE_WIDTH_KEY));
+  const val = Number(platformStorage.getItem<number | string>(SIDE_WIDTH_KEY));
   if (!isNaN(val) && val >= 340 && val <= 560) return val;
   return 400;
 }
 
 function getInitialSound(): boolean {
-  if (typeof window === "undefined") return true;
-  return localStorage.getItem(SOUND_KEY) !== "false";
+  const stored = platformStorage.getItem<boolean>(SOUND_KEY);
+  return stored !== false;
 }
 
 function getInitialLayoutState(): LayoutState {
@@ -110,31 +123,25 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   soundEnabled: getInitialSound(),
   audioLevel: 0,
   orbState: "idle",
+  selectedModel: getInitialModel(),
 
   setLayoutState: (layoutState) => set({ layoutState }),
 
+  setSelectedModel: (selectedModel) => {
+    platformStorage.setItem(MODEL_KEY, selectedModel);
+    set({ selectedModel });
+  },
+
   setSideWidth: (width) => {
     const clamped = Math.min(Math.max(width, 340), 560);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem(SIDE_WIDTH_KEY, String(clamped));
-      } catch {
-        // Ignore
-      }
-    }
+    platformStorage.setItem(SIDE_WIDTH_KEY, clamped);
     set({ sideWidth: clamped });
   },
 
   setDraft: (draft) => set({ draft }),
 
   setSoundEnabled: (enabled) => {
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem(SOUND_KEY, String(enabled));
-      } catch {
-        // Ignore
-      }
-    }
+    platformStorage.setItem(SOUND_KEY, enabled);
     set({ soundEnabled: enabled });
   },
 
@@ -215,6 +222,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     await streamAgentLoop({
       prompt,
       cityId,
+      modelId: get().selectedModel,
       origin,
       history: historyForBackend,
       signal: abortCtrl.signal,

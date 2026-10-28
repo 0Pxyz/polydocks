@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
+import { ModelSwitcher } from "./ModelSwitcher";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
@@ -212,6 +213,7 @@ export function AgentConversation({
               </div>
 
               <div className="flex items-center gap-1">
+                <ModelSwitcher compact className="h-6 text-[11px] px-1.5 mr-1" />
                 <button
                   type="button"
                   onClick={() => setSoundEnabled(!soundEnabled)}
@@ -466,6 +468,7 @@ export function AgentConversation({
           isBottom ? "top-4 sm:top-6" : "top-[calc(var(--dock-top-offset,88px)-44px)]"
         )}
       >
+        <ModelSwitcher className="mr-1" />
         {!isSide && (
           <button
             type="button"
