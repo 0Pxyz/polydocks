@@ -76,4 +76,4 @@ Open [http://localhost:3000](http://localhost:3000). For Docker instructions and
 ---
 
 Built for the **Meta Global AI Developer Hackathon** (Indie Track). Distributed under the [MIT License](LICENSE).  
-Architecture guidelines and contributor rules are documented in [**AGENTS.md**](AGENTS.md).
+Architecture guidelines and contributor rules are documented in [**AGENTS.md**](AGENTS.md). Core product philosophy is documented in [**docs/product-philosophy.md**](docs/product-philosophy.md).

@@ -80,4 +80,43 @@ CREATE TABLE IF NOT EXISTS map_points (
   UNIQUE(map_id, city_id)
 );
 
+-- Core Plugin Architecture & Capability Bus
+
+CREATE TABLE IF NOT EXISTS plugins (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  manifest_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  trust TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plugin_grants (
+  grant_id TEXT PRIMARY KEY,
+  plugin_id TEXT NOT NULL,
+  permission_type TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  status TEXT NOT NULL, -- 'allow_once' | 'allow_always' | 'denied'
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS executions (
+  execution_id TEXT PRIMARY KEY,
+  capability_id TEXT NOT NULL,
+  plugin_id TEXT NOT NULL,
+  actor TEXT NOT NULL, -- 'agent' | 'user'
+  city_id TEXT,
+  status TEXT NOT NULL, -- 'running' | 'success' | 'failed' | 'denied'
+  duration_ms INTEGER DEFAULT 0,
+  input_json TEXT,
+  output_json TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL
+);
+
+
 
