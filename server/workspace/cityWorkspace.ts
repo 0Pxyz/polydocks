@@ -46,6 +46,7 @@ export interface CityContext {
   notes: string[];
   sources: string[];
   tabs: string[];
+  features?: string[];
 }
 
 /**
@@ -81,11 +82,14 @@ export async function getCityContext(cityId: string): Promise<CityContext> {
     }
   };
 
-  const [notes, sources, tabs] = await Promise.all([
+  const [notes, sources, legacyTabs, featureDirs] = await Promise.all([
     listDirFiles("notes"),
     listDirFiles("sources"),
     listDirFiles("tabs"),
+    listDirFiles("features"),
   ]);
+
+  const allTabs = Array.from(new Set([...featureDirs, ...legacyTabs]));
 
   return {
     cityId,
@@ -93,7 +97,8 @@ export async function getCityContext(cityId: string): Promise<CityContext> {
     workspace,
     notes,
     sources,
-    tabs,
+    tabs: allTabs,
+    features: featureDirs,
   };
 }
 

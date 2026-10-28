@@ -440,3 +440,89 @@ Inject this skill whenever the user asks the agent to build, synthesize, create,
 </body>
 </html>
 ```
+
+---
+
+## 5. Canonical Example 3: Modern TypeScript Feature Module (`feature.ts`)
+
+When creating tools via `create_tab`, you can provide TypeScript code via the `code` parameter.
+The runtime saves it to `workspace/<city>/features/<tabId>/feature.ts` and deterministically transpiles it to browser JavaScript.
+
+### Rules for `feature.ts`:
+- Single file, clean TypeScript.
+- **Forbidden from importing:** Do NOT write `import ...` or `export ...`. The code runs directly inside the sandboxed document.
+- Root element `#app` is provided automatically.
+- Global `window.polymax` is available immediately with `storage`, `openUrl`, `getContext`, `submit`, and `ui.expand`.
+
+```typescript
+// feature.ts - Concept Mastery Matrix & XP Tracker
+interface Concept {
+  id: string;
+  name: string;
+  mastery: number; // 0 - 100
+  lastReviewed: string;
+}
+
+const DEFAULT_CONCEPTS: Concept[] = [
+  { id: "qubit", name: "Qubit & Superposition", mastery: 85, lastReviewed: "2026-10-27" },
+  { id: "entangle", name: "Quantum Entanglement", mastery: 40, lastReviewed: "2026-10-26" },
+  { id: "decohere", name: "Decoherence & Noise", mastery: 20, lastReviewed: "2026-10-25" },
+];
+
+async function init() {
+  const app = document.getElementById("app");
+  if (!app) return;
+
+  // Read saved state via bridge storage
+  const saved = await window.polymax.storage.get("concepts");
+  const concepts: Concept[] = (saved as Concept[]) || DEFAULT_CONCEPTS;
+
+  function render() {
+    app.innerHTML = \`
+      <div style="max-width: 600px; margin: 0 auto; width: 100%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2 style="font-family: var(--font-display); font-size: 18px; color: #F0F0F5;">Mastery Matrix</h2>
+          <button id="expand-btn" style="font-size: 11px;">Expand View</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          \${concepts.map(c => \`
+            <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-weight: 500; font-size: 14px;">\${c.name}</span>
+                <span style="color: var(--accent); font-family: var(--font-mono); font-size: 12px;">\${c.mastery}%</span>
+              </div>
+              <div style="width: 100%; height: 6px; background: #1C1C24; border-radius: 3px; overflow: hidden;">
+                <div style="width: \${c.mastery}%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+              </div>
+              <div style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                <button class="drill-btn" data-id="\${c.id}" style="font-size: 11px; padding: 4px 10px;">Practice (+10 XP)</button>
+              </div>
+            </div>
+          \`).join("")}
+        </div>
+      </div>
+    \`;
+
+    document.getElementById("expand-btn")?.addEventListener("click", () => {
+      window.polymax.ui.expand();
+    });
+
+    document.querySelectorAll(".drill-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        const target = concepts.find(c => c.id === id);
+        if (target && target.mastery < 100) {
+          target.mastery = Math.min(100, target.mastery + 10);
+          await window.polymax.storage.set("concepts", concepts);
+          render();
+        }
+      });
+    });
+  }
+
+  render();
+}
+
+init();
+```
+

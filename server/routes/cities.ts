@@ -5,6 +5,7 @@ import {
   getCityContext,
   readCityFile,
 } from "../workspace/cityWorkspace";
+import { listFeatures, readFeature } from "../workspace/features";
 import { generateCityFeed } from "../discovery/feedGenerator";
 import { db } from "../workspace/db";
 
@@ -100,23 +101,12 @@ citiesRouter.post("/:id/feed/refresh", async (c) => {
 });
 
 /**
- * GET /api/cities/:id/tabs - Lists installed dock tabs in city
+ * GET /api/cities/:id/tabs - Lists installed dock tabs and features in city
  */
 citiesRouter.get("/:id/tabs", async (c) => {
   const cityId = c.req.param("id");
   try {
-    const context = await getCityContext(cityId);
-    const tabs: any[] = [];
-
-    for (const tabId of context.tabs) {
-      try {
-        const manifestRaw = await readCityFile(cityId, `tabs/${tabId}/manifest.json`);
-        tabs.push(JSON.parse(manifestRaw));
-      } catch {
-        tabs.push({ id: tabId, title: tabId, kind: "dynamic" });
-      }
-    }
-
+    const tabs = await listFeatures(cityId);
     return c.json({ success: true, count: tabs.length, data: tabs });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -130,10 +120,24 @@ citiesRouter.get("/:id/tabs/:tabId/srcdoc", async (c) => {
   const cityId = c.req.param("id");
   const tabId = c.req.param("tabId");
   try {
-    const html = await readCityFile(cityId, `tabs/${tabId}/index.html`);
+    const feat = await readFeature(cityId, tabId);
     c.header("Content-Type", "text/html; charset=utf-8");
-    return c.body(html);
+    return c.body(feat.srcdoc);
   } catch {
     return c.text("Dynamic tab not found", 404);
+  }
+});
+
+/**
+ * GET /api/cities/:id/features/:tabId - Retrieves raw feature module data and manifest
+ */
+citiesRouter.get("/:id/features/:tabId", async (c) => {
+  const cityId = c.req.param("id");
+  const tabId = c.req.param("tabId");
+  try {
+    const feat = await readFeature(cityId, tabId);
+    return c.json({ success: true, data: feat });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 404);
   }
 });
