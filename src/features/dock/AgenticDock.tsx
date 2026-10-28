@@ -1,21 +1,25 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Sparkles,
-  Clock,
+  Compass,
+  Cards,
   Paperclip,
-  Folder,
   Globe,
-  PenTool,
-  Flame,
+  NotePencil,
+  Target,
   Palette,
-} from "lucide-react";
+  TerminalWindow,
+  Flame,
+  Sparkle,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
+import { DockIcon } from "@/components/icons/DockIcon";
+import type { IconComponent } from "@/components/icons/adapter";
 
 export interface DockToolItem {
   id: string;
   label: string;
   type: "icon" | "text" | "terminal";
-  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  icon?: IconComponent | React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   text?: string;
   isAgent?: boolean;
 }
@@ -25,20 +29,21 @@ export const DOCK_TOOLS: DockToolItem[] = [
     id: "agent",
     label: "Agent Co-Pilot (⌘K)",
     type: "icon",
-    icon: Sparkles,
+    icon: Sparkle,
     isAgent: true,
   },
   {
     id: "terminal",
     label: "City Terminal",
-    type: "terminal",
+    type: "icon",
+    icon: TerminalWindow,
     text: ">_",
   },
   {
     id: "flashcards",
     label: "Flashcards & Drills",
     type: "icon",
-    icon: Clock,
+    icon: Cards,
   },
   {
     id: "sources",
@@ -50,7 +55,7 @@ export const DOCK_TOOLS: DockToolItem[] = [
     id: "world",
     label: "World Map (Cities)",
     type: "icon",
-    icon: Folder,
+    icon: Compass,
   },
   {
     id: "browser",
@@ -61,14 +66,15 @@ export const DOCK_TOOLS: DockToolItem[] = [
   {
     id: "notes",
     label: "Notes & Tiling",
-    type: "text",
+    type: "icon",
+    icon: NotePencil,
     text: "Aa",
   },
   {
     id: "quests",
     label: "Quests & Practice",
     type: "icon",
-    icon: PenTool,
+    icon: Target,
   },
   {
     id: "theme",
@@ -150,7 +156,7 @@ export function AgenticDock({
     <header
       ref={headerRef}
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 flex flex-col items-center select-none pt-0",
+        "fixed top-0 left-0 right-0 z-50 flex flex-col items-center select-none pt-0 pointer-events-none",
         className
       )}
     >
@@ -158,7 +164,7 @@ export function AgenticDock({
       <div className="w-full h-[2px] bg-gradient-to-r from-transparent via-[var(--accent-lime)] to-transparent opacity-85 shadow-[0_0_12px_rgba(200,255,87,0.6)]" />
 
       {/* Top HUD container */}
-      <div className="flex flex-col items-center pt-2.5 pb-2">
+      <div className="flex flex-col items-center pt-2.5 pb-2 pointer-events-auto">
         {/* Status Bar */}
         <div className="flex items-center justify-center gap-4 px-4 py-1 font-mono text-[13px] font-semibold tracking-wide mb-2">
           {/* Level */}
@@ -182,9 +188,9 @@ export function AgenticDock({
 
           <span className="text-border/80 font-light select-none">|</span>
 
-          {/* Streak */}
+          {/* Streak with Phosphor Duotone Flame */}
           <div className="flex items-center gap-1 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.35)]">
-            <Flame className="w-3.5 h-3.5 fill-amber-500 stroke-amber-500" />
+            <Flame size={16} weight="duotone" className="text-amber-500" />
             <span>4d</span>
           </div>
         </div>
@@ -204,7 +210,7 @@ export function AgenticDock({
                 data-dock-tool-id={tool.id}
                 onClick={() => handleToolClick(tool.id)}
                 className={cn(
-                  "group relative w-11 h-[38px] flex items-center justify-center rounded-[10px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1118]",
+                  "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-[10px] transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1118]",
                   !isActive &&
                     "text-[#9aa5b8] hover:text-white hover:bg-white/[0.08] hover:-translate-y-0.5",
                   isActive &&
@@ -212,30 +218,18 @@ export function AgenticDock({
                   !isActive &&
                     isAgent &&
                     isAgentWorking &&
-                    "text-[var(--accent-lime)] animate-pulse shadow-[0_0_12px_rgba(200,255,87,0.4)]"
+                    "text-[var(--accent-lime)] shadow-[0_0_12px_rgba(200,255,87,0.4)]"
                 )}
                 aria-label={tool.label}
               >
-                {tool.type === "icon" && tool.icon && (
-                  <tool.icon
-                    className={cn(
-                      "w-[18px] h-[18px]",
-                      isAgent && "w-[19px] h-[19px]"
-                    )}
-                  />
-                )}
-
-                {tool.type === "terminal" && (
-                  <span className="font-mono text-sm font-bold tracking-tighter">
-                    {tool.text}
-                  </span>
-                )}
-
-                {tool.type === "text" && (
-                  <span className="font-sans font-semibold text-[15px] tracking-tight">
-                    {tool.text}
-                  </span>
-                )}
+                <DockIcon
+                  icon={tool.icon}
+                  name={tool.id}
+                  isActive={isActive}
+                  isAgent={isAgent}
+                  isAgentWorking={isAgentWorking}
+                  size={21}
+                />
 
                 {/* Tooltip */}
                 <span className="pointer-events-none absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-all duration-150 transform translate-y-1 group-hover:translate-y-0 bg-[#171b24] border border-[#2e374d] text-[#f1f3f9] text-[11px] font-mono px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50">

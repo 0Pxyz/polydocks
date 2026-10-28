@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -8,6 +9,8 @@ import {
 import { listFeatures, readFeature } from "../workspace/features";
 import { generateCityFeed } from "../discovery/feedGenerator";
 import { db } from "../workspace/db";
+import { buildCityWorkspace } from "../city-builder/pipeline";
+import { TinyFishClient } from "../discovery/tinyfish";
 
 export const citiesRouter = new Hono();
 
@@ -140,4 +143,40 @@ citiesRouter.get("/:id/features/:tabId", async (c) => {
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 404);
   }
+});
+
+/**
+ * GET /api/cities/:id/build/stream - Streams live progress of city workspace synthesis
+ */
+citiesRouter.get("/:id/build/stream", async (c) => {
+  const cityId = c.req.param("id");
+  const topic = c.req.query("topic") || cityId.replace(/-/g, " ");
+  const depth = (c.req.query("depth") as "overview" | "deep" | "mastery") || "deep";
+
+  return streamSSE(c, async (stream) => {
+    const tinyfish = new TinyFishClient();
+    try {
+      await buildCityWorkspace({
+        cityId,
+        topic,
+        depth,
+        tinyfish,
+        emitEvent: async (ev) => {
+          await stream.writeSSE({
+            event: ev.type,
+            data: JSON.stringify(ev),
+          });
+        },
+      });
+      await stream.writeSSE({
+        event: "done",
+        data: JSON.stringify({ success: true, cityId }),
+      });
+    } catch (err: any) {
+      await stream.writeSSE({
+        event: "error",
+        data: JSON.stringify({ error: err.message || String(err) }),
+      });
+    }
+  });
 });

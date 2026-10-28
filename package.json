@@ -18,12 +18,14 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "test": "bun test",
+    "seed": "bun scripts/seedDemoWorld.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/syne": "^5.3.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.105.0",
     "class-variance-authority": "^0.7.1",
@@ -48,6 +50,7 @@
     "zustand": "^5.0.16"
   },
   "devDependencies": {
+    "@phosphor-icons/core": "^2.1.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

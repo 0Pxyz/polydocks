@@ -80,4 +80,24 @@ describe("Polymax REST API Endpoints", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("GET /api/cities/:id/build/stream streams progress events via SSE", async () => {
+    const res = await app.fetch(
+      new Request(`http://localhost:3000/api/cities/${TEST_CITY}/build/stream?topic=Quantum%20Mechanics&depth=overview`)
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/event-stream");
+
+    const reader = res.body?.getReader();
+    expect(reader).toBeDefined();
+
+    if (reader) {
+      const chunk = await reader.read();
+      expect(chunk.done).toBe(false);
+      const text = new TextDecoder().decode(chunk.value);
+      expect(text).toContain("event:");
+      reader.cancel();
+    }
+  });
 });
