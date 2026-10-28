@@ -28,6 +28,11 @@ import { create_plugin } from "./create_plugin";
 import { modify_plugin } from "./modify_plugin";
 import { operate_plugin } from "./operate_plugin";
 import { publish_plugin } from "./publish_plugin";
+import { list_files } from "./list_files";
+import { read_file } from "./read_file";
+import { write_file } from "./write_file";
+import { edit_file } from "./edit_file";
+import { search_files } from "./search_files";
 
 export * from "./types";
 export {
@@ -60,6 +65,11 @@ export {
   modify_plugin,
   operate_plugin,
   publish_plugin,
+  list_files,
+  read_file,
+  write_file,
+  edit_file,
+  search_files,
 };
 
 /**
@@ -95,4 +105,9 @@ export const defaultTools: AgentTool[] = [
   modify_plugin,
   operate_plugin,
   publish_plugin,
+  list_files,
+  read_file,
+  write_file,
+  edit_file,
+  search_files,
 ];
