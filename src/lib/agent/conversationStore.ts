@@ -3,6 +3,7 @@ import { streamAgentLoop } from "./client";
 import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, getMetaModel } from "./models";
+import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
 import { platformStorage } from "@/lib/platform/storage";
 import type { OrbState } from "@/features/agent/Orb";
 
@@ -15,6 +16,7 @@ export interface ConversationMessage {
   origin?: "dock-add" | "chat";
   toolName?: string;
   timestamp: number;
+  attachments?: ChatAttachment[];
   error?: {
     code?: string;
     message: string;
@@ -25,6 +27,7 @@ interface ConversationStoreState {
   layoutState: LayoutState;
   sideWidth: number;
   messages: ConversationMessage[];
+  stagedAttachments: ChatAttachment[];
   draft: string;
   isStreaming: boolean;
   isBuildingTool: boolean;
@@ -40,6 +43,9 @@ interface ConversationStoreState {
   setLayoutState: (layoutState: LayoutState) => void;
   setSideWidth: (width: number) => void;
   setDraft: (draft: string) => void;
+  addAttachments: (files: File[]) => Promise<void>;
+  removeAttachment: (id: string) => void;
+  clearAttachments: () => void;
   setSoundEnabled: (enabled: boolean) => void;
   setAudioLevel: (level: number) => void;
   setOrbState: (state: OrbState) => void;
@@ -114,6 +120,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   layoutState: getInitialLayoutState(),
   sideWidth: getInitialSideWidth(),
   messages: [],
+  stagedAttachments: [],
   draft: "",
   isStreaming: false,
   isBuildingTool: false,
@@ -130,6 +137,31 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   setSelectedModel: (selectedModel) => {
     platformStorage.setItem(MODEL_KEY, selectedModel);
     set({ selectedModel });
+  },
+
+  addAttachments: async (files: File[]) => {
+    const current = get().stagedAttachments;
+    const remainingSlots = MAX_ATTACHMENTS_COUNT - current.length;
+    if (remainingSlots <= 0) return;
+
+    const filesToProcess = files.slice(0, remainingSlots);
+    const validFiles = filesToProcess.filter((f) => f.size <= MAX_ATTACHMENT_SIZE);
+
+    const processed = await Promise.all(
+      validFiles.map((file) => processFileToAttachment(file))
+    );
+
+    set({ stagedAttachments: [...current, ...processed] });
+  },
+
+  removeAttachment: (id: string) => {
+    set({
+      stagedAttachments: get().stagedAttachments.filter((a) => a.id !== id),
+    });
+  },
+
+  clearAttachments: () => {
+    set({ stagedAttachments: [] });
   },
 
   setSideWidth: (width) => {
@@ -180,15 +212,18 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   },
 
   sendMessage: async (promptToSend, cityId, callbacks, options) => {
-    const prompt = (promptToSend ?? get().draft).trim();
-    if (!prompt || get().isStreaming) return;
+    const rawPrompt = (promptToSend ?? get().draft).trim();
+    const attachmentsToSend = [...get().stagedAttachments];
+    if ((!rawPrompt && attachmentsToSend.length === 0) || get().isStreaming) return;
 
+    const prompt = rawPrompt || (attachmentsToSend.length > 0 ? "Inspect the attached files." : "");
     const origin = options?.origin || "chat";
     const isDockAdd = origin === "dock-add";
 
     cancelSpeech();
     set({
       draft: isDockAdd ? get().draft : "",
+      stagedAttachments: [],
       isStreaming: true,
       isBuildingTool: isDockAdd,
       buildingToolName: isDockAdd ? prompt : "",
@@ -202,6 +237,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       role: "user",
       content: prompt,
       origin,
+      attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       timestamp: Date.now(),
     };
 
@@ -223,6 +259,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       prompt,
       cityId,
       modelId: get().selectedModel,
+      attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       origin,
       history: historyForBackend,
       signal: abortCtrl.signal,
