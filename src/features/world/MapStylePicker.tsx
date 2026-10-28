@@ -10,19 +10,23 @@ export interface MapStylePickerProps {
   activeMapId: string;
   onSelectMap: (mapId: string) => void;
   onOpenUpload?: () => void;
+  engineMode?: "illustrated" | "ascii";
+  onToggleEngineMode?: (mode: "illustrated" | "ascii") => void;
   className?: string;
 }
 
 /**
  * MapStylePicker:
  * Frameless bottom-center row of 44px style thumbnails with accent ring selection,
- * transient name line, 300ms cross-fade switching, and "+" modal for custom uploads/FMG creator.
+ * engine mode switcher (Illustrated vs Procedural ASCII), transient name line, and "+" modal.
  */
 export function MapStylePicker({
   availableMaps,
   activeMapId,
   onSelectMap,
   onOpenUpload,
+  engineMode = "illustrated",
+  onToggleEngineMode,
   className,
 }: MapStylePickerProps) {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
@@ -39,22 +43,61 @@ export function MapStylePicker({
         className
       )}
     >
-      {/* Transient Active / Hovered Style Name Line */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={displayName}
-          initial={isReduced ? { opacity: 1 } : { opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.15 }}
-          className="mb-2 text-[12px] font-mono tracking-wider text-[#d1d6e2] font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]"
-        >
-          {displayName}
-        </motion.div>
-      </AnimatePresence>
+      {/* Engine Mode Toggle (Illustrated vs Procedural ASCII Experiment) */}
+      {onToggleEngineMode && (
+        <div className="flex items-center gap-1 mb-2 p-1 rounded-xl bg-[#0d1118]/90 border border-white/10 backdrop-blur-xl text-xs font-mono shadow-xl">
+          <button
+            type="button"
+            onClick={() => onToggleEngineMode("illustrated")}
+            className={cn(
+              "px-3 py-1 rounded-lg transition-all cursor-pointer",
+              engineMode === "illustrated"
+                ? "bg-white/15 text-white font-medium shadow-sm"
+                : "text-zinc-400 hover:text-white"
+            )}
+          >
+            Illustrated
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleEngineMode("ascii")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all cursor-pointer",
+              engineMode === "ascii"
+                ? "bg-[var(--accent-lime,#C8FF57)] text-black font-semibold shadow-md"
+                : "text-zinc-400 hover:text-white hover:bg-white/5"
+            )}
+          >
+            <span>ASCII Engine</span>
+            <span className={cn(
+              "text-[9px] uppercase font-bold px-1 py-0.5 rounded",
+              engineMode === "ascii" ? "bg-black/20 text-black" : "bg-emerald-500/20 text-emerald-400"
+            )}>
+              Exp
+            </span>
+          </button>
+        </div>
+      )}
 
-      {/* Capsule of 44px Thumbnails + Plus Tile */}
-      <div className="flex items-center gap-2 p-1.5 rounded-[16px] bg-[#0d1118]/85 border border-white/10 backdrop-blur-xl shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
+      {/* When in Illustrated Mode, show Thumbnails Capsule */}
+      {engineMode === "illustrated" && (
+        <>
+          {/* Transient Active / Hovered Style Name Line */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={displayName}
+              initial={isReduced ? { opacity: 1 } : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+              className="mb-2 text-[12px] font-mono tracking-wider text-[#d1d6e2] font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]"
+            >
+              {displayName}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Capsule of 44px Thumbnails + Plus Tile */}
+          <div className="flex items-center gap-2 p-1.5 rounded-[16px] bg-[#0d1118]/85 border border-white/10 backdrop-blur-xl shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
         {availableMaps.map((map) => {
           const isSelected = map.id === activeMapId;
 
@@ -135,6 +178,8 @@ export function MapStylePicker({
           </AnimatePresence>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

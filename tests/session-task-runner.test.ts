@@ -126,8 +126,11 @@ describe("Persistent Work Sessions & Background Task Engine (Issue #76)", () => 
         rootDir: TEST_ROOT,
       });
 
-      // Wait a bit for execution to finish
-      await new Promise((r) => setTimeout(r, 60));
+      // Wait for execution to finish
+      for (let i = 0; i < 20; i++) {
+        if (getTask(task.id)?.status === "completed") break;
+        await new Promise((r) => setTimeout(r, 25));
+      }
 
       const updated = getTask(task.id);
       expect(updated?.status).toBe("completed");

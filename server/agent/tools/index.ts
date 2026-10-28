@@ -35,6 +35,7 @@ import { edit_file } from "./edit_file";
 import { search_files } from "./search_files";
 import { recall_memory } from "./recall_memory";
 import { record_memory } from "./record_memory";
+import { plan_ascii_world } from "./plan_ascii_world";
 
 export * from "./types";
 export {
@@ -74,6 +75,7 @@ export {
   search_files,
   recall_memory,
   record_memory,
+  plan_ascii_world,
 };
 
 /**
@@ -116,4 +118,5 @@ export const defaultTools: AgentTool[] = [
   search_files,
   recall_memory,
   record_memory,
+  plan_ascii_world,
 ];
