@@ -12,6 +12,8 @@ import { useCityBuildStream } from "../world/useCityBuildStream";
 import type { CityPoint, MapSource } from "../world/types";
 import { prefersReducedMotion } from "@/lib/motion";
 import { AsciiWorldView } from "../world/ascii/AsciiWorldView";
+import { ParticleWorldView } from "../world/particle/ParticleWorldView";
+import type { EngineMode } from "../world/MapStylePicker";
 
 export const INITIAL_GLOBAL_CITIES = [
   { id: "neural-networks", title: "Neural Networks", region: "Aethelgard Reach" },
@@ -36,7 +38,7 @@ export function WorldView({
   activeCityId,
 }: WorldViewProps) {
   const [activeMapId, setActiveMapId] = useState<string>("gloom");
-  const [engineMode, setEngineMode] = useState<"illustrated" | "ascii">("illustrated");
+  const [engineMode, setEngineMode] = useState<EngineMode>("illustrated");
   const [customMaps, setCustomMaps] = useState<MapSource[]>([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [cityPoints, setCityPoints] = useState<CityPoint[]>([]);
@@ -279,8 +281,10 @@ export function WorldView({
           </button>
         </div>
       )}
-      {/* Map Surface: Illustrated vs Procedural ASCII Engine */}
-      {engineMode === "ascii" ? (
+      {/* Map Surface: Illustrated vs Procedural ASCII vs Procedural Particles */}
+      {engineMode === "particles" ? (
+        <ParticleWorldView onEnterCity={onEnterCity} className="w-full h-full" />
+      ) : engineMode === "ascii" ? (
         <AsciiWorldView onEnterCity={onEnterCity} className="w-full h-full" />
       ) : (
         <motion.div

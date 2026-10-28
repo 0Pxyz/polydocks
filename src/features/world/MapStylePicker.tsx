@@ -5,13 +5,15 @@ import type { MapSource } from "./types";
 import { cn } from "@/lib/cn";
 import { prefersReducedMotion } from "@/lib/motion";
 
+export type EngineMode = "illustrated" | "ascii" | "particles";
+
 export interface MapStylePickerProps {
   availableMaps: MapSource[];
   activeMapId: string;
   onSelectMap: (mapId: string) => void;
   onOpenUpload?: () => void;
-  engineMode?: "illustrated" | "ascii";
-  onToggleEngineMode?: (mode: "illustrated" | "ascii") => void;
+  engineMode?: EngineMode;
+  onToggleEngineMode?: (mode: EngineMode) => void;
   className?: string;
 }
 
@@ -68,10 +70,28 @@ export function MapStylePicker({
                 : "text-zinc-400 hover:text-white hover:bg-white/5"
             )}
           >
-            <span>ASCII Engine</span>
+            <span>ASCII</span>
             <span className={cn(
               "text-[9px] uppercase font-bold px-1 py-0.5 rounded",
               engineMode === "ascii" ? "bg-black/20 text-black" : "bg-emerald-500/20 text-emerald-400"
+            )}>
+              Exp
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleEngineMode("particles")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all cursor-pointer",
+              engineMode === "particles"
+                ? "bg-[var(--accent-lime,#C8FF57)] text-black font-semibold shadow-md"
+                : "text-zinc-400 hover:text-white hover:bg-white/5"
+            )}
+          >
+            <span>Particles</span>
+            <span className={cn(
+              "text-[9px] uppercase font-bold px-1 py-0.5 rounded",
+              engineMode === "particles" ? "bg-black/20 text-black" : "bg-emerald-500/20 text-emerald-400"
             )}>
               Exp
             </span>
