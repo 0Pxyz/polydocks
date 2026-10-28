@@ -13,6 +13,8 @@ import { write_city_file } from "./write_city_file";
 import { open_source } from "./open_source";
 import { search_web } from "./search_web";
 import { fetch_page } from "./fetch_page";
+import { plan_map } from "./plan_map";
+import { build_city } from "./build_city";
 
 export * from "./types";
 export {
@@ -30,6 +32,8 @@ export {
   open_source,
   search_web,
   fetch_page,
+  plan_map,
+  build_city,
 };
 
 /**
@@ -50,4 +54,6 @@ export const defaultTools: AgentTool[] = [
   open_source,
   search_web,
   fetch_page,
+  plan_map,
+  build_city,
 ];

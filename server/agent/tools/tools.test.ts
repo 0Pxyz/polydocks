@@ -28,8 +28,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("should export all 14 canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(14);
+  it("should export all 16 canonical tools in defaultTools catalog", () => {
+    expect(defaultTools.length).toBe(16);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -45,6 +45,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("open_source");
     expect(names).toContain("search_web");
     expect(names).toContain("fetch_page");
+    expect(names).toContain("plan_map");
+    expect(names).toContain("build_city");
   });
 
   it("list_tabs returns builtins and dynamic tabs", async () => {
@@ -143,5 +145,31 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(
       resolveSafeCityPath("..", "notes.md")
     ).rejects.toThrow(/Security Violation/);
+  });
+
+  it("plan_map synthesizes semantic knowledge regions and cities", async () => {
+    const { plan_map } = await import("./plan_map");
+    const result = (await plan_map.execute(
+      { interests: ["Quantum Computing", "Philosophy"] },
+      { cityId: TEST_CITY, step: 1 }
+    )) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.regionCount).toBe(2);
+    expect(result.cityCount).toBe(4);
+    expect(result.spec.regions[0].title).toBe("Quantum Computing");
+  });
+
+  it("build_city tool executes pipeline and constructs workspace assets", async () => {
+    const { build_city } = await import("./build_city");
+    const result = (await build_city.execute(
+      { cityId: TEST_CITY, topic: "Distributed Systems", depth: "overview" },
+      { cityId: TEST_CITY, step: 1 }
+    )) as any;
+
+    expect(result.success).toBe(true);
+    expect(result.topic).toBe("Distributed Systems");
+    expect(result.status).toBe("ready");
+    expect(result.questsCount).toBe(3);
   });
 });
