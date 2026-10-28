@@ -3,6 +3,8 @@ import { pluginRegistry } from "../plugins/registry";
 import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import { connectMcpServer } from "../plugins/adapters/mcp";
+import { validateUrlForSsrf } from "../plugins/ssrf";
+import { validatePluginManifest } from "../plugins/manifest";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -192,6 +194,81 @@ pluginsRouter.post("/mcp/connect", async (c) => {
 });
 
 /**
+ * POST /api/plugins/install-url - Install a plugin from a remote manifest URL
+ */
+pluginsRouter.post("/install-url", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { url, permissionsConfirmed } = body;
+  if (!url || typeof url !== "string") {
+    return c.json({ error: "Manifest URL is required." }, 400);
+  }
+
+  // 1. SSRF Guard
+  const ssrfCheck = validateUrlForSsrf(url);
+  if (!ssrfCheck.safe || !ssrfCheck.url) {
+    return c.json({ error: `SSRF Guard Blocked: ${ssrfCheck.reason || "Forbidden URL"}` }, 400);
+  }
+
+  // 2. Fetch remote manifest
+  let rawManifest: unknown;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(ssrfCheck.url.toString(), {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      return c.json({ error: `Failed to fetch manifest: HTTP ${res.status} ${res.statusText}` }, 400);
+    }
+    const text = await res.text();
+    if (Buffer.byteLength(text, "utf-8") > 512 * 1024) {
+      return c.json({ error: "Manifest payload exceeds maximum allowed size of 512KB" }, 400);
+    }
+    rawManifest = JSON.parse(text);
+  } catch (err: any) {
+    return c.json({ error: `Failed to fetch or parse remote manifest: ${err.message}` }, 400);
+  }
+
+  // 3. Validate schema
+  const validation = validatePluginManifest(rawManifest);
+  if (!validation.success || !validation.data) {
+    return c.json({ error: `Invalid plugin manifest: ${validation.error}` }, 400);
+  }
+
+  const manifest = validation.data;
+
+  // 4. If permissions not yet confirmed by user, prompt with manifest and required permissions
+  if (!permissionsConfirmed) {
+    return c.json({
+      success: false,
+      requiresConfirmation: true,
+      manifest,
+      permissions: manifest.permissions || [],
+    });
+  }
+
+  // 5. Install plugin and register capabilities
+  const installed = pluginRegistry.install(manifest);
+  if (!installed.success || !installed.plugin) {
+    return c.json({ error: installed.error || "Failed to install plugin." }, 400);
+  }
+
+  // Auto-grant declared permissions upon explicit user confirmation
+  for (const perm of manifest.permissions || []) {
+    pluginRegistry.recordGrant(manifest.id, perm.type, "*", "allow_always");
+  }
+
+  for (const cap of manifest.capabilities || []) {
+    capabilityBus.register(manifest.id, cap);
+  }
+
+  return c.json({ success: true, plugin: installed.plugin }, 201);
+});
+
+/**
  * GET /api/capabilities - Unified capability catalog
  */
 capabilitiesRouter.get("/", (c) => {
@@ -271,6 +348,22 @@ capabilitiesRouter.post("/invoke", async (c) => {
   if (!capabilityId) {
     return c.json({ error: "Missing capabilityId" }, 400);
   }
+
+  const result = await capabilityBus.invoke(capabilityId, input, {
+    actor: "user",
+    cityId,
+  });
+
+  return c.json(result);
+});
+
+/**
+ * POST /api/capabilities/:id/invoke - Invoke a capability by parameter ID
+ */
+capabilitiesRouter.post("/:id/invoke", async (c) => {
+  const capabilityId = c.req.param("id");
+  const body = await c.req.json().catch(() => ({}));
+  const { input, cityId } = body;
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
