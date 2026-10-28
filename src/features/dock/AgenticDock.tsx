@@ -5,6 +5,7 @@ import {
   NotePencil,
   Sparkle,
   Plus,
+  Storefront,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
@@ -52,6 +53,13 @@ export const CORE_DOCK_TOOLS: DockToolItem[] = [
     icon: NotePencil,
   },
 ];
+
+export const STORE_DOCK_TOOL: DockToolItem = {
+  id: "store",
+  label: "Plugin Store",
+  type: "icon",
+  icon: Storefront,
+};
 
 export const ROOT_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
 export const CITY_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;

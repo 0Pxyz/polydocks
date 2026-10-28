@@ -27,6 +27,7 @@ import { list_recent_executions } from "./list_recent_executions";
 import { create_plugin } from "./create_plugin";
 import { modify_plugin } from "./modify_plugin";
 import { operate_plugin } from "./operate_plugin";
+import { publish_plugin } from "./publish_plugin";
 
 export * from "./types";
 export {
@@ -58,6 +59,7 @@ export {
   create_plugin,
   modify_plugin,
   operate_plugin,
+  publish_plugin,
 };
 
 /**
@@ -92,4 +94,5 @@ export const defaultTools: AgentTool[] = [
   create_plugin,
   modify_plugin,
   operate_plugin,
+  publish_plugin,
 ];
