@@ -12,7 +12,6 @@ import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
 import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
-import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function App() {
