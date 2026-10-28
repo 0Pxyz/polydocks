@@ -211,6 +211,8 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
           collapse: () => sendHostRequest('ui.collapse', {}),
         }
       };
+      // PolyDocks V2 alias
+      window.polydocks = window.polymax;
     })();
   </script>
 </head>
