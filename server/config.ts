@@ -8,6 +8,7 @@ const envSchema = z.object({
   MAX_STEPS: z.coerce.number().int().positive().default(20),
   PORT: z.coerce.number().int().positive().default(3000),
   DATA_DIR: z.string().default("./data"),
+  AGENT_HOME_DIR: z.string().optional(),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 
