@@ -243,7 +243,7 @@ export default function App() {
   return (
     <AppProviders>
       <RootLayout>
-        <div className="relative min-h-screen w-full bg-background text-foreground overflow-x-hidden select-none">
+        <div className="relative min-h-screen w-full bg-background text-foreground overflow-x-hidden select-none flex flex-col">
           {/* Custom Wallpaper Layer */}
           {wallpaperUrl && (
             <div
@@ -355,7 +355,7 @@ export default function App() {
           <main
             style={isSideLayout ? { marginLeft: `${sideWidth}px` } : undefined}
             className={cn(
-              "relative z-10 min-h-screen w-full flex flex-col items-center transition-[margin] duration-150",
+              "relative z-10 w-full flex-1 flex flex-col items-center transition-[margin] duration-150",
               isSideLayout && "w-[calc(100%-${sideWidth}px)] max-w-full"
             )}
           >
