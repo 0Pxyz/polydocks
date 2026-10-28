@@ -129,6 +129,7 @@ Source of truth for work is **GitHub Issues**. `.internal/backlog.md` is only a 
 7. Ensure linked GitHub issues are closed upon PR approval and merge (`gh issue close <id>` if not auto-closed).
 8. Never push to `main`. Always branch off `main` and submit via PR.
 9. Strictly follow the **Language Rule**: write all code, commit messages, PR descriptions, and docs in English.
+10. **Design Slop Rule:** Read `docs/design-slop.md` before any UI work. Every UI task's final report ends with a short slop check (indicators found and fixed, or kept with a reason).
 
 ## 6. Git, commits and PRs
 
@@ -161,6 +162,7 @@ Public (in the repo):
 - `docs/product-philosophy.md`: everything is a plugin, the agent is the operator, typed capability bus.
 - `docs/architecture.md` and `docs/adr/NNNN-title.md`: decisions, short.
 - `docs/design-system.md`: tokens, typography, Dock motion rules.
+- `docs/design-slop.md`: visual slop patterns to eliminate across UI and agent experiences.
 - `docs/meta-model-api.md`: the Meta API facts we rely on.
 - `docs/tinyfish.md`: the TinyFish API facts we rely on.
 - `docs/system-access.md`: how the agent accesses the user's files and machine, security model, reference projects.
