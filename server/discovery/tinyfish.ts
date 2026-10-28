@@ -91,32 +91,35 @@ export class TinyFishClient implements TinyFishAdapter {
       ];
     } else {
       const url = new URL(this.searchBaseUrl);
-      url.searchParams.set("q", trimmed);
-      url.searchParams.set("domain_type", domainType);
-      url.searchParams.set("limit", String(limit));
+      url.searchParams.set("query", trimmed);
+      if (domainType) {
+        url.searchParams.set("domain_type", domainType);
+      }
 
       try {
         const res = await fetch(url.toString(), {
           headers: {
             "X-API-Key": this.apiKey,
-            Authorization: `Bearer ${this.apiKey}`,
           },
         });
 
         if (!res.ok) {
-          throw new Error(`TinyFish Search API error ${res.status}: ${await res.text()}`);
+          const errText = await res.text();
+          console.error(`[TinyFish Search Error] HTTP ${res.status}: ${errText}`);
+          throw new Error(`TinyFish Search API error ${res.status}: ${errText}`);
         }
 
         const data = (await res.json()) as any;
         const rawHits = Array.isArray(data) ? data : data.results || data.hits || [];
 
-        results = rawHits.map((h: any) => ({
+        results = rawHits.slice(0, limit).map((h: any) => ({
           title: h.title || h.name || "Untitled Resource",
           url: h.url || h.link,
           snippet: h.snippet || h.summary || "",
           domainType,
         }));
-      } catch {
+      } catch (err: any) {
+        console.warn(`[TinyFish Search Fallback] using mock hits for "${trimmed}":`, err?.message || err);
         // Fallback to deterministic results on network / API error
         results = [
           {
@@ -198,7 +201,6 @@ export class TinyFishClient implements TinyFishAdapter {
           headers: {
             "Content-Type": "application/json",
             "X-API-Key": this.apiKey,
-            Authorization: `Bearer ${this.apiKey}`,
           },
           body: JSON.stringify({
             urls: missingUrls,
@@ -207,14 +209,16 @@ export class TinyFishClient implements TinyFishAdapter {
         });
 
         if (!res.ok) {
-          throw new Error(`TinyFish Fetch API error ${res.status}: ${await res.text()}`);
+          const errText = await res.text();
+          console.error(`[TinyFish Fetch Error] HTTP ${res.status}: ${errText}`);
+          throw new Error(`TinyFish Fetch API error ${res.status}: ${errText}`);
         }
 
         const data = (await res.json()) as any;
         const rawList = Array.isArray(data) ? data : data.results || [];
 
         fetchedBatch = rawList.map((item: any) => {
-          let md = item.markdown || item.content || "";
+          let md = item.text || item.markdown || item.content || "";
           if (md.length > MAX_PAGE_BYTES) {
             md = md.slice(0, MAX_PAGE_BYTES) + "\n\n...[Truncated to 16KB for security]...";
           }
@@ -224,7 +228,8 @@ export class TinyFishClient implements TinyFishAdapter {
             markdown: md,
           };
         });
-      } catch {
+      } catch (err: any) {
+        console.warn(`[TinyFish Fetch Fallback] for URLs:`, missingUrls, err?.message || err);
         fetchedBatch = missingUrls.map((u) => ({
           url: u,
           status: 200,

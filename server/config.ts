@@ -5,7 +5,7 @@ const envSchema = z.object({
   MODEL_ID: z.string().default("muse-spark-1.3"),
   MODEL_API_KEY: z.string().optional().default(""),
   TINYFISH_API_KEY: z.string().optional().default(""),
-  MAX_STEPS: z.coerce.number().int().positive().default(8),
+  MAX_STEPS: z.coerce.number().int().positive().default(16),
   PORT: z.coerce.number().int().positive().default(3000),
   DATA_DIR: z.string().default("./data"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),

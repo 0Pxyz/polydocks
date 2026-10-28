@@ -37,6 +37,19 @@ export function isTabSynthesisIntent(prompt: string): boolean {
     "make a tool",
     "synthesize tool",
     "synthesize a tab",
+    "crie uma nova experiência",
+    "crie uma experiência",
+    "criar experiência",
+    "nova experiência",
+    "experiência na dock",
+    "experiencia na dock",
+    "mapa do tema",
+    "mapa mental",
+    "mapa de conceitos",
+    "concept map",
+    "knowledge map",
+    "knowledge graph",
+    "interactive map",
     "flashcard",
     "comparator",
     "matrix",
@@ -44,6 +57,7 @@ export function isTabSynthesisIntent(prompt: string): boolean {
     "calculator tab",
     "tool for",
     "tab for",
+    "experience for",
   ];
 
   return triggers.some((t) => lower.includes(t));

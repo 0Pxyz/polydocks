@@ -38,6 +38,7 @@ export const fetch_page: AgentTool<{
       pages: pages.map((p) => ({
         url: p.url,
         status: p.status,
+        markdown: p.markdown.length > 8000 ? p.markdown.slice(0, 8000) + "\n\n...[truncated for model context]..." : p.markdown,
         markdownPreview: p.markdown.slice(0, 500),
       })),
     };
