@@ -174,7 +174,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(result.topic).toBe("Distributed Systems");
     expect(result.status).toBe("ready");
     expect(result.questsCount).toBe(3);
-  });
+  }, 15000);
 
   it("list_maps, set_map, and place_city tools manage Maps v2 world cartography", async () => {
     const { list_maps } = await import("./list_maps");

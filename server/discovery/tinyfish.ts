@@ -228,6 +228,19 @@ export class TinyFishClient implements TinyFishAdapter {
             markdown: md,
           };
         });
+
+        // Ensure errors/missing pages are also returned with status
+        if (data.errors && Array.isArray(data.errors)) {
+          for (const errItem of data.errors) {
+            if (!fetchedBatch.some((f) => f.url === errItem.url)) {
+              fetchedBatch.push({
+                url: errItem.url,
+                status: errItem.status || 404,
+                markdown: `# ${errItem.url}\n\nContent unavailable (${errItem.error || "not found"}).`,
+              });
+            }
+          }
+        }
       } catch (err: any) {
         console.warn(`[TinyFish Fetch Fallback] for URLs:`, missingUrls, err?.message || err);
         fetchedBatch = missingUrls.map((u) => ({
