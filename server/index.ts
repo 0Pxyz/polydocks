@@ -11,6 +11,7 @@ import { citiesRouter } from "./routes/cities";
 import { mapsRouter } from "./routes/maps";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
+import { registryRouter } from "./routes/registry";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { db } from "./workspace/db";
 
@@ -92,6 +93,9 @@ app.route("/api/capabilities", capabilitiesRouter);
 
 // Mount PolyDocks V2 Workspaces router
 app.route("/api/workspaces", workspacesRouter);
+
+// Mount PolyDocks V2 Community Plugin Registry router
+app.route("/api/registry", registryRouter);
 
 // Mount Cities & Workspaces router
 app.route("/api/cities", citiesRouter);

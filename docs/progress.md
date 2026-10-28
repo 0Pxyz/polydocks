@@ -34,3 +34,4 @@
 | 2026-10-28 | Multi-workspace scoping, SQLite workspace tables, and PolyDocks workspace switcher | [#68](https://github.com/0Pxyz/polymax/pull/68) |
 | 2026-10-28 | Dynamic plugin synthesis, modification & operation tools with synthesize-plugin skill | [#69](https://github.com/0Pxyz/polymax/pull/69) |
 | 2026-10-28 | Sandboxed plugin runtime, window.polydocks bridge & scoped storage | [#70](https://github.com/0Pxyz/polymax/pull/70) |
+| 2026-10-28 | Community plugin registry, publish_plugin tool & PluginStoreView with 1-click install | [#71](https://github.com/0Pxyz/polymax/pull/71) |

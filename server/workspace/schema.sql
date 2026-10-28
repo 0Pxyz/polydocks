@@ -175,3 +175,19 @@ CREATE TABLE IF NOT EXISTS workspace_plugins (
   FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS registry_plugins (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  icon TEXT DEFAULT 'Cards',
+  version TEXT NOT NULL,
+  author TEXT DEFAULT 'Community',
+  tags_json TEXT,
+  manifest_json TEXT NOT NULL,
+  code TEXT NOT NULL,
+  downloads INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+
