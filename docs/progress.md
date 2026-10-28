@@ -17,3 +17,4 @@
 | 2026-10-28 | Maps, the world of knowledge: procedural fantasy cartography, living cities, and staged builder pipeline | [#34](https://github.com/0Pxyz/polymax/pull/34) |
 | 2026-10-28 | Fix TinyFish query param & markdown payload, expand synthesis intent triggers and max steps | [#35](https://github.com/0Pxyz/polymax/pull/35) |
 | 2026-10-28 | Maps v2: illustrated world maps, style picker, fly-in transition, raster import, and agent placement | [#36](https://github.com/0Pxyz/polymax/pull/36) |
+| 2026-10-28 | Phase 2: dock-first architecture (root vs city dock), toggleable map surface, and city files | [#37](https://github.com/0Pxyz/polymax/pull/37) |
