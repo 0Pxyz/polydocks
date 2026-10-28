@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { MapMarkersOverlay } from "../src/features/world/MapMarkersOverlay";
-import type { CityPoint, MapRegionSpec } from "../src/features/world/types";
+import type { CityPoint } from "../src/features/world/types";
 
 describe("Map Markers & Region Typography (Maps v2)", () => {
   it("exports MapMarkersOverlay functional component", () => {

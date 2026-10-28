@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CityPoint, MapRegionSpec } from "./types";
 import { cn } from "@/lib/cn";
