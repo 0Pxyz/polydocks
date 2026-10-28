@@ -1,6 +1,16 @@
 import { db } from "../workspace/db";
 import { pluginRegistry } from "./registry";
 import type { CapabilityManifest, CapabilityRisk } from "./manifest";
+import { evaluateCapabilityPolicy } from "./policy";
+import {
+  createScopedExecutionContext,
+  type ScopedExecutionContext,
+  type ScopedFsContext,
+  type ScopedFetchContext,
+  type ScopedExecContext,
+  type ScopedSecretsContext,
+} from "./context";
+import { redactSecrets } from "./redact";
 
 export interface ExecutionContext {
   actor: "agent" | "user";
@@ -8,6 +18,10 @@ export interface ExecutionContext {
   signal?: AbortSignal;
   log: (msg: string) => void;
   emit?: (event: { type: string; payload: Record<string, unknown> }) => Promise<void> | void;
+  fs?: ScopedFsContext;
+  fetch?: ScopedFetchContext;
+  exec?: ScopedExecContext;
+  secrets?: ScopedSecretsContext;
 }
 
 export type CapabilityHandler = (input: any, ctx: ExecutionContext) => Promise<any> | any;
@@ -20,6 +34,7 @@ export interface RegisteredCapability {
   risk: CapabilityRisk;
   inputSchema: any;
   outputSchema?: any;
+  adapter?: CapabilityManifest["adapter"];
   handler?: CapabilityHandler;
 }
 
@@ -73,6 +88,7 @@ export class CapabilityBus {
       risk: capability.risk,
       inputSchema: capability.input,
       outputSchema: capability.output,
+      adapter: capability.adapter,
       handler,
     };
 
@@ -108,6 +124,7 @@ export class CapabilityBus {
           risk: cap.risk,
           inputSchema: cap.input,
           outputSchema: cap.output,
+          adapter: cap.adapter,
         };
       }
     }
@@ -145,6 +162,7 @@ export class CapabilityBus {
             risk: cap.risk,
             inputSchema: cap.input,
             outputSchema: cap.output,
+            adapter: cap.adapter,
           });
           seen.add(cap.id);
         }
@@ -156,7 +174,8 @@ export class CapabilityBus {
 
   /**
    * Invoke a capability via the typed bus.
-   * Validates schema, logs execution in SQLite, enforces timeout, and emits SSE events.
+   * Validates policy, validates schema, logs execution in SQLite, enforces timeout,
+   * redacts secrets, and emits SSE events.
    */
   public async invoke<T = unknown>(
     capabilityId: string,
@@ -171,7 +190,18 @@ export class CapabilityBus {
     const capability = this.getCapability(capabilityId);
     if (!capability) {
       const err = `Capability "${capabilityId}" not found in registry.`;
-      this.recordExecution(executionId, capabilityId, "unknown", options.actor, options.cityId, "failed", 0, rawInput, null, err);
+      this.recordExecution(
+        executionId,
+        capabilityId,
+        "unknown",
+        options.actor,
+        options.cityId,
+        "failed",
+        0,
+        redactSecrets(rawInput),
+        null,
+        err
+      );
       return { success: false, executionId, capabilityId, pluginId: "unknown", error: err, durationMs: 0 };
     }
 
@@ -181,11 +211,94 @@ export class CapabilityBus {
     const plugin = pluginRegistry.get(pluginId);
     if (plugin && !plugin.enabled) {
       const err = `Plugin "${pluginId}" is currently disabled.`;
-      this.recordExecution(executionId, capabilityId, pluginId, options.actor, options.cityId, "denied", 0, rawInput, null, err);
+      this.recordExecution(
+        executionId,
+        capabilityId,
+        pluginId,
+        options.actor,
+        options.cityId,
+        "denied",
+        0,
+        redactSecrets(rawInput),
+        null,
+        err
+      );
       return { success: false, executionId, capabilityId, pluginId, error: err, durationMs: 0 };
     }
 
-    // 3. Emit tool.start SSE event (preserving compatibility)
+    // 3. Security Policy Evaluation (default-deny, destructive confirmations, external first-use)
+    const activePlugin =
+      plugin ?? {
+        id: pluginId,
+        name: pluginId,
+        version: "1.0.0",
+        manifest: {
+          apiVersion: 1 as const,
+          id: pluginId,
+          name: pluginId,
+          version: "1.0.0",
+          description: "",
+          icon: "default",
+          trust: "core" as const,
+          capabilities: [],
+          permissions: [],
+        },
+        enabled: true,
+        trust: "core" as const,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+    const policyResult = await evaluateCapabilityPolicy({
+      capability,
+      plugin: activePlugin,
+      actor: options.actor,
+      cityId: options.cityId,
+      input:
+        rawInput && typeof rawInput === "object"
+          ? (redactSecrets(rawInput) as Record<string, unknown>)
+          : {},
+      timeoutMs: options.timeoutMs,
+      emit: async (evt) => {
+        if (options.onEvent) {
+          await options.onEvent({ step, type: evt.type, payload: evt.payload });
+        }
+      },
+    });
+
+    if (!policyResult.allowed) {
+      const err = policyResult.reason || `Execution denied by policy for capability "${capabilityId}".`;
+      this.recordExecution(
+        executionId,
+        capabilityId,
+        pluginId,
+        options.actor,
+        options.cityId,
+        "denied",
+        0,
+        redactSecrets(rawInput),
+        null,
+        err
+      );
+
+      if (options.onEvent) {
+        await options.onEvent({
+          step,
+          type: "tool.done",
+          payload: {
+            id: executionId,
+            name: capabilityId,
+            result: { error: err, status: "denied" },
+            pluginId,
+            capabilityId,
+          },
+        });
+      }
+
+      return { success: false, executionId, capabilityId, pluginId, error: err, durationMs: 0 };
+    }
+
+    // 4. Emit tool.start SSE event (preserving compatibility)
     if (options.onEvent) {
       await options.onEvent({
         step,
@@ -193,21 +306,32 @@ export class CapabilityBus {
         payload: {
           id: executionId,
           name: capabilityId,
-          arguments: rawInput as Record<string, unknown>,
+          arguments: redactSecrets(rawInput) as Record<string, unknown>,
           pluginId,
           capabilityId,
         },
       });
     }
 
-    // 4. Validate input against schema if Zod schema
+    // 5. Validate input against schema if Zod schema
     let validatedInput = rawInput;
     if (capability.inputSchema && typeof capability.inputSchema.safeParse === "function") {
       const parseResult = capability.inputSchema.safeParse(rawInput);
       if (!parseResult.success) {
         const errorMsg = `Input validation error: ${parseResult.error.message}`;
         const duration = Date.now() - startTime;
-        this.recordExecution(executionId, capabilityId, pluginId, options.actor, options.cityId, "failed", duration, rawInput, null, errorMsg);
+        this.recordExecution(
+          executionId,
+          capabilityId,
+          pluginId,
+          options.actor,
+          options.cityId,
+          "failed",
+          duration,
+          redactSecrets(rawInput),
+          null,
+          errorMsg
+        );
 
         if (options.onEvent) {
           await options.onEvent({
@@ -228,16 +352,27 @@ export class CapabilityBus {
       validatedInput = parseResult.data;
     }
 
-    // 5. Look up executable handler
+    // 6. Look up executable handler
     const handlerRecord = this.handlers.get(capabilityId);
     if (!handlerRecord?.handler) {
       const err = `No execution handler registered for capability "${capabilityId}".`;
       const duration = Date.now() - startTime;
-      this.recordExecution(executionId, capabilityId, pluginId, options.actor, options.cityId, "failed", duration, validatedInput, null, err);
+      this.recordExecution(
+        executionId,
+        capabilityId,
+        pluginId,
+        options.actor,
+        options.cityId,
+        "failed",
+        duration,
+        redactSecrets(validatedInput),
+        null,
+        err
+      );
       return { success: false, executionId, capabilityId, pluginId, error: err, durationMs: duration };
     }
 
-    // 6. Execute handler with timeout and abort signal
+    // 7. Execute handler with scoped execution context, timeout and abort signal
     const timeoutMs = options.timeoutMs ?? 30_000;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort("Capability execution timed out"), timeoutMs);
@@ -247,9 +382,22 @@ export class CapabilityBus {
     }
 
     try {
-      this.recordExecution(executionId, capabilityId, pluginId, options.actor, options.cityId, "running", 0, validatedInput, null, null);
+      this.recordExecution(
+        executionId,
+        capabilityId,
+        pluginId,
+        options.actor,
+        options.cityId,
+        "running",
+        0,
+        redactSecrets(validatedInput),
+        null,
+        null
+      );
 
-      const ctx: ExecutionContext = {
+      const ctx: ScopedExecutionContext = createScopedExecutionContext({
+        pluginId,
+        manifest: activePlugin.manifest,
         actor: options.actor,
         cityId: options.cityId,
         signal: controller.signal,
@@ -259,7 +407,7 @@ export class CapabilityBus {
             await options.onEvent({ step, type: evt.type, payload: evt.payload });
           }
         },
-      };
+      });
 
       const result = await Promise.race([
         handlerRecord.handler(validatedInput, ctx),
@@ -272,8 +420,9 @@ export class CapabilityBus {
 
       clearTimeout(timer);
       const duration = Date.now() - startTime;
+      const safeResult = redactSecrets(result);
 
-      this.updateExecution(executionId, "success", duration, result, null);
+      this.updateExecution(executionId, "success", duration, safeResult, null);
 
       if (options.onEvent) {
         await options.onEvent({
@@ -282,7 +431,7 @@ export class CapabilityBus {
           payload: {
             id: executionId,
             name: capabilityId,
-            result,
+            result: safeResult,
             pluginId,
             capabilityId,
           },
@@ -294,13 +443,13 @@ export class CapabilityBus {
         executionId,
         capabilityId,
         pluginId,
-        data: result as T,
+        data: safeResult as T,
         durationMs: duration,
       };
     } catch (err: any) {
       clearTimeout(timer);
       const duration = Date.now() - startTime;
-      const errorMsg = err.message || String(err);
+      const errorMsg = redactSecrets(err.message || String(err));
 
       this.updateExecution(executionId, "failed", duration, null, errorMsg);
 
@@ -330,42 +479,43 @@ export class CapabilityBus {
   }
 
   private recordExecution(
-    id: string,
+    executionId: string,
     capabilityId: string,
     pluginId: string,
-    actor: string,
+    actor: "agent" | "user",
     cityId: string | undefined,
-    status: string,
+    status: "running" | "success" | "failed" | "denied",
     durationMs: number,
     input: unknown,
     output: unknown,
     error: string | null
   ): void {
     try {
+      const now = new Date().toISOString();
       db.query(
         `INSERT INTO executions (execution_id, capability_id, plugin_id, actor, city_id, status, duration_ms, input_json, output_json, error, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
-        id,
+        executionId,
         capabilityId,
         pluginId,
         actor,
         cityId || null,
         status,
         durationMs,
-        JSON.stringify(input || null),
-        JSON.stringify(output || null),
-        error,
-        new Date().toISOString()
+        input !== undefined ? JSON.stringify(redactSecrets(input)) : null,
+        output !== null && output !== undefined ? JSON.stringify(redactSecrets(output)) : null,
+        error ? redactSecrets(error) : null,
+        now
       );
     } catch {
-      // Ignore SQLite write error during execution recording
+      // Non-blocking telemetry failure
     }
   }
 
   private updateExecution(
-    id: string,
-    status: string,
+    executionId: string,
+    status: "success" | "failed" | "denied",
     durationMs: number,
     output: unknown,
     error: string | null
@@ -375,9 +525,15 @@ export class CapabilityBus {
         `UPDATE executions 
          SET status = ?, duration_ms = ?, output_json = ?, error = ?
          WHERE execution_id = ?`
-      ).run(status, durationMs, JSON.stringify(output || null), error, id);
+      ).run(
+        status,
+        durationMs,
+        output !== null && output !== undefined ? JSON.stringify(redactSecrets(output)) : null,
+        error ? redactSecrets(error) : null,
+        executionId
+      );
     } catch {
-      // Ignore SQLite update error
+      // Non-blocking telemetry failure
     }
   }
 }
