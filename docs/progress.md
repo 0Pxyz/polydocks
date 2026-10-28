@@ -41,3 +41,4 @@
 | 2026-10-28 | Durable agent memory engine (two-tier MEMORY.md + memory/YYYY-MM-DD.md), keyword retrieval, token budget clamping, tools & REST API | [#84](https://github.com/0Pxyz/polymax/pull/84) |
 | 2026-10-28 | Persistent work sessions, JSONL transcripts & background task execution engine with cancel & crash recovery | [#85](https://github.com/0Pxyz/polymax/pull/85) |
 | 2026-10-28 | Unified product API and shared service layer (Workspace, Session, Task, Plugin, Artifact) with idempotency and audit log | #77 |
+| 2026-10-28 | Integrated tool surfaces, dock styles, icon catalog backfill, and slop-free home screen | [#87](https://github.com/0Pxyz/polymax/pull/87) |
