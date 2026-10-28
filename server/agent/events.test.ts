@@ -37,6 +37,24 @@ describe("Agent UI Event Adapter & Vocabulary Guard", () => {
     }
   });
 
+  it("adapts backend tab.prime to experience.primed", () => {
+    const uiEvt = adaptBackendEvent({
+      type: "tab.prime",
+      step: 3,
+      payload: {
+        tabId: "browser",
+        url: "https://arxiv.org/abs/quant-ph/0201082",
+        payload: { kind: "paper", title: "Quantum Teleportation" },
+      },
+    });
+    expect(uiEvt?.type).toBe("experience.primed");
+    if (uiEvt?.type === "experience.primed") {
+      expect(uiEvt.experienceId).toBe("browser");
+      expect(uiEvt.url).toBe("https://arxiv.org/abs/quant-ph/0201082");
+      expect(uiEvt.payload?.title).toBe("Quantum Teleportation");
+    }
+  });
+
   it("detects delete_tab approval requirement and maps to approval.required", () => {
     const uiEvt = adaptBackendEvent({
       type: "tool.done",

@@ -44,3 +44,12 @@ CREATE TABLE IF NOT EXISTS discovery_cache (
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  city_id TEXT,
+  action TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL
+);
+

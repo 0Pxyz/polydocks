@@ -50,6 +50,13 @@ export type UIEvent =
       experienceId: string;
     }
   | {
+      type: "experience.primed";
+      step: number;
+      experienceId: string;
+      url?: string;
+      payload?: Record<string, unknown>;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -92,6 +99,12 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       return "Checking available dock experiences…";
     case "open_tab":
       return "Opening experience in workspace…";
+    case "open_intent": {
+      const tabId = typeof args?.tabId === "string" ? args.tabId : "dock";
+      return `Directing ${tabId} experience…`;
+    }
+    case "inspect_tab":
+      return "Inspecting active dock workspace…";
     case "close_tray":
       return "Minimizing workspace surface…";
     case "get_city_context":
@@ -189,7 +202,16 @@ export function adaptBackendEvent(raw: {
       return {
         type: "dock.open_experience",
         step,
-        experienceId: String(payload.id || ""),
+        experienceId: String(payload.tabId || payload.id || ""),
+      };
+
+    case "tab.prime":
+      return {
+        type: "experience.primed",
+        step,
+        experienceId: String(payload.tabId || payload.id || ""),
+        url: payload.url ? String(payload.url) : undefined,
+        payload: (payload.payload as Record<string, unknown>) || undefined,
       };
 
     case "agent.finish":

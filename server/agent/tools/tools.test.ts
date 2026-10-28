@@ -28,11 +28,13 @@ describe("Agent Tool Catalog & Security Guards", () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("should export all 12 canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(12);
+  it("should export all 14 canonical tools in defaultTools catalog", () => {
+    expect(defaultTools.length).toBe(14);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
+    expect(names).toContain("open_intent");
+    expect(names).toContain("inspect_tab");
     expect(names).toContain("close_tray");
     expect(names).toContain("create_tab");
     expect(names).toContain("update_tab");
