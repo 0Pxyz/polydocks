@@ -22,6 +22,7 @@ import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
@@ -138,12 +139,22 @@ export function AgentConversation({
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
-  const handleScroll = () => {
+  // Track scroll position natively on the Radix ScrollArea viewport (React
+  // does not delegate scroll events to it)
+  useEffect(() => {
+    if (layoutState !== "side" && layoutState !== "full") return;
     const el = transcriptRef.current;
     if (!el) return;
-    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollBottom(distanceToBottom > 150);
-  };
+
+    const onViewportScroll = () => {
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBottom(distanceToBottom > 150);
+    };
+
+    onViewportScroll();
+    el.addEventListener("scroll", onViewportScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onViewportScroll);
+  }, [layoutState]);
 
   const scrollToBottom = () => {
     const el = transcriptRef.current;
@@ -309,10 +320,11 @@ export function AgentConversation({
             )}
 
             {/* Scrollable Transcript Box */}
-            <div
-              ref={sheetTranscriptRef}
-              className="my-3 max-h-64 min-h-[72px] overflow-y-auto px-1 space-y-2.5 select-text font-sans scroll-smooth"
+            <ScrollArea
+              viewportRef={sheetTranscriptRef}
+              className="my-3 max-h-64 min-h-[72px] [&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0 [&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]"
             >
+              <div className="px-1 space-y-2.5 select-text scroll-smooth">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                   <p className="text-xs text-[#9aa5b8]">
@@ -348,7 +360,10 @@ export function AgentConversation({
                   }
 
                   return (
-                    <div key={msg.id} className="text-xs leading-relaxed text-[#f1f3f9] font-sans pr-2">
+                    <div
+                      key={msg.id}
+                      className="prose prose-invert prose-sm max-w-none pr-2 leading-relaxed prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs"
+                    >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -397,7 +412,8 @@ export function AgentConversation({
                   <span className="truncate">{statusText}</span>
                 </div>
               )}
-            </div>
+              </div>
+            </ScrollArea>
 
             {/* Staging bar for attachments */}
             {stagedAttachments.length > 0 && (
@@ -498,10 +514,11 @@ export function AgentConversation({
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       style={isSide ? { width: `${sideWidth}px` } : undefined}
       className={cn(
-        "relative flex flex-col justify-between bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
+        "relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
         isSide
           ? "fixed top-0 bottom-0 left-0 z-40 border-r border-white/5 shadow-2xl"
-          : "fixed inset-0 z-40 w-full"
+          : "fixed inset-0 z-40 w-full",
+        isBottom && "pb-[calc(var(--dock-bottom-offset,88px)+8px)]"
       )}
     >
       {/* Resizable drag edge for side-by-side mode */}
@@ -518,16 +535,11 @@ export function AgentConversation({
         </div>
       )}
 
-      {/* Top soft fade under dock */}
-      {!isBottom && (
-        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[calc(var(--dock-top-offset,88px)+24px)] bg-gradient-to-b from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent z-20" />
-      )}
-
-      {/* Top Corner Controls (aligned with dock line, no headers/titles) */}
+      {/* Controls aligned below the dock line, part of the panel layout (no overlay fades) */}
       <div
         className={cn(
-          "absolute right-4 sm:right-8 z-30 flex items-center gap-1.5",
-          isBottom ? "top-4 sm:top-6" : "top-[calc(var(--dock-top-offset,88px)-44px)]"
+          "shrink-0 flex items-center justify-end gap-1.5 px-4 sm:px-8 pb-3",
+          isBottom ? "pt-4" : "pt-[calc(var(--dock-top-offset,88px)+12px)]"
         )}
       >
         <ModelSwitcher className="mr-1" />
@@ -562,17 +574,16 @@ export function AgentConversation({
       </div>
 
       {/* Transcript Area */}
-      <div
-        ref={transcriptRef}
-        onScroll={handleScroll}
+      <ScrollArea
+        viewportRef={transcriptRef}
         className={cn(
-          "flex-1 overflow-y-auto px-4 sm:px-6",
-          isBottom
-            ? "pt-14 pb-[calc(var(--dock-bottom-offset,88px)+96px)]"
-            : "pt-[calc(var(--dock-top-offset,88px)+24px)] pb-36",
-          !isSide && "w-full max-w-[720px] mx-auto"
+          "flex-1 min-h-0 px-4 sm:px-6",
+          "[&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0",
+          "[&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]",
+          !isSide && "max-w-[720px] mx-auto"
         )}
       >
+        <div className="w-full pt-3 pb-8">
         {/* Empty State: centered composer with idle orb */}
         {messages.length === 0 && (
           <div className="h-full min-h-[360px] flex flex-col items-center justify-center">
@@ -630,10 +641,16 @@ export function AgentConversation({
 
             // Agent Message: Plain text on backdrop, no bubble, markdown, copy & retry on hover
             return (
-              <div key={msg.id} className="group relative w-full text-base leading-relaxed text-[#f1f3f9] font-sans">
+              <div
+                key={msg.id}
+                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    // The custom `code` renderer draws its own code block; let it
+                    // through without the default <pre> wrapper (and prose styling)
+                    pre: ({ children }) => <>{children}</>,
                     a: ({ href, children }) => (
                       <a
                         href={href}
@@ -716,7 +733,8 @@ export function AgentConversation({
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </ScrollArea>
 
       {/* Floating Scroll to Bottom button */}
       {showScrollBottom && (
@@ -733,11 +751,10 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Floating Composer Area */}
+      {/* Composer: clean footer aligned with the transcript column */}
       <div
         className={cn(
-          "absolute left-0 right-0 z-20 px-4 pointer-events-auto bg-gradient-to-t from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent pt-8",
-          isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+8px)] pb-2" : "bottom-0 pb-6",
+          "shrink-0 px-4 sm:px-6 pt-4 pb-5 pointer-events-auto",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
@@ -752,7 +769,7 @@ export function AgentConversation({
 
         <div
           className={cn(
-            "relative flex flex-col bg-[#10141d]/90 border border-white/10 p-2 shadow-2xl backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors",
+            "relative flex flex-col bg-[var(--bg-surface)]/90 border border-white/10 p-2 shadow-lg backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors",
             stagedAttachments.length > 0 ? "rounded-b-[24px] rounded-t-none" : "rounded-[24px]"
           )}
           onDragOver={handleDragOver}
