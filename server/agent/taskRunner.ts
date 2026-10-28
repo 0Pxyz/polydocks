@@ -501,9 +501,11 @@ export class TaskExecutionEngine {
           const loopResult = await runAgentLoop({
             prompt,
             cityId,
+            workspaceId: task.workspaceId,
+            sessionId: task.sessionId,
+            taskId: task.id,
             origin,
             signal: controller.signal,
-            onEvent: emit,
           });
 
           if (controller.signal.aborted) {
