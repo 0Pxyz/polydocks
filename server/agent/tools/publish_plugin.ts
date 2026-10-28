@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { publishToRegistry } from "../../plugins/communityRegistry";
+import { PluginService } from "../../services/pluginService";
 
 export interface PublishPluginArgs {
   pluginId: string;
   workspaceId?: string;
   author?: string;
   tags?: string[];
+  idempotencyKey?: string;
 }
 
 export const publish_plugin: AgentTool<PublishPluginArgs> = {
@@ -21,28 +22,21 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
       .array(z.string())
       .optional()
       .describe("Descriptive categories (e.g. ['productivity', 'timer', 'study'])"),
+    idempotencyKey: z
+      .string()
+      .optional()
+      .describe("Optional idempotency key to prevent duplicate publishing"),
   }),
   execute: async (input, ctx) => {
     const workspaceId = input.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
-    const res = await publishToRegistry({
+
+    return await PluginService.publishPlugin({
       pluginId: input.pluginId,
       workspaceId,
-      author: input.author || "PolyDocks User",
-      tags: input.tags || ["community", "tool"],
+      author: input.author,
+      tags: input.tags,
+      actor: "agent",
+      idempotencyKey: input.idempotencyKey,
     });
-
-    if (!res.success) {
-      return {
-        success: false,
-        error: res.error || `Failed to publish plugin "${input.pluginId}"`,
-      };
-    }
-
-    return {
-      success: true,
-      pluginId: input.pluginId,
-      item: res.item,
-      message: `Plugin "${res.item?.name}" has been published to the Community Plugin Store.`,
-    };
   },
 };

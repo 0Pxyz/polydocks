@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS discovery_cache (
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   city_id TEXT,
+  actor TEXT DEFAULT 'user', -- 'agent' | 'user' | 'cli'
   action TEXT NOT NULL,
+  target_id TEXT,
   details TEXT,
   created_at TEXT NOT NULL
 );
@@ -223,6 +225,34 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+-- Idempotency & Unified Service Layer (Issue #77)
+
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  key TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  target_id TEXT,
+  response_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at ON idempotency_keys(created_at);
+
+CREATE TABLE IF NOT EXISTS artifacts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  session_id TEXT,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'document' | 'code' | 'diagram' | 'data' | 'other'
+  path TEXT,
+  content TEXT,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_workspace_id ON artifacts(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
 
 
 
