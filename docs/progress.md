@@ -38,3 +38,4 @@
 | 2026-10-28 | End-to-end Pomodoro benchmark test suite (create -> storage -> modify -> publish -> install) & demo script | [#72](https://github.com/0Pxyz/polymax/pull/72) |
 | 2026-10-28 | Persistent agent-home filesystem structure, baseline templates & initialization service | [#77](https://github.com/0Pxyz/polymax/pull/77) |
 | 2026-10-28 | Scoped agent-home filesystem service (resolveSafeAgentPath, atomic writes) and tool suite (list, read, write, edit, search) | [#83](https://github.com/0Pxyz/polymax/pull/83) |
+| 2026-10-28 | Durable agent memory engine (two-tier MEMORY.md + memory/YYYY-MM-DD.md), keyword retrieval, token budget clamping, tools & REST API | #75 |
