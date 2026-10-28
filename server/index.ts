@@ -13,7 +13,13 @@ import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
+import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
+
+// Bootstrap persistent agent-home filesystem structure on startup
+await initAgentHome().catch((err) => {
+  console.error("[Polymax Server] Failed to initialize agent-home:", err);
+});
 
 const app = new Hono();
 

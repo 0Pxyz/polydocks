@@ -72,6 +72,8 @@ data/*
 !data/.gitkeep
 workspace/*
 !workspace/.gitkeep
+agent-home/*
+!agent-home/.gitkeep
 *.db
 *.db-wal
 *.db-shm
