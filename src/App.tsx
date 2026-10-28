@@ -15,6 +15,7 @@ import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
 import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { cn } from "@/lib/cn";
 
 export default function App() {
@@ -45,6 +46,22 @@ export default function App() {
     wallpaperOpacity,
     wallpaperBlur,
   } = useThemeStore();
+
+  const { workspacePlugins } = useWorkspaceStore();
+
+  const workspaceDockTools: DockToolItem[] = workspacePlugins
+    .filter((wp) => wp.enabled && wp.plugin)
+    .map((wp) => ({
+      id: wp.pluginId,
+      label: wp.plugin?.name || wp.pluginId,
+      type: "icon",
+      icon: resolveIcon(wp.plugin?.icon || "Cards"),
+    }));
+
+  const activeExtraTools = [
+    ...extraTools,
+    ...workspaceDockTools.filter((wt) => !extraTools.some((et) => et.id === wt.id)),
+  ];
 
   const handleDismissTool = (toolIdToDismiss?: string) => {
     const targetTool = toolIdToDismiss ?? activeToolId;
@@ -255,7 +272,7 @@ export default function App() {
             activeToolId={activeToolId}
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
-            extraTools={extraTools}
+            extraTools={activeExtraTools}
             onSelectTool={handleSelectTool}
             onSubmitToolPrompt={handleToolPromptSubmit}
             isBuilding={isBuildingTool}

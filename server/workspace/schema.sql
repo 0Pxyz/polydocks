@@ -151,7 +151,27 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   FOREIGN KEY (conversation_id) REFERENCES city_conversations(id) ON DELETE CASCADE
 );
 
+-- PolyDocks V2 Multi-Workspace Architecture
 
+CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  icon TEXT DEFAULT 'Briefcase',
+  is_default INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 
-
+CREATE TABLE IF NOT EXISTS workspace_plugins (
+  workspace_id TEXT NOT NULL,
+  plugin_id TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  position INTEGER DEFAULT 0,
+  settings_json TEXT,
+  installed_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, plugin_id),
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+);
 

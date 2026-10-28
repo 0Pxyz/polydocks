@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { DockIcon } from "@/components/icons/DockIcon";
 import { spring } from "@/lib/motion";
 import type { IconComponent } from "@/components/icons/adapter";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export * from "./legacyAdapter";
 export * from "./surfaceResolver";
@@ -243,6 +244,11 @@ export function AgenticDock({
         className
       )}
     >
+      {/* Workspace Switcher (PolyDocks V2) */}
+      <div className="fixed top-3 left-4 pointer-events-auto">
+        <WorkspaceSwitcher />
+      </div>
+
       {/* Floating Agentic Dock Capsule - Smoothly expands when agent creates tools */}
       <motion.div
         ref={capsuleRef}
