@@ -6,6 +6,8 @@ import {
   Sparkle,
   Plus,
   Storefront,
+  Sliders,
+  Folder,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
@@ -64,8 +66,70 @@ export const STORE_DOCK_TOOL: DockToolItem = {
 };
 
 export const ROOT_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
-export const CITY_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
-export const DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
+
+export const HOME_DOCK_TOOLS: DockToolItem[] = [
+  {
+    id: "agent",
+    label: "Agent (⌘K)",
+    type: "icon",
+    icon: Sparkle,
+    isAgent: true,
+  },
+  {
+    id: "maps",
+    label: "World Map",
+    type: "icon",
+    icon: Compass,
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    type: "icon",
+    icon: Sliders,
+  },
+];
+
+export const CITY_DOCK_TOOLS: DockToolItem[] = [
+  {
+    id: "agent",
+    label: "Agent (⌘K)",
+    type: "icon",
+    icon: Sparkle,
+    isAgent: true,
+  },
+  {
+    id: "maps",
+    label: "World Map",
+    type: "icon",
+    icon: Compass,
+  },
+  {
+    id: "browser",
+    label: "Research & Sources",
+    type: "icon",
+    icon: Globe,
+  },
+  {
+    id: "notes",
+    label: "Notes",
+    type: "icon",
+    icon: NotePencil,
+  },
+  {
+    id: "files",
+    label: "City Files",
+    type: "icon",
+    icon: Folder,
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    type: "icon",
+    icon: Sliders,
+  },
+];
+
+export const DOCK_TOOLS: DockToolItem[] = ROOT_DOCK_TOOLS;
 
 interface AgenticDockProps {
   mode?: "world" | "city";
@@ -255,7 +319,8 @@ export function AgenticDock({
       ? statusText
       : null);
 
-  const baseTools = explicitTools ?? CORE_DOCK_TOOLS;
+  const defaultTools = cityName ? CITY_DOCK_TOOLS : HOME_DOCK_TOOLS;
+  const baseTools = explicitTools ?? defaultTools;
   const allTools = [...baseTools, ...extraTools];
 
   const drawerElement = (
