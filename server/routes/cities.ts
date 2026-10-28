@@ -5,6 +5,8 @@ import path from "node:path";
 import {
   getCityContext,
   readCityFile,
+  writeCityFile,
+  resolveSafeCityPath,
 } from "../workspace/cityWorkspace";
 import { listFeatures, readFeature } from "../workspace/features";
 import { generateCityFeed } from "../discovery/feedGenerator";
@@ -50,7 +52,69 @@ citiesRouter.get("/", async (c) => {
 });
 
 /**
- * GET /api/cities/:id - Retrieves full city workspace context
+ * Helper to recursively list files inside a city workspace
+ */
+async function listAllCityFiles(
+  cityRoot: string,
+  subDir = ""
+): Promise<Array<{ path: string; name: string; size: number }>> {
+  const currentDir = path.join(cityRoot, subDir);
+  const items: Array<{ path: string; name: string; size: number }> = [];
+  try {
+    const entries = await fs.readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) continue;
+      const relPath = subDir ? `${subDir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        const nested = await listAllCityFiles(cityRoot, relPath);
+        items.push(...nested);
+      } else if (entry.isFile()) {
+        const stat = await fs.stat(path.join(currentDir, entry.name));
+        items.push({
+          path: relPath,
+          name: entry.name,
+          size: stat.size,
+        });
+      }
+    }
+  } catch {
+    // Directory unreadable
+  }
+  return items;
+}
+
+/**
+ * GET /api/cities/:id/files - Lists all files inside city workspace
+ */
+citiesRouter.get("/:id/files", async (c) => {
+  const cityId = c.req.param("id");
+  try {
+    const cityRoot = await resolveSafeCityPath(cityId, ".");
+    const files = await listAllCityFiles(cityRoot);
+    return c.json({ success: true, count: files.length, files });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+/**
+ * POST /api/cities/:id/files - Writes or creates a file inside city workspace
+ */
+citiesRouter.post("/:id/files", async (c) => {
+  const cityId = c.req.param("id");
+  try {
+    const body = await c.req.json();
+    const filePath = String(body.path || body.name || "untitled.md").trim();
+    const content = String(body.content ?? "");
+    await writeCityFile(cityId, filePath, content);
+    return c.json({ success: true, path: filePath });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 400);
+  }
+});
+
+/**
+ * GET /api/cities/:id/context - Retrieves full city workspace context
  */
 citiesRouter.get("/:id", async (c) => {
   const cityId = c.req.param("id");
