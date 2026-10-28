@@ -227,22 +227,10 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
 
           case "tool.started":
-            set({
-              orbState: "thinking",
-              statusText: event.statusLabel,
-            });
-            set((state) => ({
-              messages: [
-                ...state.messages,
-                {
-                  id: crypto.randomUUID(),
-                  role: "tool",
-                  toolName: event.name,
-                  content: event.statusLabel,
-                  timestamp: Date.now(),
-                },
-              ],
-            }));
+            set({ orbState: "thinking" });
+            if (event.statusLabel) {
+              set({ statusText: event.statusLabel });
+            }
             break;
 
           case "tool.completed":

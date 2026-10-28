@@ -25,7 +25,7 @@ export interface InspectTabArgs {
 export const inspect_tab: AgentTool<InspectTabArgs> = {
   name: "inspect_tab",
   description:
-    "Inspects the active state, loaded content, open sources, or manifest configuration of dock tabs in the city workspace.",
+    "Inspects the active state or loaded content of dock tabs. Only call when debugging or when the user asks to inspect tab state.",
   schema: z.object({
     tabId: z
       .string()

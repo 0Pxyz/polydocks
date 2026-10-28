@@ -29,7 +29,7 @@ export type UIEvent =
       step: number;
       id: string;
       name: string;
-      statusLabel: string;
+      statusLabel?: string;
       args: Record<string, unknown>;
     }
   | {
@@ -90,60 +90,73 @@ export type UIEvent =
     };
 
 /**
- * Human-friendly status line mapping for all 12 canonical tools.
+ * Human-friendly status line mapping for substantive tools.
+ * Internal bookkeeping, inspections, and instant queries return null to suppress noisy progress updates.
  */
-export function getFriendlyToolStatus(toolName: string, args?: Record<string, unknown>): string {
+export function getFriendlyToolStatus(toolName: string, args?: Record<string, unknown>): string | null {
   switch (toolName) {
     case "search_web": {
       const q = typeof args?.query === "string" ? args.query : "";
-      return q ? `Searching the web for "${q}"…` : "Searching the web for primary sources…";
+      return q ? `Searching the web for "${q}"…` : "Searching the web…";
     }
     case "fetch_page":
-      return "Reading article content…";
+      return "Reading primary sources…";
     case "create_tab": {
       const title = typeof args?.title === "string" ? args.title : "";
-      return title ? `Building "${title}" experience…` : "Building new experience…";
+      return title ? `Building "${title}"…` : "Building the interactive experience…";
     }
     case "update_tab":
-      return "Updating dynamic experience…";
+      return "Updating the interactive experience…";
     case "delete_tab": {
       const id = typeof args?.id === "string" ? args.id : "";
       return id ? `Removing experience "${id}"…` : "Removing experience…";
     }
-    case "list_tabs":
-      return "Checking available dock experiences…";
-    case "open_tab":
-      return "Opening experience in workspace…";
-    case "open_intent": {
-      const tabId = typeof args?.tabId === "string" ? args.tabId : "dock";
-      return `Directing ${tabId} experience…`;
-    }
-    case "inspect_tab":
-      return "Inspecting active dock workspace…";
-    case "close_tray":
-      return "Minimizing workspace surface…";
-    case "get_city_context":
-      return "Loading city knowledge base…";
     case "read_city_file":
-      return "Inspecting workspace document…";
+    case "read_file":
+    case "read_file_safe":
+      return "Reading your notes…";
     case "write_city_file":
-      return "Writing workspace knowledge…";
-    case "open_source":
-      return "Opening curated source…";
-    case "list_maps":
-      return "Inspecting cartographic map styles…";
-    case "set_map":
-      return "Restyling the world map…";
-    case "place_city":
-      return "Placing it on the map…";
+    case "write_file":
+    case "write_file_safe":
+    case "edit_file":
+      return "Writing your notes…";
     case "plan_map":
-      return "Charting new knowledge territories on the world map…";
+      return "Planning knowledge territories on the world map…";
     case "build_city": {
       const topic = typeof args?.topic === "string" ? args.topic : "";
-      return topic ? `Constructing and researching "${topic}"…` : "Constructing city workspace & quests…";
+      return topic ? `Constructing and researching "${topic}"…` : "Constructing learning environment & quests…";
     }
+    case "open_tab":
+    case "open_intent": {
+      const tabId = typeof args?.tabId === "string" ? args.tabId : typeof args?.id === "string" ? args.id : "";
+      return tabId ? `Opening ${tabId}…` : "Opening experience in workspace…";
+    }
+    // Trivial bookkeeping, internal inspections, and instant queries are silent
+    case "list_tabs":
+    case "inspect_tab":
+    case "get_city_context":
+    case "close_tray":
+    case "list_maps":
+    case "set_map":
+    case "place_city":
+    case "open_source":
+    case "find_capabilities":
+    case "invoke_capability":
+    case "inspect_experience":
+    case "inspect_execution":
+    case "list_recent_executions":
+    case "list_files":
+    case "search_files":
+    case "recall_memory":
+    case "record_memory":
+    case "create_plugin":
+    case "modify_plugin":
+    case "operate_plugin":
+    case "publish_plugin":
+    case "promote_to_plugin":
+      return null;
     default:
-      return `Working with ${toolName}…`;
+      return null;
   }
 }
 
@@ -170,12 +183,13 @@ export function adaptBackendEvent(raw: {
     case "tool.start": {
       const toolName = String(payload.name || "");
       const args = (payload.arguments || {}) as Record<string, unknown>;
+      const status = getFriendlyToolStatus(toolName, args);
       return {
         type: "tool.started",
         step,
         id: String(payload.id || ""),
         name: toolName,
-        statusLabel: getFriendlyToolStatus(toolName, args),
+        statusLabel: status || undefined,
         args,
       };
     }

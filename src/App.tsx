@@ -105,7 +105,9 @@ export default function App() {
     }
 
     if (toolId === "city") {
-      enterCity(selectedCity);
+      if (selectedCity) {
+        enterCity(selectedCity);
+      }
       setActiveToolId("");
       setDockActiveTool("");
       return;
@@ -139,7 +141,7 @@ export default function App() {
   };
 
   // Compelling demonstration of the dock dynamically expanding itself
-  const handleSynthesizeTool = (topic = selectedCity) => {
+  const handleSynthesizeTool = (topic = selectedCity || "General") => {
     setExtraTools((prev) => {
       if (prev.some((t) => t.id === "flashcards")) return prev;
       return [
