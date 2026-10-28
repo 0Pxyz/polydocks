@@ -70,7 +70,7 @@ export const CapabilitySchema = z.object({
   risk: CapabilityRiskSchema,
   adapter: z
     .object({
-      mcp: z.string().optional(),
+      mcp: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
       http: z.record(z.string(), z.any()).optional(),
       cli: z.record(z.string(), z.any()).optional(),
     })
