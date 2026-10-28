@@ -12,7 +12,15 @@ export const get_city_context: AgentTool<{ cityId?: string }> = {
   execute: async (args, ctx) => {
     const targetCity = args.cityId || ctx.cityId;
     if (!targetCity) {
-      throw new Error("No cityId provided or active in context.");
+      return {
+        cityId: "global",
+        exists: false,
+        files: [],
+        notes: [],
+        sources: [],
+        dynamicTabs: [],
+        message: "No specific city active in context; operating in global workspace.",
+      };
     }
 
     const context = await getCityContext(targetCity);

@@ -44,10 +44,7 @@ export const create_tab: AgentTool<CreateTabArgs> = {
       message: "Either 'code' (TypeScript feature module) or 'html' (legacy document) must be provided.",
     }),
   execute: async (args, ctx) => {
-    const targetCity = args.cityId || ctx.cityId;
-    if (!targetCity) {
-      throw new Error("Cannot create a tab without an active city workspace scope.");
-    }
+    const targetCity = args.cityId || ctx.cityId || (args.scope === "global" ? "global" : args.id);
 
     const manifest = {
       id: args.id,

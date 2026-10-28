@@ -27,6 +27,8 @@ describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
     expect(isTabSynthesisIntent("cria uma tab de resumo")).toBe(true);
     expect(isTabSynthesisIntent("build a tool for papers comparator")).toBe(true);
     expect(isTabSynthesisIntent("make a flashcard quiz")).toBe(true);
+    expect(isTabSynthesisIntent("crie uma nova experiência na dock com um mapa do tema")).toBe(true);
+    expect(isTabSynthesisIntent("create an interactive concept map")).toBe(true);
 
     expect(isTabSynthesisIntent("what is the weather today?")).toBe(false);
     expect(isTabSynthesisIntent("hello world")).toBe(false);

@@ -526,3 +526,149 @@ async function init() {
 init();
 ```
 
+---
+
+## 6. Canonical Example 4: Interactive Knowledge Graph & Concept Map
+
+When the user asks for a **concept map**, **knowledge graph**, or **relational diagram of topics** with nodes, links, and real source citations:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --bg: #0A0A0C;
+      --surface: #12151D;
+      --border: #222938;
+      --accent: #C8FF57;
+      --text: #F1F3F9;
+      --muted: #8B95A8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    .header h2 { font-size: 18px; color: var(--accent); }
+    .map-container {
+      position: relative;
+      width: 100%;
+      min-height: 480px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    svg.connections {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    .node {
+      position: absolute;
+      background: #161A24;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      width: 200px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .node:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 0 15px rgba(200, 255, 87, 0.2);
+    }
+    .node-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+    .node-desc { font-size: 11px; color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-family: monospace;
+      color: var(--accent);
+      background: rgba(200,255,87,0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-decoration: none;
+    }
+    .source-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2 id="title">Knowledge Map</h2>
+    <span style="font-size: 12px; color: var(--muted);">Click nodes to explore primary sources</span>
+  </div>
+
+  <div class="map-container" id="container">
+    <svg class="connections" id="svg"></svg>
+    <div id="nodes"></div>
+  </div>
+
+  <script>
+    // Concept nodes with real source citations
+    const nodes = [
+      { id: "root", title: "Dicotomia do Controle", desc: "Coisas sob nosso controle vs fora dele.", x: 50, y: 50, source: "https://en.wikipedia.org/wiki/Epictetus" },
+      { id: "virtue", title: "As 4 Virtudes Cardinais", desc: "Sabedoria, Coragem, Justiça, Temperança.", x: 300, y: 180, source: "https://plato.stanford.edu/entries/stoicism/" },
+      { id: "nature", title: "Viver Segundo a Natureza", desc: "Conformidade com o Logos e Razão universal.", x: 50, y: 300, source: "https://iep.utm.edu/stoiceth/" }
+    ];
+
+    const links = [
+      { from: "root", to: "virtue" },
+      { from: "virtue", to: "nature" }
+    ];
+
+    function render() {
+      const container = document.getElementById("nodes");
+      const svg = document.getElementById("svg");
+
+      container.innerHTML = nodes.map(n => \`
+        <div class="node" id="\${n.id}" style="left: \${n.x}px; top: \${n.y}px;">
+          <div class="node-title">\${n.title}</div>
+          <div class="node-desc">\${n.desc}</div>
+          <a href="#" class="source-link" onclick="openUrl('\${n.source}'); return false;">↗ Fonte Autorizada</a>
+        </div>
+      \`).join("");
+
+      // Draw SVG lines between connected nodes
+      svg.innerHTML = links.map(l => {
+        const from = nodes.find(n => n.id === l.from);
+        const to = nodes.find(n => n.id === l.to);
+        if (!from || !to) return "";
+        return \`<line x1="\${from.x + 100}" y1="\${from.y + 35}" x2="\${to.x + 100}" y2="\${to.y + 35}" stroke="rgba(200,255,87,0.3)" stroke-width="2" stroke-dasharray="4" />\`;
+      }).join("");
+    }
+
+    function openUrl(url) {
+      if (window.polymax && window.polymax.openUrl) {
+        window.polymax.openUrl(url);
+      } else {
+        window.open(url, "_blank");
+      }
+    }
+
+    render();
+  </script>
+</body>
+</html>
+```
+
+
