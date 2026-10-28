@@ -3,7 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, isTabSynthesisIntent, isResearchIntent } from "./skills";
+import { loadSkill, isTabSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
 
 export interface AgentStepEvent {
   step: number;
@@ -45,6 +45,11 @@ export interface AgentLoopResult {
 const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Dock Agent, powered by Meta Muse Spark.
 Polymax is an Agentic Dock workspace and knowledge game for mastery.
 The Dock is the user's persistent control surface: Browser, Notes, Papers, Files, Terminal, and dynamically synthesized tools.
+- World Map & Knowledge Territories: Polymax organizes learning into an explorable world map where regions are domains and cities are topics.
+- When the user asks to create, explore, or master a new discipline or knowledge area (e.g., "criar nova area de conhecimento", "quero aprender sobre física quântica", "learn Neuroscience"):
+  1. Use plan_map({ interests: [topic] }) to establish the region and progression cities on the world map.
+  2. Use build_city({ cityId, topic, depth: "deep" }) to construct the workspace with primary sources, notes, and quests.
+  3. Respond with an inspiring, structured pedagogical summary of the new territory and suggest which city to explore first. Avoid unnecessary repeated tool loops.
 - Autonomous Web Research & Discovery (TinyFish): You have access to real-time search and web retrieval tools (search_web, fetch_page). Proactively search and fetch whenever you need authoritative primary sources, breakthrough papers, official documentation, or verified technical context.
 - City Workspace Context: In a city workspace, knowledge files live in workspace/<city>/ (notes, sources, feed.json). Use research to populate living feeds (feed.json), write technical synthesis notes, and design mastery quests.
 - When opening or directing tabs to study or work content, call open_intent to prime the tab (e.g., Browser with a tutorial/paper URL, Notes with a target markdown file, attaching active quest XP).
@@ -108,6 +113,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       try {
         const researchSkillPrompt = await loadSkill("web-research");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Primary Source Discovery (TinyFish)\n${researchSkillPrompt}`;
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    if (isWorldPlanningIntent(prompt)) {
+      try {
+        const worldSkillPrompt = await loadSkill("world-planning");
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Knowledge Territories & World Map Planning\n${worldSkillPrompt}`;
       } catch {
         // Non-fatal
       }
@@ -273,11 +287,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
-        if (toolName === "set_map" && toolOutput && typeof toolOutput === "object") {
+        if ((toolName === "set_map" || toolName === "plan_map") && toolOutput && typeof toolOutput === "object") {
+          const spec = (toolOutput as any).spec;
           await onEvent({
             step: currentStep,
             type: "map.changed",
-            payload: toolOutput as Record<string, unknown>,
+            payload: {
+              mapId: spec?.id || (toolOutput as any).mapId || "world-map",
+              name: spec?.title,
+              spec,
+              ...(toolOutput as Record<string, unknown>),
+            },
           });
         }
 
@@ -291,19 +311,48 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    // Reached maximum steps
+    // Reached maximum steps — synthesize progress gracefully rather than failing abruptly
+    let fallbackText = "";
+    try {
+      const fallbackMessages = [
+        ...messages,
+        {
+          role: "user",
+          content:
+            "Please provide a helpful final synthesis summarizing what was accomplished (knowledge areas planned, cities constructed, notes or sources discovered) and what the user should explore next. Do not call any tools.",
+        },
+      ];
+
+      const fallbackResponse = await llmClient.chat.completions.create({
+        model: modelId,
+        messages: fallbackMessages,
+      });
+
+      const fallbackChoice = fallbackResponse.choices?.[0];
+      if (fallbackChoice?.message?.content) {
+        fallbackText = fallbackChoice.message.content.trim();
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    if (!fallbackText) {
+      fallbackText =
+        "I've structured your knowledge territory and prepared the workspace. You can explore the cities on the map or ask me to dive into any specific concept.";
+    }
+
     await onEvent({
       step: currentStep,
       type: "agent.finish",
       payload: {
-        text: `Reached maximum limit of ${maxSteps} steps.`,
+        text: fallbackText,
         steps: currentStep,
       },
     });
 
     return {
       status: "max_steps_reached",
-      text: `Reached maximum limit of ${maxSteps} steps.`,
+      text: fallbackText,
       steps: currentStep,
     };
   } catch (err: any) {

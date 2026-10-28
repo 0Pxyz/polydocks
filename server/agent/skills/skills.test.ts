@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isTabSynthesisIntent, isResearchIntent, loadSkill } from "./index";
+import { isTabSynthesisIntent, isResearchIntent, isWorldPlanningIntent, loadSkill } from "./index";
 import { runAgentLoop } from "../loop";
 
 describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
@@ -129,5 +129,60 @@ describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
     expect(capturedSystemMessage).toContain("search_web");
     expect(capturedSystemMessage).toContain("fetch_page");
     expect(capturedSystemMessage).toContain("Autonomous Web Research & Discovery");
+  });
+
+  it("loadSkill loads world-planning.md skill with plan_map and build_city protocol", async () => {
+    const content = await loadSkill("world-planning");
+    expect(content).toBeDefined();
+    expect(content).toContain("plan_map");
+    expect(content).toContain("build_city");
+    expect(content).toContain("TinyFish");
+  });
+
+  it("isWorldPlanningIntent detects knowledge domain and world planning queries in English and Portuguese", () => {
+    expect(isWorldPlanningIntent("criar nova area de conhecimento")).toBe(true);
+    expect(isWorldPlanningIntent("criar uma nova área de conhecimento sobre computação quântica")).toBe(true);
+    expect(isWorldPlanningIntent("quero aprender sobre física quântica")).toBe(true);
+    expect(isWorldPlanningIntent("plan the map for distributed systems")).toBe(true);
+    expect(isWorldPlanningIntent("expand the world map")).toBe(true);
+    expect(isWorldPlanningIntent("want to learn neuroscience")).toBe(true);
+    expect(isWorldPlanningIntent("build city for transformers")).toBe(true);
+
+    expect(isWorldPlanningIntent("what time is it?")).toBe(false);
+    expect(isWorldPlanningIntent("change accent to lime")).toBe(false);
+  });
+
+  it("runAgentLoop dynamically injects world-planning skill into system prompt on world planning intent", async () => {
+    let capturedSystemMessage = "";
+
+    const mockLlmClient: any = {
+      chat: {
+        completions: {
+          create: async (params: any) => {
+            const sys = params.messages.find((m: any) => m.role === "system");
+            capturedSystemMessage = sys?.content || "";
+            return {
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: "Planning new knowledge territory...",
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    await runAgentLoop({
+      prompt: "quero aprender sobre mecânica quântica e criar nova area de conhecimento",
+      llmClient: mockLlmClient,
+    });
+
+    expect(capturedSystemMessage).toContain("Specialized Skill: Knowledge Territories & World Map Planning");
+    expect(capturedSystemMessage).toContain("plan_map");
+    expect(capturedSystemMessage).toContain("build_city");
   });
 });

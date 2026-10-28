@@ -27,6 +27,19 @@ export async function loadSkill(skillName: string): Promise<string> {
  */
 export function isTabSynthesisIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
+
+  // If prompt is clearly about world map or knowledge territory planning, avoid false tab trigger
+  if (
+    isWorldPlanningIntent(prompt) &&
+    !lower.includes("tab") &&
+    !lower.includes("aba") &&
+    !lower.includes("dock") &&
+    !lower.includes("micro-app") &&
+    !lower.includes("flashcard")
+  ) {
+    return false;
+  }
+
   const triggers = [
     "create tab",
     "create a tab",
@@ -47,8 +60,7 @@ export function isTabSynthesisIntent(prompt: string): boolean {
     "mapa mental",
     "mapa de conceitos",
     "concept map",
-    "knowledge map",
-    "knowledge graph",
+    "interactive concept graph",
     "interactive map",
     "flashcard",
     "comparator",
@@ -58,6 +70,49 @@ export function isTabSynthesisIntent(prompt: string): boolean {
     "tool for",
     "tab for",
     "experience for",
+  ];
+
+  return triggers.some((t) => lower.includes(t));
+}
+
+/**
+ * Heuristic detector for whether user prompt involves planning or expanding knowledge domains, world regions, or cities.
+ */
+export function isWorldPlanningIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  const triggers = [
+    "nova area",
+    "nova área",
+    "area de conhecimento",
+    "área de conhecimento",
+    "knowledge area",
+    "knowledge domain",
+    "knowledge territory",
+    "knowledge map",
+    "world map",
+    "mapa do mundo",
+    "plan map",
+    "plan the map",
+    "expand map",
+    "expand the map",
+    "build city",
+    "criar cidade",
+    "nova cidade",
+    "fundar cidade",
+    "found city",
+    "novo tema",
+    "novo topico",
+    "novo tópico",
+    "new topic",
+    "new subject",
+    "new domain",
+    "quero aprender",
+    "quero estudar",
+    "aprender sobre",
+    "estudar sobre",
+    "want to learn",
+    "learn about",
+    "master topic",
   ];
 
   return triggers.some((t) => lower.includes(t));

@@ -218,6 +218,127 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
     expect(result.status).toBe("max_steps_reached");
     expect(result.steps).toBe(3);
     expect(events[events.length - 1].type).toBe("agent.finish");
+    expect(result.text).not.toContain("Reached maximum limit");
+  });
+
+  it("should synthesize graceful summary upon max steps exhaustion", async () => {
+    const events: AgentStepEvent[] = [];
+    let callCount = 0;
+
+    const mockLlmClient: any = {
+      chat: {
+        completions: {
+          create: async (params: any) => {
+            callCount++;
+            // During regular steps: loop tools
+            if (callCount <= 2) {
+              return {
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          id: `call_${callCount}`,
+                          type: "function",
+                          function: {
+                            name: "dummy_tool",
+                            arguments: "{}",
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              };
+            }
+
+            // Fallback synthesis step (no tools)
+            expect(params.tools).toBeUndefined();
+            return {
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: "Synthesized overview of newly founded territory with immediate next steps.",
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    const result = await runAgentLoop({
+      prompt: "Research deep topic",
+      maxSteps: 2,
+      llmClient: mockLlmClient,
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(result.status).toBe("max_steps_reached");
+    expect(result.text).toBe("Synthesized overview of newly founded territory with immediate next steps.");
+    expect(events[events.length - 1].payload?.text).toBe(
+      "Synthesized overview of newly founded territory with immediate next steps."
+    );
+  });
+
+  it("should emit map.changed when plan_map is executed", async () => {
+    const events: AgentStepEvent[] = [];
+    let callCount = 0;
+
+    const mockLlmClient: any = {
+      chat: {
+        completions: {
+          create: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          id: "call_plan_1",
+                          type: "function",
+                          function: {
+                            name: "plan_map",
+                            arguments: JSON.stringify({ interests: ["Neuroscience"] }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              };
+            }
+            return {
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: "Neuroscience region charted on the world map.",
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    const result = await runAgentLoop({
+      prompt: "Add Neuroscience to the world map",
+      llmClient: mockLlmClient,
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(result.status).toBe("completed");
+    const mapChangedEvent = events.find((e) => e.type === "map.changed");
+    expect(mapChangedEvent).toBeDefined();
+    expect((mapChangedEvent?.payload as any)?.spec?.regions?.some((r: any) => r.title === "Neuroscience")).toBe(true);
   });
 
   it("should catch errors and emit error event", async () => {
