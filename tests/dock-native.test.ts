@@ -61,4 +61,29 @@ describe("Dock Native Architecture & City Mode (Phase 2)", () => {
     const found = listData.files.some((f: any) => f.path === testPath);
     expect(found).toBe(true);
   });
+
+  it("contextual suggestions provide city-specific and root defaults without slop", () => {
+    const getSuggestions = (cityName?: string) =>
+      cityName?.trim()
+        ? [
+            `Flashcards for ${cityName}`,
+            `Compare two sources on ${cityName}`,
+            `A timeline of ${cityName}`,
+          ]
+        : ["Flashcards", "A reading list", "A timeline"];
+
+    const citySuggestions = getSuggestions("Stoicism");
+    expect(citySuggestions).toEqual([
+      "Flashcards for Stoicism",
+      "Compare two sources on Stoicism",
+      "A timeline of Stoicism",
+    ]);
+
+    const defaultSuggestions = getSuggestions(undefined);
+    expect(defaultSuggestions).toEqual([
+      "Flashcards",
+      "A reading list",
+      "A timeline",
+    ]);
+  });
 });
