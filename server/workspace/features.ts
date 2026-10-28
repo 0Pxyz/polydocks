@@ -13,6 +13,8 @@ export interface FeatureManifest {
   title: string;
   icon?: string;
   scope?: "city" | "global";
+  capabilities?: string[];
+  permissions?: unknown[];
   createdAt?: string;
   updatedAt?: string;
   [key: string]: unknown;
@@ -167,12 +169,40 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
         });
       }
 
+      // Error capture & reporting to host runtime
+      window.addEventListener('error', function(event) {
+        window.parent.postMessage({
+          polymaxAction: 'runtime.error',
+          error: {
+            message: event.message || 'Unknown error',
+            filename: event.filename || '',
+            lineno: event.lineno || 0,
+            colno: event.colno || 0,
+            stack: event.error ? event.error.stack : '',
+            timestamp: new Date().toISOString()
+          }
+        }, '*');
+      });
+
+      window.addEventListener('unhandledrejection', function(event) {
+        const reason = event.reason;
+        window.parent.postMessage({
+          polymaxAction: 'runtime.error',
+          error: {
+            message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
+            stack: reason && reason.stack ? reason.stack : '',
+            timestamp: new Date().toISOString()
+          }
+        }, '*');
+      });
+
       window.polymax = {
         storage: {
           get: (key) => sendHostRequest('storage.get', { key }),
           set: (key, value) => sendHostRequest('storage.set', { key, value }),
           remove: (key) => sendHostRequest('storage.remove', { key }),
         },
+        invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
         openUrl: (url) => sendHostRequest('openUrl', { url }),
         getContext: () => sendHostRequest('getContext', {}),
         submit: (command) => sendHostRequest('submit', { command }),
@@ -191,6 +221,14 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
 ${jsCode}
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
+      window.parent.postMessage({
+        polymaxAction: 'runtime.error',
+        error: {
+          message: err && err.message ? err.message : String(err),
+          stack: err && err.stack ? err.stack : '',
+          timestamp: new Date().toISOString()
+        }
+      }, '*');
       const app = document.getElementById('app');
       if (app) {
         app.innerHTML = '<div style="color: #FF5A5A; padding: 20px; font-size: 13px; font-family: monospace;"><b>Error executing feature:</b><br/>' + (err && err.message ? err.message : String(err)) + '</div>';

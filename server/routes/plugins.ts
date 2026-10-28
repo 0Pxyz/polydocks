@@ -245,6 +245,24 @@ capabilitiesRouter.post("/approvals/:id", async (c) => {
   return c.json({ success: true, id, decision });
 });
 
+/**
+ * POST /api/capabilities/invoke - Invoke a capability
+ */
+capabilitiesRouter.post("/invoke", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { capabilityId, input, cityId } = body;
+  if (!capabilityId) {
+    return c.json({ error: "Missing capabilityId" }, 400);
+  }
+
+  const result = await capabilityBus.invoke(capabilityId, input, {
+    actor: "user",
+    cityId,
+  });
+
+  return c.json(result);
+});
+
 // Backward compatibility: keep pluginsRouter.get("/capabilities", ...)
 pluginsRouter.get("/capabilities", (c) => {
   const enabledOnly = c.req.query("enabled") !== "false";

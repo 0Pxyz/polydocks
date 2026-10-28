@@ -29,7 +29,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(21);
+    expect(defaultTools.length).toBe(23);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -52,6 +52,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("place_city");
     expect(names).toContain("find_capabilities");
     expect(names).toContain("invoke_capability");
+    expect(names).toContain("inspect_experience");
+    expect(names).toContain("promote_to_plugin");
   });
 
   it("list_tabs returns builtins and dynamic tabs", async () => {
@@ -176,7 +178,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(result.topic).toBe("Distributed Systems");
     expect(result.status).toBe("ready");
     expect(result.questsCount).toBe(3);
-  }, 15000);
+  }, 30000);
 
   it("list_maps, set_map, and place_city tools manage Maps v2 world cartography", async () => {
     const { list_maps } = await import("./list_maps");

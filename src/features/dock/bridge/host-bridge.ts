@@ -123,6 +123,65 @@ export function createHostBridge(
           return true;
         }
 
+        case "capability.invoke": {
+          const capId = data.capabilityId as string;
+          if (!capId) {
+            respond(requestId, null, "Missing capabilityId for invoke.");
+            return true;
+          }
+
+          if (
+            options.allowedCapabilities &&
+            !options.allowedCapabilities.includes(capId) &&
+            !options.allowedCapabilities.includes("*")
+          ) {
+            respond(
+              requestId,
+              null,
+              `Permission denied: Capability "${capId}" is not declared in this experience manifest.`
+            );
+            return true;
+          }
+
+          if (options.onInvoke) {
+            const res = await options.onInvoke(capId, data.input);
+            respond(requestId, res);
+            return true;
+          }
+
+          // Fallback to fetch invocation endpoint
+          try {
+            const apiRes = await fetch("/api/capabilities/invoke", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ capabilityId: capId, input: data.input, cityId }),
+            });
+            const apiData = await apiRes.json();
+            if (apiData.success) {
+              respond(requestId, apiData.data);
+            } else {
+              respond(requestId, null, apiData.error || "Invocation failed");
+            }
+          } catch (invokeErr: any) {
+            respond(requestId, null, invokeErr.message || "Failed to invoke capability");
+          }
+          return true;
+        }
+
+        case "runtime.error": {
+          options.onError?.(data.error);
+
+          // Report to backend error collector
+          if (typeof fetch !== "undefined") {
+            fetch(`/api/experiences/${encodeURIComponent(tabId)}/errors`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cityId, error: data.error }),
+            }).catch(() => {});
+          }
+          return true;
+        }
+
         default:
           respond(requestId, null, `Unknown bridge action "${data.polymaxAction}"`);
           return true;

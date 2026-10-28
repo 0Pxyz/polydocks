@@ -16,7 +16,9 @@ export type BridgeAction =
   | "openUrl"
   | "submit"
   | "ui.expand"
-  | "ui.collapse";
+  | "ui.collapse"
+  | "capability.invoke"
+  | "runtime.error";
 
 export interface HostBridgeRequest {
   polymaxAction: BridgeAction;
@@ -25,6 +27,9 @@ export interface HostBridgeRequest {
   value?: unknown;
   url?: string;
   command?: string;
+  capabilityId?: string;
+  input?: unknown;
+  error?: unknown;
   [key: string]: unknown;
 }
 
@@ -38,6 +43,9 @@ export interface HostBridgeOptions {
   cityId: string;
   tabId: string;
   storagePrefix?: string;
+  allowedCapabilities?: string[];
+  onError?: (error: unknown) => void;
+  onInvoke?: (capabilityId: string, input: unknown) => Promise<unknown> | unknown;
   onExpand?: () => void;
   onCollapse?: () => void;
   onSubmitCommand?: (command: string) => void;

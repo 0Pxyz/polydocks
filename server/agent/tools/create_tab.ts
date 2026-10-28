@@ -11,6 +11,8 @@ export interface CreateTabArgs {
   html?: string;
   scope?: "city" | "global";
   cityId?: string;
+  capabilities?: string[];
+  permissions?: any[];
 }
 
 export const create_tab: AgentTool<CreateTabArgs> = {
@@ -39,6 +41,11 @@ export const create_tab: AgentTool<CreateTabArgs> = {
         .describe("Complete self-contained HTML/CSS/JS document rendered in the sandbox (legacy format)"),
       scope: z.enum(["city", "global"]).default("city"),
       cityId: z.string().optional().describe("City identifier to mount the tab inside"),
+      capabilities: z
+        .array(z.string())
+        .optional()
+        .describe("Declared bridge capability IDs this experience is permitted to invoke"),
+      permissions: z.array(z.any()).optional().describe("Declared granular permissions"),
     })
     .refine((data) => Boolean(data.code || data.html), {
       message: "Either 'code' (TypeScript feature module) or 'html' (legacy document) must be provided.",
@@ -51,6 +58,8 @@ export const create_tab: AgentTool<CreateTabArgs> = {
       title: args.title,
       icon: args.icon || "Layers",
       scope: args.scope || "city",
+      capabilities: args.capabilities || [],
+      permissions: args.permissions || [],
       createdAt: new Date().toISOString(),
     };
 
