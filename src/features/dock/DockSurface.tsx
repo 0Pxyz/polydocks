@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
 import { spring, prefersReducedMotion } from "@/lib/motion";
+import { useThemeStore } from "@/lib/theme";
 
-export type DockSurfaceVariant = "default" | "frameless" | "sheet" | "fullscreen";
+export type DockSurfaceVariant = "default" | "frameless" | "sheet" | "fullscreen" | "immersive";
 
 interface DockSurfaceProps {
   children: ReactNode;
@@ -31,6 +32,8 @@ export function DockSurface({
 }: DockSurfaceProps) {
   const variant: DockSurfaceVariant =
     propVariant ?? (frameless ? "frameless" : "default");
+  const dockPosition = useThemeStore((s) => s.dockPosition);
+  const isBottom = dockPosition === "bottom";
 
   if (variant === "sheet") {
     return (
@@ -40,7 +43,7 @@ export function DockSurface({
             layoutId={layoutId}
             initial={{
               opacity: 0,
-              y: prefersReducedMotion() ? 0 : 28,
+              y: prefersReducedMotion() ? 0 : isBottom ? -28 : 28,
               scale: prefersReducedMotion() ? 1 : 0.96,
             }}
             animate={{
@@ -51,12 +54,13 @@ export function DockSurface({
             }}
             exit={{
               opacity: 0,
-              y: prefersReducedMotion() ? 0 : 20,
+              y: prefersReducedMotion() ? 0 : isBottom ? -20 : 20,
               scale: prefersReducedMotion() ? 1 : 0.95,
               transition: { duration: 0.18 },
             }}
             className={cn(
-              "fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto",
+              "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto",
+              isBottom ? "top-6" : "bottom-6",
               className
             )}
           >
@@ -88,13 +92,33 @@ export function DockSurface({
     );
   }
 
+  if (variant === "immersive") {
+    return (
+      <div
+        className={cn(
+          "w-full h-full min-h-[calc(100vh-var(--dock-offset,88px))] flex-1 flex flex-col items-center justify-start select-none bg-transparent",
+          isBottom
+            ? "pb-[calc(var(--dock-offset,var(--dock-bottom,88px))+8px)] pt-4"
+            : "pt-[calc(var(--dock-offset,var(--dock-bottom,88px))+8px)] pb-4",
+          className
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
         "w-full flex flex-col items-center justify-start select-none",
-        variant === "frameless"
-          ? "pt-[calc(var(--dock-bottom,88px)+28px)] pb-10"
-          : "pt-[calc(var(--dock-bottom,88px)+20px)] pb-12 px-4",
+        isBottom
+          ? variant === "frameless"
+            ? "pb-[calc(var(--dock-offset,var(--dock-bottom,88px))+28px)] pt-10"
+            : "pb-[calc(var(--dock-offset,var(--dock-bottom,88px))+20px)] pt-12 px-4"
+          : variant === "frameless"
+            ? "pt-[calc(var(--dock-offset,var(--dock-bottom,88px))+28px)] pb-10"
+            : "pt-[calc(var(--dock-offset,var(--dock-bottom,88px))+20px)] pb-12 px-4",
         className
       )}
     >
