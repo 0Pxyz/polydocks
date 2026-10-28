@@ -28,8 +28,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("should export all 19 canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(19);
+  it("should export all canonical tools in defaultTools catalog", () => {
+    expect(defaultTools.length).toBe(21);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -50,6 +50,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("list_maps");
     expect(names).toContain("set_map");
     expect(names).toContain("place_city");
+    expect(names).toContain("find_capabilities");
+    expect(names).toContain("invoke_capability");
   });
 
   it("list_tabs returns builtins and dynamic tabs", async () => {

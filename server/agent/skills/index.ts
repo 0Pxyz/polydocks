@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pluginRegistry } from "../../plugins/registry";
 
 const skillCache = new Map<string, string>();
 
@@ -120,9 +121,22 @@ export function isWorldPlanningIntent(prompt: string): boolean {
 
 /**
  * Heuristic detector for whether user prompt involves web research, discovery, or content curation.
+ * Evaluates triggers declared in plugin manifests, falling back to canonical defaults.
  */
 export function isResearchIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
+
+  try {
+    const searchPlugin = pluginRegistry.get("search");
+    if (searchPlugin?.manifest.skill?.triggers) {
+      if (searchPlugin.manifest.skill.triggers.some((t) => lower.includes(t.toLowerCase()))) {
+        return true;
+      }
+    }
+  } catch {
+    // Non-fatal fallback
+  }
+
   const triggers = [
     "research",
     "search",

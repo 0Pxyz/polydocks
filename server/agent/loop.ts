@@ -4,6 +4,12 @@ import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, isTabSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { initializeFirstPartyPlugins } from "../plugins/first-party";
+import { pluginRegistry } from "../plugins/registry";
+import path from "node:path";
+
+// Auto-register first party plugins
+initializeFirstPartyPlugins();
 
 export interface AgentStepEvent {
   step: number;
@@ -97,8 +103,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       };
     });
 
-    // Context-aware dynamic skill injection
+    // Context-aware dynamic skill injection and progressive disclosure
     let activeSystemPrompt = systemPrompt;
+
+    // Progressive Disclosure: Summarize installed plugins
+    const installedPlugins = pluginRegistry.list({ enabledOnly: true });
+    if (installedPlugins.length > 0) {
+      const summaryLines = installedPlugins.map(
+        (p) => `- ${p.name} (${p.id}): ${p.manifest.description} [${(p.manifest.capabilities || []).map((c) => c.id).join(", ")}]`
+      );
+      activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability):\n${summaryLines.join("\n")}`;
+    }
 
     if (isTabSynthesisIntent(prompt)) {
       try {
@@ -109,7 +124,32 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    if (isResearchIntent(prompt) || Boolean(cityId)) {
+    // Manifest-driven skills & fallback
+    const lowerPrompt = prompt.toLowerCase();
+    let researchSkillInjected = false;
+
+    for (const plugin of installedPlugins) {
+      if (plugin.manifest.skill) {
+        const { file, triggers } = plugin.manifest.skill;
+        const matchesTrigger = triggers.some((t) => lowerPrompt.includes(t.toLowerCase()));
+        if (matchesTrigger || (Boolean(cityId) && plugin.id === "search")) {
+          try {
+            const skillName = path.basename(file, ".md");
+            const skillPrompt = await loadSkill(skillName);
+            const skillHeading =
+              plugin.id === "search"
+                ? "Web Research & Primary Source Discovery (TinyFish)"
+                : plugin.name;
+            activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: ${skillHeading}\n${skillPrompt}`;
+            if (plugin.id === "search") researchSkillInjected = true;
+          } catch {
+            // Non-fatal
+          }
+        }
+      }
+    }
+
+    if (!researchSkillInjected && (isResearchIntent(prompt) || Boolean(cityId))) {
       try {
         const researchSkillPrompt = await loadSkill("web-research");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Primary Source Discovery (TinyFish)\n${researchSkillPrompt}`;
