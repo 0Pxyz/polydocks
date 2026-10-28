@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } fro
 import { RotateCcw, Plus, Check, Ban, Upload, Clipboard } from "lucide-react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { THEMES, useThemeStore } from "@/lib/theme";
+import { DOCK_STYLES, type DockStyleId } from "@/features/dock/styles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -61,11 +62,15 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     wallpaperUrl,
     wallpaperOpacity,
     wallpaperBlur,
+    dockStyle,
+    dockPosition,
     setTheme,
     setCustomAccentColor,
     setWallpaper,
     setWallpaperOpacity,
     setWallpaperBlur,
+    setDockStyle,
+    setDockPosition,
     clearWallpaper,
     resetTheme,
   } = useThemeStore();
@@ -757,6 +762,87 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Dock Style Swatches (Glass, Solid, Bare, Lift) */}
+        <motion.div
+          variants={rowVariants}
+          role="radiogroup"
+          aria-label="Dock style"
+          className="w-full flex items-center justify-between gap-1.5"
+        >
+          {(Object.keys(DOCK_STYLES) as DockStyleId[]).map((styleId) => {
+            const isSelected = dockStyle === styleId;
+            const styleMeta = DOCK_STYLES[styleId];
+            return (
+              <button
+                key={styleId}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                aria-label={`Dock style: ${styleMeta.name}`}
+                onClick={() => {
+                  setDockStyle(styleId);
+                  showTransientLabel(`Dock: ${styleMeta.name}`);
+                }}
+                onMouseEnter={() => showTransientLabel(`Dock: ${styleMeta.name}`)}
+                className={cn(
+                  "flex-1 h-[32px] rounded-xl flex items-center justify-center gap-1 transition-all duration-150 cursor-pointer overflow-hidden border backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)]",
+                  isSelected
+                    ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background shadow-[0_0_12px_rgba(200,255,87,0.35)]"
+                    : "border-white/15 opacity-75 hover:opacity-100 hover:scale-105",
+                  styleId === "glass" && "bg-[#0c0e14]/80",
+                  styleId === "solid" && "bg-[#0c0e14]",
+                  styleId === "bare" && "bg-transparent border-dashed border-white/20",
+                  styleId === "lift" && "bg-[#0c0e14]/80"
+                )}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
+                <span className="w-1.5 h-1.5 rounded-full bg-white/40" />
+              </button>
+            );
+          })}
+        </motion.div>
+
+        {/* Dock Position Segmented Toggle (Top / Bottom) */}
+        <motion.div
+          variants={rowVariants}
+          className="w-full flex items-center justify-between"
+        >
+          <span className="text-xs font-mono text-muted-foreground">Dock Position</span>
+          <div className="flex items-center gap-1 p-0.5 rounded-xl bg-white/[0.04]">
+            <button
+              type="button"
+              onClick={() => {
+                setDockPosition("top");
+                showTransientLabel("Dock: Top");
+              }}
+              className={cn(
+                "px-2.5 py-1 rounded-lg text-xs font-sans transition-colors cursor-pointer",
+                dockPosition === "top"
+                  ? "bg-white/10 text-white font-medium"
+                  : "text-[#9aa5b8] hover:text-white"
+              )}
+            >
+              Top
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDockPosition("bottom");
+                showTransientLabel("Dock: Bottom");
+              }}
+              className={cn(
+                "px-2.5 py-1 rounded-lg text-xs font-sans transition-colors cursor-pointer",
+                dockPosition === "bottom"
+                  ? "bg-white/10 text-white font-medium"
+                  : "text-[#9aa5b8] hover:text-white"
+              )}
+            >
+              Bottom
+            </button>
+          </div>
+        </motion.div>
 
         {/* Row 5: Fixed Non-Overlapping Transient Name Label (13px, sans, fades after 1.2s) */}
         <div className="h-6 flex items-center justify-center text-[13px] font-sans font-medium text-foreground/80 tracking-normal text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] transition-opacity duration-300">
