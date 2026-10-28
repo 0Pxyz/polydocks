@@ -5,6 +5,7 @@ import { IllustratedWorldMap } from "../world/IllustratedWorldMap";
 import { MapMarkersOverlay } from "../world/MapMarkersOverlay";
 import { MapStylePicker } from "../world/MapStylePicker";
 import { syncCitiesToMap, placeCityOnMap } from "../world/placement";
+import { isPointOnLand } from "../world/landmask";
 import { useCityBuildStream } from "../world/useCityBuildStream";
 import type { CityPoint, MapSource } from "../world/types";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -43,9 +44,12 @@ export function WorldView({
     screenX: number;
     screenY: number;
   } | null>(null);
+  const [waterNudge, setWaterNudge] = useState<{ screenX: number; screenY: number } | null>(null);
   const [foundTopicText, setFoundTopicText] = useState("");
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchTimerRef = useRef<any>(null);
   const { buildingProgress: streamProgress, startCityBuild } = useCityBuildStream();
   const isReduced = prefersReducedMotion();
 
@@ -119,22 +123,65 @@ export function WorldView({
     setFoundTopicText("");
   };
 
-  // Right-click or long-press on land
+  // Trigger found a city prompt or water nudge
+  const triggerFoundCity = (screenX: number, screenY: number, containerRect: DOMRect) => {
+    const nx = Math.min(Math.max((screenX - containerRect.left) / containerRect.width, 0), 1);
+    const ny = Math.min(Math.max((screenY - containerRect.top) / containerRect.height, 0), 1);
+
+    if (!isPointOnLand(activeMapId, nx, ny)) {
+      setWaterNudge({ screenX, screenY });
+      setFoundCityPrompt(null);
+      setTimeout(() => setWaterNudge(null), 2500);
+      return;
+    }
+
+    setWaterNudge(null);
+    setFoundCityPrompt({ nx, ny, screenX, screenY });
+    setFoundTopicText("");
+  };
+
+  // Right-click on map
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    const screenX = e.clientX;
-    const screenY = e.clientY;
-    const nx = Math.min(Math.max((screenX - rect.left) / rect.width, 0), 1);
-    const ny = Math.min(Math.max((screenY - rect.top) / rect.height, 0), 1);
+    triggerFoundCity(e.clientX, e.clientY, rect);
+  };
 
-    setFoundCityPrompt({ nx, ny, screenX, screenY });
-    setFoundTopicText("");
+  // Long-press touch listeners
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+
+    touchTimerRef.current = setTimeout(() => {
+      if (touchStartRef.current) {
+        triggerFoundCity(touchStartRef.current.x, touchStartRef.current.y, rect);
+      }
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const dist = Math.hypot(touch.clientX - touchStartRef.current.x, touch.clientY - touchStartRef.current.y);
+    if (dist > 10) {
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+      touchStartRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    touchStartRef.current = null;
   };
 
   return (
     <div
       onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       className="relative w-full h-full min-h-screen flex-1 overflow-hidden select-none bg-[#06080e]"
     >
       {/* Illustrated Map Canvas */}
@@ -213,6 +260,25 @@ export function WorldView({
                 ✕
               </button>
             </form>
+          </motion.div>
+        )}
+
+        {/* Water Click Nudge */}
+        {waterNudge && (
+          <motion.div
+            initial={isReduced ? { opacity: 1 } : { opacity: 0, scale: 0.9, y: 4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 4 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              left: `${waterNudge.screenX}px`,
+              top: `${waterNudge.screenY}px`,
+            }}
+            className="fixed z-50 transform -translate-x-1/2 -translate-y-full mb-3 pointer-events-none"
+          >
+            <div className="px-3 py-1.5 rounded-lg bg-[#0e131d]/95 border border-sky-500/40 text-sky-300 font-mono text-[11px] font-medium shadow-xl backdrop-blur-md">
+              Pick a spot on land
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
