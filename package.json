@@ -4,6 +4,9 @@
   "description": "The Agentic Dock for Polymaths - Autonomous Knowledge Game & Workspace",
   "private": true,
   "license": "MIT",
+  "bin": {
+    "polydocks": "./bin/polydocks"
+  },
   "type": "module",
   "engines": {
     "bun": ">=1.1.0"
