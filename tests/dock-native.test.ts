@@ -3,9 +3,9 @@ import { ROOT_DOCK_TOOLS, CITY_DOCK_TOOLS } from "../src/features/dock/AgenticDo
 import app from "../server/index";
 
 describe("Dock Native Architecture & City Mode (Phase 2)", () => {
-  it("ROOT_DOCK_TOOLS contains only agent, maps, and settings initially", () => {
+  it("CORE_DOCK_TOOLS contains the four core tools for the hackathon", () => {
     const toolIds = ROOT_DOCK_TOOLS.map((t) => t.id);
-    expect(toolIds).toEqual(["agent", "maps", "settings"]);
+    expect(toolIds).toEqual(["agent", "maps", "browser", "notes"]);
 
     const agent = ROOT_DOCK_TOOLS.find((t) => t.id === "agent");
     expect(agent?.isAgent).toBe(true);
@@ -13,19 +13,19 @@ describe("Dock Native Architecture & City Mode (Phase 2)", () => {
     const maps = ROOT_DOCK_TOOLS.find((t) => t.id === "maps");
     expect(maps?.label).toContain("World Map");
 
-    const settings = ROOT_DOCK_TOOLS.find((t) => t.id === "settings");
-    expect(settings?.label).toContain("Settings");
+    const browser = ROOT_DOCK_TOOLS.find((t) => t.id === "browser");
+    expect(browser?.label).toContain("Research");
+
+    const notes = ROOT_DOCK_TOOLS.find((t) => t.id === "notes");
+    expect(notes?.label).toContain("Notes");
   });
 
-  it("CITY_DOCK_TOOLS contains world exit, agent, and city native tools", () => {
+  it("CITY_DOCK_TOOLS also ships the four core tools by default", () => {
     const toolIds = CITY_DOCK_TOOLS.map((t) => t.id);
-    expect(toolIds).toContain("world");
     expect(toolIds).toContain("agent");
+    expect(toolIds).toContain("maps");
     expect(toolIds).toContain("browser");
-    expect(toolIds).toContain("files");
     expect(toolIds).toContain("notes");
-    expect(toolIds).toContain("quests");
-    expect(toolIds).toContain("terminal");
   });
 
   it("GET and POST /api/cities/:id/files safely lists and creates workspace files", async () => {

@@ -5,6 +5,7 @@ interface CityViewProps {
   onBackToWorld: () => void;
   activeToolId?: string;
   onSelectTool?: (toolId: string) => void;
+  onSynthesizeTool?: (toolId: string) => void;
 }
 
 export function CityView({
@@ -12,12 +13,14 @@ export function CityView({
   onBackToWorld,
   activeToolId,
   onSelectTool,
+  onSynthesizeTool,
 }: CityViewProps) {
   return (
     <CityWorkspace
       cityId={cityName}
       activeToolId={activeToolId}
       onSelectTool={onSelectTool}
+      onSynthesizeTool={onSynthesizeTool}
       onBackToWorld={onBackToWorld}
     />
   );

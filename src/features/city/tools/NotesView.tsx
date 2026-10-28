@@ -1,9 +1,8 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { FileText, Plus, Edit3, Eye, Check } from "lucide-react";
+import { FileText, Plus, PencilSimple, Eye, Check } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import type { CityNoteItem } from "../types";
 
 interface NotesViewProps {
@@ -43,13 +42,13 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 w-full h-full min-h-[500px]">
+    <div className="flex flex-col md:flex-row gap-6 w-full max-w-5xl h-full min-h-[500px]">
       {/* Notes Sidebar */}
-      <div className="w-full md:w-64 flex flex-col gap-3 shrink-0">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
-            <FileText className="w-3.5 h-3.5 text-primary" />
-            Workspace Notes ({notes.length})
+      <div className="w-full md:w-60 flex flex-col gap-2 shrink-0">
+        <div className="flex items-center justify-between px-1 mb-1">
+          <span className="text-xs font-mono text-muted-foreground flex items-center gap-1.5">
+            <FileText size={16} />
+            <span>Notes ({notes.length})</span>
           </span>
           <Button
             variant="ghost"
@@ -64,11 +63,11 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
             }}
             title="Create Note"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus size={14} />
           </Button>
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1">
           {notes.map((note) => {
             const isSelected = note.name === selectedNoteName;
             return (
@@ -76,21 +75,16 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
                 key={note.name}
                 type="button"
                 onClick={() => handleSelectNote(note.name)}
-                className={`flex items-center justify-between p-2.5 rounded-lg border text-left text-xs transition-colors cursor-pointer ${
+                className={`flex items-center justify-between p-2.5 rounded-xl text-left text-xs transition-colors cursor-pointer ${
                   isSelected
-                    ? "bg-secondary border-primary/40 text-foreground font-medium shadow-sm"
-                    : "bg-card/50 border-border/60 text-muted-foreground hover:text-foreground hover:bg-card"
+                    ? "bg-white/[0.08] text-white font-medium"
+                    : "text-muted-foreground hover:text-white hover:bg-white/[0.04]"
                 }`}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <FileText className={`w-3.5 h-3.5 ${isSelected ? "text-primary" : "text-muted-foreground"}`} />
+                  <FileText size={14} className={isSelected ? "text-[var(--accent-lime)]" : "text-muted-foreground"} />
                   <span className="truncate">{note.name}</span>
                 </div>
-                {note.updatedAt && (
-                  <span className="text-[10px] font-mono text-muted-foreground/70 shrink-0">
-                    {new Date(note.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </span>
-                )}
               </button>
             );
           })}
@@ -98,16 +92,16 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
       </div>
 
       {/* Main Note Canvas */}
-      <div className="flex-1 flex flex-col rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex-1 flex flex-col rounded-2xl bg-[#0c0e14] border border-white/5 overflow-hidden">
         {/* Note Action Toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/60">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs border-primary/30 text-primary">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-xs text-white">
               {currentNote.name}
-            </Badge>
+            </span>
             {savedSuccess && (
               <span className="text-xs text-[var(--accent-lime)] flex items-center gap-1 font-mono">
-                <Check className="w-3.5 h-3.5" /> Saved
+                <Check size={14} /> Saved
               </span>
             )}
           </div>
@@ -117,34 +111,34 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
               <>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   className="h-7 text-xs gap-1"
                   onClick={() => {
                     setEditBuffer(currentNote.content);
                     setIsEditing(false);
                   }}
                 >
-                  <Eye className="w-3.5 h-3.5" /> Preview
+                  <Eye size={14} /> Preview
                 </Button>
                 <Button
                   size="sm"
-                  className="h-7 text-xs gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="h-7 text-xs gap-1 bg-[var(--accent-lime)] text-black font-semibold hover:opacity-90"
                   onClick={handleSave}
                 >
-                  <Check className="w-3.5 h-3.5" /> Save Changes
+                  <Check size={14} /> Save
                 </Button>
               </>
             ) : (
               <Button
                 size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1 hover:border-primary/50"
+                variant="ghost"
+                className="h-7 text-xs gap-1 text-muted-foreground hover:text-white"
                 onClick={() => {
                   setEditBuffer(currentNote.content);
                   setIsEditing(true);
                 }}
               >
-                <Edit3 className="w-3.5 h-3.5 text-primary" /> Edit Markdown
+                <PencilSimple size={14} /> Edit
               </Button>
             )}
           </div>
@@ -160,7 +154,7 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
               placeholder="Write your synthesized knowledge notes in markdown..."
             />
           ) : (
-            <div className="prose prose-invert prose-sm max-w-none prose-headings:font-display prose-headings:text-foreground prose-a:text-primary prose-code:text-[var(--accent-lime)] prose-pre:bg-secondary/60">
+            <div className="prose prose-invert prose-sm max-w-none prose-headings:text-foreground prose-a:text-[var(--accent-lime)]">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {currentNote.content}
               </ReactMarkdown>

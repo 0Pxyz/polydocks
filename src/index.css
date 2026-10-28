@@ -3,7 +3,7 @@
 @import "./styles/tokens.css";
 
 @theme {
-  --font-display: "Syne Variable", sans-serif;
+  --font-display: "Inter Variable", sans-serif;
   --font-sans: "Inter Variable", sans-serif;
   --font-mono: "Geist Mono Variable", monospace;
 

@@ -9,7 +9,6 @@ import {
   ArrowClockwise,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 export interface WorkspaceFileItem {
   path: string;
@@ -136,12 +135,12 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border/60">
         <div>
-          <h3 className="font-display text-lg font-bold text-foreground flex items-center gap-2">
-            <Folder size={20} weight="duotone" className="text-[var(--accent-lime)]" />
-            <span>Workspace Files & Code</span>
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Folder size={18} className="text-[var(--accent-lime)]" />
+            <span>Workspace Files</span>
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-            workspace/{cityId}/ • Managed by you and the Polymax agent
+            workspace/{cityId}/
           </p>
         </div>
 
@@ -170,8 +169,8 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
       {/* Main Files Layout */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 min-h-[480px]">
         {/* File Explorer Sidebar */}
-        <div className="md:col-span-4 rounded-xl border border-border/80 bg-card/60 backdrop-blur-md p-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between px-2 py-1 text-xs font-mono text-muted-foreground uppercase tracking-wider">
+        <div className="md:col-span-4 rounded-2xl border border-white/5 bg-[#0c0e14] p-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between px-2 py-1 text-xs font-mono text-muted-foreground">
             <span>Explorer ({files.length})</span>
             <span>Size</span>
           </div>
@@ -184,10 +183,10 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
                   key={f.path}
                   type="button"
                   onClick={() => loadFileContent(f.path)}
-                  className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-mono transition-colors text-left cursor-pointer ${
+                  className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-mono transition-colors text-left cursor-pointer ${
                     isSelected
-                      ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/30"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
+                      ? "bg-white/[0.08] text-white"
+                      : "text-muted-foreground hover:text-white hover:bg-white/[0.04]"
                   }`}
                 >
                   <div className="flex items-center gap-2 truncate max-w-[200px]">
@@ -210,10 +209,10 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
         </div>
 
         {/* File Content Viewer / Editor */}
-        <div className="md:col-span-8 rounded-xl border border-border/80 bg-[#0d121c] p-4 flex flex-col justify-between">
+        <div className="md:col-span-8 rounded-2xl border border-white/5 bg-[#0c0e14] p-4 flex flex-col justify-between">
           <div className="flex flex-col gap-3">
             {/* Viewer Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
               <div className="flex items-center gap-2 font-mono text-xs text-foreground">
                 <span className="text-muted-foreground">Editing:</span>
                 <span className="font-semibold text-white">{selectedFile || "None"}</span>
@@ -221,9 +220,9 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
 
               <div className="flex items-center gap-2">
                 {saveStatus && (
-                  <Badge variant="outline" className="border-[var(--accent-lime)] text-[var(--accent-lime)] text-[11px]">
+                  <span className="text-[var(--accent-lime)] text-xs font-mono">
                     {saveStatus}
-                  </Badge>
+                  </span>
                 )}
                 {isEditing ? (
                   <Button

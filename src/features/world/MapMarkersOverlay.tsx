@@ -60,7 +60,7 @@ export function MapMarkersOverlay({
                 }}
               >
                 <span
-                  className="font-display text-[12px] sm:text-[14px] uppercase tracking-[0.3em] font-bold text-white/70 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]"
+                  className="text-[12px] sm:text-[14px] uppercase tracking-wider font-semibold text-white/70"
                   style={{
                     color: region.color ? region.color : "rgba(255,255,255,0.7)",
                   }}
@@ -72,7 +72,7 @@ export function MapMarkersOverlay({
           })}
       </AnimatePresence>
 
-      {/* 2. City Markers (Dots with accent ring, not pins) */}
+      {/* City Markers */}
       {cities.map((city) => {
         const pos = mapToViewport(city.x, city.y);
         const isSelected = selectedCityId === city.cityId;

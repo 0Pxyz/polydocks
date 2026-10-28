@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Compass, Sparkle, Sliders } from "@phosphor-icons/react";
+import { Compass, Sparkle, Cards } from "@phosphor-icons/react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
@@ -29,6 +29,7 @@ export default function App() {
     isStreaming,
     setLayoutState,
     toggleAgent,
+    sendMessage,
   } = useConversationStore();
 
   const {
@@ -62,7 +63,6 @@ export default function App() {
         setDockActiveTool("maps");
         return;
       }
-      // In world view, toggling "maps"
       const nextTool = activeToolId === "maps" ? "" : "maps";
       setActiveToolId(nextTool);
       setDockActiveTool(nextTool);
@@ -85,7 +85,6 @@ export default function App() {
 
     const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
 
-    // If chat is full and a tool is clicked, split to side
     if (layoutState === "full") {
       if (isWide) {
         setLayoutState("side");
@@ -99,7 +98,6 @@ export default function App() {
       return;
     }
 
-    // If chat is in side mode and same tool is re-clicked, close tool and chat goes to full
     if (layoutState === "side" && activeToolId === toolId) {
       setActiveToolId("");
       setDockActiveTool("");
@@ -107,16 +105,37 @@ export default function App() {
       return;
     }
 
-    // Toggle tool selection normally
     const nextTool = activeToolId === toolId ? "" : toolId;
     setActiveToolId(nextTool);
     setDockActiveTool(nextTool);
+  };
+
+  // Compelling demonstration of the dock dynamically expanding itself
+  const handleSynthesizeTool = (topic = selectedCity) => {
+    setExtraTools((prev) => {
+      if (prev.some((t) => t.id === "flashcards")) return prev;
+      return [
+        ...prev,
+        {
+          id: "flashcards",
+          label: `${topic} Flashcards`,
+          type: "icon",
+          icon: resolveIcon("cards"),
+        },
+      ];
+    });
+    setActiveToolId("flashcards");
+    setDockActiveTool("flashcards");
   };
 
   const handleAddAction = (action: "synthesize_tool" | "create_file" | "create_note" | "add_flashcards") => {
     switch (action) {
       case "synthesize_tool":
         setLayoutState("sheet");
+        sendMessage(`Synthesize a custom tool for ${selectedCity}`, selectedCity);
+        break;
+      case "add_flashcards":
+        handleSynthesizeTool();
         break;
       case "create_file":
         setActiveToolId("files");
@@ -125,22 +144,6 @@ export default function App() {
       case "create_note":
         setActiveToolId("notes");
         setDockActiveTool("notes");
-        break;
-      case "add_flashcards":
-        setExtraTools((prev) => {
-          if (prev.some((t) => t.id === "flashcards")) return prev;
-          return [
-            ...prev,
-            {
-              id: "flashcards",
-              label: "Flashcards & Drills",
-              type: "icon",
-              icon: resolveIcon("cards"),
-            },
-          ];
-        });
-        setActiveToolId("flashcards");
-        setDockActiveTool("flashcards");
         break;
     }
   };
@@ -179,7 +182,7 @@ export default function App() {
     <AppProviders>
       <RootLayout>
         <div className="relative min-h-screen w-full bg-background text-foreground overflow-x-hidden select-none">
-          {/* Custom Wallpaper Layer (Image / GIF) */}
+          {/* Custom Wallpaper Layer */}
           {wallpaperUrl && (
             <div
               className="pointer-events-none fixed inset-0 z-0 transition-all duration-300"
@@ -197,22 +200,18 @@ export default function App() {
             />
           )}
 
-          {/* Ambient lighting & subtle grid pattern */}
+          {/* Ambient Lighting */}
           <div
-            className="pointer-events-none fixed inset-0 z-0 opacity-40"
+            className="pointer-events-none fixed inset-0 z-0 opacity-30"
             style={{
               backgroundImage: `
-                radial-gradient(circle at 50% 0%, rgba(200, 255, 87, 0.08) 0%, transparent 60%),
-                linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px)
+                radial-gradient(circle at 50% 0%, rgba(200, 255, 87, 0.06) 0%, transparent 60%)
               `,
-              backgroundSize: "100% 100%, 32px 32px, 32px 32px",
             }}
           />
 
-          {/* Pinned Agentic Dock at the top edge of the screen */}
+          {/* Pinned Agentic Dock at the top edge */}
           <AgenticDock
-            mode={isCityMode ? "city" : "world"}
             activeToolId={activeToolId}
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
@@ -221,7 +220,7 @@ export default function App() {
             onAddAction={handleAddAction}
           />
 
-          {/* Single Agent Conversation Instance (Never unmounted; survives layout transitions) */}
+          {/* Single Agent Conversation Instance */}
           <AgentConversation
             cityId={selectedCity}
             onExperienceCreated={(exp) => {
@@ -243,7 +242,7 @@ export default function App() {
             }}
           />
 
-          {/* Main Active Workspace Content (rendered side-by-side or full width) */}
+          {/* Main Workspace Viewport */}
           <main
             style={isSideLayout ? { marginLeft: `${sideWidth}px` } : undefined}
             className={cn(
@@ -262,6 +261,7 @@ export default function App() {
                     cityName={activeCityId || selectedCity}
                     activeToolId={activeToolId === "city" || !activeToolId ? "overview" : activeToolId}
                     onSelectTool={handleSelectTool}
+                    onSynthesizeTool={handleSynthesizeTool}
                     onBackToWorld={() => {
                       exitToWorld();
                       setActiveToolId("maps");
@@ -271,23 +271,18 @@ export default function App() {
                 </div>
               </DockSurface>
             ) : !isMapsOpen ? (
-              /* Ambient Root World Screen: Clean ambient canvas with quick navigation pills */
+              /* Ambient Root World Screen: Clean typography, no design slop */
               <DockSurface frameless>
-                <div className="flex flex-col items-center justify-center text-center max-w-2xl px-4 pt-16 sm:pt-24 animate-in fade-in duration-300">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/[0.03] text-xs font-mono text-[var(--accent-lime)] mb-6 shadow-sm">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
-                    <span>Agentic Dock Workspace</span>
-                  </div>
-
-                  <h1 className="font-display text-4xl sm:text-6xl font-extrabold tracking-tight text-white mb-4 drop-shadow-[0_4px_16px_rgba(0,0,0,0.8)]">
+                <div className="flex flex-col items-center justify-center text-center max-w-2xl px-4 pt-20 sm:pt-28 animate-in fade-in duration-300">
+                  <h1 className="text-4xl sm:text-6xl font-semibold text-white mb-3">
                     Polymax
                   </h1>
 
-                  <p className="text-sm sm:text-base text-[#9aa5b8] max-w-lg mb-8 leading-relaxed font-sans">
-                    The Dock IS the workspace. Open <strong className="text-white">Maps</strong> from the dock to explore territories, or press <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-xs text-white">⌘K</kbd> to converse with your Agent.
+                  <p className="text-sm sm:text-base text-[#9aa5b8] max-w-md mb-8 font-sans">
+                    The Agentic Dock workspace. Open <strong className="text-white">Maps</strong> to explore territories, or press <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-xs text-white">⌘K</kbd> to converse with your Agent.
                   </p>
 
-                  {/* Quick Action Pills */}
+                  {/* Core Action Triggers */}
                   <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
                     <button
                       type="button"
@@ -295,7 +290,7 @@ export default function App() {
                         setActiveToolId("maps");
                         setDockActiveTool("maps");
                       }}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--accent-lime)] text-black font-semibold text-xs transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(200,255,87,0.4)] cursor-pointer"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--accent-lime)] text-black font-semibold text-xs transition-opacity hover:opacity-90 cursor-pointer"
                     >
                       <Compass size={18} weight="bold" />
                       <span>Open World Map</span>
@@ -304,29 +299,26 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => toggleAgent(activeToolId)}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/15 bg-white/[0.05] text-white font-medium text-xs hover:bg-white/[0.1] hover:border-white/30 transition-all cursor-pointer"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] text-white font-medium text-xs transition-colors cursor-pointer"
                     >
-                      <Sparkle size={18} weight="duotone" className="text-[var(--accent-lime)]" />
+                      <Sparkle size={18} className="text-[var(--accent-lime)]" />
                       <span>Ask Agent (⌘K)</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => {
-                        setActiveToolId("settings");
-                        setDockActiveTool("settings");
-                      }}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/15 bg-white/[0.05] text-[#d1d6e2] font-medium text-xs hover:text-white hover:bg-white/[0.1] transition-all cursor-pointer"
+                      onClick={() => handleSynthesizeTool()}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] text-white font-medium text-xs transition-colors cursor-pointer"
                     >
-                      <Sliders size={18} weight="duotone" />
-                      <span>Themes & Settings</span>
+                      <Cards size={18} className="text-[var(--accent-lime)]" />
+                      <span>Demo: Synthesize Tool</span>
                     </button>
                   </div>
 
-                  {/* Direct Jump to Discovered Cities */}
-                  <div className="flex flex-col items-center gap-3 w-full max-w-lg">
-                    <span className="text-[11px] font-mono text-[#9aa5b8] uppercase tracking-wider">
-                      Explore Discovered Cities
+                  {/* Cities List */}
+                  <div className="flex flex-col items-center gap-2.5 w-full max-w-lg">
+                    <span className="text-xs text-[#9aa5b8]">
+                      Discovered Cities
                     </span>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       {INITIAL_GLOBAL_CITIES.map((city) => (
@@ -339,7 +331,7 @@ export default function App() {
                             setActiveToolId("");
                             setDockActiveTool("");
                           }}
-                          className="px-3 py-1.5 rounded-lg border border-white/10 bg-[#101520]/80 hover:bg-white/[0.08] hover:border-[var(--accent-lime)]/40 text-xs font-mono text-[#d1d6e2] hover:text-white transition-all cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-sans text-[#d1d6e2] hover:text-white transition-colors cursor-pointer"
                         >
                           {city.title}
                         </button>
@@ -350,7 +342,7 @@ export default function App() {
               </DockSurface>
             ) : null}
 
-            {/* Living World/Map View is rendered when Maps is selected from the dock */}
+            {/* Living World Map */}
             {isMapsOpen && (
               <div className="fixed inset-0 z-0 w-full h-full animate-in fade-in duration-300">
                 <WorldView
