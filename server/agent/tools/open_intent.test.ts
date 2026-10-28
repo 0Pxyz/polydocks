@@ -138,13 +138,15 @@ describe("Open Intents Engine & Tab State Inspection", () => {
 
   it("emits SSE tray.open and tab.prime events through runAgentLoop", async () => {
     const emittedEvents: Array<{ type: string; payload?: any }> = [];
+    let callCount = 0;
 
     // Mock LLM client simulating open_intent tool call
     const mockLlmClient = {
       chat: {
         completions: {
-          create: async (params: any) => {
-            if (params.messages.length === 2) {
+          create: async (_params: any) => {
+            callCount++;
+            if (callCount === 1) {
               return {
                 choices: [
                   {

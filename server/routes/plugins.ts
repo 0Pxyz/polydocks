@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { pluginRegistry } from "../plugins/registry";
 import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
+import { connectMcpServer } from "../plugins/adapters/mcp";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -124,6 +125,22 @@ pluginsRouter.post("/mcp/connect", async (c) => {
   }
 
   const cleanId = `mcp_${name.toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`;
+
+  // Try dynamic tool discovery via MCP adapter
+  let discoveredTools: any[] = [];
+  try {
+    const discovery = await connectMcpServer({ name, url, token });
+    if (discovery.success && discovery.tools && discovery.tools.length > 0) {
+      discoveredTools = discovery.tools;
+    }
+  } catch {
+    // Server might be offline or mock during connect; fallback gracefully
+  }
+
+  if (discoveredTools.length > 0) {
+    const installed = pluginRegistry.get(cleanId);
+    return c.json({ success: true, plugin: installed, tools: discoveredTools }, 201);
+  }
 
   const installed = pluginRegistry.install({
     apiVersion: 1,

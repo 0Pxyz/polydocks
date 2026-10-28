@@ -11,6 +11,7 @@ import {
   type ScopedSecretsContext,
 } from "./context";
 import { redactSecrets } from "./redact";
+import { resolveAdapterHandler } from "./adapters";
 
 export interface ExecutionContext {
   actor: "agent" | "user";
@@ -80,6 +81,7 @@ export class CapabilityBus {
     capability: CapabilityManifest,
     handler?: CapabilityHandler
   ): void {
+    const effectiveHandler = handler || resolveAdapterHandler(capability.adapter);
     const registered: RegisteredCapability = {
       id: capability.id,
       pluginId,
@@ -89,11 +91,11 @@ export class CapabilityBus {
       inputSchema: capability.input,
       outputSchema: capability.output,
       adapter: capability.adapter,
-      handler,
+      handler: effectiveHandler,
     };
 
-    if (handler) {
-      this.handlers.set(capability.id, { handler, meta: registered });
+    if (effectiveHandler) {
+      this.handlers.set(capability.id, { handler: effectiveHandler, meta: registered });
     }
   }
 
@@ -354,7 +356,8 @@ export class CapabilityBus {
 
     // 6. Look up executable handler
     const handlerRecord = this.handlers.get(capabilityId);
-    if (!handlerRecord?.handler) {
+    const handler = handlerRecord?.handler || resolveAdapterHandler(capability.adapter);
+    if (!handler) {
       const err = `No execution handler registered for capability "${capabilityId}".`;
       const duration = Date.now() - startTime;
       this.recordExecution(
@@ -410,7 +413,7 @@ export class CapabilityBus {
       });
 
       const result = await Promise.race([
-        handlerRecord.handler(validatedInput, ctx),
+        handler(validatedInput, ctx),
         new Promise((_, reject) => {
           controller.signal.addEventListener("abort", () => {
             reject(new Error(controller.signal.reason || "Execution aborted"));
