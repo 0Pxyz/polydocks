@@ -10,6 +10,7 @@ export interface ConversationMessage {
   id: string;
   role: "user" | "assistant" | "tool";
   content: string;
+  origin?: "dock-add" | "chat";
   toolName?: string;
   timestamp: number;
   error?: {
@@ -24,6 +25,8 @@ interface ConversationStoreState {
   messages: ConversationMessage[];
   draft: string;
   isStreaming: boolean;
+  isBuildingTool: boolean;
+  buildingToolName: string;
   statusText: string;
   activeApproval: ApprovalRequest | null;
   soundEnabled: boolean;
@@ -45,6 +48,9 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+    },
+    options?: {
+      origin?: "dock-add" | "chat";
     }
   ) => Promise<void>;
   retryLast: (
@@ -97,6 +103,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   messages: [],
   draft: "",
   isStreaming: false,
+  isBuildingTool: false,
+  buildingToolName: "",
   statusText: "",
   activeApproval: null,
   soundEnabled: getInitialSound(),
@@ -158,22 +166,35 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     cancelSpeech();
     set({
       isStreaming: false,
+      isBuildingTool: false,
       orbState: "idle",
       statusText: "Canceled request.",
     });
   },
 
-  sendMessage: async (promptToSend, cityId, callbacks) => {
+  sendMessage: async (promptToSend, cityId, callbacks, options) => {
     const prompt = (promptToSend ?? get().draft).trim();
     if (!prompt || get().isStreaming) return;
 
+    const origin = options?.origin || "chat";
+    const isDockAdd = origin === "dock-add";
+
     cancelSpeech();
-    set({ draft: "", isStreaming: true, orbState: "thinking", statusText: "", activeApproval: null });
+    set({
+      draft: isDockAdd ? get().draft : "",
+      isStreaming: true,
+      isBuildingTool: isDockAdd,
+      buildingToolName: isDockAdd ? prompt : "",
+      orbState: "thinking",
+      statusText: isDockAdd ? "Starting tool synthesis…" : "",
+      activeApproval: null,
+    });
 
     const userMsg: ConversationMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: prompt,
+      origin,
       timestamp: Date.now(),
     };
 
@@ -194,6 +215,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     await streamAgentLoop({
       prompt,
       cityId,
+      origin,
       history: historyForBackend,
       signal: abortCtrl.signal,
       onEvent: (event: UIEvent) => {
@@ -228,7 +250,10 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "experience.created":
             callbacks?.onExperienceCreated?.(event.experience);
-            set({ statusText: `Mounted "${event.experience.title}" in the dock.` });
+            set({
+              isBuildingTool: false,
+              statusText: `Mounted "${event.experience.title}" in the dock.`,
+            });
             break;
 
           case "dock.open_experience":
@@ -236,11 +261,14 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             callbacks?.onOpenExperience?.(event.experienceId);
 
             // Per specification: from sheet or full, the chat goes to side
-            // and the experience opens on the right (on >= 900px wide screens)
-            if (typeof window !== "undefined" && window.innerWidth >= 900) {
-              set({ layoutState: "side" });
-            } else {
-              set({ layoutState: "closed" });
+            // and the experience opens on the right (on >= 900px wide screens).
+            // But if origin is dock-add, chat stays closed!
+            if (!isDockAdd) {
+              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+                set({ layoutState: "side" });
+              } else {
+                set({ layoutState: "closed" });
+              }
             }
             break;
 
@@ -256,7 +284,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             const replyText = event.text || "Done.";
             set((state) => ({
               isStreaming: false,
-              orbState: "speaking",
+              isBuildingTool: false,
+              orbState: isDockAdd ? "idle" : "speaking",
               statusText: "",
               messages: [
                 ...state.messages,
@@ -269,7 +298,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               ],
             }));
 
-            if (soundEnabled) {
+            if (!isDockAdd && soundEnabled) {
               speakReply(
                 replyText,
                 () => set({ orbState: "speaking" }),
@@ -287,7 +316,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               code: event.code,
               message: isUnauthorized
                 ? "Model access isn't set up. Check your API key."
-                : "Something went wrong.",
+                : (isDockAdd ? "Couldn't build that. Try again." : "Something went wrong."),
             };
 
             set((state) => {
@@ -298,6 +327,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               }
               return {
                 isStreaming: false,
+                isBuildingTool: false,
                 orbState: "error",
                 statusText: errorObj.message,
                 messages: updatedMessages,
@@ -309,7 +339,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       },
     });
 
-    set({ isStreaming: false });
+    set({ isStreaming: false, isBuildingTool: false });
     activeAbortController = null;
   },
 
@@ -322,11 +352,12 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     if (lastUserIndex === -1) return;
 
     const lastUserMsg = messages[lastUserIndex];
+    const lastOrigin = lastUserMsg.origin;
     // Clear error from last user message and discard subsequent failed/tool attempts
     const prunedMessages = messages.slice(0, lastUserIndex);
 
     set({ messages: prunedMessages });
-    await get().sendMessage(lastUserMsg.content, cityId, callbacks);
+    await get().sendMessage(lastUserMsg.content, cityId, callbacks, { origin: lastOrigin });
   },
 
   handleApproval: async (approved, cityId, callbacks) => {

@@ -3,6 +3,7 @@ import { adaptBackendEvent, type UIEvent } from "./events";
 export interface SendAgentMessageOptions {
   prompt: string;
   cityId?: string;
+  origin?: "dock-add" | "chat";
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   onEvent: (event: UIEvent) => void;
   signal?: AbortSignal;
@@ -14,7 +15,7 @@ export interface SendAgentMessageOptions {
 export async function streamAgentLoop(
   options: SendAgentMessageOptions
 ): Promise<void> {
-  const { prompt, cityId, history = [], onEvent, signal } = options;
+  const { prompt, cityId, origin, history = [], onEvent, signal } = options;
 
   let response: Response;
   try {
@@ -27,6 +28,7 @@ export async function streamAgentLoop(
       body: JSON.stringify({
         prompt,
         cityId,
+        origin,
         history,
       }),
       signal,

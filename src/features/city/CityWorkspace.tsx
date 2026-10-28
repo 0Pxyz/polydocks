@@ -9,6 +9,7 @@ import { SourcesView } from "./tools/SourcesView";
 import { QuestsView } from "./tools/QuestsView";
 import { TerminalView } from "./tools/TerminalView";
 import { FilesView } from "./tools/FilesView";
+import { FlashcardsView } from "./FlashcardsView";
 import type { CityWorkspaceProps } from "./types";
 
 interface ExtendedCityWorkspaceProps extends CityWorkspaceProps {
@@ -60,6 +61,11 @@ export function CityWorkspace({
                 className="w-full h-full"
               />
             </div>
+          ) : activeTool === "flashcards" ? (
+            <FlashcardsView
+              cityName={data.title}
+              sources={data.sources}
+            />
           ) : activeTool === "files" ? (
             <FilesView
               cityId={cityId}

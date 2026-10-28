@@ -32,6 +32,7 @@ export type AgentEventCallback = (event: AgentStepEvent) => Promise<void> | void
 export interface AgentLoopOptions {
   prompt: string;
   cityId?: string;
+  origin?: "dock-add" | "chat";
   history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   tools?: AgentTool[];
   onEvent?: AgentEventCallback;
@@ -71,6 +72,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const {
     prompt,
     cityId,
+    origin = "chat",
     history = [],
     tools = defaultTools,
     onEvent = () => {},
@@ -86,7 +88,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await onEvent({
       step: 0,
       type: "agent.start",
-      payload: { prompt, cityId, model: modelId },
+      payload: { prompt, cityId, origin, model: modelId },
     });
 
     // Build tool registry map and OpenAI-compatible tools definitions
@@ -115,13 +117,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability):\n${summaryLines.join("\n")}`;
     }
 
-    if (isTabSynthesisIntent(prompt)) {
+    if (origin === "dock-add" || isTabSynthesisIntent(prompt)) {
       try {
         const tabSkillPrompt = await loadSkill("create-tab");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Dynamic Tab Synthesis\n${tabSkillPrompt}`;
       } catch {
         // Non-fatal
       }
+    }
+
+    if (origin === "dock-add") {
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request Instructions (origin: dock-add)\n1. Build exactly one tool for this request using create_tab.\n2. If sources or information are needed (such as flashcards, reading list, or timeline), research first using search_web or city context.\n3. Choose a fitting catalog icon name for the tool.\n4. Call open_tab to mount and open the created tool in the workspace.\n5. In your final text response, reply with at most one sentence confirming the tool was mounted.`;
     }
 
     // Manifest-driven skills & fallback
