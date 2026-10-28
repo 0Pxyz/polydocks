@@ -105,3 +105,28 @@ Every agent action is categorized by risk level:
 - **Persisted Workspace State:** Maestri persists spatial canvas nodes into layout files. Polymax applies this to the Dock: the active dock plugins, open tabs, and reading state persist in `workspace.json`.
 - **Guest Runtime:** Maestri runs webviews with per-partition sessions. Polymax runs dynamic tabs in isolated `iframe srcdoc` containers communicating solely via a typed `postMessage` bridge (`window.polymax`).
 - **CLI and Headless Parity:** Maestri includes a bundled CLI (`maestri floor create`). Polymax provides the MCP Server (`/api/mcp`) and `llms.txt` so external CLI tools and agents can operate directly on cities.
+
+---
+
+## 6. Container Hardening & Persistent Agent-Home Isolation (Docker)
+
+To prevent container breakouts, denial-of-service, or data loss when deploying via Docker:
+
+1. **Persistent Volume Isolation (`agent-home-data`):**
+   - The agent's persistent home directory (`/app/agent-home`) is backed by a dedicated named Docker volume `agent-home-data`.
+   - SQLite WAL database and database files are persisted under `./data:/app/data`.
+   - Files stored in `agent-home/` (durable memory `MEMORY.md`, task execution logs, sessions, and artifacts) survive `docker compose down` and restart.
+
+2. **Least-Privilege Execution (Non-Root User):**
+   - Container processes run strictly under the unprivileged `bun` user (UID 1000).
+   - `/app/agent-home` and `/app/data` ownership are chown-configured to `bun:bun` at container build time.
+
+3. **Resource Guardrails & Fork Bomb Mitigation:**
+   - **Memory Limit:** Capped at `2048M` (2GB) with a `512M` baseline reservation to prevent out-of-memory host starvation.
+   - **CPU Limit:** Capped at `2.0` CPUs.
+   - **PID Limit:** Enforced at `pids: 100` to prevent fork bombs or runaway subagent processes.
+
+4. **Network & Socket Isolation:**
+   - Default network port published strictly to local loopback (`127.0.0.1:3000:3000`).
+   - Host Docker socket (`/var/run/docker.sock`) is never mounted, preventing host container-escape vectors.
+   - Secrets (`MODEL_API_KEY`, `TINYFISH_API_KEY`) are passed via environment variables and never committed or written to container disk.
