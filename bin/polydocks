@@ -1,0 +1,445 @@
+#!/usr/bin/env bun
+import { config } from "../server/config";
+import { db } from "../server/workspace/db";
+import {
+  WorkspaceService,
+  SessionService,
+  TaskService,
+  PluginService,
+} from "../server/services";
+import { runAgentLoop, type AgentStepEvent } from "../server/agent/loop";
+
+interface CliOptions {
+  json: boolean;
+  workspace?: string;
+  session?: string;
+  status?: string;
+  fromStep?: number;
+  city?: string;
+  maxSteps?: number;
+}
+
+function parseCliArgs(args: string[]): {
+  command: string;
+  subcommand?: string;
+  positional: string[];
+  options: CliOptions;
+} {
+  const options: CliOptions = {
+    json: false,
+  };
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--json") {
+      options.json = true;
+    } else if (arg === "--workspace" || arg === "-w") {
+      options.workspace = args[++i];
+    } else if (arg === "--session" || arg === "-s") {
+      options.session = args[++i];
+    } else if (arg === "--status") {
+      options.status = args[++i];
+    } else if (arg === "--from-step") {
+      options.fromStep = parseInt(args[++i], 10);
+    } else if (arg === "--city") {
+      options.city = args[++i];
+    } else if (arg === "--max-steps") {
+      options.maxSteps = parseInt(args[++i], 10);
+    } else if (!arg.startsWith("-")) {
+      positional.push(arg);
+    }
+  }
+
+  const command = positional[0] || "help";
+  const subcommand = positional[1];
+  const restPositional = positional.slice(2);
+
+  return {
+    command,
+    subcommand,
+    positional: restPositional,
+    options,
+  };
+}
+
+function printUsage(): void {
+  console.log(`
+PolyDocks CLI - Agent Runtime & Workspace Operator
+
+USAGE:
+  polydocks <command> [subcommand] [arguments] [options]
+
+COMMANDS:
+  status                               Show runtime health, SQLite WAL, and active counts
+  sessions list [--workspace <id>]     List active and historical work sessions
+  sessions resume <sessionId>          Inspect and tail session transcript
+  tasks list [--status <status>]       List background tasks and progress
+  plugins list [--workspace <id>]      List installed plugins
+  plugins inspect <pluginId>           Inspect plugin manifest and capabilities
+  plugins install <pluginId>           Install plugin into active workspace
+  agent run "<prompt>"                 Run agent instruction directly in terminal
+
+GLOBAL OPTIONS:
+  --json                               Output machine-readable JSON on stdout
+  --workspace, -w <id>                 Target workspace ID
+  --help, -h                           Show this help menu
+`);
+}
+
+async function handleStatus(options: CliOptions): Promise<void> {
+  let walMode = "unknown";
+  try {
+    const res = db.query<any, []>("PRAGMA journal_mode;").get();
+    walMode = res?.journal_mode || "ok";
+  } catch {
+    walMode = "error";
+  }
+
+  const workspaces = WorkspaceService.listWorkspaces();
+  const defaultWs = workspaces.find((w) => w.isDefault) || workspaces[0];
+  const sessions = SessionService.listSessions();
+  const runningTasks = TaskService.listTasks({ status: "running" });
+  const plugins = PluginService.listPlugins();
+
+  const data = {
+    status: "ok",
+    port: config.PORT,
+    env: config.NODE_ENV,
+    sqlite: {
+      wal: walMode,
+      ok: walMode === "wal" || walMode !== "error",
+    },
+    model: {
+      id: config.MODEL_ID,
+      configured: Boolean(config.MODEL_API_KEY && config.MODEL_API_KEY.trim().length > 0),
+    },
+    tinyfish: {
+      configured: Boolean(config.TINYFISH_API_KEY && config.TINYFISH_API_KEY.trim().length > 0),
+    },
+    activeWorkspace: defaultWs ? { id: defaultWs.id, name: defaultWs.name } : null,
+    counts: {
+      workspaces: workspaces.length,
+      sessions: sessions.length,
+      runningTasks: runningTasks.length,
+      installedPlugins: plugins.length,
+    },
+  };
+
+  if (options.json) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  console.log("==================================================");
+  console.log("  PolyDocks Runtime Status                        ");
+  console.log("==================================================");
+  console.log(`Port:             ${data.port}`);
+  console.log(`Environment:      ${data.env}`);
+  console.log(`SQLite WAL:       ${data.sqlite.wal.toUpperCase()}`);
+  console.log(`Model ID:         ${data.model.id} (${data.model.configured ? "configured" : "unconfigured"})`);
+  console.log(`TinyFish:         ${data.tinyfish.configured ? "configured" : "unconfigured"}`);
+  console.log(`Active Workspace: ${data.activeWorkspace?.name || "None"} (${data.activeWorkspace?.id || "-"})`);
+  console.log("--------------------------------------------------");
+  console.log(`Workspaces:       ${data.counts.workspaces}`);
+  console.log(`Total Sessions:   ${data.counts.sessions}`);
+  console.log(`Running Tasks:    ${data.counts.runningTasks}`);
+  console.log(`Installed Tools:  ${data.counts.installedPlugins}`);
+  console.log("==================================================");
+}
+
+async function handleSessions(
+  subcommand: string | undefined,
+  posArgs: string[],
+  options: CliOptions
+): Promise<void> {
+  if (subcommand === "list" || !subcommand) {
+    const list = SessionService.listSessions(options.workspace);
+    if (options.json) {
+      console.log(JSON.stringify(list, null, 2));
+      return;
+    }
+
+    if (list.length === 0) {
+      console.log("No work sessions found.");
+      return;
+    }
+
+    console.log("ID\t\t\t\tWORKSPACE\tSTATUS\t\tTITLE");
+    console.log("--------------------------------------------------------------------------------");
+    for (const s of list) {
+      console.log(`${s.id}\t${s.workspaceId}\t\t${s.status.padEnd(10)}\t${s.title || "Untitled"}`);
+    }
+    return;
+  }
+
+  if (subcommand === "resume") {
+    const sessionId = posArgs[0] || options.session;
+    if (!sessionId) {
+      console.error("Error: Missing required sessionId for 'sessions resume <sessionId>'");
+      process.exit(1);
+    }
+
+    const session = SessionService.getSession(sessionId);
+    if (!session) {
+      console.error(`Error: Session "${sessionId}" not found.`);
+      process.exit(1);
+    }
+
+    const transcript = await SessionService.getTranscript(sessionId, {
+      offset: options.fromStep,
+    });
+
+    if (options.json) {
+      console.log(JSON.stringify({ session, transcript }, null, 2));
+      return;
+    }
+
+    console.log(`Session: ${session.title || session.id} [${session.status}]`);
+    console.log(`Workspace: ${session.workspaceId} | Created: ${session.createdAt}`);
+    console.log("--------------------------------------------------");
+    for (const turn of transcript) {
+      const type = turn.type || "event";
+      const payload = turn.payload ? JSON.stringify(turn.payload) : "";
+      console.log(`[${turn.timestamp || "T"}] Step ${turn.step ?? "-"}: ${type} ${payload}`);
+    }
+    return;
+  }
+
+  console.error(`Unknown sessions subcommand "${subcommand}". Use "list" or "resume".`);
+  process.exit(1);
+}
+
+async function handleTasks(
+  subcommand: string | undefined,
+  options: CliOptions
+): Promise<void> {
+  if (subcommand === "list" || !subcommand) {
+    const tasks = TaskService.listTasks({
+      status: options.status,
+      sessionId: options.session,
+      workspaceId: options.workspace,
+    });
+
+    if (options.json) {
+      console.log(JSON.stringify(tasks, null, 2));
+      return;
+    }
+
+    if (tasks.length === 0) {
+      console.log("No background tasks found.");
+      return;
+    }
+
+    console.log("ID\t\t\t\tTYPE\t\tSTATUS\t\tPROGRESS\tSESSION");
+    console.log("--------------------------------------------------------------------------------");
+    for (const t of tasks) {
+      const progress = `${Math.round(t.progress * 100)}%`.padEnd(8);
+      console.log(`${t.id}\t${t.type.padEnd(12)}\t${t.status.padEnd(10)}\t${progress}\t${t.sessionId}`);
+    }
+    return;
+  }
+
+  console.error(`Unknown tasks subcommand "${subcommand}". Use "list".`);
+  process.exit(1);
+}
+
+async function handlePlugins(
+  subcommand: string | undefined,
+  posArgs: string[],
+  options: CliOptions
+): Promise<void> {
+  if (subcommand === "list" || !subcommand) {
+    if (options.workspace) {
+      const wsPlugins = WorkspaceService.listWorkspacePlugins(options.workspace);
+      if (options.json) {
+        console.log(JSON.stringify(wsPlugins, null, 2));
+        return;
+      }
+      console.log(`Plugins in workspace "${options.workspace}":`);
+      for (const p of wsPlugins) {
+        console.log(`- ${p.pluginId} (enabled: ${p.enabled})`);
+      }
+      return;
+    }
+
+    const all = PluginService.listPlugins();
+    if (options.json) {
+      console.log(JSON.stringify(all, null, 2));
+      return;
+    }
+
+    console.log("ID\t\t\tVERSION\tTRUST\t\tNAME");
+    console.log("--------------------------------------------------------------------------------");
+    for (const p of all) {
+      console.log(`${p.id.padEnd(20)}\tv${p.version}\t${p.trust.padEnd(10)}\t${p.name}`);
+    }
+    return;
+  }
+
+  if (subcommand === "inspect") {
+    const pluginId = posArgs[0];
+    if (!pluginId) {
+      console.error("Error: Missing required pluginId for 'plugins inspect <pluginId>'");
+      process.exit(1);
+    }
+
+    const plugin = PluginService.getPlugin(pluginId);
+    if (!plugin) {
+      console.error(`Error: Plugin "${pluginId}" not found.`);
+      process.exit(1);
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify(plugin, null, 2));
+      return;
+    }
+
+    console.log(`Plugin: ${plugin.name} (${plugin.id}) v${plugin.version}`);
+    console.log(`Trust: ${plugin.trust} | Enabled: ${plugin.enabled}`);
+    console.log(`Description: ${plugin.manifest.description}`);
+    console.log("Capabilities:");
+    for (const cap of plugin.manifest.capabilities || []) {
+      console.log(`  - [${cap.risk || "read"}] ${cap.id}: ${cap.description}`);
+    }
+    return;
+  }
+
+  if (subcommand === "install") {
+    const pluginId = posArgs[0];
+    if (!pluginId) {
+      console.error("Error: Missing required pluginId for 'plugins install <pluginId>'");
+      process.exit(1);
+    }
+
+    const workspaceId = options.workspace || "default";
+    const mounted = WorkspaceService.addPluginToWorkspace(workspaceId, pluginId, {}, 0, "cli");
+
+    if (options.json) {
+      console.log(JSON.stringify({ success: true, mounted }, null, 2));
+      return;
+    }
+
+    console.log(`Successfully installed plugin "${pluginId}" into workspace "${workspaceId}".`);
+    return;
+  }
+
+  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", or "install".`);
+  process.exit(1);
+}
+
+async function handleAgentRun(
+  posArgs: string[],
+  options: CliOptions
+): Promise<void> {
+  const prompt = posArgs.join(" ").trim();
+  if (!prompt) {
+    console.error("Error: Missing required prompt argument for 'agent run \"<prompt>\"'");
+    process.exit(1);
+  }
+
+  const stepEvents: AgentStepEvent[] = [];
+
+  const onEvent = async (event: AgentStepEvent) => {
+    stepEvents.push(event);
+    if (!options.json) {
+      if (event.type === "agent.start") {
+        console.log(`✦ [agent.start] Prompt: "${prompt}"`);
+      } else if (event.type === "tool.start") {
+        console.log(`✦ [tool.start] ${event.payload?.name}`);
+      } else if (event.type === "tool.done") {
+        console.log(`✦ [tool.done] ${event.payload?.name}`);
+      } else if (event.type === "error") {
+        console.error(`✦ [error] ${event.payload?.message || "Execution error"}`);
+      }
+    }
+  };
+
+  let mockLlmClient: any = undefined;
+  if (process.env.POLYMAX_CLI_MOCK_LLM === "true") {
+    mockLlmClient = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: `Polymax agent processed: "${prompt}"`,
+                },
+              },
+            ],
+          }),
+        },
+      },
+    };
+  }
+
+  const result = await runAgentLoop({
+    prompt,
+    cityId: options.city,
+    origin: "cli",
+    onEvent,
+    maxSteps: options.maxSteps,
+    llmClient: mockLlmClient,
+  });
+
+  if (options.json) {
+    console.log(JSON.stringify({ result, events: stepEvents }, null, 2));
+    return;
+  }
+
+  console.log("\n--------------------------------------------------");
+  console.log("Agent Response:");
+  console.log(result.text || (result.status === "error" ? `Error: ${result.error}` : "(No text response)"));
+  console.log(`\nStatus: ${result.status} (${result.steps} steps)`);
+}
+
+async function main(): Promise<void> {
+  const rawArgs = process.argv.slice(2);
+  if (rawArgs.length === 0 || rawArgs.includes("--help") || rawArgs.includes("-h")) {
+    printUsage();
+    process.exit(0);
+  }
+
+  const { command, subcommand, positional, options } = parseCliArgs(rawArgs);
+
+  try {
+    switch (command) {
+      case "status":
+        await handleStatus(options);
+        break;
+      case "sessions":
+        await handleSessions(subcommand, positional, options);
+        break;
+      case "tasks":
+        await handleTasks(subcommand, options);
+        break;
+      case "plugins":
+        await handlePlugins(subcommand, positional, options);
+        break;
+      case "agent":
+        if (subcommand === "run") {
+          await handleAgentRun(positional, options);
+        } else {
+          console.error(`Unknown agent subcommand "${subcommand}". Use "agent run '<prompt>'".`);
+          process.exit(1);
+        }
+        break;
+      default:
+        console.error(`Unknown command "${command}". Run "polydocks --help" for usage.`);
+        process.exit(1);
+    }
+  } catch (err: any) {
+    if (options.json) {
+      console.log(JSON.stringify({ error: err.message || String(err) }));
+    } else {
+      console.error(`Error: ${err.message || String(err)}`);
+    }
+    process.exit(1);
+  }
+}
+
+if (import.meta.main) {
+  await main();
+}

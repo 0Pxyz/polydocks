@@ -40,5 +40,6 @@
 | 2026-10-28 | Scoped agent-home filesystem service (resolveSafeAgentPath, atomic writes) and tool suite (list, read, write, edit, search) | [#83](https://github.com/0Pxyz/polymax/pull/83) |
 | 2026-10-28 | Durable agent memory engine (two-tier MEMORY.md + memory/YYYY-MM-DD.md), keyword retrieval, token budget clamping, tools & REST API | [#84](https://github.com/0Pxyz/polymax/pull/84) |
 | 2026-10-28 | Persistent work sessions, JSONL transcripts & background task execution engine with cancel & crash recovery | [#85](https://github.com/0Pxyz/polymax/pull/85) |
-| 2026-10-28 | Unified product API and shared service layer (Workspace, Session, Task, Plugin, Artifact) with idempotency and audit log | #77 |
+| 2026-10-28 | Unified product API and shared service layer (Workspace, Session, Task, Plugin, Artifact) with idempotency and audit log | [#86](https://github.com/0Pxyz/polymax/pull/86) |
 | 2026-10-28 | Integrated tool surfaces, dock styles, icon catalog backfill, and slop-free home screen | [#87](https://github.com/0Pxyz/polymax/pull/87) |
+| 2026-10-28 | Minimal polydocks CLI for runtime status, sessions, tasks, plugins, and agent execution | #78 |
