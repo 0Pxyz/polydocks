@@ -10,6 +10,7 @@ import { mcpRouter } from "./api/mcp";
 import { citiesRouter } from "./routes/cities";
 import { mapsRouter } from "./routes/maps";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
+import { workspacesRouter } from "./routes/workspaces";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { db } from "./workspace/db";
 
@@ -88,6 +89,9 @@ app.route("/api/mcp", mcpRouter);
 // Mount Plugins and Capabilities router
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/capabilities", capabilitiesRouter);
+
+// Mount PolyDocks V2 Workspaces router
+app.route("/api/workspaces", workspacesRouter);
 
 // Mount Cities & Workspaces router
 app.route("/api/cities", citiesRouter);
