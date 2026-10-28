@@ -136,6 +136,12 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       return "Restyling the world map…";
     case "place_city":
       return "Placing it on the map…";
+    case "plan_map":
+      return "Charting new knowledge territories on the world map…";
+    case "build_city": {
+      const topic = typeof args?.topic === "string" ? args.topic : "";
+      return topic ? `Constructing and researching "${topic}"…` : "Constructing city workspace & quests…";
+    }
     default:
       return `Working with ${toolName}…`;
   }
