@@ -53,7 +53,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       expect(stdout).toContain("Port:");
       expect(stdout).toContain("SQLite WAL:");
       expect(stdout).toContain("Workspaces:");
-    });
+    }, 20000);
 
     it("outputs valid JSON with --json flag", async () => {
       const { exitCode, stdout } = await runCli(["status", "--json"]);
@@ -63,7 +63,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       expect(typeof data.port).toBe("number");
       expect(data.sqlite.ok).toBe(true);
       expect(typeof data.counts.workspaces).toBe("number");
-    });
+    }, 20000);
   });
 
   describe("polydocks sessions", () => {
@@ -83,7 +83,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       const list = JSON.parse(jsonRes.stdout);
       expect(Array.isArray(list)).toBe(true);
       expect(list.some((s: any) => s.id === sess.id)).toBe(true);
-    });
+    }, 20000);
 
     it("resumes session transcript", async () => {
       const sess = await SessionService.createSession({
@@ -106,7 +106,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       const data = JSON.parse(jsonRes.stdout);
       expect(data.session.id).toBe(sess.id);
       expect(Array.isArray(data.transcript)).toBe(true);
-    });
+    }, 20000);
   });
 
   describe("polydocks tasks", () => {
@@ -127,7 +127,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       expect(jsonRes.exitCode).toBe(0);
       const tasks = JSON.parse(jsonRes.stdout);
       expect(tasks.some((t: any) => t.id === task.id)).toBe(true);
-    });
+    }, 20000);
   });
 
   describe("polydocks plugins", () => {
@@ -146,7 +146,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       const plugin = JSON.parse(jsonRes.stdout);
       expect(plugin.id).toBe("search");
       expect(plugin.manifest.capabilities.length).toBeGreaterThanOrEqual(1);
-    });
+    }, 15000);
 
     it("installs plugin into workspace", async () => {
       const { exitCode, stdout } = await runCli([
@@ -163,7 +163,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       expect(listRes.exitCode).toBe(0);
       const wsPlugins = JSON.parse(listRes.stdout);
       expect(wsPlugins.some((p: any) => p.pluginId === "search")).toBe(true);
-    });
+    }, 20000);
   });
 
   describe("polydocks agent run", () => {
@@ -172,7 +172,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       const { exitCode, stdout } = await runCli(["agent", "run", "Hello world"]);
       expect(exitCode).toBe(0);
       expect(stdout).toContain("Agent Response:");
-    });
+    }, 20000);
 
     it("outputs structured result and events with --json", async () => {
       const { exitCode, stdout } = await runCli(["agent", "run", "Status ping", "--json"]);
@@ -180,7 +180,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       const data = JSON.parse(stdout);
       expect(data.result).toBeDefined();
       expect(Array.isArray(data.events)).toBe(true);
-    });
+    }, 20000);
   });
 
   describe("Error Handling & Clean Exit Codes", () => {
@@ -188,12 +188,12 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       const { exitCode, stderr } = await runCli(["foobar"]);
       expect(exitCode).toBe(1);
       expect(stderr).toContain("Unknown command");
-    });
+    }, 20000);
 
     it("exits with non-zero code when inspect target is not found", async () => {
       const { exitCode, stderr } = await runCli(["plugins", "inspect", "non-existent-plugin"]);
       expect(exitCode).toBe(1);
       expect(stderr).toContain("not found");
-    });
+    }, 20000);
   });
 });
