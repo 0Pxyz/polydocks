@@ -1,9 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { PluginRegistry } from "../../plugins/registry";
-import type { PluginManifest } from "../../plugins/manifest";
-import { writeFeature } from "../../workspace/features";
-import { addPluginToWorkspace } from "../../workspace/workspaces";
+import { PluginService } from "../../services/pluginService";
 
 export interface CreatePluginArgs {
   id: string;
@@ -12,11 +9,12 @@ export interface CreatePluginArgs {
   icon?: string;
   code: string;
   workspaceId?: string;
+  idempotencyKey?: string;
   capabilities?: Array<{
     id: string;
     title: string;
     description: string;
-    risk?: "read" | "write" | "exec" | "network";
+    risk?: "read" | "write" | "destructive" | "external";
     input?: Record<string, unknown>;
   }>;
 }
@@ -50,6 +48,10 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .string()
       .optional()
       .describe("Workspace to install into. Defaults to active workspace or 'default'"),
+    idempotencyKey: z
+      .string()
+      .optional()
+      .describe("Optional idempotency key to prevent duplicate creation on retry"),
     capabilities: z
       .array(
         z.object({
@@ -65,76 +67,17 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
   }),
   execute: async (args, ctx) => {
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
-    const pluginId = args.id.toLowerCase().trim();
-    const icon = args.icon || "Cards";
 
-    const featureManifest = {
-      id: pluginId,
-      title: args.name,
-      icon,
-      scope: "workspace",
-      workspaceId,
-      capabilities: args.capabilities?.map((c) => c.id) || [],
-      createdAt: new Date().toISOString(),
-    };
-
-    // 1. Transpile and write the feature file safely (enforces no forbidden imports & size caps)
-    await writeFeature(workspaceId, pluginId, {
-      manifest: featureManifest,
-      code: args.code,
-    });
-
-    // 2. Build and register the formal PluginManifest
-    const manifestCapabilities = (args.capabilities || []).map((cap) => ({
-      id: cap.id.includes(".") ? cap.id : `${pluginId}.${cap.id}`,
-      title: cap.title,
-      description: cap.description,
-      risk: cap.risk || "read",
-      input: cap.input || { type: "object" },
-    }));
-
-    const pluginManifest: PluginManifest = {
-      apiVersion: 1,
-      id: pluginId,
+    return await PluginService.synthesizePlugin({
+      id: args.id,
       name: args.name,
-      version: "1.0.0",
       description: args.description,
-      icon,
-      trust: "generated",
-      capabilities: manifestCapabilities,
-      surfaces: [
-        {
-          id: pluginId,
-          title: args.name,
-          icon,
-          variant: "immersive",
-          entry: `features/${pluginId}`,
-        },
-      ],
-      permissions: [],
-    };
-
-    const registry = PluginRegistry.getInstance();
-    const installResult = registry.install(pluginManifest);
-    if (!installResult.success) {
-      return {
-        success: false,
-        error: installResult.error || "Failed to register plugin manifest",
-      };
-    }
-
-    // 3. Mount into the active workspace dock
-    const mounted = addPluginToWorkspace(workspaceId, pluginId);
-
-    return {
-      success: true,
-      pluginId,
-      name: args.name,
+      icon: args.icon,
+      code: args.code,
       workspaceId,
-      version: "1.0.0",
-      action: "dock.tool_mounted",
-      message: `Plugin "${args.name}" successfully synthesized and mounted to workspace "${workspaceId}".`,
-      mounted,
-    };
+      capabilities: args.capabilities,
+      actor: "agent",
+      idempotencyKey: args.idempotencyKey,
+    });
   },
 };

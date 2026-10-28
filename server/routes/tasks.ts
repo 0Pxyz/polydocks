@@ -1,9 +1,5 @@
 import { Hono } from "hono";
-import {
-  getTask,
-  listTasks,
-  taskExecutionEngine,
-} from "../agent/taskRunner";
+import { TaskService } from "../services/taskService";
 
 export const tasksRouter = new Hono();
 
@@ -18,7 +14,7 @@ tasksRouter.get("/", (c) => {
   const limitParam = c.req.query("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-  const tasks = listTasks({
+  const tasks = TaskService.listTasks({
     sessionId,
     workspaceId,
     status,
@@ -34,7 +30,7 @@ tasksRouter.get("/", (c) => {
  */
 tasksRouter.get("/:id", (c) => {
   const taskId = c.req.param("id");
-  const task = getTask(taskId);
+  const task = TaskService.getTask(taskId);
 
   if (!task) {
     return c.json({ error: `Task "${taskId}" not found` }, 404);
@@ -57,7 +53,7 @@ tasksRouter.post("/:id/cancel", async (c) => {
   }
 
   const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
-  const result = taskExecutionEngine.cancelTask(taskId, workspaceId);
+  const result = TaskService.cancelTask(taskId, workspaceId, "user");
 
   if (!result.cancelled && !result.task) {
     return c.json({ error: result.message }, 404);
