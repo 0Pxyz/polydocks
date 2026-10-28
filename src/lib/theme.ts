@@ -134,6 +134,8 @@ function loadInitialConfig(): StoredThemeConfig {
         wallpaperFit: "cover",
         wallpaperOpacity: 0.6,
         wallpaperBlur: 2,
+        dockStyle: DEFAULT_CONFIG.dockStyle,
+        dockPosition: DEFAULT_CONFIG.dockPosition,
       };
       applyThemeDom(brightConfig.theme, brightConfig.customAccentColor);
       return brightConfig;
@@ -266,14 +268,7 @@ export const useThemeStore = create<ThemeConfigState>((set, get) => {
       set((state) => {
         applyThemeDom(theme, state.customAccentColor);
         const next = { ...state, theme };
-        persistConfig({
-          theme: next.theme,
-          customAccentColor: next.customAccentColor,
-          wallpaperUrl: next.wallpaperUrl,
-          wallpaperFit: next.wallpaperFit,
-          wallpaperOpacity: next.wallpaperOpacity,
-          wallpaperBlur: next.wallpaperBlur,
-        });
+        persistConfig(next);
         return { theme };
       });
     },
@@ -282,14 +277,7 @@ export const useThemeStore = create<ThemeConfigState>((set, get) => {
       set((state) => {
         applyThemeDom(state.theme, customAccentColor);
         const next = { ...state, customAccentColor };
-        persistConfig({
-          theme: next.theme,
-          customAccentColor: next.customAccentColor,
-          wallpaperUrl: next.wallpaperUrl,
-          wallpaperFit: next.wallpaperFit,
-          wallpaperOpacity: next.wallpaperOpacity,
-          wallpaperBlur: next.wallpaperBlur,
-        });
+        persistConfig(next);
         return { customAccentColor };
       });
     },
@@ -303,14 +291,7 @@ export const useThemeStore = create<ThemeConfigState>((set, get) => {
           wallpaperOpacity: options?.opacity ?? state.wallpaperOpacity,
           wallpaperBlur: options?.blur ?? state.wallpaperBlur,
         };
-        persistConfig({
-          theme: next.theme,
-          customAccentColor: next.customAccentColor,
-          wallpaperUrl: next.wallpaperUrl,
-          wallpaperFit: next.wallpaperFit,
-          wallpaperOpacity: next.wallpaperOpacity,
-          wallpaperBlur: next.wallpaperBlur,
-        });
+        persistConfig(next);
         return {
           wallpaperUrl: next.wallpaperUrl,
           wallpaperFit: next.wallpaperFit,

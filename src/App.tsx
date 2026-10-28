@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Compass, Sparkle, Cards } from "@phosphor-icons/react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem, STORE_DOCK_TOOL } from "@/features/dock/AgenticDock";
@@ -9,7 +8,8 @@ import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
-import { WorldView, INITIAL_GLOBAL_CITIES } from "@/features/views/WorldView";
+import { HomeScreen } from "@/features/home/HomeScreen";
+import { WorldView } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
@@ -155,7 +155,7 @@ export default function App() {
     setDockActiveTool("flashcards");
   };
 
-  const handleToolPromptSubmit = (prompt: string) => {
+  const handleToolPromptSubmit = (prompt: string, meta?: Record<string, unknown>) => {
     const isFlashcards = prompt.toLowerCase().includes("flashcard");
     const targetCity = activeCityId || selectedCity;
 
@@ -182,7 +182,7 @@ export default function App() {
           setDockActiveTool(expId);
         },
       },
-      { origin: "dock-add" }
+      meta || { origin: "dock-add" }
     );
 
     if (isFlashcards) {
@@ -372,11 +372,16 @@ export default function App() {
                 />
               </DockSurface>
             ) : activeExtraTools.some((t) => t.id === activeToolId) ? (
-              <DockSurface frameless>
+              <DockSurface variant="immersive">
                 <DynamicPluginSandbox
                   pluginId={activeToolId}
                   title={activeExtraTools.find((t) => t.id === activeToolId)?.label}
                   onDismiss={() => handleDismissTool(activeToolId)}
+                  onAskAgentFix={(errorMsg) => {
+                    handleToolPromptSubmit(`Fix tool "${activeToolId}": ${errorMsg}`, {
+                      origin: "dock-fix",
+                    });
+                  }}
                 />
               </DockSurface>
             ) : isCityMode ? (
@@ -396,74 +401,16 @@ export default function App() {
                 </div>
               </DockSurface>
             ) : !isMapsOpen ? (
-              /* Ambient Root World Screen: Clean typography, no design slop */
               <DockSurface frameless>
-                <div className="flex flex-col items-center justify-center text-center max-w-2xl px-4 pt-20 sm:pt-28 animate-in fade-in duration-300">
-                  <h1 className="text-4xl sm:text-6xl font-semibold text-white mb-3">
-                    Polymax
-                  </h1>
-
-                  <p className="text-sm sm:text-base text-[#9aa5b8] max-w-md mb-8 font-sans">
-                    The Agentic Dock workspace. Open <strong className="text-white">Maps</strong> to explore territories, or press <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-xs text-white">⌘K</kbd> to converse with your Agent.
-                  </p>
-
-                  {/* Core Action Triggers */}
-                  <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveToolId("maps");
-                        setDockActiveTool("maps");
-                      }}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--accent-lime)] text-black font-semibold text-xs transition-opacity hover:opacity-90 cursor-pointer"
-                    >
-                      <Compass size={18} weight="bold" />
-                      <span>Open World Map</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleAgent(activeToolId)}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] text-white font-medium text-xs transition-colors cursor-pointer"
-                    >
-                      <Sparkle size={18} className="text-[var(--accent-lime)]" />
-                      <span>Ask Agent (⌘K)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSynthesizeTool()}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] text-white font-medium text-xs transition-colors cursor-pointer"
-                    >
-                      <Cards size={18} className="text-[var(--accent-lime)]" />
-                      <span>Demo: Synthesize Tool</span>
-                    </button>
-                  </div>
-
-                  {/* Cities List */}
-                  <div className="flex flex-col items-center gap-2.5 w-full max-w-lg">
-                    <span className="text-xs text-[#9aa5b8]">
-                      Discovered Cities
-                    </span>
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      {INITIAL_GLOBAL_CITIES.map((city) => (
-                        <button
-                          key={city.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCity(city.title);
-                            enterCity(city.title);
-                            setActiveToolId("");
-                            setDockActiveTool("");
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-sans text-[#d1d6e2] hover:text-white transition-colors cursor-pointer"
-                        >
-                          {city.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                <HomeScreen
+                  onSendMessage={(prompt, meta) => handleToolPromptSubmit(prompt, meta)}
+                  onEnterCity={(cityName) => {
+                    setSelectedCity(cityName);
+                    enterCity(cityName);
+                    setActiveToolId("");
+                    setDockActiveTool("");
+                  }}
+                />
               </DockSurface>
             ) : null}
 
