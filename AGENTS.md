@@ -158,6 +158,7 @@ docker compose up  # whole app, no manual steps
 Public (in the repo):
 - `README.md`: what it is, GIF, run it (`docker compose up`), how to add a tab.
 - `docs/product.md`: vision, mechanic, principles.
+- `docs/product-philosophy.md`: everything is a plugin, the agent is the operator, typed capability bus.
 - `docs/architecture.md` and `docs/adr/NNNN-title.md`: decisions, short.
 - `docs/design-system.md`: tokens, typography, Dock motion rules.
 - `docs/meta-model-api.md`: the Meta API facts we rely on.
