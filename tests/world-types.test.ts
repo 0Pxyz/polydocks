@@ -148,4 +148,41 @@ describe("World Architecture Typed Boundaries (Zod Schemas)", () => {
     expect(parsed.quests[0].tier).toBe("novice");
     expect(parsed.glossary["Ataraxia"]).toBe("Tranquility of mind");
   });
+
+  it("validates Maps v2 MapSource and CityPoint Zod schemas with normalized coordinates", () => {
+    const { MapSourceSchema, CityPointSchema } = require("../src/features/world/types");
+
+    const validMapSource = {
+      id: "gloom",
+      name: "Abyssal Gloom",
+      style: "gloom",
+      kind: "bundled" as const,
+      image: { url: "/maps/gloom/map.webp", width: 2048, height: 1152 },
+      thumbnail: "/maps/gloom/thumb.webp",
+      regions: [{ id: "reg-1", name: "Aethelgard", cx: 0.35, cy: 0.45 }],
+      sites: [{ id: "site-1", name: "Spire", x: 0.32, y: 0.42, regionId: "reg-1", importance: 1.0 }],
+      license: "MIT",
+    };
+
+    const parsedMap = MapSourceSchema.parse(validMapSource);
+    expect(parsedMap.id).toBe("gloom");
+    expect(parsedMap.regions?.[0].cx).toBe(0.35);
+
+    const validCityPoint = {
+      id: "pt-stoic",
+      mapId: "gloom",
+      cityId: "city-stoicism",
+      title: "Stoicism",
+      x: 0.32,
+      y: 0.42,
+      status: "discovered" as const,
+    };
+
+    const parsedPoint = CityPointSchema.parse(validCityPoint);
+    expect(parsedPoint.cityId).toBe("city-stoicism");
+    expect(parsedPoint.status).toBe("discovered");
+
+    // Invalid coordinate > 1 must fail
+    expect(() => CityPointSchema.parse({ ...validCityPoint, x: 1.5 })).toThrow();
+  });
 });

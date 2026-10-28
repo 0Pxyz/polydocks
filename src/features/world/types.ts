@@ -255,3 +255,62 @@ export interface CameraState {
 }
 
 export type SemanticZoomLevel = "regional" | "city" | "neighborhood";
+
+// ==========================================
+// 6. Maps v2 Core Contracts (MapSource & CityPoint)
+// The map is only the visual layer. A city is a point on it.
+// ==========================================
+
+export const MapRegionSpecSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string().optional(),
+  cx: z.number().min(0).max(1),
+  cy: z.number().min(0).max(1),
+});
+export type MapRegionSpec = z.infer<typeof MapRegionSpecSchema>;
+
+export const MapSiteSpecSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  regionId: z.string().optional(),
+  importance: z.number().optional(),
+});
+export type MapSiteSpec = z.infer<typeof MapSiteSpecSchema>;
+
+export const MapSourceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  style: z.string(),
+  kind: z.enum(["bundled", "imported"]),
+  image: z.object({
+    url: z.string(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  }),
+  thumbnail: z.string(),
+  regions: z.array(MapRegionSpecSchema).optional(),
+  sites: z.array(MapSiteSpecSchema).optional(),
+  license: z.string(),
+});
+export type MapSource = z.infer<typeof MapSourceSchema>;
+
+export const CityPointStatusSchema = z.enum(["undiscovered", "building", "discovered", "mastered"]);
+export type CityPointStatus = z.infer<typeof CityPointStatusSchema>;
+
+export const CityPointSchema = z.object({
+  id: z.string(),
+  mapId: z.string(),
+  cityId: z.string(),
+  title: z.string().optional(),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  status: CityPointStatusSchema,
+});
+export type CityPoint = z.infer<typeof CityPointSchema>;
+
+export interface CityBuilder {
+  buildCity(cityId: string, topic: string): Promise<void>;
+}
