@@ -10,6 +10,7 @@ import {
   removePluginFromWorkspace,
   setWorkspacePluginStatus,
 } from "../workspace/workspaces";
+import { readFeature } from "../workspace/features";
 
 export const workspacesRouter = new Hono();
 
@@ -165,3 +166,25 @@ workspacesRouter.delete("/:id/plugins/:pluginId", (c) => {
   }
   return c.json({ success: true });
 });
+
+/**
+ * GET /api/workspaces/:id/plugins/:pluginId/srcdoc - Serves sandboxed HTML payload for workspace plugin
+ */
+workspacesRouter.get("/:id/plugins/:pluginId/srcdoc", async (c) => {
+  const id = c.req.param("id");
+  const pluginId = c.req.param("pluginId");
+  try {
+    let feat = await readFeature(id, pluginId);
+    if (!feat && id !== "default") {
+      feat = await readFeature("default", pluginId);
+    }
+    if (!feat) {
+      feat = await readFeature("global", pluginId);
+    }
+    c.header("Content-Type", "text/html; charset=utf-8");
+    return c.body(feat.srcdoc);
+  } catch {
+    return c.text("Dynamic plugin not found", 404);
+  }
+});
+

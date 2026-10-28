@@ -7,6 +7,7 @@ import { CommandPalette } from "@/features/dock/CommandPalette";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
+import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { WorldView, INITIAL_GLOBAL_CITIES } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
@@ -357,6 +358,14 @@ export default function App() {
             ) : activeToolId === "plugins" ? (
               <DockSurface frameless>
                 <PluginsView onDismiss={() => handleDismissTool("plugins")} />
+              </DockSurface>
+            ) : activeExtraTools.some((t) => t.id === activeToolId) ? (
+              <DockSurface frameless>
+                <DynamicPluginSandbox
+                  pluginId={activeToolId}
+                  title={activeExtraTools.find((t) => t.id === activeToolId)?.label}
+                  onDismiss={() => handleDismissTool(activeToolId)}
+                />
               </DockSurface>
             ) : isCityMode ? (
               <DockSurface frameless>
