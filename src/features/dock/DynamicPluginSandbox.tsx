@@ -1,26 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { AlertCircle, RefreshCw, X } from "lucide-react";
 import { createHostBridge } from "./bridge/host-bridge";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
+import { cn } from "@/lib/cn";
 
 export interface DynamicPluginSandboxProps {
   pluginId: string;
   workspaceId?: string;
   title?: string;
   onDismiss?: () => void;
+  onAskAgentFix?: (errorMessage: string) => void;
   className?: string;
 }
 
 /**
- * Sandboxed iframe host for PolyDocks V2 dynamic plugins.
- * Enforces strict sandbox boundaries (sandbox="allow-scripts"), scoped localStorage keys,
- * and seamless integration with the host agentic dock surface.
+ * Sandboxed iframe host for dynamic dock experiences.
+ * Adheres strictly to docs/design-slop.md:
+ * - Edge-to-edge transparent surface with no artificial borders or window headers
+ * - Skeleton loading while awaiting compilation and bridge handshake (3s timeout)
+ * - Quiet inline recovery status with reload and agent fix triggers
  */
 export function DynamicPluginSandbox({
   pluginId,
   workspaceId: explicitWorkspaceId,
   title,
   onDismiss,
+  onAskAgentFix,
   className = "",
 }: DynamicPluginSandboxProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -28,29 +32,32 @@ export function DynamicPluginSandbox({
   const workspaceId = explicitWorkspaceId || activeWsId || "default";
 
   const [srcdoc, setSrcdoc] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
+  const [fetching, setFetching] = useState<boolean>(true);
+  const [isReady, setIsReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchSrcdoc = useCallback(async () => {
     try {
-      setLoading(true);
+      setFetching(true);
       setError(null);
+      setIsReady(false);
       const res = await fetch(
         `/api/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(
           pluginId
         )}/srcdoc`
       );
       if (!res.ok) {
-        throw new Error(`Failed to load plugin "${pluginId}" (HTTP ${res.status})`);
+        throw new Error(`Failed to load ${title || pluginId} (HTTP ${res.status})`);
       }
       const text = await res.text();
       setSrcdoc(text);
     } catch (err: any) {
-      setError(err?.message || "Failed to load plugin payload");
+      setError(err?.message || `Failed to load ${title || pluginId}`);
     } finally {
-      setLoading(false);
+      setFetching(false);
     }
-  }, [workspaceId, pluginId]);
+  }, [workspaceId, pluginId, title]);
 
   useEffect(() => {
     fetchSrcdoc();
@@ -66,6 +73,16 @@ export function DynamicPluginSandbox({
       pluginId,
       storagePrefix: "polydocks",
       onCollapse: onDismiss,
+      onReady: () => {
+        if (handshakeTimerRef.current) {
+          clearTimeout(handshakeTimerRef.current);
+          handshakeTimerRef.current = null;
+        }
+        setIsReady(true);
+      },
+      onError: (err) => {
+        setError(typeof err === "string" ? err : "Runtime error in experience");
+      },
     });
 
     return () => {
@@ -73,74 +90,100 @@ export function DynamicPluginSandbox({
     };
   }, [workspaceId, pluginId, onDismiss]);
 
-  if (error) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center p-8 bg-[#0A0A0C] border border-[#23232E] rounded-2xl text-[#F0F0F5] ${className}`}
-      >
-        <AlertCircle className="w-8 h-8 text-[#FF5A5A] mb-3" />
-        <h3 className="text-sm font-semibold mb-1">Failed to load plugin</h3>
-        <p className="text-xs text-[#A0A0B0] mb-4 text-center max-w-sm">{error}</p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={fetchSrcdoc}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#131318] hover:bg-[#1C1C24] border border-[#23232E] hover:border-[#C8FF57] rounded-lg text-xs font-medium transition-colors cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Retry
-          </button>
-          {onDismiss && (
-            <button
-              onClick={onDismiss}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-[#9aa5b8] hover:text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // 3-second ready handshake timeout once srcdoc is mounted
+  useEffect(() => {
+    if (!srcdoc || fetching) return;
+
+    handshakeTimerRef.current = setTimeout(() => {
+      if (!isReady) {
+        // If iframe loaded without explicit handshake, check if document is ready or gracefully reveal
+        setIsReady(true);
+      }
+    }, 3000);
+
+    return () => {
+      if (handshakeTimerRef.current) {
+        clearTimeout(handshakeTimerRef.current);
+      }
+    };
+  }, [srcdoc, fetching, isReady]);
+
+  const handleIframeLoad = () => {
+    // When iframe triggers native load event
+    setIsReady(true);
+  };
+
+  const handleAskAgent = () => {
+    const issue = error || `Tool ${title || pluginId} did not respond to ready handshake.`;
+    if (onAskAgentFix) {
+      onAskAgentFix(issue);
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("polymax:submit-prompt", {
+          detail: {
+            prompt: `Fix tool "${title || pluginId}": ${issue}`,
+            origin: "dock-fix",
+          },
+        })
+      );
+    }
+  };
 
   return (
     <div
-      className={`relative flex flex-col w-full h-[calc(100vh-140px)] min-h-[500px] max-w-5xl mx-auto bg-[#0A0A0C] rounded-2xl border border-white/10 overflow-hidden shadow-2xl ${className}`}
+      className={cn(
+        "relative w-full h-full flex-1 flex flex-col bg-transparent select-none",
+        className
+      )}
     >
-      {/* Sleek Minimal Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.08] bg-[#131318]/70 backdrop-blur-md">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[var(--accent-lime)] animate-pulse" />
-          <span className="font-semibold text-xs text-white tracking-wide">
-            {title || pluginId}
-          </span>
-          <span className="text-[10px] text-[#9aa5b8] font-mono px-1.5 py-0.5 rounded bg-white/[0.05]">
-            PolyDocks
-          </span>
-        </div>
-
-        {onDismiss && (
+      {/* Quiet Status Row on Failure or Timeout */}
+      {error && (
+        <div className="w-full flex items-center justify-center gap-2 py-3 text-xs text-[#9aa5b8] bg-transparent">
+          <span>{error}</span>
+          <span>·</span>
           <button
-            onClick={onDismiss}
-            className="p-1 rounded-md text-[#9aa5b8] hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
-            aria-label="Close plugin surface"
+            type="button"
+            onClick={fetchSrcdoc}
+            className="text-[var(--accent-lime)] hover:underline cursor-pointer"
           >
-            <X size={15} />
+            Reload
           </button>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-xs text-[#9aa5b8] gap-2">
-          <RefreshCw className="w-5 h-5 animate-spin text-[var(--accent-lime)]" />
-          <span>Mounting plugin sandbox…</span>
+          <span>·</span>
+          <button
+            type="button"
+            onClick={handleAskAgent}
+            className="text-[var(--accent-lime)] hover:underline cursor-pointer"
+          >
+            Ask the agent to fix it
+          </button>
         </div>
-      ) : (
+      )}
+
+      {/* Skeleton Loading State */}
+      {(fetching || (!isReady && !error)) && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-transparent text-[#9aa5b8] pointer-events-none"
+          aria-live="polite"
+        >
+          <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-[var(--accent-lime)] animate-spin" />
+          <span className="text-xs font-sans tracking-wide">
+            Mounting {title || pluginId}…
+          </span>
+        </div>
+      )}
+
+      {/* Edge-to-Edge Frameless Sandboxed Surface */}
+      {srcdoc && (
         <iframe
           ref={iframeRef}
           sandbox="allow-scripts"
           srcDoc={srcdoc}
           title={title || `plugin-${pluginId}`}
-          className="w-full h-full border-none flex-1 bg-transparent"
+          onLoad={handleIframeLoad}
+          className={cn(
+            "w-full h-full flex-1 border-0 bg-transparent transition-opacity duration-200",
+            !isReady || error ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto"
+          )}
         />
       )}
     </div>
