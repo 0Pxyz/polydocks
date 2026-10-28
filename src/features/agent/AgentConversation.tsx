@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
 import { spring, prefersReducedMotion } from "@/lib/motion";
@@ -92,12 +93,22 @@ export function AgentConversation({
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
-  const handleScroll = () => {
+  // Track scroll position natively (the Radix ScrollArea viewport scrolls,
+  // and React does not delegate scroll events to it)
+  useEffect(() => {
+    if (layoutState === "closed" || layoutState === "sheet") return;
     const el = transcriptRef.current;
     if (!el) return;
-    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollBottom(distanceToBottom > 150);
-  };
+
+    const onViewportScroll = () => {
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShowScrollBottom(distanceToBottom > 150);
+    };
+
+    onViewportScroll();
+    el.addEventListener("scroll", onViewportScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onViewportScroll);
+  }, [layoutState]);
 
   const scrollToBottom = () => {
     const el = transcriptRef.current;
@@ -345,7 +356,7 @@ export function AgentConversation({
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       style={isSide ? { width: `${sideWidth}px` } : undefined}
       className={cn(
-        "relative flex flex-col justify-between bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
+        "relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
         isSide
           ? "fixed top-0 bottom-0 left-0 z-40 border-r border-white/5 shadow-2xl"
           : "fixed inset-0 z-40 w-full"
@@ -365,11 +376,8 @@ export function AgentConversation({
         </div>
       )}
 
-      {/* Top soft fade under dock */}
-      <div className="pointer-events-none absolute top-0 left-0 right-0 h-[calc(var(--dock-bottom,88px)+24px)] bg-gradient-to-b from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent z-20" />
-
-      {/* Top Corner Controls (aligned with dock line, no headers/titles) */}
-      <div className="absolute top-[calc(var(--dock-bottom,88px)-44px)] right-4 sm:right-8 z-30 flex items-center gap-1.5">
+      {/* Controls aligned below the dock line, part of the panel layout (no overlay fades) */}
+      <div className="shrink-0 flex items-center justify-end gap-1.5 px-4 sm:px-8 pt-[calc(var(--dock-bottom,88px)+12px)] pb-3">
         {!isSide && (
           <button
             type="button"
@@ -401,14 +409,16 @@ export function AgentConversation({
       </div>
 
       {/* Transcript Area */}
-      <div
-        ref={transcriptRef}
-        onScroll={handleScroll}
+      <ScrollArea
+        viewportRef={transcriptRef}
         className={cn(
-          "flex-1 overflow-y-auto px-4 sm:px-6 pt-[calc(var(--dock-bottom,88px)+32px)] pb-36",
-          !isSide && "w-full max-w-[720px] mx-auto"
+          "flex-1 min-h-0 px-4 sm:px-6",
+          "[&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0",
+          "[&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]",
+          !isSide && "max-w-[720px] mx-auto"
         )}
       >
+        <div className="w-full pt-3 pb-6">
         {/* Empty State: centered composer with idle orb */}
         {messages.length === 0 && (
           <div className="h-full min-h-[360px] flex flex-col items-center justify-center">
@@ -465,10 +475,16 @@ export function AgentConversation({
 
             // Agent Message: Plain text on backdrop, no bubble, markdown, copy & retry on hover
             return (
-              <div key={msg.id} className="group relative w-full text-base leading-relaxed text-[#f1f3f9] font-sans">
+              <div
+                key={msg.id}
+                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    // The custom `code` renderer draws its own code block; let it
+                    // through without the default <pre> wrapper (and prose styling)
+                    pre: ({ children }) => <>{children}</>,
                     a: ({ href, children }) => (
                       <a
                         href={href}
@@ -551,7 +567,8 @@ export function AgentConversation({
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </ScrollArea>
 
       {/* Floating Scroll to Bottom button */}
       {showScrollBottom && (
@@ -565,14 +582,14 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Floating Composer Area */}
+      {/* Composer: clean footer aligned with the transcript column */}
       <div
         className={cn(
-          "absolute bottom-0 left-0 right-0 z-20 pb-6 px-4 pointer-events-auto bg-gradient-to-t from-[var(--bg-void)] via-[var(--bg-void)]/85 to-transparent pt-8",
+          "shrink-0 px-4 sm:px-6 pt-4 pb-5 pointer-events-auto",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
-        <div className="relative flex items-end bg-[#10141d]/90 border border-white/10 rounded-[24px] p-2 shadow-2xl backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors">
+        <div className="relative flex items-end bg-[var(--bg-surface)]/90 border border-white/10 rounded-[24px] p-2 shadow-lg backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors">
           <textarea
             ref={textareaRef}
             rows={1}

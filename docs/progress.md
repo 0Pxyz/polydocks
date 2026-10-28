@@ -31,3 +31,4 @@
 | 2026-10-28 | Persistent per-city conversation, execution introspection (inspect_execution), and failure retry | [#60](https://github.com/0Pxyz/polymax/pull/60) |
 | 2026-10-28 | Declarative MCP client SDK, HTTP/CLI adapters, and example plugins (wikipedia, git-status, hello) | [#61](https://github.com/0Pxyz/polymax/pull/61) |
 | 2026-10-28 | Dynamic Command Palette (⌘K) capability discovery and external manifest URL installation | [#62](https://github.com/0Pxyz/polymax/pull/62) |
+| 2026-10-28 | Agent chat panel rebuilt on shadcn ScrollArea (themed scrollbar, flow layout, no mask gradients) with prose typography, missing mapgen deps restored |
