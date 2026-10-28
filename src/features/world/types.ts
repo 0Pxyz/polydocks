@@ -229,6 +229,21 @@ export const CityBundleSchema = z.object({
 
 export type CityBundle = z.infer<typeof CityBundleSchema>;
 
+export interface CityBuildEvent {
+  type:
+    | "stage.start"
+    | "source.found"
+    | "concept.extracted"
+    | "quest.created"
+    | "progress"
+    | "city.ready"
+    | "error";
+  stage?: string;
+  progress?: number;
+  message?: string;
+  payload?: unknown;
+}
+
 // ==========================================
 // 5. Camera & Navigation State
 // ==========================================

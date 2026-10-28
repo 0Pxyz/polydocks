@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { generateMapLayout } from "@/lib/mapgen/proceduralWorld";
 import { WorldMapCanvas } from "../world/WorldMapCanvas";
+import { useCityBuildStream } from "../world/useCityBuildStream";
 import type { MapSpec, Point2D } from "../world/types";
 
 export const DEFAULT_DEMO_SPEC: MapSpec = {
@@ -61,9 +62,15 @@ export function WorldView({
   onEnterCity,
   onFoundCityTopic,
   spec: initialSpec = DEFAULT_DEMO_SPEC,
-  buildingProgress = {},
+  buildingProgress: externalProgress,
 }: WorldViewProps) {
   const [spec, setSpec] = useState<MapSpec>(initialSpec);
+  const { buildingProgress: streamProgress, startCityBuild } = useCityBuildStream();
+
+  const mergedProgress = {
+    ...streamProgress,
+    ...externalProgress,
+  };
 
   // Layout engine: deterministic, seeded layout
   const layout = useMemo(() => {
@@ -100,6 +107,9 @@ export function WorldView({
       };
     });
 
+    // Start live SSE city build stream
+    startCityBuild(newCityId, topic);
+
     if (onFoundCityTopic) {
       onFoundCityTopic(topic);
     }
@@ -111,7 +121,7 @@ export function WorldView({
         layout={layout}
         onEnterCity={(cityName, cityId) => onEnterCity(cityName, cityId)}
         onFoundCity={handleFoundCity}
-        buildingProgress={buildingProgress}
+        buildingProgress={mergedProgress}
         className="w-full h-full"
       />
     </div>
