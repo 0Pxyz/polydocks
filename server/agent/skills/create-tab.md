@@ -50,6 +50,16 @@ Inject this skill whenever the user asks the agent to build, synthesize, create,
    window.polymax.ui.expand();
    ```
 
+4. **Design Rules & Slop Elimination (docs/design-slop.md):**
+   - **Frameless surfaces:** Let content sit directly on surfaces. Avoid cards inside cards or decorative borders.
+   - **No dividers:** Do not use horizontal dividing lines, vertical pipes, or dot separators. Use spacing and alignment.
+   - **No tags or badges:** Avoid decorative pill tags, level badges, or status chips.
+   - **No section numbering:** Drop numbers from titles and headings.
+   - **No code identifiers in UI:** Present human concepts and titles, never method names or technical IDs.
+   - **One accent:** Single primary accent (`#C8FF57`), crisp white text, and muted secondary text.
+   - **Plain copy:** Direct verbs, sentence case, and zero buzzwords (avoid 'synthesize', 'dynamic', 'engine').
+   - **Primary source links:** Every card or study item must carry a direct link to the real source page it was derived from (`window.polymax.openUrl(sourceUrl)`).
+
 ---
 
 ## 3. Canonical Example 1: Interactive Flashcards Micro-App
