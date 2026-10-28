@@ -4,7 +4,6 @@ import {
   DownloadSimple,
   Check,
   Storefront,
-  X,
   Sparkle,
 } from "@phosphor-icons/react";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
@@ -23,11 +22,16 @@ export interface RegistryPluginCard {
 }
 
 interface PluginStoreViewProps {
-  onDismiss: () => void;
+  onDismiss?: () => void;
   onOpenPlugin?: (pluginId: string) => void;
 }
 
-export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProps) {
+/**
+ * Plugin Store: Native Workspace Experience
+ * Replaces floating window boxes with a full-content application view
+ * consistent with Settings and City Workspaces.
+ */
+export function PluginStoreView({ onOpenPlugin }: PluginStoreViewProps) {
   const { activeWorkspaceId, workspacePlugins, fetchWorkspacePlugins } = useWorkspaceStore();
   const [plugins, setPlugins] = useState<RegistryPluginCard[]>([]);
   const [search, setSearch] = useState("");
@@ -82,44 +86,33 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
   };
 
   const installedSet = new Set(workspacePlugins.map((wp) => wp.pluginId));
-
   const allTags = ["All", "Productivity", "Timer", "Focus", "Micro-app"];
 
   return (
-    <div className="flex flex-col w-full max-w-4xl mx-auto h-[calc(100vh-140px)] min-h-[520px] bg-[#0c0e14]/98 border border-white/10 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-2xl">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] bg-[#131318]/60">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-[var(--accent-lime)]/15 border border-[var(--accent-lime)]/30 flex items-center justify-center text-[var(--accent-lime)]">
-            <Storefront size={18} weight="bold" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-white tracking-tight">Plugin Store</h2>
-            <p className="text-xs text-[#9aa5b8]">
-              Discover, install, and share agent-synthesized tools across workspaces
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={onDismiss}
-          className="p-1.5 rounded-lg text-[#9aa5b8] hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
-          aria-label="Close Store"
-        >
-          <X size={18} />
-        </button>
+    <div className="w-full max-w-5xl px-4 py-8 flex flex-col items-center gap-8 select-none">
+      {/* Header */}
+      <div className="flex flex-col items-center text-center">
+        <h1 className="text-3xl sm:text-4xl font-semibold text-white tracking-normal mb-2">
+          Plugin Store
+        </h1>
+        <p className="text-sm text-[#9aa5b8] max-w-md font-sans">
+          Discover, install, and share agent-synthesized tools across your workspaces
+        </p>
       </div>
 
       {/* Filter and Search controls */}
-      <div className="px-6 py-3.5 border-b border-white/[0.06] flex flex-wrap items-center justify-between gap-3 bg-white/[0.01]">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9aa5b8]" />
+      <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+        <div className="relative flex-1 min-w-[260px] max-w-md">
+          <MagnifyingGlass
+            size={16}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9aa5b8]"
+          />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search plugins by name, tag, or description..."
-            className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-[#9aa5b8] focus:outline-none focus:border-[var(--accent-lime)]/50 transition-colors"
+            className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-[#9aa5b8] focus:outline-none focus:border-[var(--accent-lime)]/50 transition-colors font-sans"
           />
         </div>
 
@@ -127,9 +120,10 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
           {allTags.map((tag) => (
             <button
               key={tag}
+              type="button"
               onClick={() => setSelectedTag(tag)}
               className={cn(
-                "px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap",
+                "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer whitespace-nowrap",
                 selectedTag === tag
                   ? "bg-[var(--accent-lime)] text-black font-semibold"
                   : "bg-white/[0.04] text-[#9aa5b8] hover:text-white hover:bg-white/[0.08]"
@@ -142,14 +136,14 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
       </div>
 
       {/* Plugin Cards Grid */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="w-full">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full text-xs text-[#9aa5b8] gap-2">
+          <div className="flex flex-col items-center justify-center py-20 text-xs text-[#9aa5b8] gap-2">
             <Sparkle size={20} className="text-[var(--accent-lime)] animate-spin" />
             <span>Browsing community catalog…</span>
           </div>
         ) : plugins.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-12">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
             <Storefront size={32} className="text-[#9aa5b8] mb-2 opacity-50" />
             <h3 className="text-sm font-semibold text-white mb-1">No plugins found</h3>
             <p className="text-xs text-[#9aa5b8] max-w-sm">
@@ -157,7 +151,7 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
             {plugins.map((plugin) => {
               const isInstalled = installedSet.has(plugin.id);
               const isInstalling = installingId === plugin.id;
@@ -166,12 +160,12 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
               return (
                 <div
                   key={plugin.id}
-                  className="flex flex-col justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/10 transition-all duration-150 group"
+                  className="flex flex-col justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/5 transition-all duration-150 group"
                 >
                   <div>
                     <div className="flex items-start justify-between gap-3 mb-2.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/10 flex items-center justify-center text-[var(--accent-lime)] shrink-0">
+                        <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex items-center justify-center text-[var(--accent-lime)] shrink-0">
                           <IconComp size={18} />
                         </div>
                         <div>
@@ -190,7 +184,7 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#9aa5b8] line-clamp-2 mb-3 leading-relaxed">
+                    <p className="text-xs text-[#9aa5b8] line-clamp-2 mb-3 leading-relaxed font-sans">
                       {plugin.description}
                     </p>
 
@@ -206,9 +200,9 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-                    <span className="text-[11px] text-[#9aa5b8] truncate">
-                      {isInstalled ? "Mounted in active dock" : "Ready to install"}
+                  <div className="flex items-center justify-between pt-3 border-t border-white/[0.04]">
+                    <span className="text-[11px] text-[#9aa5b8] truncate font-sans">
+                      {isInstalled ? "Mounted in dock" : "Available to install"}
                     </span>
 
                     {isInstalled ? (

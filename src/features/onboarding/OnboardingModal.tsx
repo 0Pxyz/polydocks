@@ -1,15 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Compass, Sparkle, ArrowRight, Check } from "@phosphor-icons/react";
+import {
+  House,
+  Compass,
+  Sparkle,
+  Storefront,
+  ArrowRight,
+  Check,
+  SquaresFour,
+} from "@phosphor-icons/react";
+import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
-
-const ONBOARDING_STORAGE_KEY = "polymax_onboarding_seen_v1";
-
-interface OnboardingModalProps {
-  forceOpen?: boolean;
-  onClose?: () => void;
-}
 
 interface OnboardingStep {
   title: string;
@@ -20,64 +22,66 @@ interface OnboardingStep {
 
 const STEPS: OnboardingStep[] = [
   {
-    title: "Master any domain",
+    title: "Home",
     description:
-      "Tell your agent what you want to master. It constructs a living world map where knowledge regions and concepts become interactive cities.",
+      "Tell your agent what you want to learn, explore, or build. It maps the domain and builds the path forward.",
+    icon: House,
+    actionText: "Next",
+  },
+  {
+    title: "Knowledge Cities",
+    description:
+      "Explore subjects through connected concepts, primary research papers, interactive tools, and mastery quests.",
     icon: Compass,
     actionText: "Next",
   },
   {
     title: "The Agentic Dock",
     description:
-      "No window sprawl or chat bubble feeds. The dock is your persistent control surface pinned to the screen. Every tool opens directly into the active viewport.",
+      "Your persistent control surface. Click any tool to mount its surface directly into the active viewport without window sprawl.",
+    icon: SquaresFour,
+    actionText: "Next",
+  },
+  {
+    title: "Your Dock Agent",
+    description:
+      "Press ⌘K or speak to research topics, synthesize custom interactive micro-tools on demand, and organize your workspace.",
     icon: Sparkle,
     actionText: "Next",
   },
   {
-    title: "Synthesize on demand",
+    title: "Plugin Store",
     description:
-      "Your dock agent orchestrates research and builds new tools dynamically. Hit + anytime to generate flashcards, comparators, or custom micro-apps.",
-    icon: Sparkle,
+      "Discover, install, and share reusable agent-synthesized capabilities across your learning workspaces.",
+    icon: Storefront,
     actionText: "Start Exploring",
   },
 ];
 
-export function OnboardingModal({ forceOpen = false, onClose }: OnboardingModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function OnboardingModal() {
+  const { isOpen, closeOnboarding } = useOnboardingStore();
   const [currentStep, setCurrentStep] = useState(0);
   const isReduced = prefersReducedMotion();
-
-  useEffect(() => {
-    if (forceOpen) {
-      setIsOpen(true);
-      setCurrentStep(0);
-      return;
-    }
-    const hasSeen = localStorage.getItem(ONBOARDING_STORAGE_KEY);
-    if (!hasSeen) {
-      setIsOpen(true);
-    }
-  }, [forceOpen]);
-
-  const handleDismiss = () => {
-    localStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
-    setIsOpen(false);
-    onClose?.();
-  };
-
-  const handleNext = () => {
-    if (currentStep < STEPS.length - 1) {
-      setCurrentStep((prev) => prev + 1);
-    } else {
-      handleDismiss();
-    }
-  };
 
   if (!isOpen) return null;
 
   const step = STEPS[currentStep];
   const StepIcon = step.icon;
   const isLast = currentStep === STEPS.length - 1;
+
+  const handleNext = () => {
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep((prev) => prev + 1);
+    } else {
+      closeOnboarding();
+      setCurrentStep(0);
+    }
+  };
+
+  const handleSkip = () => {
+    closeOnboarding();
+    setCurrentStep(0);
+  };
 
   return (
     <AnimatePresence>
@@ -86,7 +90,7 @@ export function OnboardingModal({ forceOpen = false, onClose }: OnboardingModalP
           initial={{ opacity: 0, scale: isReduced ? 1 : 0.96, y: isReduced ? 0 : 8 }}
           animate={{ opacity: 1, scale: 1, y: 0, transition: spring.soft }}
           exit={{ opacity: 0, scale: isReduced ? 1 : 0.96, y: isReduced ? 0 : 8 }}
-          className="relative w-full max-w-md rounded-2xl bg-[#0c0e14]/95 p-6 shadow-2xl backdrop-blur-xl flex flex-col items-center text-center"
+          className="relative w-full max-w-md rounded-2xl bg-[#0c0e14]/95 p-6 shadow-2xl backdrop-blur-xl flex flex-col items-center text-center border border-white/5"
         >
           {/* Step Icon */}
           <div className="w-12 h-12 rounded-2xl bg-white/[0.05] flex items-center justify-center text-[var(--accent-lime)] mb-5">
@@ -120,7 +124,7 @@ export function OnboardingModal({ forceOpen = false, onClose }: OnboardingModalP
           <div className="flex items-center justify-between w-full">
             <button
               type="button"
-              onClick={handleDismiss}
+              onClick={handleSkip}
               className="text-xs text-[#9aa5b8] hover:text-white transition-colors cursor-pointer px-2 py-1"
             >
               Skip

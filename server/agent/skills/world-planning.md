@@ -7,10 +7,12 @@
 
 ## 1. When to Use This Skill
 
-Activate this skill when:
-1. The user asks to learn, master, or study a new subject or field (e.g. "*quero aprender sobre física quântica*", "*I want to learn Neuroscience*").
-2. The user asks to create or expand a knowledge area, territory, or domain (e.g. "*criar uma nova área de conhecimento*", "*create a new knowledge domain for distributed systems*").
-3. The user asks to expand or plan the world map with new topics or cities.
+Activate this skill ONLY when:
+1. The user explicitly requests to create a Knowledge City, build a city, or construct a learning environment (e.g. "*Create a Knowledge City to learn neural networks from scratch*", "*build city for transformers*").
+2. The user explicitly asks to create or expand a knowledge area, territory, or domain (e.g. "*criar uma nova área de conhecimento*", "*create a new knowledge domain for distributed systems*").
+3. The user explicitly asks to expand or plan the world map with new territories or cities (e.g. "*expand the world map*").
+
+Do NOT activate this skill for general conceptual questions, explanations, or general learning queries (e.g. "*Explain how transformers work*", "*What is quantum computing?*"). For general questions, answer directly in natural language without planning a map or constructing a city.
 
 ---
 

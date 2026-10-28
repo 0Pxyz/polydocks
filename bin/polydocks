@@ -188,6 +188,7 @@ async function handleSessions(
 
     const transcript = await SessionService.getTranscript(sessionId, {
       offset: options.fromStep,
+      rootDir: process.env.AGENT_HOME_DIR,
     });
 
     if (options.json) {

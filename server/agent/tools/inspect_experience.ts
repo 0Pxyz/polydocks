@@ -11,7 +11,7 @@ export interface InspectExperienceArgs {
 export const inspect_experience: AgentTool<InspectExperienceArgs> = {
   name: "inspect_experience",
   description:
-    "Inspects a synthesized experience or dock tool: returns security status, payload size, declared capabilities, and runtime error logs.",
+    "Inspects a synthesized experience or dock tool (security status, payload, declared capabilities, errors). Only call when debugging or verifying a specific experience.",
   schema: z.object({
     id: z
       .string()
