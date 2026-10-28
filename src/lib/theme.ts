@@ -1,7 +1,9 @@
 import { create } from "zustand";
+import type { DockStyleId, DockPosition } from "@/features/dock/styles";
 
 export type ThemeId = "void" | "cyber" | "amber" | "amethyst";
 export type WallpaperFit = "cover" | "contain" | "tile";
+export type { DockStyleId, DockPosition };
 
 export interface ThemeMeta {
   id: ThemeId;
@@ -49,6 +51,8 @@ export interface ThemeConfigState {
   wallpaperFit: WallpaperFit;
   wallpaperOpacity: number; // 0.05 to 1.0
   wallpaperBlur: number; // 0 to 20 px
+  dockStyle: DockStyleId;
+  dockPosition: DockPosition;
 
   // Actions
   setTheme: (theme: ThemeId) => void;
@@ -64,6 +68,8 @@ export interface ThemeConfigState {
   setWallpaperFit: (fit: WallpaperFit) => void;
   setWallpaperOpacity: (opacity: number) => void;
   setWallpaperBlur: (blur: number) => void;
+  setDockStyle: (style: DockStyleId) => void;
+  setDockPosition: (pos: DockPosition) => void;
   clearWallpaper: () => void;
   resetTheme: () => void;
 }
@@ -77,6 +83,8 @@ interface StoredThemeConfig {
   wallpaperFit: WallpaperFit;
   wallpaperOpacity: number;
   wallpaperBlur: number;
+  dockStyle: DockStyleId;
+  dockPosition: DockPosition;
 }
 
 const DEFAULT_CONFIG: StoredThemeConfig = {
@@ -86,6 +94,8 @@ const DEFAULT_CONFIG: StoredThemeConfig = {
   wallpaperFit: "cover",
   wallpaperOpacity: 0.25,
   wallpaperBlur: 0,
+  dockStyle: "glass",
+  dockPosition: "top",
 };
 
 function applyThemeDom(
@@ -162,6 +172,16 @@ function loadInitialConfig(): StoredThemeConfig {
           typeof parsed.wallpaperBlur === "number"
             ? Math.min(Math.max(parsed.wallpaperBlur, 0), 30)
             : DEFAULT_CONFIG.wallpaperBlur,
+        dockStyle:
+          parsed.dockStyle === "solid" ||
+          parsed.dockStyle === "bare" ||
+          parsed.dockStyle === "lift"
+            ? parsed.dockStyle
+            : DEFAULT_CONFIG.dockStyle,
+        dockPosition:
+          parsed.dockPosition === "bottom"
+            ? "bottom"
+            : DEFAULT_CONFIG.dockPosition,
       };
 
       applyThemeDom(config.theme, config.customAccentColor);
@@ -321,6 +341,22 @@ export const useThemeStore = create<ThemeConfigState>((set, get) => {
         const next = { ...state, wallpaperBlur };
         persistConfig(next);
         return { wallpaperBlur };
+      });
+    },
+
+    setDockStyle: (dockStyle) => {
+      set((state) => {
+        const next = { ...state, dockStyle };
+        persistConfig(next);
+        return { dockStyle };
+      });
+    },
+
+    setDockPosition: (dockPosition) => {
+      set((state) => {
+        const next = { ...state, dockPosition };
+        persistConfig(next);
+        return { dockPosition };
       });
     },
 

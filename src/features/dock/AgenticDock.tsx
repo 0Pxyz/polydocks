@@ -10,9 +10,11 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
 import { DockIcon } from "@/components/icons/DockIcon";
-import { spring } from "@/lib/motion";
+import { spring, prefersReducedMotion } from "@/lib/motion";
 import type { IconComponent } from "@/components/icons/adapter";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { useThemeStore } from "@/lib/theme";
+import { DOCK_STYLES } from "./styles";
+import { DockStatusLine } from "@/features/profile/DockStatusLine";
 
 export * from "./legacyAdapter";
 export * from "./surfaceResolver";
@@ -179,30 +181,42 @@ export function AgenticDock({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showCreator]);
 
-  // Measure dock bottom edge dynamically from the capsule and publish --dock-bottom to :root
+  // Measure dock offset dynamically from the capsule and publish --dock-bottom and --dock-offset to :root
+  const { dockStyle, dockPosition } = useThemeStore();
+  const isBottom = dockPosition === "bottom";
+  const currentStyle = DOCK_STYLES[dockStyle] || DOCK_STYLES.glass;
+  const isReducedMotion = prefersReducedMotion();
+
   useEffect(() => {
     const el = capsuleRef.current || headerRef.current;
     if (!el) return;
 
-    const updateDockBottom = () => {
+    const updateDockOffset = () => {
       const rect = el.getBoundingClientRect();
-      const bottom = Math.round(rect.bottom);
-      document.documentElement.style.setProperty("--dock-bottom", `${bottom}px`);
+      if (isBottom) {
+        const offset = Math.round(window.innerHeight - rect.top);
+        document.documentElement.style.setProperty("--dock-bottom", `${offset}px`);
+        document.documentElement.style.setProperty("--dock-offset", `${offset}px`);
+      } else {
+        const offset = Math.round(rect.bottom);
+        document.documentElement.style.setProperty("--dock-bottom", `${offset}px`);
+        document.documentElement.style.setProperty("--dock-offset", `${offset}px`);
+      }
     };
 
-    updateDockBottom();
+    updateDockOffset();
 
     const ro = new ResizeObserver(() => {
-      updateDockBottom();
+      updateDockOffset();
     });
     ro.observe(el);
 
-    window.addEventListener("resize", updateDockBottom);
+    window.addEventListener("resize", updateDockOffset);
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", updateDockBottom);
+      window.removeEventListener("resize", updateDockOffset);
     };
-  }, []);
+  }, [isBottom]);
 
   const handleToolClick = (toolId: string) => {
     if (showCreator) closeCreator();
@@ -244,25 +258,131 @@ export function AgenticDock({
   const baseTools = explicitTools ?? CORE_DOCK_TOOLS;
   const allTools = [...baseTools, ...extraTools];
 
+  const drawerElement = (
+    <AnimatePresence>
+      {showCreator && (
+        <motion.div
+          ref={creatorDrawerRef}
+          layout
+          initial={{ opacity: 0, y: isBottom ? 6 : -6, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: isBottom ? 6 : -6, scale: 0.98 }}
+          transition={{ duration: 0.15 }}
+          className={cn(
+            "pointer-events-auto w-[calc(100vw-32px)] max-w-[460px] min-w-[340px] bg-[#0c0e14]/95 backdrop-blur-xl rounded-2xl p-2 shadow-2xl flex flex-col gap-1 z-50",
+            isBottom ? "mb-2" : "mt-2"
+          )}
+        >
+          <div className="w-full flex items-center">
+            <input
+              ref={inputRef}
+              type="text"
+              value={creatorPrompt}
+              onChange={(e) => {
+                setCreatorPrompt(e.target.value);
+                setSelectedIndex(-1);
+              }}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Add a tool"
+              className="w-full px-3 py-2 text-[15px] text-white placeholder:text-[#9aa5b8] bg-transparent outline-none rounded-xl"
+              aria-label="Tool to add"
+              role="combobox"
+              aria-expanded={showCreator}
+              aria-autocomplete="list"
+              aria-controls="creator-suggestions"
+              aria-activedescendant={
+                selectedIndex >= 0 ? `creator-suggestion-${selectedIndex}` : undefined
+              }
+            />
+          </div>
+
+          <div
+            id="creator-suggestions"
+            role="listbox"
+            className="flex flex-col gap-0.5 pt-0.5"
+          >
+            {suggestions.map((suggestion, idx) => {
+              const isSelected = selectedIndex === idx;
+              return (
+                <button
+                  key={suggestion}
+                  id={`creator-suggestion-${idx}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  type="button"
+                  onClick={() => handleSelectSuggestion(suggestion)}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  className={cn(
+                    "w-full text-left px-3 py-2 text-[15px] rounded-xl transition-colors cursor-pointer outline-none",
+                    isSelected
+                      ? "bg-white/[0.08] text-white"
+                      : "text-[#d1d6e2] hover:bg-white/[0.05] hover:text-white"
+                  )}
+                >
+                  {suggestion}
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const statusElement = (
+    <AnimatePresence>
+      {activeStatus && !showCreator && (
+        <motion.div
+          initial={{ opacity: 0, y: isBottom ? 2 : -2 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: isBottom ? 2 : -2 }}
+          transition={{ duration: 0.15 }}
+          aria-live="polite"
+          className={cn(
+            "pointer-events-auto text-[13px] text-[#9aa5b8] flex items-center gap-1.5 px-3 py-1 bg-[#0c0e14]/90 backdrop-blur-md rounded-full shadow-lg",
+            isBottom ? "mb-2" : "mt-2"
+          )}
+        >
+          <span>{activeStatus}</span>
+          {activeStatus.includes("Couldn't build that") && onRetryBuilding && (
+            <button
+              type="button"
+              onClick={onRetryBuilding}
+              className="text-[var(--accent-lime)] hover:underline cursor-pointer ml-1"
+            >
+              Try again.
+            </button>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   return (
     <header
       ref={headerRef}
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 flex flex-col items-center select-none pt-3 pointer-events-none",
+        "fixed left-0 right-0 z-50 flex flex-col items-center select-none pointer-events-none",
+        isBottom ? "bottom-0 pb-3" : "top-0 pt-3",
         className
       )}
     >
-      {/* Workspace Switcher (PolyDocks V2) */}
-      <div className="fixed top-3 left-4 pointer-events-auto">
-        <WorkspaceSwitcher />
-      </div>
+      {/* If bottom dock, show drawer and transient status above the capsule */}
+      {isBottom && drawerElement}
+      {isBottom && statusElement}
 
-      {/* Floating Agentic Dock Capsule - Smoothly expands when agent creates tools */}
+      {/* Dock Status Line (Lvl, XP, Streak) */}
+      <DockStatusLine className="mb-1.5 pointer-events-auto" />
+
+      {/* Floating Agentic Dock Capsule */}
       <motion.div
         ref={capsuleRef}
         layout
         transition={spring.soft}
-        className="pointer-events-auto relative bg-[#0c0e14]/95 border border-white/10 rounded-2xl p-1.5 flex items-center gap-1.5 shadow-2xl backdrop-blur-xl"
+        className={cn(
+          "pointer-events-auto relative rounded-2xl p-1.5 flex items-center gap-1.5 transition-colors",
+          currentStyle.capsuleClass
+        )}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           {allTools.map((tool) => {
@@ -283,10 +403,9 @@ export function AgenticDock({
                 data-dock-tool-id={tool.id}
                 onClick={() => handleToolClick(tool.id)}
                 className={cn(
-                  "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-colors duration-150 cursor-pointer focus:outline-none",
-                  !isActive && "text-[#9aa5b8] hover:text-white hover:bg-white/[0.08]",
-                  isActive &&
-                    "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border border-[var(--accent-lime)]/30 shadow-[0_0_12px_rgba(200,255,87,0.2)]",
+                  "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus:outline-none",
+                  isActive ? currentStyle.activeItemClass : currentStyle.inactiveItemClass,
+                  currentStyle.enableLift && !isReducedMotion && "hover:scale-115",
                   !isActive &&
                     isAgent &&
                     isAgentWorking &&
@@ -304,7 +423,12 @@ export function AgenticDock({
                 />
 
                 {/* Tooltip */}
-                <span className="pointer-events-none absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50">
+                <span
+                  className={cn(
+                    "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
+                    isBottom ? "-top-8" : "-bottom-8"
+                  )}
+                >
                   {tool.label}
                 </span>
               </motion.button>
@@ -324,7 +448,10 @@ export function AgenticDock({
               onClick={onStopBuilding}
               aria-label="Stop building"
               aria-busy="true"
-              className="group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl bg-white/[0.04] text-[var(--accent-lime)] cursor-pointer focus:outline-none"
+              className={cn(
+                "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl bg-white/[0.04] text-[var(--accent-lime)] cursor-pointer focus:outline-none transition-all duration-150",
+                currentStyle.enableLift && !isReducedMotion && "hover:scale-115"
+              )}
             >
               <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle
@@ -338,7 +465,12 @@ export function AgenticDock({
                   className="opacity-75"
                 />
               </svg>
-              <span className="pointer-events-none absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50">
+              <span
+                className={cn(
+                  "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
+                  isBottom ? "-top-8" : "-bottom-8"
+                )}
+              >
                 Stop building
               </span>
             </motion.button>
@@ -359,9 +491,10 @@ export function AgenticDock({
           aria-expanded={showCreator}
           aria-label="Add a tool"
           className={cn(
-            "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-colors duration-150 cursor-pointer focus:outline-none",
-            !showCreator && "text-[#9aa5b8] hover:text-white hover:bg-white/[0.08]",
-            showCreator && "text-white bg-white/[0.08]"
+            "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus:outline-none",
+            !showCreator && currentStyle.inactiveItemClass,
+            showCreator && "text-white bg-white/[0.08]",
+            currentStyle.enableLift && !isReducedMotion && "hover:scale-115"
           )}
         >
           <Plus
@@ -371,103 +504,20 @@ export function AgenticDock({
               showCreator && "rotate-45"
             )}
           />
-          <span className="pointer-events-none absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50">
+          <span
+            className={cn(
+              "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
+              isBottom ? "-top-8" : "-bottom-8"
+            )}
+          >
             Add
           </span>
         </button>
       </motion.div>
 
-      {/* Dynamic One-Line Tool Creator Drawer */}
-      <AnimatePresence>
-        {showCreator && (
-          <motion.div
-            ref={creatorDrawerRef}
-            layout
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.15 }}
-            className="pointer-events-auto mt-2 w-[calc(100vw-32px)] max-w-[460px] min-w-[340px] bg-[#0c0e14]/95 backdrop-blur-xl rounded-2xl p-2 shadow-2xl flex flex-col gap-1 z-50"
-          >
-            <div className="w-full flex items-center">
-              <input
-                ref={inputRef}
-                type="text"
-                value={creatorPrompt}
-                onChange={(e) => {
-                  setCreatorPrompt(e.target.value);
-                  setSelectedIndex(-1);
-                }}
-                onKeyDown={handleInputKeyDown}
-                placeholder="Add a tool"
-                className="w-full px-3 py-2 text-[15px] text-white placeholder:text-[#9aa5b8] bg-transparent outline-none rounded-xl"
-                aria-label="Tool to add"
-                role="combobox"
-                aria-expanded={showCreator}
-                aria-autocomplete="list"
-                aria-controls="creator-suggestions"
-                aria-activedescendant={
-                  selectedIndex >= 0 ? `creator-suggestion-${selectedIndex}` : undefined
-                }
-              />
-            </div>
-
-            <div
-              id="creator-suggestions"
-              role="listbox"
-              className="flex flex-col gap-0.5 pt-0.5"
-            >
-              {suggestions.map((suggestion, idx) => {
-                const isSelected = selectedIndex === idx;
-                return (
-                  <button
-                    key={suggestion}
-                    id={`creator-suggestion-${idx}`}
-                    role="option"
-                    aria-selected={isSelected}
-                    type="button"
-                    onClick={() => handleSelectSuggestion(suggestion)}
-                    onMouseEnter={() => setSelectedIndex(idx)}
-                    className={cn(
-                      "w-full text-left px-3 py-2 text-[15px] rounded-xl transition-colors cursor-pointer outline-none",
-                      isSelected
-                        ? "bg-white/[0.08] text-white"
-                        : "text-[#d1d6e2] hover:bg-white/[0.05] hover:text-white"
-                    )}
-                  >
-                    {suggestion}
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Transient Status Line */}
-      <AnimatePresence>
-        {activeStatus && !showCreator && (
-          <motion.div
-            initial={{ opacity: 0, y: -2 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -2 }}
-            transition={{ duration: 0.15 }}
-            aria-live="polite"
-            className="pointer-events-auto mt-2 text-[13px] text-[#9aa5b8] flex items-center gap-1.5 px-3 py-1 bg-[#0c0e14]/90 backdrop-blur-md rounded-full shadow-lg"
-          >
-            <span>{activeStatus}</span>
-            {activeStatus.includes("Couldn't build that") && onRetryBuilding && (
-              <button
-                type="button"
-                onClick={onRetryBuilding}
-                className="text-[var(--accent-lime)] hover:underline cursor-pointer ml-1"
-              >
-                Try again.
-              </button>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* If top dock, show drawer and transient status below the capsule */}
+      {!isBottom && drawerElement}
+      {!isBottom && statusElement}
     </header>
   );
 }
