@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { deleteCityFile } from "../../workspace/cityWorkspace";
+import { deleteFeature } from "../../workspace/features";
 
 export const delete_tab: AgentTool<{
   id: string;
@@ -9,7 +9,7 @@ export const delete_tab: AgentTool<{
 }> = {
   name: "delete_tab",
   description:
-    "Deletes a dynamic dock tool tab from the city workspace. Requires explicit user approval flag.",
+    "Deletes a dynamic dock tool tab or feature module from the city workspace. Requires explicit user approval flag.",
   schema: z.object({
     id: z.string().describe("Identifier of the dynamic tab to delete"),
     userApproved: z
@@ -31,8 +31,7 @@ export const delete_tab: AgentTool<{
       };
     }
 
-    await deleteCityFile(targetCity, `tabs/${args.id}/index.html`).catch(() => {});
-    await deleteCityFile(targetCity, `tabs/${args.id}/manifest.json`).catch(() => {});
+    await deleteFeature(targetCity, args.id);
 
     return {
       success: true,

@@ -9,3 +9,4 @@
 | 2026-10-27 | Agent Conversation Sheet, Orb, Web Speech & SSE tool execution loop | [#24](https://github.com/0Pxyz/polymax/pull/24) |
 | 2026-10-27 | Immersive full-screen chat, side-by-side dock layout, and 401 resolution | [#27](https://github.com/0Pxyz/polymax/pull/27) |
 | 2026-10-27 | Open Intents engine, tab state inspection, and SSE tab.prime events | [#26](https://github.com/0Pxyz/polymax/pull/26) |
+| 2026-10-28 | Tab as a workspace file: TypeScript feature modules, Bun transpilation, and sandbox bridge | [#28](https://github.com/0Pxyz/polymax/pull/28) |
