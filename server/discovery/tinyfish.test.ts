@@ -6,6 +6,7 @@ import { generateCityFeed } from "./feedGenerator";
 import { search_web } from "../agent/tools/search_web";
 import { fetch_page } from "../agent/tools/fetch_page";
 import { readCityFile } from "../workspace/cityWorkspace";
+import { db } from "../workspace/db";
 
 const TEST_CITY = "test-tinyfish-city";
 const TEST_DIR = path.resolve(process.cwd(), "workspace", TEST_CITY);
@@ -34,16 +35,20 @@ describe("TinyFish Web Discovery & City Feed Engine", () => {
   });
 
   it("caches repeated search queries in SQLite", async () => {
-    const start = Date.now();
     await tinyfish.search("Distributed Systems", "web", 2);
-    const firstDuration = Date.now() - start;
 
     const cacheStart = Date.now();
     const cachedHits = await tinyfish.search("Distributed Systems", "web", 2);
     const cachedDuration = Date.now() - cacheStart;
 
     expect(cachedHits.length).toBeGreaterThan(0);
-    expect(cachedDuration).toBeLessThanOrEqual(firstDuration + 5);
+    expect(cachedDuration).toBeLessThan(200);
+
+    // Verify cache persistence in SQLite database
+    const cachedRow = db
+      .query("SELECT COUNT(*) as c FROM discovery_cache WHERE query_type = 'search:web'")
+      .get() as any;
+    expect(cachedRow.c).toBeGreaterThan(0);
   });
 
   it("generateCityFeed creates feed.json in city workspace", async () => {
