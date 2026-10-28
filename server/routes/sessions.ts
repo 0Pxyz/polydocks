@@ -1,13 +1,8 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import {
-  createSession,
-  getSession,
-  listSessions,
-  createTask,
-  readSessionTranscript,
-  taskExecutionEngine,
-} from "../agent/taskRunner";
+import { SessionService } from "../services/sessionService";
+import { TaskService } from "../services/taskService";
+import { taskExecutionEngine } from "../agent/taskRunner";
 import type { AgentStepEvent } from "../agent/loop";
 
 export const sessionsRouter = new Hono();
@@ -18,7 +13,7 @@ export const sessionsRouter = new Hono();
  */
 sessionsRouter.get("/", (c) => {
   const workspaceId = c.req.query("workspaceId");
-  const sessions = listSessions(workspaceId);
+  const sessions = SessionService.listSessions(workspaceId);
   return c.json({ sessions });
 });
 
@@ -35,10 +30,12 @@ sessionsRouter.post("/", async (c) => {
   }
 
   const workspaceId = body.workspaceId || "default";
-  const session = createSession({
+  const session = await SessionService.createSession({
     workspaceId,
     title: body.title,
     metadata: body.metadata,
+    actor: "user",
+    idempotencyKey: body.idempotencyKey,
   });
 
   return c.json({ session }, 201);
@@ -51,13 +48,13 @@ sessionsRouter.post("/", async (c) => {
 sessionsRouter.get("/:id", async (c) => {
   const sessionId = c.req.param("id");
   const workspaceId = c.req.query("workspaceId");
-  const session = getSession(sessionId, workspaceId);
+  const session = SessionService.getSession(sessionId, workspaceId);
 
   if (!session) {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);
   }
 
-  const transcript = await readSessionTranscript(sessionId);
+  const transcript = await SessionService.getTranscript(sessionId);
 
   return c.json({
     session,
@@ -71,7 +68,7 @@ sessionsRouter.get("/:id", async (c) => {
  */
 sessionsRouter.post("/:id/run", async (c) => {
   const sessionId = c.req.param("id");
-  const session = getSession(sessionId);
+  const session = SessionService.getSession(sessionId);
 
   if (!session) {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);
@@ -89,7 +86,7 @@ sessionsRouter.post("/:id/run", async (c) => {
     return c.json({ error: "Missing required 'prompt' string field" }, 400);
   }
 
-  const task = createTask({
+  const task = await TaskService.createTask({
     sessionId,
     workspaceId: session.workspaceId,
     type: body.type || "chat",
@@ -98,10 +95,12 @@ sessionsRouter.post("/:id/run", async (c) => {
       cityId: body.cityId,
       origin: body.origin || "chat",
     },
+    actor: "user",
+    idempotencyKey: body.idempotencyKey,
   });
 
   // Start task asynchronously in background
-  const runningTask = await taskExecutionEngine.runTaskInBackground(task);
+  const runningTask = await TaskService.runTask(task, { actor: "user" });
 
   return c.json({ task: runningTask }, 202);
 });
@@ -113,7 +112,7 @@ sessionsRouter.post("/:id/run", async (c) => {
  */
 sessionsRouter.get("/:id/stream", (c) => {
   const sessionId = c.req.param("id");
-  const session = getSession(sessionId);
+  const session = SessionService.getSession(sessionId);
 
   if (!session) {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);

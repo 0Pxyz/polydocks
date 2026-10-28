@@ -1,15 +1,5 @@
 import { Hono } from "hono";
-import {
-  listWorkspaces,
-  getWorkspace,
-  createWorkspace,
-  updateWorkspace,
-  deleteWorkspace,
-  listWorkspacePlugins,
-  addPluginToWorkspace,
-  removePluginFromWorkspace,
-  setWorkspacePluginStatus,
-} from "../workspace/workspaces";
+import { WorkspaceService } from "../services/workspaceService";
 import { readFeature } from "../workspace/features";
 
 export const workspacesRouter = new Hono();
@@ -18,7 +8,7 @@ export const workspacesRouter = new Hono();
  * GET /api/workspaces - Lists all workspaces
  */
 workspacesRouter.get("/", (c) => {
-  const workspaces = listWorkspaces();
+  const workspaces = WorkspaceService.listWorkspaces();
   return c.json({ success: true, count: workspaces.length, data: workspaces });
 });
 
@@ -32,12 +22,14 @@ workspacesRouter.post("/", async (c) => {
       return c.json({ success: false, error: "Workspace name is required" }, 400);
     }
 
-    const ws = createWorkspace({
+    const ws = await WorkspaceService.createWorkspace({
       id: body.id,
       name: body.name,
       description: body.description,
       icon: body.icon,
       isDefault: body.isDefault,
+      actor: "user",
+      idempotencyKey: body.idempotencyKey,
     });
 
     return c.json({ success: true, data: ws }, 201);
@@ -51,7 +43,7 @@ workspacesRouter.post("/", async (c) => {
  */
 workspacesRouter.get("/:id", (c) => {
   const id = c.req.param("id");
-  const ws = getWorkspace(id);
+  const ws = WorkspaceService.getWorkspace(id);
   if (!ws) {
     return c.json({ success: false, error: "Workspace not found" }, 404);
   }
@@ -65,10 +57,11 @@ workspacesRouter.put("/:id", async (c) => {
   const id = c.req.param("id");
   try {
     const body = await c.req.json();
-    const updated = updateWorkspace(id, {
+    const updated = WorkspaceService.updateWorkspace(id, {
       name: body.name,
       description: body.description,
       icon: body.icon,
+      actor: "user",
     });
 
     if (!updated) {
@@ -85,7 +78,7 @@ workspacesRouter.put("/:id", async (c) => {
  */
 workspacesRouter.delete("/:id", (c) => {
   const id = c.req.param("id");
-  const result = deleteWorkspace(id);
+  const result = WorkspaceService.deleteWorkspace(id, "user");
   if (!result.success) {
     return c.json({ success: false, error: result.error || "Cannot delete workspace" }, 400);
   }
@@ -97,12 +90,12 @@ workspacesRouter.delete("/:id", (c) => {
  */
 workspacesRouter.get("/:id/plugins", (c) => {
   const id = c.req.param("id");
-  const ws = getWorkspace(id);
+  const ws = WorkspaceService.getWorkspace(id);
   if (!ws) {
     return c.json({ success: false, error: "Workspace not found" }, 404);
   }
 
-  const plugins = listWorkspacePlugins(id);
+  const plugins = WorkspaceService.listWorkspacePlugins(id);
   return c.json({ success: true, count: plugins.length, data: plugins });
 });
 
@@ -111,7 +104,7 @@ workspacesRouter.get("/:id/plugins", (c) => {
  */
 workspacesRouter.post("/:id/plugins", async (c) => {
   const id = c.req.param("id");
-  const ws = getWorkspace(id);
+  const ws = WorkspaceService.getWorkspace(id);
   if (!ws) {
     return c.json({ success: false, error: "Workspace not found" }, 404);
   }
@@ -122,11 +115,12 @@ workspacesRouter.post("/:id/plugins", async (c) => {
       return c.json({ success: false, error: "pluginId is required" }, 400);
     }
 
-    const mounted = addPluginToWorkspace(
+    const mounted = WorkspaceService.addPluginToWorkspace(
       id,
       body.pluginId,
       body.settings || {},
-      body.position || 0
+      body.position || 0,
+      "user"
     );
 
     return c.json({ success: true, data: mounted }, 201);
@@ -144,7 +138,7 @@ workspacesRouter.patch("/:id/plugins/:pluginId", async (c) => {
   try {
     const body = await c.req.json();
     const enabled = Boolean(body.enabled);
-    const updated = setWorkspacePluginStatus(id, pluginId, enabled);
+    const updated = WorkspaceService.setWorkspacePluginStatus(id, pluginId, enabled, "user");
     if (!updated) {
       return c.json({ success: false, error: "Plugin not found in workspace" }, 404);
     }
@@ -160,7 +154,7 @@ workspacesRouter.patch("/:id/plugins/:pluginId", async (c) => {
 workspacesRouter.delete("/:id/plugins/:pluginId", (c) => {
   const id = c.req.param("id");
   const pluginId = c.req.param("pluginId");
-  const removed = removePluginFromWorkspace(id, pluginId);
+  const removed = WorkspaceService.removePluginFromWorkspace(id, pluginId, "user");
   if (!removed) {
     return c.json({ success: false, error: "Plugin was not mounted in this workspace" }, 404);
   }
@@ -187,4 +181,3 @@ workspacesRouter.get("/:id/plugins/:pluginId/srcdoc", async (c) => {
     return c.text("Dynamic plugin not found", 404);
   }
 });
-

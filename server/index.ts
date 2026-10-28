@@ -15,6 +15,7 @@ import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
 import { sessionsRouter } from "./routes/sessions";
 import { tasksRouter } from "./routes/tasks";
+import { artifactsRouter } from "./routes/artifacts";
 import { taskExecutionEngine } from "./agent/taskRunner";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
@@ -119,6 +120,7 @@ app.route("/api/agent/memory", memoryRouter);
 // Mount Persistent Work Sessions & Background Task Engine (Issue #76)
 app.route("/api/sessions", sessionsRouter);
 app.route("/api/tasks", tasksRouter);
+app.route("/api/artifacts", artifactsRouter);
 
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);
