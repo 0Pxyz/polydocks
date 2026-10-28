@@ -24,6 +24,9 @@ import { inspect_experience } from "./inspect_experience";
 import { promote_to_plugin } from "./promote_to_plugin";
 import { inspect_execution } from "./inspect_execution";
 import { list_recent_executions } from "./list_recent_executions";
+import { create_plugin } from "./create_plugin";
+import { modify_plugin } from "./modify_plugin";
+import { operate_plugin } from "./operate_plugin";
 
 export * from "./types";
 export {
@@ -52,6 +55,9 @@ export {
   promote_to_plugin,
   inspect_execution,
   list_recent_executions,
+  create_plugin,
+  modify_plugin,
+  operate_plugin,
 };
 
 /**
@@ -83,4 +89,7 @@ export const defaultTools: AgentTool[] = [
   promote_to_plugin,
   inspect_execution,
   list_recent_executions,
+  create_plugin,
+  modify_plugin,
+  operate_plugin,
 ];

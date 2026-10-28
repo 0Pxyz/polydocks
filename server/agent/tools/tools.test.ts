@@ -29,7 +29,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(25);
+    expect(defaultTools.length).toBe(28);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -43,6 +43,13 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("read_city_file");
     expect(names).toContain("write_city_file");
     expect(names).toContain("open_source");
+    expect(names).toContain("search_web");
+    expect(names).toContain("fetch_page");
+    expect(names).toContain("plan_map");
+    expect(names).toContain("build_city");
+    expect(names).toContain("create_plugin");
+    expect(names).toContain("modify_plugin");
+    expect(names).toContain("operate_plugin");
     expect(names).toContain("search_web");
     expect(names).toContain("fetch_page");
     expect(names).toContain("plan_map");

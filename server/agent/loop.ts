@@ -3,7 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, isTabSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { loadSkill, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
@@ -125,6 +125,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       try {
         const tabSkillPrompt = await loadSkill("create-tab");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Dynamic Tab Synthesis\n${tabSkillPrompt}`;
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    if (isPluginSynthesisIntent(prompt)) {
+      try {
+        const pluginSkillPrompt = await loadSkill("synthesize-plugin");
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Synthesize & Modify PolyDocks Plugins\n${pluginSkillPrompt}`;
       } catch {
         // Non-fatal
       }

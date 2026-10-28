@@ -26,7 +26,73 @@ export async function loadSkill(skillName: string): Promise<string> {
 /**
  * Heuristic detector for whether user prompt involves dynamic tab/tool creation.
  */
+export function isPluginSynthesisIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+
+  // Negative filter: general informational questions, conversational greetings, pure search queries
+  if (
+    lower.startsWith("what is") ||
+    lower.startsWith("what are") ||
+    lower.startsWith("o que e") ||
+    lower.startsWith("o que é") ||
+    lower.startsWith("how does") ||
+    lower.startsWith("como funciona") ||
+    lower.startsWith("explain") ||
+    lower.startsWith("explica") ||
+    lower.startsWith("why is") ||
+    lower.startsWith("por que")
+  ) {
+    if (
+      !lower.includes("build") &&
+      !lower.includes("create") &&
+      !lower.includes("cria") &&
+      !lower.includes("crie") &&
+      !lower.includes("tool") &&
+      !lower.includes("plugin")
+    ) {
+      return false;
+    }
+  }
+
+  const triggers = [
+    "build a plugin",
+    "create a plugin",
+    "create plugin",
+    "build plugin",
+    "crie um plugin",
+    "criar plugin",
+    "build a tool",
+    "create a tool",
+    "crie uma ferramenta",
+    "criar ferramenta",
+    "pomodoro",
+    "pomodoro timer",
+    "timer",
+    "cronometro",
+    "cronômetro",
+    "kanban",
+    "kanban board",
+    "todo list",
+    "task manager",
+    "calculator",
+    "calculadora",
+    "flashcard",
+    "flashcards",
+    "micro-app",
+    "modify plugin",
+    "update plugin",
+    "modificar plugin",
+    "atualizar plugin",
+    "operate plugin",
+    "publish plugin",
+    "publicar plugin",
+  ];
+
+  return triggers.some((t) => lower.includes(t));
+}
+
 export function isTabSynthesisIntent(prompt: string): boolean {
+
   const lower = prompt.toLowerCase();
 
   // If prompt is clearly about world map or knowledge territory planning, avoid false tab trigger
