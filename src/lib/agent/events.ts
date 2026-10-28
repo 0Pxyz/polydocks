@@ -57,6 +57,21 @@ export type UIEvent =
       payload?: Record<string, unknown>;
     }
   | {
+      type: "map.changed";
+      step: number;
+      mapId: string;
+      name?: string;
+    }
+  | {
+      type: "map.point.added";
+      step: number;
+      cityId: string;
+      title: string;
+      x: number;
+      y: number;
+      mapId: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -115,6 +130,12 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       return "Writing workspace knowledge…";
     case "open_source":
       return "Opening curated source…";
+    case "list_maps":
+      return "Inspecting cartographic map styles…";
+    case "set_map":
+      return "Restyling the world map…";
+    case "place_city":
+      return "Placing it on the map…";
     default:
       return `Working with ${toolName}…`;
   }
@@ -212,6 +233,25 @@ export function adaptBackendEvent(raw: {
         experienceId: String(payload.tabId || payload.id || ""),
         url: payload.url ? String(payload.url) : undefined,
         payload: (payload.payload as Record<string, unknown>) || undefined,
+      };
+
+    case "map.changed":
+      return {
+        type: "map.changed",
+        step,
+        mapId: String(payload.mapId || ""),
+        name: payload.name ? String(payload.name) : undefined,
+      };
+
+    case "map.point.added":
+      return {
+        type: "map.point.added",
+        step,
+        cityId: String(payload.cityId || ""),
+        title: String(payload.title || ""),
+        x: Number(payload.x || 0),
+        y: Number(payload.y || 0),
+        mapId: String(payload.mapId || ""),
       };
 
     case "agent.finish":

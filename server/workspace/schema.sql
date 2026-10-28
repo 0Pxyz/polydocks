@@ -53,3 +53,31 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS maps (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  style TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  image_width INTEGER NOT NULL,
+  image_height INTEGER NOT NULL,
+  thumbnail_url TEXT NOT NULL,
+  regions_json TEXT,
+  sites_json TEXT,
+  license TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS map_points (
+  id TEXT PRIMARY KEY,
+  map_id TEXT NOT NULL,
+  city_id TEXT NOT NULL,
+  title TEXT,
+  x REAL NOT NULL,
+  y REAL NOT NULL,
+  status TEXT DEFAULT 'discovered',
+  created_at TEXT NOT NULL,
+  UNIQUE(map_id, city_id)
+);
+
+

@@ -14,6 +14,8 @@ export interface AgentStepEvent {
     | "tab.created"
     | "tray.open"
     | "tab.prime"
+    | "map.changed"
+    | "map.point.added"
     | "agent.finish"
     | "error";
   payload?: Record<string, unknown>;
@@ -267,6 +269,22 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           await onEvent({
             step: currentStep,
             type: "tab.prime",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        if (toolName === "set_map" && toolOutput && typeof toolOutput === "object") {
+          await onEvent({
+            step: currentStep,
+            type: "map.changed",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        if (toolName === "place_city" && toolOutput && typeof toolOutput === "object") {
+          await onEvent({
+            step: currentStep,
+            type: "map.point.added",
             payload: toolOutput as Record<string, unknown>,
           });
         }

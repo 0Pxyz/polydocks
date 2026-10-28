@@ -15,6 +15,9 @@ import { search_web } from "./search_web";
 import { fetch_page } from "./fetch_page";
 import { plan_map } from "./plan_map";
 import { build_city } from "./build_city";
+import { list_maps } from "./list_maps";
+import { set_map } from "./set_map";
+import { place_city } from "./place_city";
 
 export * from "./types";
 export {
@@ -34,6 +37,9 @@ export {
   fetch_page,
   plan_map,
   build_city,
+  list_maps,
+  set_map,
+  place_city,
 };
 
 /**
@@ -56,4 +62,7 @@ export const defaultTools: AgentTool[] = [
   fetch_page,
   plan_map,
   build_city,
+  list_maps,
+  set_map,
+  place_city,
 ];

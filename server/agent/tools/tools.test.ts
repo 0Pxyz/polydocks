@@ -28,8 +28,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("should export all 16 canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(16);
+  it("should export all 19 canonical tools in defaultTools catalog", () => {
+    expect(defaultTools.length).toBe(19);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -47,6 +47,9 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("fetch_page");
     expect(names).toContain("plan_map");
     expect(names).toContain("build_city");
+    expect(names).toContain("list_maps");
+    expect(names).toContain("set_map");
+    expect(names).toContain("place_city");
   });
 
   it("list_tabs returns builtins and dynamic tabs", async () => {
@@ -171,5 +174,32 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(result.topic).toBe("Distributed Systems");
     expect(result.status).toBe("ready");
     expect(result.questsCount).toBe(3);
+  });
+
+  it("list_maps, set_map, and place_city tools manage Maps v2 world cartography", async () => {
+    const { list_maps } = await import("./list_maps");
+    const { set_map } = await import("./set_map");
+    const { place_city } = await import("./place_city");
+
+    // 1. list_maps
+    const listRes = (await list_maps.execute({}, { cityId: TEST_CITY, step: 1 })) as any;
+    expect(listRes.maps.length).toBeGreaterThanOrEqual(4);
+    expect(listRes.maps.some((m: any) => m.id === "gloom")).toBe(true);
+
+    // 2. set_map
+    const setRes = (await set_map.execute({ mapId: "ancient" }, { cityId: TEST_CITY, step: 2 })) as any;
+    expect(setRes.action).toBe("map.changed");
+    expect(setRes.mapId).toBe("ancient");
+
+    // 3. place_city
+    const placeRes = (await place_city.execute(
+      { title: "Distributed Consensus", regionHint: "Reach", mapId: "gloom" },
+      { cityId: TEST_CITY, step: 3 }
+    )) as any;
+
+    expect(placeRes.action).toBe("map.point.added");
+    expect(placeRes.cityId).toBe("city-distributed-consensus");
+    expect(placeRes.x).toBeGreaterThan(0);
+    expect(placeRes.y).toBeGreaterThan(0);
   });
 });

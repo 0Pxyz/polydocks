@@ -73,3 +73,15 @@ When researching a city's topic, curate a balanced feed of **5 to 8 high-signal 
    - If user requested a specific source, call `open_intent` to prime the Browser or Papers tab immediately.
 3. **Synthesize Notes (Optional):**
    - If requested, append synthesized takeaways into `workspace/<city-id>/notes/<topic>.md` with citations.
+
+---
+
+## 5. World Map Placement & City Bootstrapping (Maps v2)
+
+When the user wants to learn, explore, or master a new topic (e.g. "I want to learn Stoicism"):
+1. **Place City First:** Call `place_city({ title, regionHint, near })` to establish a point on the active world map.
+   - `regionHint`: Reuse existing discipline names (e.g. "Philosophy & Mind", "Artificial Intelligence", "Quantum Mechanics").
+   - `near`: Cluster related topics near existing points if known.
+   - One point per city.
+   - **Never describe terrain:** The map is strictly the visual layer; never describe or generate terrain.
+2. **Build City Content:** Next, call `build_city({ cityId, topic })` to research sources, extract concepts, and design quests in `workspace/<city>/`.

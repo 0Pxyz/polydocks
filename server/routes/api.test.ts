@@ -100,4 +100,43 @@ describe("Polymax REST API Endpoints", () => {
       reader.cancel();
     }
   });
+
+  it("GET and POST /api/maps endpoints manage Maps v2 world cartography", async () => {
+    // 1. GET /api/maps
+    const listRes = await app.fetch(new Request("http://localhost:3000/api/maps"));
+    expect(listRes.status).toBe(200);
+    const listData = (await listRes.json()) as any;
+    expect(Array.isArray(listData.maps)).toBe(true);
+    expect(listData.maps.some((m: any) => m.id === "gloom")).toBe(true);
+
+    // 2. GET /api/maps/:id
+    const mapRes = await app.fetch(new Request("http://localhost:3000/api/maps/gloom"));
+    expect(mapRes.status).toBe(200);
+    const mapData = (await mapRes.json()) as any;
+    expect(mapData.id).toBe("gloom");
+    expect(mapData.kind).toBe("bundled");
+
+    // 3. POST /api/maps/:id/points
+    const postPointRes = await app.fetch(
+      new Request("http://localhost:3000/api/maps/gloom/points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cityId: "city-stoicism",
+          title: "Stoicism",
+          x: 0.35,
+          y: 0.45,
+          status: "discovered",
+        }),
+      })
+    );
+    expect(postPointRes.status).toBe(200);
+
+    // 4. GET /api/maps/:id/points
+    const getPointsRes = await app.fetch(new Request("http://localhost:3000/api/maps/gloom/points"));
+    expect(getPointsRes.status).toBe(200);
+    const pointsData = (await getPointsRes.json()) as any;
+    expect(Array.isArray(pointsData.points)).toBe(true);
+    expect(pointsData.points.some((p: any) => p.cityId === "city-stoicism")).toBe(true);
+  });
 });

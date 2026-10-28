@@ -8,6 +8,7 @@ import { config } from "./config";
 import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { mcpRouter } from "./api/mcp";
 import { citiesRouter } from "./routes/cities";
+import { mapsRouter } from "./routes/maps";
 import { db } from "./workspace/db";
 
 const app = new Hono();
@@ -84,6 +85,9 @@ app.route("/api/mcp", mcpRouter);
 
 // Mount Cities & Workspaces router
 app.route("/api/cities", citiesRouter);
+
+// Mount World Maps & Cartography router (Maps v2)
+app.route("/api/maps", mapsRouter);
 
 // SSE Streaming endpoint for agent tool-calling loop
 app.post("/api/agent", async (c) => {
