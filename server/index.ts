@@ -13,6 +13,9 @@ import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
+import { sessionsRouter } from "./routes/sessions";
+import { tasksRouter } from "./routes/tasks";
+import { taskExecutionEngine } from "./agent/taskRunner";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
@@ -21,6 +24,9 @@ import { db } from "./workspace/db";
 await initAgentHome().catch((err) => {
   console.error("[Polymax Server] Failed to initialize agent-home:", err);
 });
+
+// Recover any interrupted background tasks from previous server instance
+taskExecutionEngine.recoverInterruptedTasks();
 
 const app = new Hono();
 
@@ -109,6 +115,10 @@ app.route("/api/cities", citiesRouter);
 
 // Mount Agent Durable Memory router
 app.route("/api/agent/memory", memoryRouter);
+
+// Mount Persistent Work Sessions & Background Task Engine (Issue #76)
+app.route("/api/sessions", sessionsRouter);
+app.route("/api/tasks", tasksRouter);
 
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);
