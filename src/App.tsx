@@ -216,22 +216,27 @@ export default function App() {
                   />
                 </div>
               </DockSurface>
-            ) : (
-              /* Living World/Map View is the base full-bleed procedural canvas */
-              <div className="fixed inset-0 z-0 w-full h-full">
-                <WorldView
-                  onEnterCity={(cityName) => {
-                    setSelectedCity(cityName);
-                    enterCity(cityName);
-                    setActiveToolId("");
-                    setDockActiveTool("");
-                  }}
-                  onFoundCityTopic={(_topic) => {
-                    setLayoutState("sheet");
-                  }}
-                />
-              </div>
-            )}
+            ) : null}
+
+            {/* Living World/Map View is the base full-bleed illustrated canvas */}
+            <div className="fixed inset-0 z-0 w-full h-full">
+              <WorldView
+                activeCityId={
+                  viewMode === "city" || activeToolId === "city"
+                    ? activeCityId || selectedCity
+                    : undefined
+                }
+                onEnterCity={(cityName) => {
+                  setSelectedCity(cityName);
+                  enterCity(cityName);
+                  setActiveToolId("");
+                  setDockActiveTool("");
+                }}
+                onFoundCityTopic={(_topic) => {
+                  setLayoutState("sheet");
+                }}
+              />
+            </div>
           </main>
         </div>
       </RootLayout>
