@@ -1,13 +1,5 @@
 import { useState } from "react";
-import {
-  ArrowLeft,
-  BookOpen,
-  FileText,
-  Flame,
-  Terminal,
-  Sparkles,
-  LayoutDashboard,
-} from "lucide-react";
+import { ArrowLeft } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DynamicTabContainer } from "@/features/dock/DynamicTabContainer";
@@ -17,6 +9,7 @@ import { NotesView } from "./tools/NotesView";
 import { SourcesView } from "./tools/SourcesView";
 import { QuestsView } from "./tools/QuestsView";
 import { TerminalView } from "./tools/TerminalView";
+import { FilesView } from "./tools/FilesView";
 import type { CityWorkspaceProps } from "./types";
 
 export function CityWorkspace({
@@ -44,16 +37,16 @@ export function CityWorkspace({
   return (
     <div className={`flex flex-col w-full max-w-5xl mx-auto p-4 sm:p-6 gap-6 ${className}`}>
       {/* Persistent Breadcrumbs Navigation Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border/80">
         {/* Breadcrumb path */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             variant="ghost"
             size="sm"
             onClick={onBackToWorld}
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8 px-2 cursor-pointer font-mono"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft size={16} />
             <span>World Map</span>
           </Button>
 
@@ -84,92 +77,7 @@ export function CityWorkspace({
         </div>
       </header>
 
-      {/* Tool Navigation Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-border/40 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => handleSelectTool("overview")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-            activeTool === "overview" || !activeTool || activeTool === "city"
-              ? "bg-secondary text-primary border border-primary/30"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <LayoutDashboard className="w-3.5 h-3.5" />
-          <span>Overview</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTool("notes")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-            activeTool === "notes"
-              ? "bg-secondary text-primary border border-primary/30"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Notes ({data.notes.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTool("sources")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-            activeTool === "sources" || activeTool === "browser"
-              ? "bg-secondary text-primary border border-primary/30"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>Sources ({data.sources.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTool("quests")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-            activeTool === "quests"
-              ? "bg-secondary text-primary border border-primary/30"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-          <span>Quests ({data.quests.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleSelectTool("terminal")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-            activeTool === "terminal"
-              ? "bg-secondary text-primary border border-primary/30"
-              : "text-muted-foreground hover:text-foreground hover:bg-card"
-          }`}
-        >
-          <Terminal className="w-3.5 h-3.5" />
-          <span>Terminal</span>
-        </button>
-
-        {/* Dynamic tabs from agent */}
-        {data.dynamicTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => handleSelectTool(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
-              activeTool === tab.id
-                ? "bg-secondary text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-card"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-            <span>{tab.title}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Main Workspace Viewport */}
+      {/* Main Workspace Viewport switched natively via the Agentic Dock */}
       <main className="w-full flex-1">
         {dynamicTab ? (
           <div className="w-full h-[640px] rounded-xl overflow-hidden border border-border bg-card">
@@ -181,6 +89,11 @@ export function CityWorkspace({
               className="w-full h-full"
             />
           </div>
+        ) : activeTool === "files" ? (
+          <FilesView
+            cityId={cityId}
+            cityName={data.title}
+          />
         ) : activeTool === "notes" ? (
           <NotesView
             notes={data.notes}
