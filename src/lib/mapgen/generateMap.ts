@@ -3,7 +3,7 @@ import type {
   CitySpec,
   MapBounds,
   MapGenOptions,
-  MapSpec,
+  LegacyMapSpec as MapSpec,
   Position2D,
   RegionSpec,
   RoadConnection,

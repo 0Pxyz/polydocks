@@ -1,3 +1,5 @@
+export * from "../../features/world/types";
+
 export interface Position2D {
   x: number;
   y: number;
@@ -32,7 +34,7 @@ export interface RegionSpec {
   cities: string[];
 }
 
-export interface MapBounds {
+export interface LegacyMapBounds {
   minX: number;
   maxX: number;
   minY: number;
@@ -48,12 +50,12 @@ export interface MapGenOptions {
   minCityDistance?: number;
 }
 
-export interface MapSpec {
+export interface LegacyMapSpec {
   seed: string;
   title: string;
   regions: RegionSpec[];
   cities: CitySpec[];
   connections: RoadConnection[];
-  bounds: MapBounds;
+  bounds: LegacyMapBounds;
   createdAt: string;
 }
