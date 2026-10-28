@@ -13,3 +13,4 @@
 | 2026-10-28 | Dynamic tab runtime: sandboxed iframe host, host-bridge listener, and guest preamble | [#29](https://github.com/0Pxyz/polymax/pull/29) |
 | 2026-10-28 | Deterministic procedural world map generator (generateMap, Mulberry32 PRNG, road networks) | [#30](https://github.com/0Pxyz/polymax/pull/30) |
 | 2026-10-28 | Platform abstraction layer (storage, safe window, env) and foundational Zustand stores | [#31](https://github.com/0Pxyz/polymax/pull/31) |
+| 2026-10-28 | Maps, the world of knowledge: procedural fantasy cartography, living cities, and staged builder pipeline | [#32](https://github.com/0Pxyz/polymax/pull/32) |
