@@ -4,6 +4,7 @@ import { BUNDLED_MAPS } from "../world/bundledMaps";
 import { IllustratedWorldMap } from "../world/IllustratedWorldMap";
 import { MapMarkersOverlay } from "../world/MapMarkersOverlay";
 import { MapStylePicker } from "../world/MapStylePicker";
+import { MapImportModal } from "../world/MapImportModal";
 import { syncCitiesToMap, placeCityOnMap } from "../world/placement";
 import { isPointOnLand } from "../world/landmask";
 import { useCityBuildStream } from "../world/useCityBuildStream";
@@ -33,6 +34,8 @@ export function WorldView({
   activeCityId,
 }: WorldViewProps) {
   const [activeMapId, setActiveMapId] = useState<string>("gloom");
+  const [customMaps, setCustomMaps] = useState<MapSource[]>([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [cityPoints, setCityPoints] = useState<CityPoint[]>([]);
   const [isFlyingIn, setIsFlyingIn] = useState<boolean>(false);
   const [targetCityId, setTargetCityId] = useState<string | null>(null);
@@ -58,9 +61,26 @@ export function WorldView({
     ...externalProgress,
   };
 
+  const allMaps = useMemo(() => {
+    return [...BUNDLED_MAPS, ...customMaps];
+  }, [customMaps]);
+
   const activeMap: MapSource = useMemo(() => {
-    return BUNDLED_MAPS.find((m) => m.id === activeMapId) || BUNDLED_MAPS[0];
-  }, [activeMapId]);
+    return allMaps.find((m) => m.id === activeMapId) || allMaps[0];
+  }, [allMaps, activeMapId]);
+
+  // Load imported maps from server
+  useEffect(() => {
+    fetch("/api/maps")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.maps) {
+          const imported = data.maps.filter((m: MapSource) => m.kind === "imported");
+          setCustomMaps(imported);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Sync cities whenever map changes
   useEffect(() => {
@@ -213,11 +233,22 @@ export function WorldView({
       {/* Style Picker (Frameless Bottom-Center) */}
       {!activeCityId && (
         <MapStylePicker
-          availableMaps={BUNDLED_MAPS}
+          availableMaps={allMaps}
           activeMapId={activeMapId}
           onSelectMap={setActiveMapId}
+          onOpenUpload={() => setIsImportModalOpen(true)}
         />
       )}
+
+      {/* Map Import Modal (Phase 2 Custom Uploads) */}
+      <MapImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onMapImported={(newMap) => {
+          setCustomMaps((prev) => [...prev, newMap]);
+          setActiveMapId(newMap.id);
+        }}
+      />
 
       {/* Found-a-city Inline Input Prompt */}
       <AnimatePresence>
