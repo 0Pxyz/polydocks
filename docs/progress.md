@@ -28,3 +28,4 @@
 | 2026-10-28 | Permissions policy matrix, scoped execution context (SSRF, fs confinement, exec, canary redaction), and approval flow | [#57](https://github.com/0Pxyz/polymax/pull/57) |
 | 2026-10-28 | Plugins management surface, lifecycle UI, MCP connection popover, and inline approvals | [#58](https://github.com/0Pxyz/polymax/pull/58) |
 | 2026-10-28 | Experience manifests, bridge capability invocation, runtime error reporting, and promote_to_plugin | [#59](https://github.com/0Pxyz/polymax/pull/59) |
+| 2026-10-28 | Persistent per-city conversation, execution introspection (inspect_execution), and failure retry | [#60](https://github.com/0Pxyz/polymax/pull/60) |

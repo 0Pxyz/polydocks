@@ -22,6 +22,8 @@ import { find_capabilities } from "./find_capabilities";
 import { invoke_capability } from "./invoke_capability";
 import { inspect_experience } from "./inspect_experience";
 import { promote_to_plugin } from "./promote_to_plugin";
+import { inspect_execution } from "./inspect_execution";
+import { list_recent_executions } from "./list_recent_executions";
 
 export * from "./types";
 export {
@@ -48,6 +50,8 @@ export {
   invoke_capability,
   inspect_experience,
   promote_to_plugin,
+  inspect_execution,
+  list_recent_executions,
 };
 
 /**
@@ -77,4 +81,6 @@ export const defaultTools: AgentTool[] = [
   invoke_capability,
   inspect_experience,
   promote_to_plugin,
+  inspect_execution,
+  list_recent_executions,
 ];

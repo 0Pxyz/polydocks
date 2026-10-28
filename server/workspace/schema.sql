@@ -130,6 +130,28 @@ CREATE TABLE IF NOT EXISTS experience_errors (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS city_conversations (
+  id TEXT PRIMARY KEY,
+  city_id TEXT NOT NULL,
+  title TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(city_id)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  city_id TEXT NOT NULL,
+  role TEXT NOT NULL, -- 'user' | 'assistant' | 'system' | 'tool'
+  content TEXT NOT NULL,
+  tool_calls_json TEXT,
+  tool_call_id TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (conversation_id) REFERENCES city_conversations(id) ON DELETE CASCADE
+);
+
+
 
 
 
