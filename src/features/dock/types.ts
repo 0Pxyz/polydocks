@@ -42,6 +42,8 @@ export interface HostBridgeResponse {
 export interface HostBridgeOptions {
   cityId: string;
   tabId: string;
+  workspaceId?: string;
+  pluginId?: string;
   storagePrefix?: string;
   allowedCapabilities?: string[];
   onError?: (error: unknown) => void;

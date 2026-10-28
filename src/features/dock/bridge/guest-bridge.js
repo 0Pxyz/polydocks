@@ -60,20 +60,28 @@ export const GUEST_BRIDGE_SCRIPT = `
     }, '*');
   });
 
-  window.polymax = {
+    window.polymax = {
     storage: {
       get: (key) => sendHostRequest('storage.get', { key }),
       set: (key, value) => sendHostRequest('storage.set', { key, value }),
       remove: (key) => sendHostRequest('storage.remove', { key }),
     },
     invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
+    invokeAction: (action, args) => sendHostRequest('capability.invoke', { capabilityId: action, input: args }),
     openUrl: (url) => sendHostRequest('openUrl', { url }),
     getContext: () => sendHostRequest('getContext', {}),
     submit: (command) => sendHostRequest('submit', { command }),
     ui: {
       expand: () => sendHostRequest('ui.expand', {}),
       collapse: () => sendHostRequest('ui.collapse', {}),
+    },
+    theme: {
+      accent: '#C8FF57',
+      bg: '#0A0A0C',
+      surface: '#131318',
+      text: '#F0F0F5',
     }
   };
+  window.polydocks = window.polymax;
 })();
 `;

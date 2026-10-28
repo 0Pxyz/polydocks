@@ -7,10 +7,14 @@ export function createHostBridge(
   targetWindow: Window | null,
   options: HostBridgeOptions
 ) {
-  const { cityId, tabId, storagePrefix = "polymax" } = options;
+  const cityId = options.cityId || options.workspaceId || "global";
+  const tabId = options.tabId || options.pluginId || "default";
+  const effectiveScope = options.workspaceId || options.cityId || "global";
+  const effectiveEntityId = options.pluginId || options.tabId || "default";
+  const storagePrefix = options.storagePrefix || (options.workspaceId ? "polydocks" : "polymax");
 
   const buildStorageKey = (key?: string) => {
-    return `${storagePrefix}:${cityId}:${tabId}:${key || ""}`;
+    return `${storagePrefix}:${effectiveScope}:${effectiveEntityId}:${key || ""}`;
   };
 
   const respond = (requestId: number, result?: unknown, error?: string) => {
@@ -70,8 +74,10 @@ export function createHostBridge(
 
         case "getContext": {
           let ctx: Record<string, unknown> = {
-            cityId,
-            tabId,
+            cityId: effectiveScope,
+            tabId: effectiveEntityId,
+            workspaceId: options.workspaceId,
+            pluginId: options.pluginId,
             timestamp: new Date().toISOString(),
           };
           if (options.getContext) {
