@@ -10,12 +10,18 @@ import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
+import { useNavigationStore } from "@/lib/store/useNavigationStore";
+import { useDockStore } from "@/lib/store/useDockStore";
+import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>("Neural Networks");
+
+  const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
+  const { setActiveTool: setDockActiveTool } = useDockStore();
 
   const {
     layoutState,
@@ -49,6 +55,20 @@ export default function App() {
       return;
     }
 
+    if (toolId === "world") {
+      exitToWorld();
+      setActiveToolId("");
+      setDockActiveTool("");
+      return;
+    }
+
+    if (toolId === "city") {
+      enterCity(selectedCity);
+      setActiveToolId("");
+      setDockActiveTool("");
+      return;
+    }
+
     const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
 
     // If chat is full and a tool is clicked, split to side
@@ -56,9 +76,11 @@ export default function App() {
       if (isWide) {
         setLayoutState("side");
         setActiveToolId(toolId);
+        setDockActiveTool(toolId);
       } else {
         setLayoutState("sheet");
         setActiveToolId(toolId);
+        setDockActiveTool(toolId);
       }
       return;
     }
@@ -66,12 +88,15 @@ export default function App() {
     // If chat is in side mode and same tool is re-clicked, close tool and chat goes to full
     if (layoutState === "side" && activeToolId === toolId) {
       setActiveToolId("");
+      setDockActiveTool("");
       setLayoutState("full");
       return;
     }
 
     // Toggle tool selection normally
-    setActiveToolId((prev) => (prev === toolId ? "" : toolId));
+    const nextTool = activeToolId === toolId ? "" : toolId;
+    setActiveToolId(nextTool);
+    setDockActiveTool(nextTool);
   };
 
   useEffect(() => {
@@ -177,12 +202,18 @@ export default function App() {
               <DockSurface frameless>
                 <ThemeCustomizerView onDismiss={() => handleDismissTool("theme")} />
               </DockSurface>
-            ) : activeToolId === "city" ? (
+            ) : viewMode === "city" || activeToolId === "city" ? (
               <DockSurface>
                 <div className="w-full max-w-5xl">
                   <CityView
-                    cityName={selectedCity}
-                    onBackToWorld={() => setActiveToolId("world")}
+                    cityName={activeCityId || selectedCity}
+                    activeToolId={activeToolId === "city" ? "overview" : activeToolId}
+                    onSelectTool={handleSelectTool}
+                    onBackToWorld={() => {
+                      exitToWorld();
+                      setActiveToolId("");
+                      setDockActiveTool("");
+                    }}
                   />
                 </div>
               </DockSurface>
@@ -192,7 +223,9 @@ export default function App() {
                 <WorldView
                   onEnterCity={(cityName) => {
                     setSelectedCity(cityName);
-                    setActiveToolId("city");
+                    enterCity(cityName);
+                    setActiveToolId("");
+                    setDockActiveTool("");
                   }}
                   onFoundCityTopic={(_topic) => {
                     setLayoutState("sheet");

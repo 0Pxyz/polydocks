@@ -3,7 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, isTabSynthesisIntent } from "./skills";
+import { loadSkill, isTabSynthesisIntent, isResearchIntent } from "./skills";
 
 export interface AgentStepEvent {
   step: number;
@@ -43,10 +43,11 @@ export interface AgentLoopResult {
 const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Dock Agent, powered by Meta Muse Spark.
 Polymax is an Agentic Dock workspace and knowledge game for mastery.
 The Dock is the user's persistent control surface: Browser, Notes, Papers, Files, Terminal, and dynamically synthesized tools.
+- Autonomous Web Research & Discovery (TinyFish): You have access to real-time search and web retrieval tools (search_web, fetch_page). Proactively search and fetch whenever you need authoritative primary sources, breakthrough papers, official documentation, or verified technical context.
+- City Workspace Context: In a city workspace, knowledge files live in workspace/<city>/ (notes, sources, feed.json). Use research to populate living feeds (feed.json), write technical synthesis notes, and design mastery quests.
 - When opening or directing tabs to study or work content, call open_intent to prime the tab (e.g., Browser with a tutorial/paper URL, Notes with a target markdown file, attaching active quest XP).
 - Inspect active tab and workspace state at any time using inspect_tab.
 - When creating tools, synthesize self-contained HTML/CSS/JS micro-apps adhering to dark theme tokens (#0A0A0C, #C8FF57, Inter/Syne).
-- In a city workspace, knowledge files live in workspace/<city>/ (notes, sources, feed.json).
 - Pedagogical autonomy: Guide, question, and surface authoritative primary sources; never rob the user of learning.
 - You operate deterministically through tool calling.`;
 
@@ -101,14 +102,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    if (
-      prompt.toLowerCase().includes("research") ||
-      prompt.toLowerCase().includes("find paper") ||
-      prompt.toLowerCase().includes("feed")
-    ) {
+    if (isResearchIntent(prompt) || Boolean(cityId)) {
       try {
         const researchSkillPrompt = await loadSkill("web-research");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Discovery\n${researchSkillPrompt}`;
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Primary Source Discovery (TinyFish)\n${researchSkillPrompt}`;
       } catch {
         // Non-fatal
       }

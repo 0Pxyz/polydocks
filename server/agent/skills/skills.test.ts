@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isTabSynthesisIntent, loadSkill } from "./index";
+import { isTabSynthesisIntent, isResearchIntent, loadSkill } from "./index";
 import { runAgentLoop } from "../loop";
 
 describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
@@ -79,5 +79,53 @@ describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
     expect(capturedSystemMessage).toContain("Specialized Skill: Dynamic Tab Synthesis");
     expect(capturedSystemMessage).toContain("#0A0A0C");
     expect(capturedSystemMessage).toContain("#C8FF57");
+  });
+
+  it("isResearchIntent detects research, discovery, and knowledge queries across languages", () => {
+    expect(isResearchIntent("pesquise sobre transformers e gere um feed")).toBe(true);
+    expect(isResearchIntent("find research papers on raft consensus")).toBe(true);
+    expect(isResearchIntent("create docs for the city directory")).toBe(true);
+    expect(isResearchIntent("create quests for quantum computing")).toBe(true);
+    expect(isResearchIntent("learn about neural networks")).toBe(true);
+    expect(isResearchIntent("quais sao as fontes confiaveis")).toBe(true);
+
+    expect(isResearchIntent("hello world")).toBe(false);
+    expect(isResearchIntent("change theme color to purple")).toBe(false);
+  });
+
+  it("runAgentLoop dynamically injects web-research skill into system prompt on research intent or city workspace", async () => {
+    let capturedSystemMessage = "";
+
+    const mockLlmClient: any = {
+      chat: {
+        completions: {
+          create: async (params: any) => {
+            const sys = params.messages.find((m: any) => m.role === "system");
+            capturedSystemMessage = sys?.content || "";
+            return {
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: "Researching topic with TinyFish...",
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    await runAgentLoop({
+      prompt: "pesquise os papers mais recentes sobre distributed systems",
+      cityId: "distributed-systems",
+      llmClient: mockLlmClient,
+    });
+
+    expect(capturedSystemMessage).toContain("Specialized Skill: Web Research & Primary Source Discovery (TinyFish)");
+    expect(capturedSystemMessage).toContain("search_web");
+    expect(capturedSystemMessage).toContain("fetch_page");
+    expect(capturedSystemMessage).toContain("Autonomous Web Research & Discovery");
   });
 });
