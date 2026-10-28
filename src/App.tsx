@@ -27,9 +27,14 @@ export default function App() {
     layoutState,
     sideWidth,
     isStreaming,
+    isBuildingTool,
+    buildingToolName,
+    statusText,
     setLayoutState,
     toggleAgent,
     sendMessage,
+    abortStream,
+    retryLast,
   } = useConversationStore();
 
   const {
@@ -128,25 +133,57 @@ export default function App() {
     setDockActiveTool("flashcards");
   };
 
-  const handleAddAction = (action: "synthesize_tool" | "create_file" | "create_note" | "add_flashcards") => {
-    switch (action) {
-      case "synthesize_tool":
-        setLayoutState("sheet");
-        sendMessage(`Synthesize a custom tool for ${selectedCity}`, selectedCity);
-        break;
-      case "add_flashcards":
-        handleSynthesizeTool();
-        break;
-      case "create_file":
-        setActiveToolId("files");
-        setDockActiveTool("files");
-        break;
-      case "create_note":
-        setActiveToolId("notes");
-        setDockActiveTool("notes");
-        break;
+  const handleToolPromptSubmit = (prompt: string) => {
+    const isFlashcards = prompt.toLowerCase().includes("flashcard");
+    const targetCity = activeCityId || selectedCity;
+
+    sendMessage(
+      prompt,
+      targetCity,
+      {
+        onExperienceCreated: (exp) => {
+          setExtraTools((prev) => {
+            if (prev.some((t) => t.id === exp.id)) return prev;
+            return [
+              ...prev,
+              {
+                id: exp.id,
+                label: exp.title,
+                type: "icon",
+                icon: resolveIcon(exp.icon),
+              },
+            ];
+          });
+        },
+        onOpenExperience: (expId) => {
+          setActiveToolId(expId);
+          setDockActiveTool(expId);
+        },
+      },
+      { origin: "dock-add" }
+    );
+
+    if (isFlashcards) {
+      setTimeout(() => {
+        setExtraTools((prev) => {
+          if (prev.some((t) => t.id === "flashcards")) return prev;
+          return [
+            ...prev,
+            {
+              id: "flashcards",
+              label: `${targetCity} Flashcards`,
+              type: "icon",
+              icon: resolveIcon("cards"),
+            },
+          ];
+        });
+        setActiveToolId("flashcards");
+        setDockActiveTool("flashcards");
+      }, 600);
     }
   };
+
+
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -212,12 +249,39 @@ export default function App() {
 
           {/* Pinned Agentic Dock at the top edge */}
           <AgenticDock
+            cityName={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             activeToolId={activeToolId}
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
             extraTools={extraTools}
             onSelectTool={handleSelectTool}
-            onAddAction={handleAddAction}
+            onSubmitToolPrompt={handleToolPromptSubmit}
+            isBuilding={isBuildingTool}
+            buildingName={buildingToolName}
+            statusText={statusText}
+            onStopBuilding={abortStream}
+            onRetryBuilding={() =>
+              retryLast(activeCityId || selectedCity, {
+                onExperienceCreated: (exp) => {
+                  setExtraTools((prev) => {
+                    if (prev.some((t) => t.id === exp.id)) return prev;
+                    return [
+                      ...prev,
+                      {
+                        id: exp.id,
+                        label: exp.title,
+                        type: "icon",
+                        icon: resolveIcon(exp.icon),
+                      },
+                    ];
+                  });
+                },
+                onOpenExperience: (expId) => {
+                  setActiveToolId(expId);
+                  setDockActiveTool(expId);
+                },
+              })
+            }
           />
 
           {/* Single Agent Conversation Instance */}

@@ -69,7 +69,6 @@ interface AgenticDockProps {
   statusText?: string;
   onStopBuilding?: () => void;
   onRetryBuilding?: () => void;
-  onAddAction?: (action: "synthesize_tool" | "create_file" | "create_note" | "add_flashcards") => void;
 }
 
 export function AgenticDock({
@@ -87,7 +86,6 @@ export function AgenticDock({
   statusText,
   onStopBuilding,
   onRetryBuilding,
-  onAddAction: _onAddAction,
 }: AgenticDockProps) {
   const headerRef = useRef<HTMLElement>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
