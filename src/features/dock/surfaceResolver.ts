@@ -13,6 +13,9 @@ import {
   Target,
   BookOpen,
   SquaresFour,
+  PlugsConnected,
+  PuzzlePiece,
+  ShieldCheck,
 } from "@phosphor-icons/react";
 import type { IconComponent } from "@/components/icons/adapter";
 
@@ -31,6 +34,9 @@ export const ICON_CATALOG: Record<string, IconComponent> = {
   Target,
   BookOpen,
   SquaresFour,
+  PlugsConnected,
+  PuzzlePiece,
+  ShieldCheck,
 };
 
 /**

@@ -26,3 +26,4 @@
 | 2026-10-28 | Progressive disclosure meta-tools (find_capabilities, invoke_capability) and first-party plugins | [#55](https://github.com/0Pxyz/polymax/pull/55) |
 | 2026-10-28 | Dock surface resolution from plugin manifests with legacy tab adapter | [#56](https://github.com/0Pxyz/polymax/pull/56) |
 | 2026-10-28 | Permissions policy matrix, scoped execution context (SSRF, fs confinement, exec, canary redaction), and approval flow | [#57](https://github.com/0Pxyz/polymax/pull/57) |
+| 2026-10-28 | Plugins management surface, lifecycle UI, MCP connection popover, and inline approvals | [#58](https://github.com/0Pxyz/polymax/pull/58) |

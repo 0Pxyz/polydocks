@@ -10,6 +10,7 @@ import { QuestsView } from "./tools/QuestsView";
 import { TerminalView } from "./tools/TerminalView";
 import { FilesView } from "./tools/FilesView";
 import { FlashcardsView } from "./FlashcardsView";
+import { PluginsView } from "@/features/plugins/PluginsView";
 import type { CityWorkspaceProps } from "./types";
 
 interface ExtendedCityWorkspaceProps extends CityWorkspaceProps {
@@ -94,6 +95,10 @@ export function CityWorkspace({
               cityName={data.title}
               notesCount={data.notes.length}
               sourcesCount={data.sources.length}
+            />
+          ) : activeTool === "plugins" ? (
+            <PluginsView
+              onDismiss={() => handleSelectTool("overview")}
             />
           ) : (
             <CityOverview
