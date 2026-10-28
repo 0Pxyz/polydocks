@@ -3,6 +3,7 @@ import { Compass, Sparkle, Cards } from "@phosphor-icons/react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
+import { CommandPalette } from "@/features/dock/CommandPalette";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
@@ -283,6 +284,23 @@ export default function App() {
                 },
               })
             }
+          />
+
+          {/* Dynamic Command Palette (⌘K) */}
+          <CommandPalette
+            cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
+            onOpenAgent={() => {
+              setActiveToolId("agent");
+              setDockActiveTool("agent");
+            }}
+            onOpenInstallUrl={() => {
+              setActiveToolId("plugins");
+              setDockActiveTool("plugins");
+            }}
+            onOpenMcpConnect={() => {
+              setActiveToolId("plugins");
+              setDockActiveTool("plugins");
+            }}
           />
 
           {/* Single Agent Conversation Instance */}
