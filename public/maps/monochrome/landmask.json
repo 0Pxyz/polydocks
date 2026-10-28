@@ -1,0 +1,23 @@
+{
+  "id": "monochrome",
+  "regions": [
+    {
+      "id": "reg-1",
+      "cx": 0.34,
+      "cy": 0.4,
+      "radius": 0.18
+    },
+    {
+      "id": "reg-2",
+      "cx": 0.7,
+      "cy": 0.45,
+      "radius": 0.18
+    },
+    {
+      "id": "reg-3",
+      "cx": 0.52,
+      "cy": 0.72,
+      "radius": 0.18
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "id": "monochrome",
+  "name": "Monochrome Slate",
+  "style": "monochrome",
+  "kind": "bundled",
+  "image": {
+    "url": "/maps/monochrome/map.webp",
+    "width": 2048,
+    "height": 1152
+  },
+  "thumbnail": "/maps/monochrome/thumb.webp",
+  "regions": [
+    {
+      "id": "reg-1",
+      "name": "Graphite Frontier",
+      "color": "#c8ff57",
+      "cx": 0.34,
+      "cy": 0.4
+    },
+    {
+      "id": "reg-2",
+      "name": "Obsidian Ridge",
+      "color": "#e4e4e7",
+      "cx": 0.7,
+      "cy": 0.45
+    },
+    {
+      "id": "reg-3",
+      "name": "Basalt Valley",
+      "color": "#a1a1aa",
+      "cx": 0.52,
+      "cy": 0.72
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-1",
+      "name": "Monolith Prime",
+      "x": 0.32,
+      "y": 0.36,
+      "regionId": "reg-1",
+      "importance": 1
+    },
+    {
+      "id": "site-2",
+      "name": "Foundry Station",
+      "x": 0.38,
+      "y": 0.44,
+      "regionId": "reg-1",
+      "importance": 0.7
+    },
+    {
+      "id": "site-3",
+      "name": "Silicon Harbor",
+      "x": 0.28,
+      "y": 0.46,
+      "regionId": "reg-1",
+      "importance": 0.5
+    },
+    {
+      "id": "site-4",
+      "name": "Apex Stronghold",
+      "x": 0.68,
+      "y": 0.42,
+      "regionId": "reg-2",
+      "importance": 1
+    },
+    {
+      "id": "site-5",
+      "name": "Sentry Bluff",
+      "x": 0.74,
+      "y": 0.5,
+      "regionId": "reg-2",
+      "importance": 0.6
+    },
+    {
+      "id": "site-6",
+      "name": "Basalt Core",
+      "x": 0.5,
+      "y": 0.68,
+      "regionId": "reg-3",
+      "importance": 1
+    },
+    {
+      "id": "site-7",
+      "name": "Echo Pier",
+      "x": 0.58,
+      "y": 0.76,
+      "regionId": "reg-3",
+      "importance": 0.6
+    }
+  ],
+  "license": "MIT (Generated via Azgaar Fantasy Map Generator)"
+}
