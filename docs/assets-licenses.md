@@ -19,4 +19,6 @@ Per project principles, external copyrighted cartography assets (such as user ma
 | `simplex-noise` | MIT | Deterministic heightfield generation & coastline perturbation | https://github.com/jwagner/simplex-noise.js |
 | `lucide-react` | ISC | Legacy system and interface navigation icons (retained only for shadcn/ui primitives) | https://github.com/lucide-icons/lucide |
 | `phosphor-icons` (`@phosphor-icons/react`, `@phosphor-icons/core`) | MIT | Unified dock iconography family, dynamic dock experiences, and agent icon catalog | https://github.com/phosphor-icons/homepage |
+| `Azgaar/Fantasy-Map-Generator` | MIT | Pinned `v1.104.0` (commit `69894e77d33d9cbb281ff946d32049d5a49479b1`). Source of illustrated world map presets (Gloom, Ancient, Clean, Monochrome) and territory topology manifests (`pack.states`, `pack.burgs`). Generated maps are free to use under MIT. | https://github.com/Azgaar/Fantasy-Map-Generator |
+| `sharp` | Apache 2.0 | High-performance raster image processing and WebP conversion | https://github.com/lovell/sharp |
 | `mulberry32` (PRNG) | Public Domain / Custom | Seeded 32-bit PRNG implemented in `src/lib/mapgen/prng.ts` | Self-contained implementation |
