@@ -5,8 +5,13 @@ import sharp from "sharp";
 import { BUNDLED_MAPS } from "../../src/features/world/bundledMaps";
 import { db } from "../workspace/db";
 import type { CityPoint, MapSource } from "../../src/features/world/types";
+import { CANONICAL_WORLDS, listAsciiWorlds } from "../../src/features/world/ascii/worlds";
+import { generateAsciiWorld } from "../../src/features/world/ascii/generator";
+import type { AsciiWorldSpec } from "../../src/features/world/ascii/types";
 
 export const mapsRouter = new Hono();
+
+const customAsciiWorlds = new Map<string, AsciiWorldSpec>();
 
 const DATA_DIR = process.env.DATA_DIR || path.resolve(process.cwd(), "workspace/data");
 
@@ -236,6 +241,50 @@ mapsRouter.post("/import", async (c) => {
     });
   } catch (err: any) {
     return c.json({ error: err?.message || "Failed to import map" }, 500);
+  }
+});
+
+// GET /api/maps/ascii - list all procedural ASCII worlds
+mapsRouter.get("/ascii/list", (c) => {
+  const allWorlds = [...listAsciiWorlds(), ...Array.from(customAsciiWorlds.values())];
+  return c.json({ worlds: allWorlds });
+});
+
+// GET /api/maps/ascii/:worldId - get specific ASCII world spec and optional grid preview
+mapsRouter.get("/ascii/:worldId", (c) => {
+  const worldId = c.req.param("worldId");
+  const world = customAsciiWorlds.get(worldId) || CANONICAL_WORLDS[worldId];
+  if (!world) {
+    return c.json({ error: `Ascii world "${worldId}" not found` }, 404);
+  }
+  const includeGrid = c.req.query("grid") === "true";
+  if (includeGrid) {
+    const grid = generateAsciiWorld(world, { width: 120, height: 60 });
+    return c.json({ world, grid });
+  }
+  return c.json({ world });
+});
+
+// POST /api/maps/ascii - register or update an ASCII world
+mapsRouter.post("/ascii", async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body || !body.id || !body.title || !Array.isArray(body.regions)) {
+      return c.json({ error: "Invalid AsciiWorldSpec. Required: id, title, regions" }, 400);
+    }
+    const worldSpec: AsciiWorldSpec = {
+      id: String(body.id),
+      title: String(body.title),
+      subject: String(body.subject || body.title),
+      seed: typeof body.seed === "number" ? body.seed : Math.floor(Math.random() * 90000) + 10000,
+      description: String(body.description || ""),
+      regions: body.regions,
+      progression: body.progression || {},
+    };
+    customAsciiWorlds.set(worldSpec.id, worldSpec);
+    return c.json({ success: true, world: worldSpec }, 201);
+  } catch (err: any) {
+    return c.json({ error: err.message || "Failed to parse request" }, 400);
   }
 });
 
