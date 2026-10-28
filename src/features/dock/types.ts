@@ -18,7 +18,9 @@ export type BridgeAction =
   | "ui.expand"
   | "ui.collapse"
   | "capability.invoke"
-  | "runtime.error";
+  | "runtime.error"
+  | "runtime.ready"
+  | "ui.ready";
 
 export interface HostBridgeRequest {
   polymaxAction: BridgeAction;
@@ -46,6 +48,7 @@ export interface HostBridgeOptions {
   pluginId?: string;
   storagePrefix?: string;
   allowedCapabilities?: string[];
+  onReady?: () => void;
   onError?: (error: unknown) => void;
   onInvoke?: (capabilityId: string, input: unknown) => Promise<unknown> | unknown;
   onExpand?: () => void;

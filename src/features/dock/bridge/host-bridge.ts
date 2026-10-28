@@ -174,6 +174,13 @@ export function createHostBridge(
           return true;
         }
 
+        case "runtime.ready":
+        case "ui.ready": {
+          options.onReady?.();
+          respond(requestId, true);
+          return true;
+        }
+
         case "runtime.error": {
           options.onError?.(data.error);
 

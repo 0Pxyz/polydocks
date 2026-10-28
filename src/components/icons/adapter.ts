@@ -42,6 +42,9 @@ import {
   Shield,
   Lightbulb,
   Plus,
+  PuzzlePiece,
+  PlugsConnected,
+  Cpu,
 } from "@phosphor-icons/react";
 
 export type IconComponent = ComponentType<{
@@ -146,16 +149,94 @@ const ICON_MAP: Record<string, IconComponent> = {
   chartlineup: ChartLineUp,
   clock: Clock,
   filesmulti: Files,
+
+  // Developer, Network & API tools
+  rest: PlugsConnected,
+  api: PlugsConnected,
+  http: Globe,
+  curl: TerminalWindow,
+  client: PlugsConnected,
+  network: Globe,
+  json: Code,
+  data: Folder,
+  inspector: Eye,
+  debug: Wrench,
+  devtools: Wrench,
+  db: Folder,
+  database: Folder,
+  sql: Folder,
+  storage: Folder,
+  store: Folder,
+  doc: FileText,
+  docs: FileText,
+  documentation: FileText,
+  spec: FileText,
+  ai: Brain,
+  llm: Brain,
+  model: Cpu,
+  prompt: ChatCircle,
+  puzzle: PuzzlePiece,
+  plugin: PuzzlePiece,
+  extension: PuzzlePiece,
+  check: CheckCircle,
+  test: CheckCircle,
+  tests: CheckCircle,
+  tester: CheckCircle,
+  compare: Scales,
+  diff: Scales,
 };
+
+const DIVERSE_FALLBACK_PALETTE: IconComponent[] = [
+  PuzzlePiece,
+  Code,
+  PlugsConnected,
+  Globe,
+  TerminalWindow,
+  Cpu,
+  Brain,
+  Atom,
+  Flask,
+  Cards,
+  NotePencil,
+  FileText,
+  Shield,
+  Sliders,
+  Target,
+];
+
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
 
 /**
  * Resolves an icon identifier (case-insensitive) to a typed Phosphor component.
- * Guaranteed to never fail; falls back to neutral Stack icon.
+ * Uses exact catalog lookup, word-token inference, and deterministic palette hashing
+ * to guarantee that dynamic tools get distinct, meaningful icons rather than
+ * duplicated fallback stacks.
  */
 export function resolveIcon(name?: string | null): IconComponent {
   if (!name) return Stack;
-  const clean = name.trim().toLowerCase().replace(/[-_]/g, "");
-  return ICON_MAP[clean] || Stack;
+  const raw = name.trim();
+  const clean = raw.toLowerCase().replace(/[-_\s]/g, "");
+  if (ICON_MAP[clean]) {
+    return ICON_MAP[clean];
+  }
+
+  // Check each word token against catalog
+  const tokens = raw.toLowerCase().split(/[^a-z0-9]+/);
+  for (const token of tokens) {
+    if (token && ICON_MAP[token]) {
+      return ICON_MAP[token];
+    }
+  }
+
+  // Deterministic catalog distribution fallback
+  return DIVERSE_FALLBACK_PALETTE[hashString(raw) % DIVERSE_FALLBACK_PALETTE.length];
 }
 
 export {

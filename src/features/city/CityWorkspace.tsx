@@ -53,7 +53,7 @@ export function CityWorkspace({
           className="w-full flex-1 flex flex-col items-center"
         >
           {dynamicTab ? (
-            <div className="w-full max-w-5xl h-[640px] rounded-2xl overflow-hidden border border-white/10 bg-[#0c0e14] shadow-2xl">
+            <div className="w-full max-w-5xl h-[640px] rounded-2xl overflow-hidden bg-transparent">
               <DynamicTabContainer
                 tabId={dynamicTab.id}
                 cityId={cityId}
