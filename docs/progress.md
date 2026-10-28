@@ -23,3 +23,4 @@
 | 2026-10-28 | Core plugin manifest schema (apiVersion: 1), SQLite persistence, and registry lifecycle | [#53](https://github.com/0Pxyz/polymax/pull/53) |
 | 2026-10-28 | Capability bus with typed invoke, execution logging, and unified catalog (/api/mcp, /api/capabilities) | [#54](https://github.com/0Pxyz/polymax/pull/54) |
 | 2026-10-28 | Redesign dock + as one-line tool creator, animated creation loop, and design slop rules | main |
+| 2026-10-28 | Progressive disclosure meta-tools (find_capabilities, invoke_capability) and first-party plugins | [#55](https://github.com/0Pxyz/polymax/pull/55) |
