@@ -36,3 +36,4 @@
 | 2026-10-28 | Sandboxed plugin runtime, window.polydocks bridge & scoped storage | [#70](https://github.com/0Pxyz/polymax/pull/70) |
 | 2026-10-28 | Community plugin registry, publish_plugin tool & PluginStoreView with 1-click install | [#71](https://github.com/0Pxyz/polymax/pull/71) |
 | 2026-10-28 | End-to-end Pomodoro benchmark test suite (create -> storage -> modify -> publish -> install) & demo script | [#72](https://github.com/0Pxyz/polymax/pull/72) |
+| 2026-10-28 | Persistent agent-home filesystem structure, baseline templates & initialization service | [#77](https://github.com/0Pxyz/polymax/pull/77) |
