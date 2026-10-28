@@ -150,11 +150,18 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Invalid JSON request body" }, 400);
   }
 
-  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId } = body;
+  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model } = body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
   }
+
+  const requestedModel =
+    typeof modelId === "string" && modelId.trim().length > 0
+      ? modelId.trim()
+      : typeof model === "string" && model.trim().length > 0
+      ? model.trim()
+      : undefined;
 
   return streamSSE(c, async (stream) => {
     await runAgentLoop({
@@ -164,6 +171,7 @@ app.post("/api/agent", async (c) => {
       workspaceId: typeof workspaceId === "string" ? workspaceId : undefined,
       taskId: typeof taskId === "string" ? taskId : undefined,
       origin: origin === "dock-add" ? "dock-add" : "chat",
+      modelId: requestedModel,
       history: Array.isArray(history) ? history : [],
       onEvent: async (event: AgentStepEvent) => {
         await stream.writeSSE({
