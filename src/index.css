@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "./styles/tokens.css";
 
+@plugin "@tailwindcss/typography";
+
 @theme {
   --font-display: "Inter Variable", sans-serif;
   --font-sans: "Inter Variable", sans-serif;
