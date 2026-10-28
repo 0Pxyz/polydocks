@@ -150,7 +150,7 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Invalid JSON request body" }, 400);
   }
 
-  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model } = body;
+  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model, attachments } = body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
@@ -172,6 +172,7 @@ app.post("/api/agent", async (c) => {
       taskId: typeof taskId === "string" ? taskId : undefined,
       origin: origin === "dock-add" ? "dock-add" : "chat",
       modelId: requestedModel,
+      attachments: Array.isArray(attachments) ? attachments : undefined,
       history: Array.isArray(history) ? history : [],
       onEvent: async (event: AgentStepEvent) => {
         await stream.writeSSE({
