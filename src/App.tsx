@@ -24,7 +24,7 @@ import { cn } from "@/lib/cn";
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
-  const [selectedCity, setSelectedCity] = useState<string>("Neural Networks");
+  const [selectedCity, setSelectedCity] = useState<string | undefined>(undefined);
 
   const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
   const { setActiveTool: setDockActiveTool } = useDockStore();
@@ -158,7 +158,7 @@ export default function App() {
 
   const handleToolPromptSubmit = (prompt: string, meta?: Record<string, unknown>) => {
     const isFlashcards = prompt.toLowerCase().includes("flashcard");
-    const targetCity = activeCityId || selectedCity;
+    const targetCity = viewMode === "city" ? (activeCityId || selectedCity) : undefined;
 
     sendMessage(
       prompt,
@@ -284,7 +284,7 @@ export default function App() {
             statusText={statusText}
             onStopBuilding={abortStream}
             onRetryBuilding={() =>
-              retryLast(activeCityId || selectedCity, {
+              retryLast(viewMode === "city" ? (activeCityId || selectedCity) : undefined, {
                 onExperienceCreated: (exp) => {
                   setExtraTools((prev) => {
                     if (prev.some((t) => t.id === exp.id)) return prev;
@@ -329,7 +329,7 @@ export default function App() {
 
           {/* Single Agent Conversation Instance */}
           <AgentConversation
-            cityId={selectedCity}
+            cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             onExperienceCreated={(exp) => {
               setExtraTools((prev) => {
                 if (prev.some((t) => t.id === exp.id)) return prev;
@@ -392,12 +392,13 @@ export default function App() {
               <DockSurface frameless>
                 <div className="w-full">
                   <CityView
-                    cityName={activeCityId || selectedCity}
+                    cityName={activeCityId || selectedCity || "workspace"}
                     activeToolId={activeToolId === "city" || !activeToolId ? "overview" : activeToolId}
                     onSelectTool={handleSelectTool}
                     onSynthesizeTool={handleSynthesizeTool}
                     onBackToWorld={() => {
                       exitToWorld();
+                      setSelectedCity(undefined);
                       setActiveToolId("maps");
                       setDockActiveTool("maps");
                     }}
