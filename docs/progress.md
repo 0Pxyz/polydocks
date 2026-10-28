@@ -22,3 +22,4 @@
 | 2026-10-28 | Minimalist game-like City View, living Concept Node Orb, satellite quick-jumps, and fluid dock transitions | [#42](https://github.com/0Pxyz/polymax/pull/42) |
 | 2026-10-28 | Core plugin manifest schema (apiVersion: 1), SQLite persistence, and registry lifecycle | [#53](https://github.com/0Pxyz/polymax/pull/53) |
 | 2026-10-28 | Capability bus with typed invoke, execution logging, and unified catalog (/api/mcp, /api/capabilities) | [#54](https://github.com/0Pxyz/polymax/pull/54) |
+| 2026-10-28 | Redesign dock + as one-line tool creator, animated creation loop, and design slop rules | main |
