@@ -11,6 +11,7 @@ import { isPointOnLand } from "../world/landmask";
 import { useCityBuildStream } from "../world/useCityBuildStream";
 import type { CityPoint, MapSource } from "../world/types";
 import { prefersReducedMotion } from "@/lib/motion";
+import { AsciiWorldView } from "../world/ascii/AsciiWorldView";
 
 export const INITIAL_GLOBAL_CITIES = [
   { id: "neural-networks", title: "Neural Networks", region: "Aethelgard Reach" },
@@ -35,6 +36,7 @@ export function WorldView({
   activeCityId,
 }: WorldViewProps) {
   const [activeMapId, setActiveMapId] = useState<string>("gloom");
+  const [engineMode, setEngineMode] = useState<"illustrated" | "ascii">("illustrated");
   const [customMaps, setCustomMaps] = useState<MapSource[]>([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [cityPoints, setCityPoints] = useState<CityPoint[]>([]);
@@ -277,31 +279,35 @@ export function WorldView({
           </button>
         </div>
       )}
-      {/* Illustrated Map Canvas */}
-      <motion.div
-        animate={{
-          scale: isFlyingIn ? 1.8 : 1.0,
-          filter: activeCityId ? "blur(12px) brightness(0.55)" : "blur(0px) brightness(1)",
-        }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full h-full"
-      >
-        <IllustratedWorldMap
-          mapSource={activeMap}
+      {/* Map Surface: Illustrated vs Procedural ASCII Engine */}
+      {engineMode === "ascii" ? (
+        <AsciiWorldView onEnterCity={onEnterCity} className="w-full h-full" />
+      ) : (
+        <motion.div
+          animate={{
+            scale: isFlyingIn ? 1.8 : 1.0,
+            filter: activeCityId ? "blur(12px) brightness(0.55)" : "blur(0px) brightness(1)",
+          }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="w-full h-full"
-          renderOverlay={({ mapToViewport, zoom }) => (
-            <MapMarkersOverlay
-              regions={activeMap.regions}
-              cities={cityPoints.filter((p) => p.mapId === activeMap.id)}
-              zoom={zoom}
-              mapToViewport={mapToViewport}
-              onSelectCity={handleSelectCity}
-              selectedCityId={targetCityId || activeCityId}
-              buildingProgress={mergedProgress}
-            />
-          )}
-        />
-      </motion.div>
+        >
+          <IllustratedWorldMap
+            mapSource={activeMap}
+            className="w-full h-full"
+            renderOverlay={({ mapToViewport, zoom }) => (
+              <MapMarkersOverlay
+                regions={activeMap.regions}
+                cities={cityPoints.filter((p) => p.mapId === activeMap.id)}
+                zoom={zoom}
+                mapToViewport={mapToViewport}
+                onSelectCity={handleSelectCity}
+                selectedCityId={targetCityId || activeCityId}
+                buildingProgress={mergedProgress}
+              />
+            )}
+          />
+        </motion.div>
+      )}
 
       {/* Style Picker (Frameless Bottom-Center) */}
       {!activeCityId && (
@@ -310,6 +316,8 @@ export function WorldView({
           activeMapId={activeMapId}
           onSelectMap={setActiveMapId}
           onOpenUpload={() => setIsImportModalOpen(true)}
+          engineMode={engineMode}
+          onToggleEngineMode={setEngineMode}
         />
       )}
 

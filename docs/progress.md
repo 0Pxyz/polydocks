@@ -48,3 +48,4 @@
 | 2026-10-28 | Unified voice and text chat surface with scrollable transcript and intent-driven agent loop | [#92](https://github.com/0Pxyz/polymax/pull/92) |
 | 2026-10-28 | Persistent agent-home container isolation, loopback port binding, and Docker resource limits | [#93](https://github.com/0Pxyz/polymax/pull/93) |
 | 2026-10-28 | End-to-end agentic runtime integration benchmark (5 stages) and operational guide | [#94](https://github.com/0Pxyz/polymax/pull/94) |
+| 2026-10-28 | Procedural ASCII world engine, interactive Canvas map renderer, and plan_ascii_world tool | [#98](https://github.com/0Pxyz/polymax/pull/98) |

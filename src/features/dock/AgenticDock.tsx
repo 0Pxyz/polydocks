@@ -166,6 +166,7 @@ export function AgenticDock({
   onRetryBuilding,
 }: AgenticDockProps) {
   const headerRef = useRef<HTMLElement>(null);
+  const baseHudRef = useRef<HTMLDivElement>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
   const plusButtonRef = useRef<HTMLButtonElement>(null);
   const creatorDrawerRef = useRef<HTMLDivElement>(null);
@@ -252,19 +253,25 @@ export function AgenticDock({
   const isReducedMotion = prefersReducedMotion();
 
   useEffect(() => {
-    const el = capsuleRef.current || headerRef.current;
+    const el = baseHudRef.current || capsuleRef.current || headerRef.current;
     if (!el) return;
 
     const updateDockOffset = () => {
       const rect = el.getBoundingClientRect();
       if (isBottom) {
-        const offset = Math.round(window.innerHeight - rect.top);
-        document.documentElement.style.setProperty("--dock-bottom", `${offset}px`);
-        document.documentElement.style.setProperty("--dock-offset", `${offset}px`);
+        const bottomOffset = Math.max(0, Math.round(window.innerHeight - rect.top));
+        document.documentElement.style.setProperty("--dock-offset", `${bottomOffset}px`);
+        document.documentElement.style.setProperty("--dock-bottom-offset", `${bottomOffset}px`);
+        document.documentElement.style.setProperty("--dock-top-offset", "0px");
+        document.documentElement.style.setProperty("--dock-bottom", `${bottomOffset}px`);
+        document.documentElement.style.setProperty("--dock-top", "0px");
       } else {
-        const offset = Math.round(rect.bottom);
-        document.documentElement.style.setProperty("--dock-bottom", `${offset}px`);
-        document.documentElement.style.setProperty("--dock-offset", `${offset}px`);
+        const topOffset = Math.max(0, Math.round(rect.bottom));
+        document.documentElement.style.setProperty("--dock-offset", `${topOffset}px`);
+        document.documentElement.style.setProperty("--dock-top-offset", `${topOffset}px`);
+        document.documentElement.style.setProperty("--dock-bottom-offset", "0px");
+        document.documentElement.style.setProperty("--dock-top", `${topOffset}px`);
+        document.documentElement.style.setProperty("--dock-bottom", "0px");
       }
     };
 
@@ -436,8 +443,10 @@ export function AgenticDock({
       {isBottom && drawerElement}
       {isBottom && statusElement}
 
-      {/* Dock Status Line (Lvl, XP, Streak) */}
-      <DockStatusLine className="mb-1.5 pointer-events-auto" />
+      {/* Stable Base HUD (Status Line + Dock Capsule) */}
+      <div ref={baseHudRef} className="flex flex-col items-center pointer-events-none">
+        {/* Dock Status Line (Lvl, XP, Streak) */}
+        <DockStatusLine className="mb-1.5 pointer-events-auto" />
 
       {/* Floating Agentic Dock Capsule */}
       <motion.div
@@ -579,6 +588,7 @@ export function AgenticDock({
           </span>
         </button>
       </motion.div>
+    </div>
 
       {/* If top dock, show drawer and transient status below the capsule */}
       {!isBottom && drawerElement}

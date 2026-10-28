@@ -70,7 +70,7 @@ export function HomeScreen({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center text-center max-w-xl w-full px-4 pt-16 sm:pt-24 select-none",
+        "flex flex-col items-center justify-center text-center max-w-xl w-full px-4 pt-6 sm:pt-10 pb-6 my-auto select-none",
         className
       )}
     >

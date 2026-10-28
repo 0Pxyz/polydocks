@@ -80,7 +80,7 @@ export function CityOverview({
       initial={{ opacity: 0, scale: isReduced ? 1 : 0.98 }}
       animate={{ opacity: 1, scale: 1, transition: spring.soft }}
       exit={{ opacity: 0, scale: isReduced ? 1 : 0.98, transition: { duration: 0.16 } }}
-      className="flex flex-col items-center justify-start w-full max-w-4xl mx-auto min-h-[calc(100vh-var(--dock-bottom,88px)-64px)] px-4 py-8 select-none"
+      className="flex flex-col items-center justify-start w-full max-w-4xl mx-auto px-4 py-6 select-none"
     >
       {/* Top Breadcrumb & Territory Header */}
       <div className="w-full flex items-center justify-between mb-8">

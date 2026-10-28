@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
 import { useConversationStore } from "@/lib/agent/conversationStore";
+import { useThemeStore } from "@/lib/theme";
 import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 
@@ -54,6 +55,9 @@ export function AgentConversation({
     abortStream,
     handleApproval,
   } = useConversationStore();
+
+  const dockPosition = useThemeStore((s) => s.dockPosition);
+  const isBottom = dockPosition === "bottom";
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState<boolean>(false);
@@ -183,10 +187,13 @@ export function AgentConversation({
       <AnimatePresence>
         <motion.div
           layoutId="polymax-agent-surface"
-          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 28, scale: 0.96 }}
+          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : isBottom ? -28 : 28, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
-          exit={{ opacity: 0, y: 20, scale: 0.95, transition: { duration: 0.16 } }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none"
+          exit={{ opacity: 0, y: isBottom ? -20 : 20, scale: 0.95, transition: { duration: 0.16 } }}
+          className={cn(
+            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none",
+            isBottom ? "top-6" : "bottom-6"
+          )}
         >
           <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col">
             {/* Header: Agent info on left, mute/expand/close on right */}
