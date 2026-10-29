@@ -1,6 +1,7 @@
 import dns from "node:dns/promises";
 import { config } from "../config";
 import { validateUrlForSsrf, isPrivateOrReservedIPv4, isPrivateOrReservedIPv6 } from "../plugins/ssrf";
+import { youtubeEmbedUrl } from "../video/ids";
 import { tinyfish } from "../discovery/tinyfish";
 
 export type ReaderKind = "video" | "article";
@@ -57,18 +58,9 @@ export function classifyReaderUrl(rawUrl: string): { kind: ReaderKind; embedUrl?
   }
   const host = parsed.hostname.toLowerCase();
 
-  const ytId =
-    host.includes("youtube.com") && parsed.pathname === "/watch"
-      ? parsed.searchParams.get("v")
-      : host === "youtu.be"
-        ? parsed.pathname.slice(1) || null
-        : host.includes("youtube.com") && parsed.pathname.startsWith("/embed/")
-          ? parsed.pathname.slice("/embed/".length) || null
-          : host.includes("youtube.com") && parsed.pathname.startsWith("/shorts/")
-            ? parsed.pathname.slice("/shorts/".length) || null
-            : null;
-  if (ytId && /^[A-Za-z0-9_-]{6,}$/.test(ytId)) {
-    return { kind: "video", embedUrl: `https://www.youtube-nocookie.com/embed/${ytId}` };
+  const ytEmbed = youtubeEmbedUrl(rawUrl);
+  if (ytEmbed) {
+    return { kind: "video", embedUrl: ytEmbed };
   }
 
   const vimeoMatch = host.includes("vimeo.com") ? parsed.pathname.match(/^\/(\d+)/) : null;

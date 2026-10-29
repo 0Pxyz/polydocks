@@ -44,7 +44,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
 
   it("video opens in the official embed (never an iframe crapshoot)", () => {
     expect(videoEmbedUrl("https://www.youtube.com/watch?v=abc123XYZ-_")).toBe(
-      "https://www.youtube-nocookie.com/embed/abc123XYZ-_"
+      "https://www.youtube.com/embed/abc123XYZ-_?rel=0&modestbranding=1&playsinline=1"
     );
     expect(videoEmbedUrl("https://vimeo.com/123456789")).toBe("https://player.vimeo.com/video/123456789");
   });
@@ -177,7 +177,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
     const ctx = { step: 1, cityId: CITY } as any;
     const v: any = await invoke_capability.execute({ id: "sources.open", input: { id: vid, cityId: CITY } }, ctx);
     expect(v.data?.data?.mode).toBe("video");
-    expect(String(v.data?.data?.embedUrl || "")).toContain("youtube-nocookie.com");
+    expect(v.data?.data?.embedUrl || "").toContain("youtube.com/embed/");
 
     const a: any = await invoke_capability.execute({ id: "sources.open", input: { id: art, cityId: CITY } }, ctx);
     expect(a.data?.data?.mode).toBe("reader");
