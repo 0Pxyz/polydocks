@@ -26,7 +26,11 @@ import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
-import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
+import {
+  connectRealtimeVoice,
+  createMicPcmStreamer,
+  type MicPcmStreamer,
+} from "@/lib/agent/realtimeVoice";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 
 interface AgentConversationProps {
@@ -63,6 +67,7 @@ export function AgentConversation({
     setSoundEnabled,
     setAudioLevel,
     setOrbState,
+    setStatusText,
     sendMessage,
     retryLast,
     abortStream,
@@ -85,7 +90,7 @@ export function AgentConversation({
   const sheetInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const voiceHandleRef = useRef<VoiceRecognitionHandle | null>(null);
+  const realtimeRef = useRef<{ close: () => void; stopMic: () => void } | null>(null);
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -118,6 +123,15 @@ export function AgentConversation({
     },
     [addAttachments]
   );
+
+  // Cleanup realtime voice session on unmount
+  useEffect(() => {
+    return () => {
+      realtimeRef.current?.stopMic();
+      realtimeRef.current?.close();
+      realtimeRef.current = null;
+    };
+  }, []);
 
   // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
   const adjustTextareaHeight = useCallback(() => {
@@ -175,37 +189,79 @@ export function AgentConversation({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const toggleVoice = () => {
-    if (orbState === "listening") {
-      voiceHandleRef.current?.stop();
-      voiceHandleRef.current = null;
+  const toggleVoice = useCallback(async () => {
+    // Single Orb toggle: stop an active realtime session, else start one.
+    if (realtimeRef.current) {
+      realtimeRef.current.stopMic();
+      realtimeRef.current.close();
+      realtimeRef.current = null;
       setOrbState("idle");
       return;
     }
 
-    setOrbState("listening");
-    const handle = startVoiceInput(
-      (transcript, isFinal) => {
-        setDraft(transcript);
-        if (isFinal) {
-          sendMessage(transcript, cityId, { onExperienceCreated, onOpenExperience });
-        }
-      },
-      (level) => setAudioLevel(level),
-      () => {
-        setOrbState("idle");
-      },
-      () => {
-        setOrbState("idle");
-      }
-    );
-
-    if (handle) {
-      voiceHandleRef.current = handle;
-    } else {
-      setOrbState("idle");
+    if (typeof window === "undefined" || !("mediaDevices" in navigator)) {
+      setStatusText("Voice input is not supported in this browser.");
+      return;
     }
-  };
+
+    setOrbState("listening");
+    setStatusText("Listening… speak now. Tap the Orb to stop.");
+
+    try {
+      const session = connectRealtimeVoice({
+        onPartial: (text) => setDraft(text),
+        onFinal: (text) => {
+          if (!text.trim()) return;
+          setDraft("");
+          void sendMessage(text, cityId, { onExperienceCreated, onOpenExperience });
+        },
+        onLevel: (level) => setAudioLevel(level),
+        onError: (message) => {
+          setStatusText(message);
+          setOrbState("error");
+          window.setTimeout(() => {
+            if (!realtimeRef.current) setOrbState("idle");
+          }, 2500);
+        },
+        onClose: () => {
+          realtimeRef.current = null;
+          setOrbState("idle");
+          setStatusText("");
+        },
+      });
+
+      const streamer: MicPcmStreamer = await createMicPcmStreamer(
+        (pcm) => {
+          if (session.ws.readyState === WebSocket.OPEN) {
+            try {
+              session.ws.send(pcm);
+            } catch {
+              // Ignore transient send failures
+            }
+          }
+        },
+        (level) => setAudioLevel(level)
+      );
+
+      realtimeRef.current = {
+        stopMic: () => streamer.stop(),
+        close: () => {
+          try {
+            if (session.ws.readyState === WebSocket.OPEN) {
+              session.ws.send(JSON.stringify({ type: "endStream" }));
+            }
+          } catch {
+            // Ignore
+          }
+          // Give the server a beat to flush final transcripts, then close.
+          window.setTimeout(() => session.close(), 600);
+        },
+      };
+    } catch {
+      setOrbState("idle");
+      setStatusText("Microphone permission denied.");
+    }
+  }, [cityId, onExperienceCreated, onOpenExperience, sendMessage, setAudioLevel, setDraft, setOrbState, setStatusText]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -255,11 +311,23 @@ export function AgentConversation({
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
-          <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col">
-            {/* Header: Agent info on left, mute/expand/close on right */}
+          <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col max-h-[calc(100dvh-120px)]">
+            {/* Header: status on left, mute/expand/close on right (no Orb here — single Orb lives in the composer) */}
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
-                <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-75" />
+                <span
+                  aria-hidden
+                  className={cn(
+                    "w-2 h-2 rounded-full",
+                    orbState === "listening" || orbState === "speaking"
+                      ? "bg-[var(--accent-lime)] animate-pulse"
+                      : orbState === "thinking"
+                        ? "bg-[var(--accent-lime)]/70 animate-ping"
+                        : orbState === "error"
+                          ? "bg-red-400"
+                          : "bg-white/25"
+                  )}
+                />
                 <span className="text-xs font-semibold text-white/90 tracking-tight font-sans">
                   Polymax Agent
                 </span>
@@ -336,12 +404,12 @@ export function AgentConversation({
               </div>
             )}
 
-            {/* Scrollable Transcript Box */}
+            {/* Scrollable Transcript Box (flex-1 shrinks; generous bottom pad so rows never hide behind composer) */}
             <ScrollArea
               viewportRef={sheetTranscriptRef}
-              className="my-3 max-h-64 min-h-[72px] [&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0 [&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]"
+              className="relative z-0 my-3 min-h-0 flex-1 max-h-64 [&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0 [&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]"
             >
-              <div className="px-1 space-y-2.5 select-text scroll-smooth">
+              <div className="px-1 pt-1 pb-10 space-y-2.5 select-text scroll-smooth">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                   <p className="text-xs text-[#9aa5b8]">
@@ -443,7 +511,7 @@ export function AgentConversation({
               />
             )}
 
-            {/* Unified Composer: input row + footer toolbar (grid coexistence) */}
+            {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript) */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -454,7 +522,7 @@ export function AgentConversation({
                 if (!draft.trim() && stagedAttachments.length === 0) return;
                 sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
               }}
-              className="flex flex-col gap-1 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+              className="relative z-10 shrink-0 flex flex-col gap-1 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
             >
               <div className="flex items-center gap-1.5">
                 <button
@@ -466,11 +534,12 @@ export function AgentConversation({
                   <Paperclip className="w-3.5 h-3.5" />
                 </button>
 
+                {/* Single Orb: realtime voice toggle with pulsing active state */}
                 <button
                   type="button"
                   onClick={() => {
                     if (isStreaming) abortStream();
-                    else toggleVoice();
+                    else void toggleVoice();
                   }}
                   className={cn(
                     "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0",
@@ -609,17 +678,17 @@ export function AgentConversation({
         </button>
       </div>
 
-      {/* Transcript Area */}
+      {/* Transcript Area (z-0; bottom-padded so final rows clear the footer composer) */}
       <ScrollArea
         viewportRef={transcriptRef}
         className={cn(
-          "flex-1 min-h-0 px-4 sm:px-6",
+          "relative z-0 flex-1 min-h-0 px-4 sm:px-6",
           "[&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0",
           "[&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]",
           !isSide && "max-w-[720px] mx-auto"
         )}
       >
-        <div className="w-full pt-3 pb-8">
+        <div className="w-full pt-3 pb-10">
         {/* Scroll-back inside the same thread: never a new conversation */}
         {hasOlderMessages && (
           <div className="flex justify-center pb-4">
@@ -634,10 +703,13 @@ export function AgentConversation({
           </div>
         )}
 
-        {/* Empty State: centered composer with idle orb */}
+        {/* Empty State: text only (single Orb lives in the composer) */}
         {messages.length === 0 && (
-          <div className="h-full min-h-[360px] flex flex-col items-center justify-center gap-3">
-            <Orb state="idle" size="md" className="opacity-80 hover:opacity-100 transition-opacity" />
+          <div className="h-full min-h-[360px] flex flex-col items-center justify-center gap-3 text-center px-6">
+            <p className="text-sm text-white/85 font-sans">Ask anything to start.</p>
+            <p className="text-xs font-mono text-muted-foreground">
+              Tap the Orb in the composer below to dictate.
+            </p>
             {isHydratingThread && (
               <span className="text-xs font-mono text-muted-foreground">
                 Restoring your conversation…
@@ -806,10 +878,10 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Composer: clean footer aligned with the transcript column (grid: input row + toolbar row) */}
+      {/* Composer: footer grid (input row + toolbar row), layered above transcript */}
       <div
         className={cn(
-          "shrink-0 px-4 sm:px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-events-auto",
+          "relative z-10 shrink-0 px-4 sm:px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-events-auto",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
@@ -854,13 +926,14 @@ export function AgentConversation({
                 className="flex-1 min-w-0 bg-transparent px-3.5 pt-2 pb-1 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
               />
               <div className="flex items-center gap-1 pb-1 pr-1 shrink-0">
+                {/* Single Orb: realtime voice toggle */}
                 <button
                   type="button"
-                  onClick={toggleVoice}
+                  onClick={() => void toggleVoice()}
                   className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-                  title="Voice input"
+                  title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
                 >
-                  <Orb state={orbState} size="sm" className="scale-75" />
+                  <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-75" />
                 </button>
 
                 {isStreaming ? (

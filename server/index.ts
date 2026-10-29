@@ -22,6 +22,7 @@ import { taskExecutionEngine } from "./agent/taskRunner";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
+import { isVoiceRealtimeRequest, voiceSessionIdFrom, voiceWebsocketHandlers } from "./voice/proxy";
 
 // Bootstrap persistent agent-home filesystem structure on startup
 await initAgentHome().catch((err) => {
@@ -204,7 +205,19 @@ if (config.NODE_ENV === "production" || process.env.SERVE_STATIC === "true") {
 
 export default {
   port: config.PORT,
-  fetch: app.fetch,
+  fetch(req: Request, server: any) {
+    if (isVoiceRealtimeRequest(req)) {
+      const sessionId = voiceSessionIdFrom(req);
+      try {
+        if (server?.upgrade?.(req, { data: { sessionId } })) return undefined as any;
+      } catch {
+        // Fall through to an explicit error below
+      }
+      return new Response("Voice realtime requires a WebSocket upgrade.", { status: 426 });
+    }
+    return app.fetch(req, server);
+  },
+  websocket: voiceWebsocketHandlers,
 };
 
 if (import.meta.main) {
