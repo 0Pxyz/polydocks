@@ -14,3 +14,11 @@ if (rootElement) {
     </StrictMode>,
   )
 }
+
+// Service worker drives offline support and PWA installability. In dev we
+// skip registration so Vite HMR is untouched.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
