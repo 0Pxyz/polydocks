@@ -136,6 +136,54 @@ export function createItemsForQuery(query: string): DockItem[] {
 }
 
 /**
+ * Static "create with agent" rows for an empty query, mirroring the original
+ * suggestions: city-aware when a city context exists, generic otherwise.
+ */
+export function getStaticCreateRows(cityName?: string): DockItem[] {
+  const city = cityName?.trim();
+  const labels = city
+    ? [`Flashcards for ${city}`, `Compare two sources on ${city}`, `A timeline of ${city}`]
+    : ["Flashcards", "A reading list", "A timeline"];
+  const descriptions = city
+    ? [
+        `Ask the agent to build flashcards for ${city}`,
+        `Ask the agent to compare two sources on ${city}`,
+        `Ask the agent to build a timeline of ${city}`,
+      ]
+    : [
+        "Ask the agent to build flashcards",
+        "Ask the agent to build a reading list",
+        "Ask the agent to build a timeline",
+      ];
+  return labels.map((label, i) => ({
+    id: `create:static:${i}${city ? `:${city}` : ""}`,
+    label,
+    description: descriptions[i],
+    icon: "cards",
+    kind: "create" as const,
+  }));
+}
+
+const EMPTY_QUERY_MAX_ROWS = 6;
+const EMPTY_QUERY_OPEN_MAX = 2;
+const EMPTY_QUERY_CREATE_COUNT = 3;
+
+/**
+ * Curates the empty-query panel so it stays small: open items first (if
+ * any), then unpinned tools, then the static create rows. Pinned,
+ * non-open items are hidden here (already in the dock above) and appear
+ * once the user types.
+ */
+export function sliceEmptyQueryRows(args: {
+  open: DockItem[];
+  yours: DockItem[];
+}): { open: DockItem[]; yours: DockItem[] } {
+  const open = args.open.slice(0, EMPTY_QUERY_OPEN_MAX);
+  const yours = args.yours.slice(0, EMPTY_QUERY_MAX_ROWS - EMPTY_QUERY_CREATE_COUNT - open.length);
+  return { open, yours };
+}
+
+/**
  * How many pinned items fit in the bar. Derived from measured available
  * width, never a magic item count: each slot takes `itemSize` px and
  * `reserved` px stay free for the add button, ghost slot and padding.

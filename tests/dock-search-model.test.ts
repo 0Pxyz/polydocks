@@ -4,7 +4,9 @@ import {
   buildDockSections,
   computeVisibleCap,
   createItemsForQuery,
+  getStaticCreateRows,
   scoreDockItem,
+  sliceEmptyQueryRows,
   DEFAULT_PINNED_IDS,
   SYSTEM_TOOL_IDS,
   type DockItem,
@@ -124,6 +126,46 @@ describe("createItemsForQuery", () => {
     });
     const yoursIds = sections[1].items.map((i) => i.id);
     expect(yoursIds).toContain("gtm-feed");
+  });
+});
+
+describe("getStaticCreateRows", () => {
+  test("mirrors the original suggestions, city-aware when a city exists", () => {
+    const city = getStaticCreateRows("Stoicism");
+    expect(city.map((i) => i.label)).toEqual([
+      "Flashcards for Stoicism",
+      "Compare two sources on Stoicism",
+      "A timeline of Stoicism",
+    ]);
+    const generic = getStaticCreateRows();
+    expect(generic.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+    const emptyCity = getStaticCreateRows("   ");
+    expect(emptyCity.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+  });
+});
+
+describe("sliceEmptyQueryRows", () => {
+  const row = (id: string): DockItem => ({
+    id,
+    label: id,
+    description: "",
+    icon: "cards",
+    kind: "tab",
+  });
+
+  test("caps the empty panel at six rows: open, yours, then create", () => {
+    const open = [row("a"), row("b"), row("c")];
+    const yours = [row("d"), row("e"), row("f"), row("g"), row("h")];
+    const sliced = sliceEmptyQueryRows({ open, yours });
+    expect(sliced.open.map((r) => r.id)).toEqual(["a", "b"]);
+    // 2 open + 3 create = 5, so 1 yours row fits.
+    expect(sliced.yours.map((r) => r.id)).toEqual(["d"]);
+  });
+
+  test("fills yours up when nothing is open", () => {
+    const yours = [row("d"), row("e"), row("f"), row("g")];
+    const sliced = sliceEmptyQueryRows({ open: [], yours });
+    expect(sliced.yours.map((r) => r.id)).toEqual(["d", "e", "f"]);
   });
 });
 

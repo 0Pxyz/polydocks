@@ -10,6 +10,7 @@ import {
   X,
   PushPin,
   Wrench,
+  ArrowLeft,
 } from "@phosphor-icons/react";
 import {
   Command,
@@ -29,6 +30,8 @@ import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import {
   buildDockSections,
   createItemsForQuery,
+  getStaticCreateRows,
+  sliceEmptyQueryRows,
   DOCK_CORE_CATALOG,
   type DockItem,
   type DockItemKind,
@@ -78,6 +81,9 @@ const KIND_BADGE: Record<DockItemKind, string> = {
   create: "New",
 };
 
+const ROW_CLASS =
+  "group flex items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]";
+
 export function CommandPalette({
   cityId,
   extraItems = [],
@@ -104,6 +110,7 @@ export function CommandPalette({
   } | null>(null);
 
   const [query, setQuery] = useState("");
+  const [browseStore, setBrowseStore] = useState(false);
   const [tabItems, setTabItems] = useState<DockItem[]>([]);
   const [storeItems, setStoreItems] = useState<DockItem[]>([]);
   const [failedIds, setFailedIds] = useState<Map<string, string>>(new Map());
@@ -240,6 +247,7 @@ export function CommandPalette({
     setLastResult(null);
     setConfirmingCap(null);
     setQuery("");
+    setBrowseStore(false);
     reload();
   }, [reload]);
 
@@ -273,22 +281,53 @@ export function CommandPalette({
     [catalog, installedPluginItems]
   );
 
+  const trimmedQuery = query.trim();
+  const isEmptyQuery = trimmedQuery === "";
+
   const sections = useMemo(
     () =>
       buildDockSections({
         catalog: fullCatalog,
         store: storeItems,
         layout: { pinnedIds: pinnedToolIds, openIds },
-        query,
+        query: trimmedQuery,
         createForQuery: createItemsForQuery,
       }),
-    [fullCatalog, storeItems, pinnedToolIds, openIds, query]
+    [fullCatalog, storeItems, pinnedToolIds, openIds, trimmedQuery]
   );
 
   const pinnedSet = useMemo(() => new Set(pinnedToolIds), [pinnedToolIds]);
   const openSet = useMemo(() => new Set(openIds), [openIds]);
 
-  const visibleRowCount = sections.reduce((count, section) => count + section.items.length, 0);
+  const dockedItems = sections[0].items;
+  const yoursItems = sections[1].items;
+  const storeSectionItems = sections[2].items;
+
+  // Empty query stays small: open items, then unpinned tools, then three
+  // static create rows. Pinned non-open items are hidden here (already in
+  // the dock above) and appear once the user types.
+  const emptySliced = useMemo(
+    () =>
+      sliceEmptyQueryRows({
+        open: dockedItems.filter((item) => openSet.has(item.id)),
+        yours: yoursItems,
+      }),
+    [dockedItems, yoursItems, openSet]
+  );
+  const staticCreateRows = useMemo(() => getStaticCreateRows(cityId), [cityId]);
+
+  const capMatches = useMemo(() => {
+    const q = trimmedQuery.toLowerCase();
+    if (!q) return capabilities;
+    return capabilities.filter((cap) =>
+      `${cap.title} ${cap.id} ${cap.description} ${cap.pluginId}`.toLowerCase().includes(q)
+    );
+  }, [capabilities, trimmedQuery]);
+
+  const dockMatchCount =
+    dockedItems.length + yoursItems.length + storeSectionItems.length + sections[3].items.length;
+  const showNoMatchRow =
+    !isEmptyQuery && !browseStore && dockMatchCount === 0 && capMatches.length === 0;
 
 
   const handlePrimaryAction = useCallback(
@@ -397,7 +436,7 @@ export function CommandPalette({
         key={`${item.kind}:${item.id}`}
         value={`${item.label} ${item.description} ${item.id}`}
         onSelect={() => handleSelectRow(item)}
-        className="group flex items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
+        className={ROW_CLASS}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <Icon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
@@ -453,6 +492,87 @@ export function CommandPalette({
       </CommandItem>
     );
   };
+
+  const renderCreateRow = (item: DockItem, valueSuffix?: string) => (
+    <CommandItem
+      key={item.id}
+      value={`${item.label} ${item.description} ${valueSuffix ?? trimmedQuery}`}
+      onSelect={() => handleSelectRow(item)}
+      className={ROW_CLASS}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
+        <div className="flex flex-col gap-0 min-w-0">
+          <span className="text-sm text-white/95 truncate" title={item.label}>
+            {item.label}
+          </span>
+          <span className="text-xs text-white/40 truncate" title={item.description}>
+            {item.description}
+          </span>
+        </div>
+      </div>
+      <Badge variant="outline">New</Badge>
+    </CommandItem>
+  );
+
+  const renderBrowseStoreRow = () => {
+    const StoreIcon = resolveIcon("storefront");
+    return (
+      <CommandItem
+        key="browse-store"
+        value="browse store plugins"
+        onSelect={() => setBrowseStore(true)}
+        className={ROW_CLASS}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <StoreIcon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
+          <div className="flex flex-col gap-0 min-w-0">
+            <span className="text-sm text-white/95 truncate">Browse store</span>
+            <span className="text-xs text-white/40 truncate">
+              {storeItems.length} community {storeItems.length === 1 ? "plugin" : "plugins"}
+            </span>
+          </div>
+        </div>
+      </CommandItem>
+    );
+  };
+
+  const renderBackRow = () => (
+    <CommandItem
+      key="back-all-tools"
+      value="back to all tools"
+      onSelect={() => setBrowseStore(false)}
+      className={ROW_CLASS}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <ArrowLeft className="w-4 h-4 shrink-0 text-white/50" />
+        <span className="text-sm text-white/95">All tools</span>
+      </div>
+    </CommandItem>
+  );
+
+  const renderNoMatchRow = () => (
+    <CommandItem
+      key="no-match-create"
+      value={trimmedQuery}
+      onSelect={() => {
+        closePalette();
+        onSubmitToolPrompt?.(`Create ${trimmedQuery}`);
+      }}
+      className={ROW_CLASS}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
+        <div className="flex flex-col gap-0 min-w-0">
+          <span className="text-sm text-white/95 truncate">No match. Ask the agent to create it</span>
+          <span className="text-xs text-white/40 truncate">
+            Create {trimmedQuery} with the agent
+          </span>
+        </div>
+      </div>
+      <Badge variant="outline">New</Badge>
+    </CommandItem>
+  );
 
   // Execute a capability
   const executeCapability = async (cap: CapabilityItem) => {
@@ -640,39 +760,41 @@ export function CommandPalette({
               </div>
             )}
 
-            {visibleRowCount === 0 ? (
-              <div className="py-6 text-center text-sm text-white/40">
-                No tools match your search.
-              </div>
+            {browseStore ? (
+              <>
+                {renderBackRow()}
+                {storeSectionItems.length > 0 && (
+                  <CommandGroup key="store" heading="Store">
+                    {storeSectionItems.map((item) => renderDockRow(item))}
+                  </CommandGroup>
+                )}
+              </>
+            ) : isEmptyQuery ? (
+              <>
+                {emptySliced.open.length > 0 && (
+                  <CommandGroup key="open" heading="Open now">
+                    {emptySliced.open.map((item) => renderDockRow(item))}
+                  </CommandGroup>
+                )}
+                {(emptySliced.yours.length > 0 || storeItems.length > 0) && (
+                  <CommandGroup key="yours" heading="Your tools">
+                    {emptySliced.yours.map((item) => renderDockRow(item))}
+                    {storeItems.length > 0 && renderBrowseStoreRow()}
+                  </CommandGroup>
+                )}
+                <CommandGroup key="create" heading="Create with agent">
+                  {staticCreateRows.map((item) => renderCreateRow(item, item.id))}
+                </CommandGroup>
+              </>
+            ) : showNoMatchRow ? (
+              renderNoMatchRow()
             ) : (
               sections.map(
                 (section) =>
                   section.items.length > 0 && (
                     <CommandGroup key={section.id} heading={section.title}>
                       {section.items.map((item) =>
-                        item.kind === "create" ? (
-                          <CommandItem
-                            key={item.id}
-                            value={`${item.label} ${item.description} ${query}`}
-                            onSelect={() => handleSelectRow(item)}
-                            className="group flex items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
-                              <div className="flex flex-col gap-0 min-w-0">
-                                <span className="text-sm text-white/95 truncate" title={item.label}>
-                                  {item.label}
-                                </span>
-                                <span className="text-xs text-white/40 truncate" title={item.description}>
-                                  {item.description}
-                                </span>
-                              </div>
-                            </div>
-                            <Badge variant="outline">New</Badge>
-                          </CommandItem>
-                        ) : (
-                          renderDockRow(item)
-                        )
+                        item.kind === "create" ? renderCreateRow(item) : renderDockRow(item)
                       )}
                     </CommandGroup>
                   )
