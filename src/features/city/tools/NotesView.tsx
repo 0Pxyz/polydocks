@@ -3,16 +3,22 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { FileText, Plus, PencilSimple, Eye, Check } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { useTabState } from "@/lib/tabs/useTabState";
 import type { CityNoteItem } from "../types";
 
 interface NotesViewProps {
   notes: CityNoteItem[];
   cityName: string;
+  /** Stable city id for persisted tab state (falls back to cityName). */
+  cityKey?: string;
   onSaveNote?: (name: string, content: string) => void;
 }
 
-export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
-  const [selectedNoteName, setSelectedNoteName] = useState<string>(
+export function NotesView({ notes, cityName, cityKey, onSaveNote }: NotesViewProps) {
+  const tabId = `city:${cityKey ?? cityName}:notes`;
+  const [selectedNoteName, setSelectedNoteName] = useTabState<string>(
+    tabId,
+    "selected",
     notes[0]?.name || "summary.md"
   );
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -22,7 +28,7 @@ export function NotesView({ notes, cityName, onSaveNote }: NotesViewProps) {
     content: `# ${cityName} Notes\n\nNo notes written yet. Click edit to begin synthesizing.`,
   };
 
-  const [editBuffer, setEditBuffer] = useState<string>(currentNote.content);
+  const [editBuffer, setEditBuffer] = useTabState<string>(tabId, "draft", currentNote.content);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   const handleSelectNote = (name: string) => {

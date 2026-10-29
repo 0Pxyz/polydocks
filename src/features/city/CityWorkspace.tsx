@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { DynamicTabContainer } from "@/features/dock/DynamicTabContainer";
-import { spring, prefersReducedMotion } from "@/lib/motion";
+import { TabHost, type KeptTab } from "@/features/dock/TabHost";
 import { useCityWorkspace } from "./useCityWorkspace";
 import { CityOverview } from "./CityOverview";
 import { getLastCityTool } from "@/lib/city/cityModel";
@@ -27,7 +26,6 @@ export function CityWorkspace({
 }: ExtendedCityWorkspaceProps) {
   const [internalActiveTool, setInternalActiveTool] = useState<string>("overview");
   const activeTool = controlledActiveToolId ?? internalActiveTool;
-  const isReduced = prefersReducedMotion();
 
   const { data, loading, saveNote, toggleQuest, openSource } = useCityWorkspace(cityId);
   const readerView = useConversationStore((s) => s.readerView);
@@ -67,76 +65,101 @@ export function CityWorkspace({
   // Check if activeTool matches an agent dynamic tab
   const dynamicTab = data.dynamicTabs.find((t) => t.id === activeTool);
 
-  return (
-    <div className={`w-full flex flex-col items-center select-none ${className}`}>
-      {/* Main Viewport with Fluid Spring Transitions */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTool || "overview"}
-          initial={{ opacity: 0, y: isReduced ? 0 : 8, scale: isReduced ? 1 : 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
-          exit={{ opacity: 0, y: isReduced ? 0 : -8, scale: isReduced ? 1 : 0.98, transition: { duration: 0.15 } }}
-          className="w-full flex-1 flex flex-col items-center"
-        >
-          {dynamicTab ? (
-            <div className="w-full max-w-5xl h-[640px] rounded-2xl overflow-hidden bg-transparent">
-              <DynamicTabContainer
-                tabId={dynamicTab.id}
-                cityId={cityId}
-                srcdoc={dynamicTab.srcdoc}
-                title={dynamicTab.title}
-                className="w-full h-full"
-              />
-            </div>
-          ) : activeTool === "flashcards" ? (
-            <FlashcardsView
-              cityName={data.title}
-              sources={data.sources}
-            />
-          ) : activeTool === "files" ? (
-            <FilesView
+  // Platform tab lifecycle: every city surface stays mounted; the host
+  // shows the active one and hides the rest (0 remounts on return).
+  // Per-tool UI state persists via useTabState inside each view.
+  const toolTabs: KeptTab[] = useMemo(
+    () => [
+      {
+        id: "overview",
+        render: () => <CityOverview data={data} isFirstVisit={!getLastCityTool(cityId)} />,
+      },
+      ...data.dynamicTabs.map((t) => ({
+        id: `dyn:${t.id}`,
+        render: () => (
+          <div className="w-full max-w-5xl h-[640px] rounded-2xl overflow-hidden bg-transparent">
+            <DynamicTabContainer
+              tabId={t.id}
               cityId={cityId}
-              cityName={data.title}
+              srcdoc={t.srcdoc}
+              title={t.title}
+              className="w-full h-full"
             />
-          ) : activeTool === "notes" ? (
-            <NotesView
-              notes={data.notes}
-              cityName={data.title}
-              onSaveNote={saveNote}
-            />
-          ) : activeTool === "sources" || activeTool === "browser" ? (
-            openedSourceId && readerView ? (
-              <SourceDetailView view={readerView} />
-            ) : (
+          </div>
+        ),
+      })),
+      {
+        id: "flashcards",
+        render: () => <FlashcardsView cityName={data.title} cityKey={cityId} sources={data.sources} />,
+      },
+      {
+        id: "files",
+        render: () => <FilesView cityId={cityId} cityName={data.title} />,
+      },
+      {
+        id: "notes",
+        render: () => (
+          <NotesView notes={data.notes} cityName={data.title} cityKey={cityId} onSaveNote={saveNote} />
+        ),
+      },
+      {
+        id: "sources",
+        render: () => (
+          <>
+            <div
+              hidden={!!(openedSourceId && readerView)}
+              className={openedSourceId && readerView ? undefined : "contents"}
+            >
               <SourcesView
                 sources={data.sources}
                 cityName={data.title}
+                cityKey={cityId}
                 loading={loading}
                 onOpen={(id) => void openSource(id)}
               />
-            )
-          ) : activeTool === "quests" ? (
-            <QuestsView
-              quests={data.quests}
-              cityName={data.title}
-              onToggleQuest={toggleQuest}
-            />
-          ) : activeTool === "terminal" ? (
-            <TerminalView
-              cityId={cityId}
-              cityName={data.title}
-              notesCount={data.notes.length}
-              sourcesCount={data.sources.length}
-            />
-          ) : activeTool === "plugins" ? (
-            <PluginsView
-              onDismiss={() => handleSelectTool("overview")}
-            />
-          ) : activeTool === "" || activeTool === "overview" ? (
-            <CityOverview data={data} isFirstVisit={!getLastCityTool(cityId)} />
-          ) : null}
-        </motion.div>
-      </AnimatePresence>
+            </div>
+            {openedSourceId && readerView && <SourceDetailView view={readerView} />}
+          </>
+        ),
+      },
+      {
+        id: "quests",
+        render: () => (
+          <QuestsView quests={data.quests} cityName={data.title} onToggleQuest={toggleQuest} />
+        ),
+      },
+      {
+        id: "terminal",
+        render: () => (
+          <TerminalView
+            cityId={cityId}
+            cityName={data.title}
+            notesCount={data.notes.length}
+            sourcesCount={data.sources.length}
+          />
+        ),
+      },
+      {
+        id: "plugins",
+        render: () => <PluginsView onDismiss={() => handleSelectTool("overview")} />,
+      },
+    ],
+    // handleSelectTool excluded: stable by construction (setState + optional callback).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, loading, cityId, openedSourceId, readerView, saveNote, toggleQuest, openSource]
+  );
+  const visibleTabId = dynamicTab
+    ? `dyn:${dynamicTab.id}`
+    : activeTool === "browser"
+      ? "sources"
+      : activeTool || "overview";
+
+  return (
+    <div className={`w-full flex flex-col items-center select-none ${className}`}>
+      {/* Host-owned mount: all tools stay mounted, inactive ones hidden. */}
+      <div className="w-full flex-1 flex flex-col items-center">
+        <TabHost activeId={visibleTabId} tabs={toolTabs} />
+      </div>
     </div>
   );
 }
