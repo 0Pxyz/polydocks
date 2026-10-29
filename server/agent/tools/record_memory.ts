@@ -10,7 +10,7 @@ export const record_memory: AgentTool<{
 }> = {
   name: "record_memory",
   description:
-    "Records an observation, user preference, architectural choice, or project insight into persistent episodic memory (and optionally MEMORY.md).",
+    "Stores an observation or preference with a category. Use for durable facts; do not log turn-by-turn chatter.",
   schema: z.object({
     content: z
       .string()

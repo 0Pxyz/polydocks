@@ -68,7 +68,7 @@ function validateSafeTargetUrl(url: string, cityId: string): void {
 export const open_intent: AgentTool<OpenIntentArgs> = {
   name: "open_intent",
   description:
-    "Dispatches an open intent to focus, prime, and materialize a tool tab in the Agentic Dock tray with specific study or work content.",
+    "Primes a dock tab with content (url or payload) and persists it to workspace state. Use to open study material in context; do not use as a substitute for creating a missing tab.",
   schema: z.object({
     tabId: z
       .string()

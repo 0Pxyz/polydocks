@@ -18,7 +18,7 @@ export interface CreateTabArgs {
 export const create_tab: AgentTool<CreateTabArgs> = {
   name: "create_tab",
   description:
-    "Synthesizes and mounts a new dynamic tool tab into the Dock tray as a versioned TypeScript feature module or self-contained HTML/CSS/JS.",
+    "Builds a new city-scoped tab (TSX code or legacy html, exactly one). Use only for a tool the user wants to come back to; do not use for persistent workspace tools (use create_plugin) or to fix an existing tab (use update_tab).",
   schema: z
     .object({
       id: z

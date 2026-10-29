@@ -23,7 +23,7 @@ const placeCitySchema = z.object({
 export const place_city: AgentTool = {
   name: "place_city",
   description:
-    "Place a city point on the active world map before building its workspace content. Deterministically places on verified territory sites or exact coordinates.",
+    "Pins a city point on the map (writes map_points). Use after build_city in plan-build-place order; never before the workspace exists.",
   schema: placeCitySchema,
   execute: async ({ title, regionHint, near, x, y, mapId = "gloom" }) => {
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");

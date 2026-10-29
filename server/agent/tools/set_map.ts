@@ -9,7 +9,7 @@ const setMapSchema = z.object({
 
 export const set_map: AgentTool = {
   name: "set_map",
-  description: "Switch the active world map visual style. Use only when the user explicitly asks to change or restyle the map.",
+  description: "Switches the active map style. Use only for explicit restyle asks; never speculatively.",
   schema: setMapSchema,
   execute: async ({ mapId }) => {
     const targetId = mapId.toLowerCase().trim();

@@ -15,7 +15,7 @@ export interface PromoteToPluginArgs {
 export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
   name: "promote_to_plugin",
   description:
-    "Promotes a verified synthesized experience into a permanent reusable plugin in the catalog, making it discoverable and mountable across cities.",
+    "Makes a verified experience reusable across cities via the catalog. Use for proven tools only; do not use on unverified work.",
   schema: z.object({
     id: z
       .string()

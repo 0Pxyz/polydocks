@@ -15,7 +15,7 @@ export interface ModifyPluginArgs {
 export const modify_plugin: AgentTool<ModifyPluginArgs> = {
   name: "modify_plugin",
   description:
-    "Modifies an existing plugin in-place without duplicating dock entries or destroying existing saved user data. Updates code, bumps version, and preserves storage keys.",
+    "Patches an existing plugin in place (needs changeSummary, preserves storage, bumps version). Use for every plugin fix or change; never recreate to fix.",
   schema: z.object({
     id: z
       .string()
