@@ -10,11 +10,11 @@
 
 `plan_map({interests, existingSpec?})` returns a spec: one region per interest with two spec entries (`<Topic> Foundations` L1, `Advanced <Topic>` L3). It creates no workspaces; the loop emits `map.changed`.
 `build_city({cityId, topic, depth?})` (`overview|deep|mastery`, default `deep`) runs the pipeline and writes `notes/overview.md`, `feed.json`, `quests/tree.json`, `notes/glossary.json` under `workspace/<cityId>/`.
-`place_city({title, regionHint?, near?, x?, y?, mapId?})` (default map `gloom`) pins the point (`map_points`) and emits `map.point.added`. `list_maps({})` / `set_map({mapId})` only switch styles.
+`place_city({title, regionHint?, near?, x?, y?, mapId?})` (default map `gloom`) pins the point (`map_points`) and emits `map.point.added`. It fails when the city was never built — only announce a placement from the returned point id, never from the request. `list_maps({})` / `set_map({mapId})` only switch styles.
 
 ## Naming and existence
 
-City ids are slugs (`city-<topic>-foundations`). Before building, check what exists: `read_city_file({path: "notes/overview.md", cityId})` succeeding means the city is already built; a throw means it is missing. Never build twice, never invent decorative links.
+City ids are slugs (`city-<topic>-foundations`). Before building, check what exists: `read_city_file({path: "notes/overview.md", cityId})` succeeding means the city is already built; a throw means it is missing. Never build twice, never invent decorative links. To show anything inside a city, `enter_city` first — `open_tab` without the city scope opens the global view and shows nothing from the city.
 
 ## Common mistakes
 

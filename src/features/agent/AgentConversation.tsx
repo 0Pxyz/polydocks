@@ -91,6 +91,10 @@ export function AgentConversation({
     draft,
     isStreaming,
     statusText,
+    activity,
+    lastEventAt,
+    currentPhase,
+    streamingText,
     activeApproval,
     activeModel,
     soundEnabled,
@@ -133,6 +137,20 @@ export function AgentConversation({
   // One-shot anchor: expanding to full/side lands on the last user message,
   // never at the top after a reload. Reset when leaving the expanded views.
   const anchoredRef = useRef(false);
+
+  // Live clock for activity elapsed times + the stuck message. Ticks only
+  // while a turn is streaming.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isStreaming) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [isStreaming]);
+
+  const stuckSecs =
+    isStreaming && lastEventAt > 0 ? Math.max(0, Math.floor((now - lastEventAt) / 1000)) : 0;
+  const isStuck = stuckSecs >= 8;
+  const reduceMotion = prefersReducedMotion();
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -508,6 +526,22 @@ export function AgentConversation({
               )}
             </div>
 
+            {isStreaming && isStuck && (
+              <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-mono text-muted-foreground">
+                <span>
+                  Still working: {(currentPhase || "thinking").toLowerCase()} ({stuckSecs}s)
+                </span>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  onClick={abortStream}
+                  className="text-[var(--accent-lime)] hover:underline cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
             {/* Staging bar for attachments */}
             {stagedAttachments.length > 0 && (
               <AttachmentStagingBar
@@ -851,11 +885,68 @@ export function AgentConversation({
             );
           })}
 
-          {/* Transient status line during streaming */}
-          {isStreaming && statusText && (
-            <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)] py-1">
-              <span className="animate-spin text-xs">✦</span>
-              <span>{statusText}</span>
+          {/* Live progress during streaming: one row per step, then the stuck line */}
+          {isStreaming && (
+            <div className="flex flex-col gap-1 py-1" aria-live="polite">
+              {streamingText && (
+                <div className="w-full leading-relaxed whitespace-pre-wrap text-[15px] text-foreground/90 font-sans pb-1">
+                  {streamingText}
+                </div>
+              )}
+              {activity.map((row) => {
+                const elapsed = Math.max(
+                  0,
+                  Math.floor(((row.finishedAt ?? now) - row.startedAt) / 1000)
+                );
+                return (
+                  <div
+                    key={row.id}
+                    className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
+                  >
+                    {row.state === "running" ? (
+                      <span
+                        className={cn(
+                          "text-[var(--accent-lime)] text-[10px]",
+                          !reduceMotion && "animate-spin inline-block"
+                        )}
+                      >
+                        ✦
+                      </span>
+                    ) : row.state === "done" ? (
+                      <Check className="w-3 h-3 text-[var(--accent-lime)]" />
+                    ) : (
+                      <X className="w-3 h-3 text-red-400" />
+                    )}
+                    <span className="truncate">{row.label}</span>
+                    <span className="text-muted-foreground/60 shrink-0">{elapsed}s</span>
+                  </div>
+                );
+              })}
+              {activity.length === 0 && (statusText || currentPhase) && (
+                <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)]">
+                  <span
+                    className={cn(!reduceMotion && "animate-spin inline-block")}
+                  >
+                    ✦
+                  </span>
+                  <span>{statusText || currentPhase || "Thinking…"}</span>
+                </div>
+              )}
+              {isStuck && (
+                <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground pt-1">
+                  <span>
+                    Still working: {(currentPhase || "thinking").toLowerCase()} ({stuckSecs}s)
+                  </span>
+                  <span aria-hidden>·</span>
+                  <button
+                    type="button"
+                    onClick={abortStream}
+                    className="text-[var(--accent-lime)] hover:underline cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

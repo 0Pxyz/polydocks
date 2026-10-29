@@ -130,6 +130,28 @@ export type UIEvent =
       step: number;
       code?: string;
       message: string;
+    }
+  | {
+      type: "agent.heartbeat";
+      step: number;
+      /** Ms since the turn started (server clock). */
+      elapsedMs: number;
+      /** What the loop is waiting on. Never carries content. */
+      phase: "thinking" | "running_tool";
+      /** Machine tool name while running_tool, if any. */
+      tool?: string;
+    }
+  | {
+      type: "agent.text_delta";
+      step: number;
+      /** One streamed text fragment (append to the provisional reply). */
+      delta: string;
+    }
+  | {
+      type: "city.entered";
+      step: number;
+      /** City workspace id to switch the view into. */
+      cityId: string;
     };
 
 /**
@@ -406,6 +428,29 @@ export function adaptBackendEvent(raw: {
         steps: Number(payload.steps || step),
         model: payload.model ? String(payload.model) : undefined,
         intent: payload.intent ? String(payload.intent) : undefined,
+      };
+
+    case "agent.heartbeat":
+      return {
+        type: "agent.heartbeat",
+        step,
+        elapsedMs: Number(payload.elapsedMs || 0),
+        phase: payload.phase === "running_tool" ? "running_tool" : "thinking",
+        tool: typeof payload.tool === "string" ? payload.tool : undefined,
+      };
+
+    case "agent.text_delta":
+      return {
+        type: "agent.text_delta",
+        step,
+        delta: typeof payload.delta === "string" ? payload.delta : "",
+      };
+
+    case "city.enter":
+      return {
+        type: "city.entered",
+        step,
+        cityId: String(payload.cityId || ""),
       };
 
     case "error":

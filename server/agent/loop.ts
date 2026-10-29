@@ -33,6 +33,8 @@ export interface AgentStepEvent {
   step: number;
   type:
     | "agent.start"
+    | "agent.heartbeat"
+    | "agent.text_delta"
     | "tool.start"
     | "tool.done"
     | "tab.created"
@@ -95,6 +97,87 @@ export interface AgentLoopResult {
   text?: string;
   steps: number;
   error?: string;
+}
+
+/**
+ * Runs one model call with streaming primary: text deltas are forwarded as
+ * they arrive (first paint <1s instead of 6-15s of silence) and tool calls
+ * are accumulated from `tool_calls` chunks. Returns a legacy-shaped
+ * `{ choices: [{ message }], usage }` so the loop below is untouched.
+ * Providers/clients that answer with a plain object (older mocks,
+ * non-streaming deployments) fall back to a single call.
+ */
+async function createModelResponse(input: {
+  llmClient: typeof llm;
+  completionParams: any;
+  signal?: AbortSignal;
+  onTextDelta: (delta: string) => void | Promise<void>;
+}): Promise<any> {
+  const { llmClient, completionParams, signal, onTextDelta } = input;
+  let streamed: any = null;
+  try {
+    streamed = await llmClient.chat.completions.create(
+      { ...completionParams, stream: true, stream_options: { include_usage: true } },
+      { signal } as any
+    );
+  } catch (err) {
+    // An abort must propagate (cancel): retrying as a single call would
+    // resurrect a turn the user just killed.
+    if (signal?.aborted) throw err;
+    streamed = null;
+  }
+  if (!streamed || typeof streamed[Symbol.asyncIterator] !== "function") {
+    // Plain object answer (provider answered directly instead of streaming,
+    // or a non-streaming client such as test mocks): use it as the legacy
+    // response. Exactly one model call per step — never call again here,
+    // or stateful clients and billing would see double calls.
+    if (streamed) return streamed;
+    return llmClient.chat.completions.create(completionParams, { signal } as any);
+  }
+
+  let content = "";
+  const toolAcc = new Map<number, { id: string; name: string; args: string }>();
+  let usage: unknown = null;
+  for await (const chunk of streamed as AsyncIterable<any>) {
+    if (chunk?.usage) usage = chunk.usage;
+    const delta = chunk?.choices?.[0]?.delta;
+    if (!delta) continue;
+    if (typeof delta.content === "string" && delta.content.length > 0) {
+      content += delta.content;
+      await onTextDelta(delta.content);
+    }
+    const tcs = (delta as any).tool_calls;
+    if (Array.isArray(tcs)) {
+      for (const tc of tcs) {
+        const idx = typeof tc.index === "number" ? tc.index : 0;
+        const cur = toolAcc.get(idx) ?? { id: "", name: "", args: "" };
+        if (typeof tc.id === "string" && tc.id.length > 0) cur.id = tc.id;
+        const fn = tc.function ?? {};
+        if (typeof fn.name === "string" && fn.name.length > 0) cur.name = fn.name;
+        if (typeof fn.arguments === "string") cur.args += fn.arguments;
+        toolAcc.set(idx, cur);
+      }
+    }
+  }
+  const tool_calls = [...toolAcc.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([idx, t], i) => ({
+      id: t.id || `stream_call_${idx}_${i}`,
+      type: "function",
+      function: { name: t.name, arguments: t.args },
+    }));
+  return {
+    choices: [
+      {
+        message: {
+          role: "assistant",
+          content,
+          ...(tool_calls.length > 0 ? { tool_calls } : {}),
+        },
+      },
+    ],
+    usage: usage ?? {},
+  };
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Agent, an autonomous dock and workspace operator powered by Meta Muse Spark.
@@ -277,7 +360,28 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     }
   };
 
+  // Progress heartbeat: the model can take 6-15s per call with zero
+  // events in between (recon: theme 6s, plugin codegen 15s). A 2s tick
+  // carries only elapsed time + phase — never prompt, code, or args —
+  // so the UI can show "still working" instead of silence. Cleared in
+  // the finally below on every exit path.
+  const turnStart = Date.now();
+  let currentPhase: "thinking" | "running_tool" = "thinking";
+  let currentTool: string | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+
   try {
+    heartbeat = setInterval(() => {
+      void emit({
+        step: currentStep,
+        type: "agent.heartbeat",
+        payload: {
+          elapsedMs: Date.now() - turnStart,
+          phase: currentPhase,
+          ...(currentTool ? { tool: currentTool } : {}),
+        },
+      });
+    }, 2000);
 
     if (taskId) {
       try {
@@ -489,6 +593,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Same tool with identical arguments already ran this turn: refuse the
     // duplicate so the model changes approach instead of looping.
     const seenCalls = new Set<string>();
+    // Progress-based circuit breaker (not a step cap): consecutive duplicate
+    // refusals mean the model is stuck re-reading instead of progressing.
+    // Three in a row ends the turn gracefully instead of looping forever.
+    let duplicateStreak = 0;
 
     while (currentStep < maxSteps) {
       if (signal?.aborted) {
@@ -547,7 +655,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         completionParams.reasoning_effort = effectiveEffort;
       }
 
-      const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
+      currentPhase = "thinking";
+      currentTool = undefined;
+      // Streaming primary: text deltas are forwarded as agent.text_delta
+      // (first paint <1s instead of 6-15s of silence) and tool calls are
+      // accumulated from chunks. Legacy object responses (older mocks,
+      // non-streaming clients) are used as-is, so this degrades cleanly.
+      const response = await createModelResponse({
+        llmClient,
+        completionParams,
+        signal,
+        onTextDelta: (delta) =>
+          emit({
+            step: currentStep,
+            type: "agent.text_delta",
+            payload: { delta },
+          }),
+      });
       noteUsage(response);
       const choice = response.choices?.[0];
 
@@ -601,9 +725,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       messages.push(assistantMessage);
 
       // Execute each tool call
+      currentPhase = "running_tool";
       for (const call of toolCalls) {
         const toolName = call.function.name;
         const toolId = call.id;
+        currentTool = toolName;
+        const toolStart = Date.now();
         let rawArgs: Record<string, unknown> = {};
 
         try {
@@ -683,8 +810,50 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             id: toolId,
             name: toolName,
             result: toolOutput,
+            durationMs: Date.now() - toolStart,
           },
         });
+
+        // Circuit breaker: three consecutive duplicate refusals in one turn
+        // means the model is stuck re-reading instead of progressing (the
+        // "Reading your notes" stall). End the turn with a graceful message
+        // instead of looping forever. This is progress-based, not a step cap.
+        if (toolOutput && typeof toolOutput === "object" && (toolOutput as any).duplicate === true) {
+          duplicateStreak++;
+        } else {
+          duplicateStreak = 0;
+        }
+        if (duplicateStreak >= 3) {
+          const stuckText =
+            "I got stuck re-reading the same thing, so I'm stopping here instead of looping. " +
+            "Tell me which file or note to open and I'll pick it up from there.";
+          if (threadUserId) {
+            appendThreadMessage(threadUserId, "assistant", stuckText);
+            assistantPersisted = true;
+          } else if (cityId) {
+            appendCityMessage(cityId, "assistant", stuckText);
+          }
+          if (taskId) {
+            try {
+              updateTaskState(taskId, "completed", {
+                progress: 1.0,
+                output: { text: stuckText, steps: currentStep, stuck: true },
+              });
+            } catch {
+              // Non-fatal
+            }
+          }
+          await emit({
+            step: currentStep,
+            type: "agent.finish",
+            payload: { ...(await finishPayload(stuckText)), intent, stuck: true },
+          });
+          return {
+            status: "completed",
+            text: stuckText,
+            steps: currentStep,
+          };
+        }
 
         // Trigger reactive UI events when applicable
         if (toolName === "create_tab" && toolOutput && typeof toolOutput === "object") {
@@ -699,6 +868,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           await emit({
             step: currentStep,
             type: "tray.open",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        // Entering a city switches the UI into its workspace. Without this
+        // event the agent opens tabs in the global scope and city content
+        // shows nothing (dock marks it open, viewport stays empty).
+        if (
+          toolName === "enter_city" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).action === "city.enter" &&
+          typeof (toolOutput as any).cityId === "string"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "city.enter",
             payload: toolOutput as Record<string, unknown>,
           });
         }
@@ -956,5 +1142,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       error: errorMessage,
       steps: currentStep,
     };
+  } finally {
+    if (heartbeat !== undefined) clearInterval(heartbeat);
   }
 }

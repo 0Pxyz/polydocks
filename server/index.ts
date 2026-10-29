@@ -226,6 +226,9 @@ app.post("/api/agent", async (c) => {
       attachments: Array.isArray(attachments) ? attachments : undefined,
       history: Array.isArray(history) ? history : [],
       retryLast: retry === true,
+      // Client disconnect (Stop button) aborts the model call and the
+      // tool loop; runAgentLoop rolls the turn back for retry.
+      signal: c.req.raw.signal,
       onEvent: async (event: AgentStepEvent) => {
         await stream.writeSSE({
           event: event.type,
