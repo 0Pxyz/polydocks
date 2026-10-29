@@ -626,8 +626,21 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
-          case "city.entered": {
-            try {
+          case "reader.open": {
+            const url = event.url;
+            if (url) {
+              try {
+                const { openExternalUrl } = await import("@/lib/platform");
+                openExternalUrl(url);
+                set({ statusText: `Opening "${event.title || url}".` });
+              } catch {
+                set({ statusText: `Open this link: ${url}` });
+              }
+            }
+            break;
+          }
+
+          case "city.entered": {            try {
               const { useNavigationStore } = await import("@/lib/store/useNavigationStore");
               if (event.cityId) useNavigationStore.getState().enterCity(event.cityId);
             } catch {

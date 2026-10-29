@@ -4,6 +4,8 @@ import { capabilityBus } from "../bus";
 import { tinyfish } from "../../discovery/tinyfish";
 import { readCityFile, writeCityFile, getCityContext } from "../../workspace/cityWorkspace";
 import type { PluginManifest } from "../manifest";
+import { registerSourcesPlugin } from "../sources";
+import { registerCitiesPlugin } from "../cities";
 
 /**
  * 1. Search Plugin
@@ -198,6 +200,11 @@ export const workspacePluginManifest: PluginManifest = {
  * Register all first-party plugins and their executable handlers.
  */
 export function initializeFirstPartyPlugins(): void {
+  // Contract plugins (sources, cities): single definitions that generate
+  // the bus registration, HTTP route and CLI command.
+  registerSourcesPlugin();
+  registerCitiesPlugin();
+
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);
   capabilityBus.register("search", searchPluginManifest.capabilities[0], async (input) => {

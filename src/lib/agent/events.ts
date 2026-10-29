@@ -113,6 +113,13 @@ export type UIEvent =
       attachmentId?: string;
     }
   | {
+      type: "reader.open";
+      step: number;
+      /** URL to open (same behavior as the feed's Open button). */
+      url: string;
+      title?: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -452,6 +459,17 @@ export function adaptBackendEvent(raw: {
         step,
         cityId: String(payload.cityId || ""),
       };
+
+    case "reader.open": {
+      const url = typeof payload.url === "string" ? payload.url : "";
+      if (!url) return null;
+      return {
+        type: "reader.open",
+        step,
+        url,
+        title: typeof payload.title === "string" ? payload.title : undefined,
+      };
+    }
 
     case "error":
       return {

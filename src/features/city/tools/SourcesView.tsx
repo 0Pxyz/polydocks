@@ -1,151 +1,199 @@
-import { useState } from "react";
-import {
-  ArrowSquareOut,
-  BookOpen,
-  FileText,
-  Video,
-  Globe,
-  MagnifyingGlass,
-} from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
+import { BookOpen, FileText, Play, Video } from "@phosphor-icons/react";
 import { openExternalUrl } from "@/lib/platform";
+import { cn } from "@/lib/cn";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { CitySourceItem } from "../types";
 
 interface SourcesViewProps {
   sources: CitySourceItem[];
   cityName: string;
+  loading?: boolean;
 }
 
-export function SourcesView({ sources, cityName }: SourcesViewProps) {
-  const [activeFilter, setActiveFilter] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState<string>("");
+type KindFilter = "all" | "article" | "paper" | "video";
 
-  const filteredSources = sources.filter((item) => {
-    const matchesFilter =
-      activeFilter === "all" ||
-      (activeFilter === "paper" && (item.kind === "paper" || item.title.toLowerCase().includes("paper"))) ||
-      (activeFilter === "article" && item.kind === "article") ||
-      (activeFilter === "video" && item.kind === "video");
+const FILTERS: Array<{ id: KindFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "article", label: "Articles" },
+  { id: "paper", label: "Papers" },
+  { id: "video", label: "Videos" },
+];
 
-    const matchesSearch =
-      searchQuery === "" ||
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.why && item.why.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (item.domain && item.domain.toLowerCase().includes(searchQuery.toLowerCase()));
+function timeLine(item: CitySourceItem): string | null {
+  const parts: string[] = [];
+  if (item.domain) parts.push(item.domain);
+  if (item.kind === "video" && typeof item.durationSec === "number") {
+    const m = Math.floor(item.durationSec / 60);
+    const s = item.durationSec % 60;
+    parts.push(`${m}:${String(s).padStart(2, "0")}`);
+  } else if (typeof item.readMinutes === "number") {
+    parts.push(`${item.readMinutes} min`);
+  } else if (item.publishedAt) {
+    const y = new Date(item.publishedAt).getFullYear();
+    if (Number.isFinite(y)) parts.push(String(y));
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
-    return matchesFilter && matchesSearch;
-  });
+function KindGlyph({ kind, className }: { kind?: string; className?: string }) {
+  if (kind === "video") return <Video size={20} className={className} weight="light" />;
+  if (kind === "paper") return <FileText size={20} className={className} weight="light" />;
+  return <BookOpen size={20} className={className} weight="light" />;
+}
 
-  const getKindIcon = (kind?: string) => {
-    switch (kind) {
-      case "paper":
-        return <FileText size={16} className="text-[var(--accent-lime)]" />;
-      case "video":
-        return <Video size={16} className="text-[#9aa5b8]" />;
-      case "course":
-      case "article":
-      default:
-        return <BookOpen size={16} className="text-[#d1d6e2]" />;
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-6 w-full max-w-5xl">
-      {/* Header controls */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <Globe size={18} className="text-[var(--accent-lime)]" />
-            <span>Research & Sources</span>
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Primary sources gathered by TinyFish for {cityName}.
-          </p>
-        </div>
-
-        {/* Search & Filter bar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex items-center">
-            <MagnifyingGlass size={14} className="text-muted-foreground absolute left-3 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search sources..."
-              className="pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white/[0.04] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:bg-white/[0.08] w-40 sm:w-48 font-sans"
-            />
+function SourceImage({ item, large }: { item: CitySourceItem; large?: boolean }) {
+  if (item.image) {
+    return (
+      <div className={cn("relative w-full overflow-hidden bg-white/[0.04]", large ? "aspect-[21/9]" : "aspect-video")}>
+        <img
+          src={item.image}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+        />
+        {item.kind === "video" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white">
+              <Play size={18} weight="fill" />
+            </span>
           </div>
-
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03]">
-            {["all", "paper", "article", "video"].map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setActiveFilter(filter)}
-                className={`px-2.5 py-1 rounded-lg text-xs capitalize transition-colors font-sans cursor-pointer ${
-                  activeFilter === filter
-                    ? "bg-white/[0.1] text-white font-medium"
-                    : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Source Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredSources.length > 0 ? (
-          filteredSources.map((source, index) => (
-            <div
-              key={`${source.url}-${index}`}
-              className="rounded-2xl bg-[#0c0e14] border border-white/5 p-5 flex flex-col justify-between hover:border-white/15 transition-colors group"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    {getKindIcon(source.kind)}
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      {source.kind || "source"}
-                    </span>
-                  </div>
-                  {source.domain && (
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      {source.domain}
-                    </span>
-                  )}
-                </div>
-
-                <h4 className="text-sm font-medium text-white group-hover:text-[var(--accent-lime)] transition-colors leading-snug mb-2">
-                  {source.title}
-                </h4>
-
-                {source.why && (
-                  <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-                    {source.why}
-                  </p>
-                )}
-              </div>
-
-              <div className="pt-3 border-t border-white/5 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => openExternalUrl(source.url)}
-                  className="inline-flex items-center gap-1.5 text-xs text-[var(--accent-lime)] hover:underline cursor-pointer"
-                >
-                  <span>Open Primary Source</span>
-                  <ArrowSquareOut size={14} />
-                </button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="col-span-full py-16 text-center text-xs text-muted-foreground">
-            No sources match the search query.
+        )}
+        {item.hook && (
+          <div className="absolute inset-x-0 bottom-0 translate-y-1 bg-gradient-to-t from-black/85 to-transparent p-3 pt-8 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+            <p className="text-xs leading-relaxed text-white/90">{item.hook}</p>
           </div>
         )}
       </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "relative flex w-full items-center justify-center bg-white/[0.04] text-muted-foreground/50",
+        large ? "aspect-[21/9]" : "aspect-video"
+      )}
+    >
+      <KindGlyph kind={item.kind} className="h-8 w-8" />
+      {item.hook && (
+        <div className="absolute inset-x-0 bottom-0 translate-y-1 bg-gradient-to-t from-black/85 to-transparent p-3 pt-8 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
+          <p className="text-xs leading-relaxed text-white/90">{item.hook}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SourcesView({ sources, cityName, loading = false }: SourcesViewProps) {
+  const [activeFilter, setActiveFilter] = useState<KindFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return sources.filter((item) => {
+      if (activeFilter !== "all" && item.kind !== activeFilter) return false;
+      if (!q) return true;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        (item.why && item.why.toLowerCase().includes(q)) ||
+        (item.hook && item.hook.toLowerCase().includes(q)) ||
+        (item.domain && item.domain.toLowerCase().includes(q))
+      );
+    });
+  }, [sources, activeFilter, searchQuery]);
+
+  const [featured, ...rest] = filtered;
+
+  return (
+    <div className="flex w-full max-w-5xl flex-col gap-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-white">Research &amp; Sources</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {sources.length > 0 ? `${sources.length} saved for ${cityName}` : `Sources for ${cityName}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setActiveFilter(f.id)}
+                className={cn(
+                  "bg-transparent p-0 text-xs transition-colors cursor-pointer",
+                  activeFilter === f.id ? "font-semibold text-white" : "text-muted-foreground hover:text-white"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search"
+            className="w-36 bg-transparent px-1 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none border-b border-white/10 focus:border-white/25 font-sans"
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col gap-6">
+          <Skeleton className="aspect-[21/9] w-full" />
+          <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+            <Skeleton className="aspect-video w-full" />
+            <Skeleton className="aspect-video w-full" />
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="py-10 text-center text-xs text-muted-foreground">
+          Nothing here yet — ask the agent to find sources for this city.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-8">
+          {featured && (
+            <button
+              key={featured.url}
+              type="button"
+              onClick={() => openExternalUrl(featured.url)}
+              className="group block w-full cursor-pointer bg-transparent p-0 text-left"
+            >
+              <SourceImage item={featured} large />
+              <h4 className="mt-3 text-xl font-semibold leading-snug text-white transition-colors group-hover:text-[var(--accent-lime)]">
+                {featured.title}
+              </h4>
+              {timeLine(featured) && (
+                <p className="mt-1 text-xs text-muted-foreground">{timeLine(featured)}</p>
+              )}
+              {featured.why && (
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">{featured.why}</p>
+              )}
+            </button>
+          )}
+          {rest.length > 0 && (
+            <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+              {rest.map((item) => (
+                <button
+                  key={item.id || item.url}
+                  type="button"
+                  onClick={() => openExternalUrl(item.url)}
+                  className="group block w-full cursor-pointer bg-transparent p-0 text-left"
+                >
+                  <SourceImage item={item} />
+                  <h4 className="mt-2.5 text-[15px] font-semibold leading-snug text-white transition-colors group-hover:text-[var(--accent-lime)]">
+                    {item.title}
+                  </h4>
+                  {timeLine(item) && (
+                    <p className="mt-1 text-xs text-muted-foreground">{timeLine(item)}</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -101,15 +101,34 @@ export function useCityWorkspace(cityId: string) {
           });
         }
 
-        const sourcesList: CitySourceItem[] = Array.isArray(cityData?.sources)
-          ? cityData.sources.map((s: any) => ({
-              title: s.title || s.name || "Primary Source",
-              url: s.url || "#",
-              kind: s.kind || "article",
-              why: s.why || s.description,
-              domain: s.domain || (s.url ? new URL(s.url).hostname : "web"),
-            }))
-          : [];
+        // Enriched feed is the source of truth: one validated row per URL,
+        // saved via sources.add. Legacy shapes (sources/* filenames, raw
+        // feed.json items) are never mapped into cards.
+        let sourcesList: CitySourceItem[] = [];
+        try {
+          const feedRes = await fetch(`/api/cities/${encodeURIComponent(cityId)}/sources`);
+          if (feedRes.ok) {
+            const feedJson = await feedRes.json();
+            if (Array.isArray(feedJson.data)) {
+              sourcesList = feedJson.data
+                .filter((item: any) => item && typeof item.url === "string" && typeof item.title === "string")
+                .map((item: any) => ({
+                  id: item.id,
+                  title: item.title,
+                  url: item.url,
+                  kind: item.kind,
+                  why: item.why,
+                  domain: item.site,
+                  image: item.image,
+                  hook: item.hook,
+                  publishedAt: item.publishedAt,
+                  readMinutes: item.readMinutes,
+                }));
+            }
+          }
+        } catch {
+          // Feed optional; the empty state explains itself.
+        }
 
         // Fetch dynamic tabs
         let dynamicTabs: CityDynamicTab[] = [];
@@ -131,13 +150,15 @@ export function useCityWorkspace(cityId: string) {
               const feedJson = await feedRes.json();
               if (Array.isArray(feedJson.data?.items)) {
                 sourcesList.push(
-                  ...feedJson.data.items.map((item: any) => ({
-                    title: item.title,
-                    url: item.url,
-                    kind: item.kind || "article",
-                    why: item.why,
-                    domain: item.domain || (item.url ? new URL(item.url).hostname : "web"),
-                  }))
+                  ...feedJson.data.items
+                    .filter((item: any) => item && typeof item.url === "string" && typeof item.title === "string")
+                    .map((item: any) => ({
+                      title: item.title,
+                      url: item.url,
+                      kind: item.kind,
+                      why: item.why,
+                      domain: item.domain || (item.url ? new URL(item.url).hostname : "web"),
+                    }))
                 );
               }
             }

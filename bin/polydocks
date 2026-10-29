@@ -79,6 +79,8 @@ COMMANDS:
   plugins inspect <pluginId>           Inspect plugin manifest and capabilities
   plugins install <pluginId>           Install plugin into active workspace
   agent run "<prompt>"                 Run agent instruction directly in terminal
+  <plugin> <capability> [--k v]      Run a contract capability (sources, cities, ...)
+                                     e.g. polydocks sources add --url https://... --city biohacking --json
 
 GLOBAL OPTIONS:
   --json                               Output machine-readable JSON on stdout
@@ -427,9 +429,31 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         break;
-      default:
+      default: {
+        // Contract capabilities: `polydocks <plugin> <capability> [--key value] [--json]`
+        const { runContractCommand } = await import("../server/plugins/contractCli");
+        const { found, envelope, exitCode } = await runContractCommand(command, subcommand, rawArgs.slice(2), {
+          json: options.json,
+          city: options.city,
+          workspace: options.workspace,
+        });
+        if (found) {
+          if (options.json) {
+            console.log(JSON.stringify(envelope, null, 2));
+          } else if ((envelope as any)?.ok) {
+            const data = (envelope as any).data;
+            console.log(typeof data === "string" ? data : JSON.stringify(data, null, 2));
+            for (const e of (envelope as any).events ?? []) {
+              console.log(`[event ${e.type}]`);
+            }
+          } else {
+            console.error(`Error: ${(envelope as any)?.error || "Capability failed."}`);
+          }
+          process.exit(exitCode ?? 0);
+        }
         console.error(`Unknown command "${command}". Run "polydocks --help" for usage.`);
         process.exit(1);
+      }
     }
   } catch (err: any) {
     if (options.json) {
