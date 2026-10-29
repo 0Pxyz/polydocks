@@ -676,6 +676,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
+        // Dock layout directives: the client applies these through the shared
+        // dock layer and reads the resulting state back.
+        if (
+          (toolName === "dock_pin" || toolName === "dock_unpin" || toolName === "dock_close") &&
+          toolOutput &&
+          typeof toolOutput === "object"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "dock.layout",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
         if (toolName === "open_intent" && toolOutput && typeof toolOutput === "object") {
           await emit({
             step: currentStep,

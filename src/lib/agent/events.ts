@@ -54,6 +54,14 @@ export type UIEvent =
       experienceId: string;
     }
   | {
+      type: "dock.layout";
+      step: number;
+      op: "open" | "close" | "pin" | "unpin";
+      itemId: string;
+      success: boolean;
+      message?: string;
+    }
+  | {
       type: "experience.primed";
       step: number;
       experienceId: string;
@@ -181,6 +189,14 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       const tabId = typeof args?.tabId === "string" ? args.tabId : typeof args?.id === "string" ? args.id : "";
       return tabId ? `Opening ${tabId}…` : "Opening experience in workspace…";
     }
+    case "dock_pin":
+    case "dock_unpin":
+    case "dock_close": {
+      const id = typeof args?.id === "string" ? args.id : "";
+      if (toolName === "dock_pin") return id ? `Pinning ${id}…` : "Pinning to the dock…";
+      if (toolName === "dock_unpin") return id ? `Unpinning ${id}…` : "Unpinning from the dock…";
+      return id ? `Closing ${id}…` : "Closing…";
+    }
     // Trivial bookkeeping, internal inspections, and instant queries are silent
     case "list_tabs":
     case "inspect_tab":
@@ -292,6 +308,21 @@ export function adaptBackendEvent(raw: {
         step,
         experienceId: String(payload.tabId || payload.id || ""),
       };
+
+    case "dock.layout": {
+      const op = String(payload.action || "").replace("dock.", "");
+      if (op !== "open" && op !== "close" && op !== "pin" && op !== "unpin") {
+        return null;
+      }
+      return {
+        type: "dock.layout",
+        step,
+        op,
+        itemId: String(payload.id || ""),
+        success: payload.success !== false,
+        message: typeof payload.message === "string" ? payload.message : undefined,
+      };
+    }
 
     case "tab.prime":
       return {

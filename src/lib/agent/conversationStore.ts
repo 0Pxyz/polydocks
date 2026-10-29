@@ -14,6 +14,8 @@ import {
 } from "./thread";
 import { platformStorage } from "@/lib/platform/storage";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
+import { useDockStore } from "@/lib/store/useDockStore";
+import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
 import type { OrbState } from "@/features/agent/Orb";
 
 export type LayoutState = "closed" | "sheet" | "full" | "side";
@@ -83,6 +85,7 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
     },
     options?: {
       origin?: "dock-add" | "chat";
@@ -94,6 +97,7 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
     }
   ) => Promise<void>;
   abortStream: () => void;
@@ -103,6 +107,7 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
     }
   ) => Promise<void>;
 }
@@ -512,6 +517,35 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               }
             }
             break;
+
+          case "dock.layout": {
+            // Agent-driven dock change: the server already validated the id
+            // against workspace data; admit it to the known set and verify
+            // the state transition by reading it back. Failures surface as
+            // status text instead of pretending the dock changed.
+            if (!event.success) {
+              set({ statusText: event.message || `Couldn't change the dock.` });
+              break;
+            }
+            const dock = useDockStore.getState();
+            const knownIds = new Set([
+              ...Object.keys(DOCK_TOOL_DESCRIPTIONS),
+              ...useWorkspaceStore.getState().workspacePlugins.map((wp) => wp.pluginId),
+              ...dock.pinnedToolIds,
+              ...dock.openIds,
+              event.itemId,
+            ]);
+            const result = dock.applyDirective({ op: event.op, id: event.itemId }, knownIds);
+            if (event.op === "close" && result.ok) {
+              callbacks?.onCloseExperience?.(event.itemId);
+            }
+            set({
+              statusText: result.ok
+                ? result.message
+                : `Couldn't ${event.op} "${event.itemId}": ${result.message}`,
+            });
+            break;
+          }
 
           case "approval.required":
             set({
