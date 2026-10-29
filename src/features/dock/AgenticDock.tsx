@@ -8,6 +8,10 @@ import {
   Storefront,
   Folder,
   Gear,
+  Paperclip,
+  Target,
+  Cards,
+  TerminalWindow,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
@@ -17,7 +21,7 @@ import type { IconComponent } from "@/components/icons/adapter";
 import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
 import { useDockStore } from "@/lib/store/useDockStore";
-import { computeVisibleCap, DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
+import { computeVisibleCap, orderVisibleIds, DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
 import { DOCK_STYLES } from "./styles";
 import { DockStatusLine } from "@/features/profile/DockStatusLine";
 
@@ -33,6 +37,10 @@ export interface DockToolItem {
   iconKey?: string;
   text?: string;
   isAgent?: boolean;
+  /** Live count pill shown on the dock icon (only for real backing data). */
+  badge?: string | number;
+  /** Extra line in the dock tooltip (e.g. quest progress). */
+  tooltipDetail?: string;
 }
 
 export const CORE_DOCK_TOOLS: DockToolItem[] = [
@@ -110,10 +118,10 @@ export const CITY_DOCK_TOOLS: DockToolItem[] = [
     icon: Compass,
   },
   {
-    id: "browser",
-    label: "Research & Sources",
+    id: "sources",
+    label: "Sources",
     type: "icon",
-    icon: Globe,
+    icon: Paperclip,
   },
   {
     id: "notes",
@@ -126,6 +134,24 @@ export const CITY_DOCK_TOOLS: DockToolItem[] = [
     label: "City Files",
     type: "icon",
     icon: Folder,
+  },
+  {
+    id: "quests",
+    label: "Quests",
+    type: "icon",
+    icon: Target,
+  },
+  {
+    id: "flashcards",
+    label: "Flashcards",
+    type: "icon",
+    icon: Cards,
+  },
+  {
+    id: "terminal",
+    label: "Terminal",
+    type: "icon",
+    icon: TerminalWindow,
   },
   {
     id: "settings",
@@ -147,6 +173,11 @@ interface AgenticDockProps {
   isAgentSheetOpen?: boolean;
   extraTools?: DockToolItem[];
   tools?: DockToolItem[];
+  /**
+   * Contextual ids (city tools): shown in the bar while their context is
+   * active, without ever becoming global pins.
+   */
+  contextualIds?: string[];
   onOpenSearch?: () => void;
   isBuilding?: boolean;
   buildingName?: string;
@@ -164,6 +195,7 @@ export function AgenticDock({
   isAgentSheetOpen = false,
   extraTools = [],
   tools: explicitTools,
+  contextualIds = [],
   onOpenSearch,
   isBuilding = false,
   buildingName,
@@ -279,18 +311,21 @@ export function AgenticDock({
   const allTools = [...universe, ...extraTools];
 
   // The bar stays small and curated: pinned items first (in pinned order),
-  // then open unpinned items. Everything else is reachable through search.
-  // The visible slice derives from measured bar width, never a magic count.
+  // then contextual city tools, then open unpinned items. Everything else
+  // is reachable through search. The visible slice derives from measured
+  // bar width, never a magic count.
   const visibleCap = computeVisibleCap(barWidth);
   const byId = new Map(allTools.map((tool) => [tool.id, tool]));
-  const orderedIds = [
-    ...pinnedToolIds,
-    ...openIds.filter((id) => !pinnedToolIds.includes(id)),
-  ];
+  const orderedIds = orderVisibleIds({
+    all: allTools.map((tool) => tool.id),
+    pinned: pinnedToolIds,
+    contextual: contextualIds,
+    open: openIds,
+    cap: visibleCap,
+  });
   const visibleTools = orderedIds
     .map((id) => byId.get(id))
-    .filter((tool): tool is DockToolItem => tool !== undefined)
-    .slice(0, visibleCap);
+    .filter((tool): tool is DockToolItem => tool !== undefined);
 
   // Every visible item gets a unique icon: the first tool keeps its icon,
   // later duplicates fall back to deterministic distinct glyphs.
@@ -397,6 +432,12 @@ export function AgenticDock({
                   size={20}
                 />
 
+                {tool.badge !== undefined && (
+                  <span className="pointer-events-none absolute -top-1 -right-1 z-10 min-w-5 h-5 px-1 rounded-full bg-white/15 text-white text-[10px] font-mono font-semibold flex items-center justify-center">
+                    {tool.badge}
+                  </span>
+                )}
+
                 {/* Tooltip */}
                 <span
                   className={cn(
@@ -405,6 +446,9 @@ export function AgenticDock({
                   )}
                 >
                   {tool.label}
+                  {tool.tooltipDetail && (
+                    <span className="text-white/50"> — {tool.tooltipDetail}</span>
+                  )}
                 </span>
               </motion.button>
             );

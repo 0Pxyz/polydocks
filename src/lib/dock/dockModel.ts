@@ -26,6 +26,10 @@ export interface DockItem {
   system?: boolean;
   status?: DockItemStatus;
   errorMessage?: string;
+  /** Live count pill shown on the dock icon (only for real backing data). */
+  badge?: string | number;
+  /** Extra line in the dock tooltip (e.g. quest progress). */
+  tooltipDetail?: string;
 }
 
 export interface DockLayoutState {
@@ -135,6 +139,110 @@ export function createItemsForQuery(query: string): DockItem[] {
   ];
 }
 
+/**
+ * The city's contextual tools. Shown in the dock while inside a city, never
+ * pinned globally. Icons resolve through the shared icon adapter.
+ */
+export const CITY_TOOL_IDS = [
+  "sources",
+  "notes",
+  "files",
+  "quests",
+  "flashcards",
+  "terminal",
+  "browser",
+] as const;
+
+export type CityToolId = (typeof CITY_TOOL_IDS)[number];
+
+export interface CityToolCounts {
+  sources: number;
+  notes: number;
+  quests: number;
+  doneQuests: number;
+}
+
+/**
+ * Builds the city dock set with live badges and tooltip details from real
+ * workspace counts. No badge is invented: tools without backing data
+ * (files, terminal) render badge-free.
+ */
+export function buildCityDockTools(summary?: CityToolCounts): DockItem[] {
+  const questsDetail =
+    summary && summary.quests > 0
+      ? summary.doneQuests >= summary.quests
+        ? `${summary.quests} ${summary.quests === 1 ? "quest" : "quests"} done`
+        : `${summary.doneQuests} of ${summary.quests} quests`
+      : undefined;
+  return [
+    { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
+    { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin", system: true },
+    {
+      id: "sources",
+      label: "Sources",
+      description: "Saved sources",
+      icon: "sources",
+      kind: "builtin",
+      badge: summary && summary.sources > 0 ? summary.sources : undefined,
+    },
+    {
+      id: "notes",
+      label: "Notes",
+      description: "Synthesized notes",
+      icon: "notes",
+      kind: "builtin",
+      badge: summary && summary.notes > 0 ? summary.notes : undefined,
+    },
+    { id: "files", label: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
+    {
+      id: "quests",
+      label: "Quests",
+      description: "Mastery quests and progress",
+      icon: "quests",
+      kind: "builtin",
+      badge: summary && summary.quests > 0 ? summary.quests : undefined,
+      tooltipDetail: questsDetail,
+    },
+    {
+      id: "flashcards",
+      label: "Flashcards",
+      description: "Interactive flashcards",
+      icon: "flashcards",
+      kind: "builtin",
+      tooltipDetail:
+        summary && summary.sources > 0 ? "Ready" : summary ? "Add sources to synthesize" : undefined,
+    },
+    { id: "terminal", label: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
+    { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
+  ];
+}
+
+/**
+ * Display order for the bar: pinned first (bar stays curated), then
+ * contextual city tools, then open unpinned items. Unknown ids drop out;
+ * the caller slices to the width-derived cap.
+ */
+export function orderVisibleIds(args: {
+  all: string[];
+  pinned: string[];
+  contextual?: string[];
+  open?: string[];
+  cap: number;
+}): string[] {
+  const known = new Set(args.all);
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const take = (id: string) => {
+    if (known.has(id) && !seen.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+    }
+  };
+  for (const id of args.pinned) take(id);
+  for (const id of args.contextual || []) take(id);
+  for (const id of args.open || []) take(id);
+  return ordered.slice(0, Math.max(1, args.cap));
+}
 /**
  * How many pinned items fit in the bar. Derived from measured available
  * width, never a magic item count: each slot takes `itemSize` px and

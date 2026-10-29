@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { DynamicTabContainer } from "@/features/dock/DynamicTabContainer";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 import { useCityWorkspace } from "./useCityWorkspace";
 import { CityOverview } from "./CityOverview";
 import { getLastCityTool } from "@/lib/city/cityModel";
+import { useCitySummaryStore } from "@/lib/store/useCitySummaryStore";
 import { NotesView } from "./tools/NotesView";
 import { SourcesView } from "./tools/SourcesView";
 import { QuestsView } from "./tools/QuestsView";
@@ -26,7 +27,18 @@ export function CityWorkspace({
   const activeTool = controlledActiveToolId ?? internalActiveTool;
   const isReduced = prefersReducedMotion();
 
-  const { data, saveNote, toggleQuest } = useCityWorkspace(cityId);
+  const { data, loading, saveNote, toggleQuest } = useCityWorkspace(cityId);
+
+  // Publish live counts for the dock badges once the workspace loads.
+  useEffect(() => {
+    if (loading) return;
+    useCitySummaryStore.getState().setSummary(cityId, {
+      sources: data.sources.length,
+      notes: data.notes.length,
+      quests: data.quests.length,
+      doneQuests: data.quests.filter((q) => q.completed).length,
+    });
+  }, [cityId, loading, data.sources, data.notes, data.quests]);
 
   const handleSelectTool = (toolId: string) => {
     if (controlledActiveToolId === undefined) {

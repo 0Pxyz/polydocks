@@ -20,12 +20,16 @@ describe("Dock Native Architecture & City Mode (Phase 2)", () => {
     expect(notes?.label).toContain("Notes");
   });
 
-  it("CITY_DOCK_TOOLS also ships the four core tools by default", () => {
+  it("CITY_DOCK_TOOLS ships the city tools by default", () => {
     const toolIds = CITY_DOCK_TOOLS.map((t) => t.id);
     expect(toolIds).toContain("agent");
     expect(toolIds).toContain("maps");
-    expect(toolIds).toContain("browser");
+    expect(toolIds).toContain("sources");
     expect(toolIds).toContain("notes");
+    expect(toolIds).toContain("files");
+    expect(toolIds).toContain("quests");
+    expect(toolIds).toContain("flashcards");
+    expect(toolIds).toContain("terminal");
   });
 
   it("GET and POST /api/cities/:id/files safely lists and creates workspace files", async () => {
