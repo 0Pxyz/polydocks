@@ -91,7 +91,13 @@ export default function App() {
     if (targetTool && activeExtraTools.some((t) => t.id === targetTool)) {
       useTabHostStore.getState().closeTab(targetTool);
     }
-    setActiveToolId("");
+    // Single source: the store owns focus. Close there and mirror locally.
+    if (targetTool) {
+      useDockStore.getState().closeTool(targetTool);
+      setActiveToolId(useDockStore.getState().dock.focusedId ?? "");
+    } else {
+      setActiveToolId("");
+    }
     if (targetTool) {
       const dockBtn = document.querySelector<HTMLButtonElement>(
         `[data-dock-tool-id="${targetTool}"]`
@@ -101,14 +107,18 @@ export default function App() {
   };
 
   // Agent-driven close: dismiss the open view without deleting anything.
+  // The store owns focus; local state mirrors it.
   const handleCloseExperience = (expId: string) => {
     if (expId === "agent") {
       setLayoutState("closed");
       return;
     }
+    const dock = useDockStore.getState();
     if (activeToolId === expId) {
-      setActiveToolId("");
-      setDockActiveTool("");
+      dock.closeTool(expId);
+      setActiveToolId(dock.dock.focusedId ?? "");
+    } else if (dock.dock.items[expId] && dock.dock.items[expId].state !== "closed") {
+      dock.closeTool(expId);
     }
   };
 
@@ -142,8 +152,8 @@ export default function App() {
       if (selectedCity) {
         enterCity(selectedCity);
       }
-      setActiveToolId("");
-      setDockActiveTool("");
+      // Focus follows the context switch (per-context memory restores the
+      // city's tool); never blank the store here.
       return;
     }
 
@@ -229,24 +239,10 @@ export default function App() {
 
 
 
-  useEffect(() => {
-    // Single source: the focused tool is the dock record. Mirror into the
-    // dock with stable registration order (never prepend/reorder).
-    const dock = useDockStore.getState();
-    if (activeToolId && activeToolId !== "agent") {
-      const record = dock.dock.items[activeToolId];
-      const inScope =
-        !record || record.contextId === null || record.contextId === dock.dock.activeContextId;
-      if (inScope && record?.state !== "focused") {
-        dock.openTool(activeToolId);
-      } else if (!record) {
-        dock.openTool(activeToolId);
-      }
-    } else if (!activeToolId && dock.dock.focusedId) {
-      // One click closes what is focused (never openIds[0], never a second click).
-      dock.closeTool(dock.dock.focusedId);
-    }
-  }, [activeToolId]);
+  // Local state mirrors the single source (the dock store). One direction
+  // only: the store owns focus, this effect copies it locally. The reverse
+  // mirror (local -> store) was removed: it chased stale closures against
+  // this effect and looped close/open forever (Maximum update depth).
 
   useEffect(() => {
     // Host-owned lifecycle: selecting a dynamic plugin tab mounts it once.
@@ -470,10 +466,10 @@ export default function App() {
                 setLayoutState("closed");
                 return;
               }
-              if (activeToolId === toolId) {
-                setActiveToolId("");
-                setDockActiveTool("");
-              }
+              // Single source: close in the store, mirror locally.
+              const dock = useDockStore.getState();
+              dock.closeTool(toolId);
+              setActiveToolId(dock.dock.focusedId ?? "");
             }}
             onSubmitToolPrompt={(prompt) => handleToolPromptSubmit(prompt)}
             onFixWithAgent={(prompt) => {
@@ -545,10 +541,14 @@ export default function App() {
               });
             }}
             onOpenExperience={(expId) => {
-              setActiveToolId(expId);
+              // Single source: register in the store, mirror locally.
+              useDockStore.getState().openTool(expId);
+              setActiveToolId(useDockStore.getState().dock.focusedId ?? expId);
             }}
               onCloseExperience={(expId) => {
-                if (activeToolId === expId) setActiveToolId("");
+                const dock = useDockStore.getState();
+                dock.closeTool(expId);
+                setActiveToolId(dock.dock.focusedId ?? "");
               }}
           />
 
@@ -623,8 +623,6 @@ export default function App() {
                   onEnterCity={(cityName) => {
                     setSelectedCity(cityName);
                     enterCity(cityName);
-                    setActiveToolId("");
-                    setDockActiveTool("");
                   }}
                 />
               </DockSurface>
@@ -639,8 +637,6 @@ export default function App() {
                     const id = cityId || cityName;
                     setSelectedCity(id);
                     enterCity(id);
-                    setActiveToolId("");
-                    setDockActiveTool("");
                   }}
                   onFoundCityTopic={(_topic) => {
                     setLayoutState("sheet");
