@@ -16,6 +16,7 @@ import {
 } from "../workspace/thread";
 import { maybeCompactAgentThread } from "./threadCompaction";
 import { getMemoryContext } from "./memory";
+import { AGENT_GUIDELINES_EXTRACT } from "./guidelines";
 import { extractUsage, recordTurnUsage } from "./usage";
 import {
   getSession,
@@ -294,15 +295,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Non-fatal
     }
 
-    // Safe injection of agent operational guidelines (AGENTS.md) and user profile (USER.md)
-    try {
-      const agentsDoc = await readFileSafe("AGENTS.md");
-      if (agentsDoc?.content) {
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Workspace Operational Guidelines (AGENTS.md)\n${agentsDoc.content}`;
-      }
-    } catch {
-      // Non-fatal
-    }
+    // Runtime extract of the operating guidelines (AGENTS.md). The full file
+    // is contributor guidance; the loop injects only the distilled extract.
+    activeSystemPrompt = `${activeSystemPrompt}\n\n---\n${AGENT_GUIDELINES_EXTRACT}`;
 
     try {
       const userProfile = await readFileSafe("USER.md");
