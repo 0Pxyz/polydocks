@@ -42,6 +42,14 @@ The agent actively controls the dock. It is not limited to a static set of inter
 - **"Turn this topic into learning quests"** → The agent parses key concepts into structured quests with XP progression.
 - **"Run code against this city's files"** *(planned)* → The agent opens an interactive terminal workspace for execution.
 
+### Plugin vs core
+
+One agent and its dock. Everything you see is a plugin opened in it — browser, notes, sources, quests, files, terminal, and the tools the agent builds for you. The agent is the operator: it opens, closes, orders, operates, and modifies; it never duplicates what already exists.
+
+What stays core (never a plugin): the runtime and routes, the agent loop, the permission and approval engine, persistence, the sandbox bridge, secrets and keys, and the map and chat surfaces. Everything else — including every tool the agent builds — is a plugin: a single file with a manifest, running sandboxed, talking to the app only through the bridge.
+
+The store is local for now: publishing shares a plugin to the community registry on your own machine, with version history and one-click install into any workspace. Review, signing, and remote sharing are post-demo work.
+
 ---
 
 ## Powered by Meta AI
