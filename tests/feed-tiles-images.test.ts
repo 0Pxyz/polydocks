@@ -67,6 +67,8 @@ describe("chat-requested images (budget + artifacts)", () => {
   const createdArtifacts: string[] = [];
 
   beforeEach(() => {
+    // Hermetic key: metaKey() falls back to the live env (CI has no .env).
+    process.env.MODEL_API_KEY = process.env.MODEL_API_KEY || "test-key";
     stubImageFetch();
     spendBefore = getImageSpend();
   });

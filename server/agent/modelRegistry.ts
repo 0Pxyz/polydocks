@@ -20,7 +20,10 @@ export interface ModelError {
 }
 
 function metaKey(): string {
-  return config.MODEL_API_KEY?.trim() ?? "";
+  // config is parsed at import; fall back to the live env so tests that
+  // set MODEL_API_KEY after import (hermetic fetch mocks) still resolve.
+  // In prod both agree (bun loads .env into process.env before import).
+  return config.MODEL_API_KEY?.trim() || process.env.MODEL_API_KEY?.trim() || "";
 }
 
 /**
