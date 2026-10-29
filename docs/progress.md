@@ -51,3 +51,4 @@
 | 2026-10-28 | Procedural ASCII world engine, interactive Canvas map renderer, and plan_ascii_world tool | [#98](https://github.com/0Pxyz/polymax/pull/98) |
 | 2026-10-28 | Multimodal chat attachments (images + documents, vision-model routing) integrated end-to-end; chat panel rebuilt on shadcn ScrollArea with prose typography over the attachments composer (carried-over WIP committed and finished)
 | 2026-10-29 | Installable PWA: web manifest, generated service worker with offline fallback, install entry point in appearance settings, maskable and Apple touch icons |
+| 2026-10-29 | Chat overflow fix (flex-1 transcript, pb-10, z-10 composer), single-Orb realtime STT via backend WS proxy (Meta wss ASR, key server-side) |
