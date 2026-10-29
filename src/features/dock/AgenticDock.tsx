@@ -23,7 +23,7 @@ import { useThemeStore } from "@/lib/theme";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useDockStore } from "@/lib/store/useDockStore";
-import { computeVisibleCap, orderVisibleIds, DOCK_CORE_CATALOG, type DockItem } from "@/lib/dock/dockModel";
+import { computeVisibleCap, DOCK_CORE_CATALOG, type DockItem } from "@/lib/dock/dockModel";
 import { CommandPalette } from "./CommandPalette";
 import { DOCK_STYLES } from "./styles";
 import { DockStatusLine } from "@/features/profile/DockStatusLine";
@@ -235,11 +235,13 @@ export function AgenticDock({
   );
   const activeToolId = controlledActiveToolId ?? internalActiveToolId;
 
-  // Single action layer: pinned order and open tabs live in the dock store,
-  // shared with the search palette and the agent.
+  // Single source: one record per dock item. The bar shows globals +
+  // the active context only; other-context records persist hidden.
   const pinnedToolIds = useDockStore((s) => s.pinnedToolIds);
-  const openIds = useDockStore((s) => s.openIds);
+  const dockSnapshot = useDockStore((s) => s.dock);
+  const dockVisibleIds = useDockStore((s) => s.visibleIds);
   const openTool = useDockStore((s) => s.openTool);
+  const closeTool = useDockStore((s) => s.closeTool);
 
   const closeSearch = useCallback(() => {
     setShowSearch(false);
@@ -247,14 +249,16 @@ export function AgenticDock({
   }, []);
 
   // Global ⌘K shortcut for agent conversation, ⌘⇧P for dock search
-  // (⌘K is reserved for Agent conversation)
+  // (⌘K is reserved for Agent conversation). Dock focus shortcuts live in
+  // the single registry (event.code, never event.key) and are handled in
+  // App so keyboard, REST, CLI and agent verbs converge.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if ((e.code === "KeyK" && (e.metaKey || e.ctrlKey)) && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         onSelectTool?.("agent");
       }
-      if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.code === "KeyP") {
         e.preventDefault();
         setShowSearch((prev) => !prev);
       }
@@ -356,11 +360,20 @@ export function AgenticDock({
   }, [isBottom]);
 
   const handleToolClick = (toolId: string) => {
-    const nextToolId = activeToolId === toolId ? "" : toolId;
-    if (controlledActiveToolId === undefined) {
-      setInternalActiveToolId(nextToolId);
+    // One click always resolves: clicking the focused item closes it,
+    // clicking another focuses it (background items come forward).
+    // Never a visible-but-inaccessible state.
+    if (activeToolId === toolId) {
+      closeTool(toolId);
+      if (controlledActiveToolId === undefined) setInternalActiveToolId("");
+      onSelectTool?.("");
+      return;
     }
-    onSelectTool?.(nextToolId);
+    openTool(toolId);
+    if (controlledActiveToolId === undefined) {
+      setInternalActiveToolId(toolId);
+    }
+    onSelectTool?.(toolId);
   };
 
   const activeStatus =
@@ -382,20 +395,36 @@ export function AgenticDock({
   }
   const allTools = [...universe, ...extraTools];
 
-  // The bar stays small and curated: pinned items first (in pinned order),
-  // then contextual city tools, then open unpinned items. Everything else
-  // is reachable through search. The visible slice derives from measured
-  // bar width, never a magic count.
+  // Single-source ordering: the dock_items registration order is stable and
+  // never recalculated. Visible = globals + active context (other contexts
+  // persist hidden, so the map never shows city items and nothing reshuffles
+  // on return). Pinned globals not yet registered still appear once.
   const visibleCap = computeVisibleCap(barWidth);
   const byId = new Map(allTools.map((tool) => [tool.id, tool]));
-  const orderedIds = orderVisibleIds({
-    all: allTools.map((tool) => tool.id),
-    pinned: pinnedToolIds,
-    contextual: contextualIds,
-    open: openIds,
-    cap: visibleCap,
-  });
-  const visibleTools = orderedIds
+  const dockVisible = dockVisibleIds();
+  const stableOrder = dockSnapshot.order.filter((id) => byId.has(id));
+  const orderedIds: string[] = [];
+  const seen = new Set<string>();
+  const take = (id: string) => {
+    if (!seen.has(id) && byId.has(id)) {
+      seen.add(id);
+      orderedIds.push(id);
+    }
+  };
+  // Pinned first (pinned order), then visible in stable registration order.
+  for (const id of pinnedToolIds) {
+    const record = dockSnapshot.items[id];
+    if (!record || dockVisible.includes(id)) take(id);
+    else if (!dockSnapshot.items[id]) take(id);
+  }
+  for (const id of stableOrder) {
+    if (dockVisible.includes(id)) take(id);
+  }
+  // Contextual tools not yet registered (first visit) appear in definition order.
+  for (const id of contextualIds) take(id);
+  for (const id of pinnedToolIds) take(id);
+  const cappedIds = orderedIds.slice(0, Math.max(1, visibleCap));
+  const visibleTools = cappedIds
     .map((id) => byId.get(id))
     .filter((tool): tool is DockToolItem => tool !== undefined);
 
@@ -520,11 +549,13 @@ export function AgenticDock({
         )}
       >
         <AnimatePresence mode="popLayout" initial={false}>
-          {visibleTools.map((tool) => {
+          {visibleTools.map((tool, index) => {
             const isAgent = tool.isAgent;
             const isActive = isAgent
               ? activeToolId === tool.id || isAgentSheetOpen
               : activeToolId === tool.id;
+            // Shortcut number only on hover/focus: no permanent chrome.
+            const shortcutHint = index < 9 ? `Ctrl+Shift+${index + 1}` : null;
 
             return (
               <motion.button
@@ -536,9 +567,10 @@ export function AgenticDock({
                 key={tool.id}
                 type="button"
                 data-dock-tool-id={tool.id}
+                data-dock-index={index}
                 onClick={() => handleToolClick(tool.id)}
                 className={cn(
-                  "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus:outline-none",
+                  "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-lime)]",
                   isActive ? currentStyle.activeItemClass : currentStyle.inactiveItemClass,
                   currentStyle.enableLift && !isReducedMotion && "hover:scale-115",
                   !isActive &&
@@ -547,6 +579,8 @@ export function AgenticDock({
                     "text-[var(--accent-lime)] shadow-[0_0_12px_rgba(200,255,87,0.3)]"
                 )}
                 aria-label={tool.label}
+                aria-current={isActive ? "true" : undefined}
+                tabIndex={0}
               >
                 <DockIcon
                   icon={barIcons.get(tool.id) ?? tool.icon}
@@ -569,16 +603,19 @@ export function AgenticDock({
                   />
                 )}
 
-                {/* Tooltip */}
+                {/* Tooltip (hover/focus only; shortcut number never permanent) */}
                 <span
                   className={cn(
-                    "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
+                    "pointer-events-none absolute opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
                     isBottom ? "-top-8" : "-bottom-8"
                   )}
                 >
                   {tool.label}
                   {tool.tooltipDetail && (
                     <span className="text-white/50"> — {tool.tooltipDetail}</span>
+                  )}
+                  {shortcutHint && (
+                    <span className="text-white/50"> · {shortcutHint}</span>
                   )}
                 </span>
               </motion.button>

@@ -54,6 +54,7 @@ export interface CityWorkspaceData {
 export interface CityWorkspaceProps {
   cityId: string;
   activeToolId?: string;
+  secondaryToolId?: string | null;
   onSelectTool?: (toolId: string) => void;
   onBackToWorld?: () => void;
   className?: string;

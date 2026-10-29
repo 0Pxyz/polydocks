@@ -16,11 +16,14 @@ import { FlashcardsView } from "./FlashcardsView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import type { CityWorkspaceProps } from "./types";
 
-type ExtendedCityWorkspaceProps = CityWorkspaceProps;
+type ExtendedCityWorkspaceProps = CityWorkspaceProps & {
+  secondaryToolId?: string | null;
+};
 
 export function CityWorkspace({
   cityId,
   activeToolId: controlledActiveToolId,
+  secondaryToolId = null,
   onSelectTool,
   className = "",
 }: ExtendedCityWorkspaceProps) {
@@ -153,12 +156,19 @@ export function CityWorkspace({
     : activeTool === "browser"
       ? "sources"
       : activeTool || "overview";
+  const secondaryVisibleId = secondaryToolId
+    ? secondaryToolId === "browser"
+      ? "sources"
+      : secondaryToolId
+    : null;
+  const dual = Boolean(secondaryVisibleId && secondaryVisibleId !== visibleTabId);
 
   return (
     <div className={`w-full flex flex-col items-center select-none ${className}`}>
-      {/* Host-owned mount: all tools stay mounted, inactive ones hidden. */}
-      <div className="w-full flex-1 flex flex-col items-center">
-        <TabHost activeId={visibleTabId} tabs={toolTabs} />
+      {/* Host-owned mount: all tools stay mounted, inactive ones hidden.
+          Dual panels show two records side by side; nothing remounts. */}
+      <div className={dual ? "w-full flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start" : "w-full flex-1 flex flex-col items-center"}>
+        <TabHost activeId={visibleTabId} secondaryId={dual ? secondaryVisibleId : null} tabs={toolTabs} />
       </div>
     </div>
   );

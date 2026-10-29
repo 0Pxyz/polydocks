@@ -8,6 +8,8 @@ export interface KeptTab {
 interface TabHostProps {
   tabs: KeptTab[];
   activeId: string;
+  /** Second visible tab for side-by-side panels (same mounts, two shown). */
+  secondaryId?: string | null;
   className?: string;
 }
 
@@ -25,18 +27,22 @@ interface TabHostProps {
  * No AnimatePresence around kept tabs: exit animations unmount, which
  * defeats the contract. Enter animations belong inside each surface.
  */
-export function TabHost({ tabs, activeId, className = "" }: TabHostProps) {
+export function TabHost({ tabs, activeId, secondaryId = null, className = "" }: TabHostProps) {
+  const visible = new Set([activeId, ...(secondaryId ? [secondaryId] : [])]);
+  const dual = Boolean(secondaryId && secondaryId !== activeId);
   return (
     <>
       {tabs.map((tab) => {
-        const active = tab.id === activeId;
+        const active = visible.has(tab.id);
+        const isSecondary = dual && tab.id === secondaryId;
         return (
           <div
             key={tab.id}
             hidden={!active}
-            className={cn(active && "contents", className)}
+            className={cn(active && !dual && "contents", className)}
             data-tab-host-id={tab.id}
             data-tab-host-active={active ? "true" : "false"}
+            data-tab-host-panel={active ? (isSecondary ? "right" : "left") : undefined}
           >
             {tab.render()}
           </div>

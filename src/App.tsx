@@ -20,8 +20,8 @@ import { useDockStore } from "@/lib/store/useDockStore";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { TabHost } from "@/features/dock/TabHost";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
-import { buildCityDockTools, CITY_TOOL_IDS } from "@/lib/dock/dockModel";
-import { getLastCityTool, setLastCityTool } from "@/lib/city/cityModel";
+import { buildCityDockTools } from "@/lib/dock/dockModel";
+import { matchDockShortcut, TWO_PANEL_MIN_WIDTH } from "@/lib/dock/dockItems";
 import { useCitySummaryStore } from "@/lib/store/useCitySummaryStore";
 import { cn } from "@/lib/cn";
 
@@ -230,13 +230,21 @@ export default function App() {
 
 
   useEffect(() => {
-    // Mirror the focused tool into the shared dock layer so the bar, the
-    // search palette and the agent all read the same open state.
+    // Single source: the focused tool is the dock record. Mirror into the
+    // dock with stable registration order (never prepend/reorder).
     const dock = useDockStore.getState();
     if (activeToolId && activeToolId !== "agent") {
-      dock.openTool(activeToolId);
-    } else if (!activeToolId && dock.openIds.length > 0) {
-      dock.closeTool(dock.openIds[0]);
+      const record = dock.dock.items[activeToolId];
+      const inScope =
+        !record || record.contextId === null || record.contextId === dock.dock.activeContextId;
+      if (inScope && record?.state !== "focused") {
+        dock.openTool(activeToolId);
+      } else if (!record) {
+        dock.openTool(activeToolId);
+      }
+    } else if (!activeToolId && dock.dock.focusedId) {
+      // One click closes what is focused (never openIds[0], never a second click).
+      dock.closeTool(dock.dock.focusedId);
     }
   }, [activeToolId]);
 
@@ -258,8 +266,26 @@ export default function App() {
   const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
   const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
 
+  // Active context is opaque to the core: city id or null (map). Records
+  // persist across switches; visibility filters globals + active context.
+  // Focus is remembered per context, so map -> city restores order + focus.
+  useEffect(() => {
+    useDockStore.getState().setActiveContext(cityId ?? null);
+  }, [cityId]);
+
+  // Keep the local focus mirror in sync when the dock changes underneath
+  // (keyboard, REST, CLI, agent verbs share the same registry).
+  const dockFocusedId = useDockStore((s) => s.dock.focusedId);
+  useEffect(() => {
+    if ((dockFocusedId ?? "") !== activeToolId) {
+      setActiveToolId(dockFocusedId ?? "");
+    }
+  }, [dockFocusedId]);
+
   // City tools live in the dock while inside a city (contextual, never
   // pinned globally) with live badges from real workspace counts.
+  // No per-view duplicate state: the dock record is the source; the
+  // per-city focus memory restores the same tool on return.
   const cityTools: DockToolItem[] = useMemo(
     () =>
       buildCityDockTools(citySummary).map(
@@ -276,27 +302,6 @@ export default function App() {
   );
   const cityToolIds = useMemo(() => cityTools.map((t) => t.id), [cityTools]);
 
-  // Entering a city reopens the last-used tool; first visit opens nothing.
-  useEffect(() => {
-    if (viewMode === "city" && cityId) {
-      const last = getLastCityTool(cityId);
-      setActiveToolId(last ?? "");
-      setDockActiveTool(last ?? "");
-    }
-  }, [viewMode, cityId, setDockActiveTool]);
-
-  // Remember the last-used tool per city while inside one.
-  useEffect(() => {
-    if (
-      viewMode === "city" &&
-      cityId &&
-      activeToolId &&
-      (CITY_TOOL_IDS as readonly string[]).includes(activeToolId)
-    ) {
-      setLastCityTool(cityId, activeToolId);
-    }
-  }, [viewMode, cityId, activeToolId]);
-
   useEffect(() => {
     // Restore the single persistent thread once per session. Layout changes
     // never re-fetch it and no conversation list is created.
@@ -305,6 +310,56 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Single registry: Ctrl/Cmd+Shift + code. event.code, never event.key.
+      const matched = matchDockShortcut({
+        code: e.code,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+      });
+      if (matched) {
+        const dock = useDockStore.getState();
+        if (matched.action.id === "tabs.focus") {
+          e.preventDefault();
+          dock.focusByIndex(matched.index ?? 0);
+          return;
+        }
+        if (matched.action.id === "tabs.next") {
+          e.preventDefault();
+          dock.focusNext(1);
+          return;
+        }
+        if (matched.action.id === "tabs.prev") {
+          e.preventDefault();
+          dock.focusNext(-1);
+          return;
+        }
+        if (matched.action.id === "tabs.close") {
+          // Never close the chat via W when typing inside it: the chat
+          // owns its own keys; the dock shortcut applies outside inputs.
+          const target = (e.target as HTMLElement | null)?.tagName;
+          if (target === "INPUT" || target === "TEXTAREA") return;
+          e.preventDefault();
+          dock.runDockAction("tabs.close");
+          return;
+        }
+        if (matched.action.id === "tabs.background") {
+          e.preventDefault();
+          dock.runDockAction("tabs.background");
+          return;
+        }
+        if (matched.action.id === "chat.toggle") {
+          e.preventDefault();
+          dock.runDockAction("chat.toggle");
+          const focused = useDockStore.getState().dock.focusedId;
+          if (focused === "agent") {
+            const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+            setLayoutState(isWide ? "side" : "sheet");
+          }
+          return;
+        }
+      }
       if (e.key === "Escape") {
         if (layoutState === "full") {
           setLayoutState("sheet");
@@ -332,6 +387,40 @@ export default function App() {
   const isSideLayout = layoutState === "side";
   const isCityMode = viewMode === "city";
   const isMapsOpen = !isCityMode && activeToolId === "maps";
+
+  // Two panels side by side at sufficient width; otherwise single panel.
+  // Nothing unmounts: the host keeps every record mounted, hidden via CSS.
+  const [viewportWidth, setViewportWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1280
+  );
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  const dockSnapshot = useDockStore((s) => s.dock);
+  const secondaryToolId = useMemo(() => {
+    if (!isCityMode || viewportWidth < TWO_PANEL_MIN_WIDTH) return null;
+    const visible = dockSnapshot.order.filter((id) => {
+      const record = dockSnapshot.items[id];
+      return (
+        record &&
+        (record.contextId === null || record.contextId === dockSnapshot.activeContextId) &&
+        (record.state === "open" || record.state === "focused")
+      );
+    });
+    if (visible.length < 2) return null;
+    const focused = dockSnapshot.focusedId && visible.includes(dockSnapshot.focusedId)
+      ? dockSnapshot.focusedId
+      : visible[0];
+    const others = visible.filter((id) => id !== focused);
+    others.sort((a, b) => (dockSnapshot.items[b]?.updatedAt ?? 0) - (dockSnapshot.items[a]?.updatedAt ?? 0));
+    return others[0] ?? null;
+  }, [isCityMode, viewportWidth, dockSnapshot]);
+  useEffect(() => {
+    useDockStore.getState().layoutPanels(viewportWidth);
+  }, [viewportWidth, dockSnapshot.focusedId, dockSnapshot.activeContextId]);
 
   return (
     <AppProviders>
@@ -518,6 +607,7 @@ export default function App() {
                   <CityView
                     cityName={activeCityId || selectedCity || "workspace"}
                     activeToolId={!activeToolId ? "" : activeToolId}
+                    secondaryToolId={secondaryToolId}
                     onSelectTool={handleSelectTool}
                   />
                 </div>
