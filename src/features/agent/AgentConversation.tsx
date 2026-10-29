@@ -272,7 +272,6 @@ export function AgentConversation({
               </div>
 
               <div className="flex items-center gap-1">
-                <ModelSwitcher compact className="h-6 text-[11px] px-1.5 mr-1" />
                 <button
                   type="button"
                   onClick={() => setSoundEnabled(!soundEnabled)}
@@ -371,7 +370,7 @@ export function AgentConversation({
                   if (isUser) {
                     return (
                       <div key={msg.id} className="flex flex-col items-end gap-1">
-                        <div className="max-w-[85%] rounded-2xl px-3.5 py-1.5 bg-white/[0.08] text-white text-xs leading-relaxed">
+                        <div className="max-w-[85%] rounded-2xl px-3.5 pt-1.5 pb-2 bg-white/[0.08] text-white text-xs leading-relaxed text-pretty">
                           {msg.content}
                         </div>
                         <MessageAttachments attachments={msg.attachments} />
@@ -382,7 +381,7 @@ export function AgentConversation({
                   return (
                     <div
                       key={msg.id}
-                      className="prose prose-invert prose-sm max-w-none pr-2 leading-relaxed prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs"
+                      className="prose prose-invert prose-sm max-w-none pr-2 pb-1 leading-relaxed prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs"
                     >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -444,7 +443,7 @@ export function AgentConversation({
               />
             )}
 
-            {/* Unified Composer: Attach Button + Voice Orb + Text Input + Send/Stop */}
+            {/* Unified Composer: input row + footer toolbar (grid coexistence) */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -455,65 +454,70 @@ export function AgentConversation({
                 if (!draft.trim() && stagedAttachments.length === 0) return;
                 sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
               }}
-              className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+              className="flex flex-col gap-1 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
             >
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer shrink-0"
-                title="Attach photo or document"
-              >
-                <Paperclip className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (isStreaming) abortStream();
-                  else toggleVoice();
-                }}
-                className={cn(
-                  "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0",
-                  orbState === "listening"
-                    ? "bg-red-500/20 text-red-400"
-                    : "hover:bg-white/10 text-muted-foreground hover:text-white"
-                )}
-                title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
-              >
-                <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-65" />
-              </button>
-
-              <input
-                ref={sheetInputRef}
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                placeholder="Ask anything, or give a dock command…"
-                className="flex-1 bg-transparent px-2 py-1 text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans"
-                autoFocus
-              />
-
-              {isStreaming ? (
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={abortStream}
-                  className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer shrink-0"
-                  title="Stop generation"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer shrink-0"
+                  title="Attach photo or document"
                 >
-                  <Square className="w-3 h-3 fill-current" />
+                  <Paperclip className="w-3.5 h-3.5" />
                 </button>
-              ) : (
+
                 <button
-                  type="submit"
-                  disabled={!draft.trim() && stagedAttachments.length === 0}
-                  className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
-                  title="Send message"
+                  type="button"
+                  onClick={() => {
+                    if (isStreaming) abortStream();
+                    else toggleVoice();
+                  }}
+                  className={cn(
+                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0",
+                    orbState === "listening"
+                      ? "bg-red-500/20 text-red-400"
+                      : "hover:bg-white/10 text-muted-foreground hover:text-white"
+                  )}
+                  title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
                 >
-                  <Send className="w-3 h-3" />
+                  <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-65" />
                 </button>
-              )}
+
+                <input
+                  ref={sheetInputRef}
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  placeholder="Ask anything, or give a dock command…"
+                  className="flex-1 min-w-0 bg-transparent px-2 py-1 text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans"
+                  autoFocus
+                />
+
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={abortStream}
+                    className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                    title="Stop generation"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() && stagedAttachments.length === 0}
+                    className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
+                    title="Send message"
+                  >
+                    <Send className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-start pl-1">
+                <ModelSwitcher compact align="start" />
+              </div>
             </form>
           </div>
         </motion.div>
@@ -562,7 +566,6 @@ export function AgentConversation({
           isBottom ? "pt-4" : "pt-[calc(var(--dock-top-offset,88px)+12px)]"
         )}
       >
-        <ModelSwitcher className="mr-1" />
         {!isSide && (
           <button
             type="button"
@@ -665,7 +668,7 @@ export function AgentConversation({
             if (isUser) {
               return (
                 <div key={msg.id} className="flex flex-col items-end gap-1.5 w-full">
-                  <div className="max-w-[75%] rounded-[20px] px-4 py-2.5 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed shadow-sm">
+                  <div className="max-w-[75%] rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
                     {msg.content}
                   </div>
                   <MessageAttachments attachments={msg.attachments} />
@@ -803,10 +806,10 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Composer: clean footer aligned with the transcript column */}
+      {/* Composer: clean footer aligned with the transcript column (grid: input row + toolbar row) */}
       <div
         className={cn(
-          "shrink-0 px-4 sm:px-6 pt-4 pb-5 pointer-events-auto",
+          "shrink-0 px-4 sm:px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-events-auto",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
@@ -838,67 +841,73 @@ export function AgentConversation({
             </div>
           )}
 
-          <div className="flex items-end">
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder="Ask anything"
-              className="flex-1 bg-transparent px-3.5 py-2 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
-            />
-
-            {/* Right Composer Controls */}
-            <div className="flex items-center gap-1.5 pb-1 pr-1">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title="Attach file"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title="Attach image"
-              >
-                <ImageIcon className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleVoice}
-                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-                title="Voice input"
-              >
-                <Orb state={orbState} size="sm" className="scale-75" />
-              </button>
-
-              {isStreaming ? (
+          <div className="grid grid-cols-1 gap-1">
+            <div className="flex items-end gap-1">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                placeholder="Ask anything"
+                className="flex-1 min-w-0 bg-transparent px-3.5 pt-2 pb-1 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
+              />
+              <div className="flex items-center gap-1 pb-1 pr-1 shrink-0">
                 <button
                   type="button"
-                  onClick={abortStream}
-                  className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
-                  title="Stop generation"
+                  onClick={toggleVoice}
+                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Voice input"
                 >
-                  <Square className="w-4 h-4 fill-current" />
+                  <Orb state={orbState} size="sm" className="scale-75" />
                 </button>
-              ) : (
+
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={abortStream}
+                    className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
+                    title="Stop generation"
+                  >
+                    <Square className="w-4 h-4 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience })}
+                    disabled={!draft.trim() && stagedAttachments.length === 0}
+                    className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Footer toolbar: model/effort picker left, attachments right — coexists with input via grid */}
+            <div className="flex items-center justify-between gap-2 px-1.5 pb-0.5">
+              <ModelSwitcher align="start" />
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience })}
-                  disabled={!draft.trim() && stagedAttachments.length === 0}
-                  className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
-                  title="Send message"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Attach file"
                 >
-                  <Send className="w-4 h-4" />
+                  <Paperclip className="w-4 h-4" />
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Attach image"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

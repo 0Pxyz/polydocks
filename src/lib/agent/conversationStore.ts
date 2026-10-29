@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { streamAgentLoop } from "./client";
 import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
-import { DEFAULT_MODEL_ID, getMetaModel } from "./models";
+import { DEFAULT_MODEL_ID, getMetaModel, DEFAULT_EFFORT_ID, type ReasoningEffortId } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
 import {
   clearAgentThread,
@@ -48,6 +48,7 @@ interface ConversationStoreState {
   audioLevel: number;
   orbState: OrbState;
   selectedModel: string;
+  selectedEffort: ReasoningEffortId;
   isHydratingThread: boolean;
   isLoadingOlder: boolean;
   hasOlderMessages: boolean;
@@ -68,6 +69,7 @@ interface ConversationStoreState {
   setOrbState: (state: OrbState) => void;
   setStatusText: (text: string) => void;
   setSelectedModel: (modelId: string) => void;
+  setSelectedEffort: (effort: ReasoningEffortId) => void;
   toggleAgent: (currentActiveToolId?: string) => void;
   sendMessage: (
     prompt?: string,
@@ -102,6 +104,7 @@ interface ConversationStoreState {
 const SIDE_WIDTH_KEY = "polymax-agent-side-width";
 const SOUND_KEY = "polymax-agent-sound";
 const MODEL_KEY = "polymax-agent-model";
+const EFFORT_KEY = "polymax-agent-effort";
 
 function getInitialModel(): string {
   const stored = platformStorage.getItem<string>(MODEL_KEY);
@@ -121,6 +124,12 @@ function getInitialSideWidth(): number {
 function getInitialSound(): boolean {
   const stored = platformStorage.getItem<boolean>(SOUND_KEY);
   return stored !== false;
+}
+
+function getInitialEffort(): ReasoningEffortId {
+  const stored = platformStorage.getItem<string>(EFFORT_KEY);
+  if (stored === "low" || stored === "medium" || stored === "high" || stored === "auto") return stored;
+  return DEFAULT_EFFORT_ID;
 }
 
 function getInitialLayoutState(): LayoutState {
@@ -171,6 +180,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   audioLevel: 0,
   orbState: "idle",
   selectedModel: getInitialModel(),
+  selectedEffort: getInitialEffort(),
   isHydratingThread: false,
   isLoadingOlder: false,
   hasOlderMessages: false,
@@ -257,6 +267,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   setSelectedModel: (selectedModel) => {
     platformStorage.setItem(MODEL_KEY, selectedModel);
     set({ selectedModel });
+  },
+
+  setSelectedEffort: (selectedEffort) => {
+    platformStorage.setItem(EFFORT_KEY, selectedEffort);
+    set({ selectedEffort });
   },
 
   addAttachments: async (files: File[]) => {

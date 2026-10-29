@@ -64,3 +64,24 @@ export const DEFAULT_MODEL_ID = "muse-spark-1.3";
 export function getMetaModel(modelId: string): MetaModelSpec {
   return META_MODELS.find((m) => m.id === modelId) || META_MODELS[0];
 }
+
+export type ReasoningEffortId = "auto" | "low" | "medium" | "high";
+
+export interface ReasoningEffortSpec {
+  id: ReasoningEffortId;
+  label: string;
+  description: string;
+}
+
+export const REASONING_EFFORTS: ReasoningEffortSpec[] = [
+  { id: "auto", label: "Automático", description: "Modelos Muse" },
+  { id: "low", label: "Baixo", description: "Rápido e eficiente" },
+  { id: "medium", label: "Médio", description: "Profundidade equilibrada" },
+  { id: "high", label: "Alto", description: "Muito minucioso" },
+];
+
+export const DEFAULT_EFFORT_ID: ReasoningEffortId = "auto";
+
+export function getEffort(effortId: string): ReasoningEffortSpec {
+  return REASONING_EFFORTS.find((e) => e.id === effortId) || REASONING_EFFORTS[0];
+}
