@@ -11,6 +11,7 @@ import {
   getPluginFile,
   listPluginFiles,
 } from "./pluginFiles";
+import { UI_KIT_FILES, codeHasImports } from "./reactKit";
 
 export interface FeatureManifest {
   id: string;
@@ -35,7 +36,9 @@ const MAX_FEATURE_SIZE_BYTES = 512 * 1024; // 512 KB safety cap
 
 /**
  * Deterministically strips TypeScript types and transpiles feature code for browser execution.
- * Enforces strict security boundaries: guest code is forbidden from importing external modules.
+ * Imports are validated against the vendored UI-kit allowlist (react,
+ * react-dom/client, @/components/ui/*): allowlisted imports pass here and are
+ * bundled at publish time; anything else is rejected with a clear error.
  */
 export function transpileFeatureCode(tsCode: string): string {
   if (Buffer.byteLength(tsCode, "utf-8") > MAX_FEATURE_SIZE_BYTES) {
@@ -44,18 +47,36 @@ export function transpileFeatureCode(tsCode: string): string {
     );
   }
 
+  const loader = /^\s*import\s/m.test(tsCode) || /<[A-Za-z][\w]*(\s[^<>]*)?\/>|<\/[A-Za-z][\w]*/.test(tsCode) ? "tsx" : "ts";
   const transpiler = new Bun.Transpiler({
-    loader: "ts",
+    loader,
     target: "browser",
   });
 
-  // Verify that the guest module does not attempt to import anything
-  const scannedImports = transpiler.scanImports(tsCode);
+  // Validate guest imports against the allowlist; bundling happens in
+  // writeFeature via the vendored kit (origin isolation is preserved).
+  // scanImports also reports transpiler-injected JSX runtime require-calls;
+  // those are kit-owned, not user-authored.
+  const INJECTED_RUNTIME = new Set(["react", "react/jsx-runtime", "react/jsx-dev-runtime"]);
+  const scannedImports = transpiler
+    .scanImports(tsCode)
+    .filter((imp) => !((imp as { kind?: string }).kind === "require-call" && INJECTED_RUNTIME.has(imp.path)));
   if (scannedImports.length > 0) {
-    const forbiddenPaths = scannedImports.map((imp) => imp.path).join(", ");
-    throw new Error(
-      `Security Violation: Feature modules must be self-contained. Forbidden imports detected: [${forbiddenPaths}]`
-    );
+    const allowedPattern = /^(@\/components\/ui\/[a-z-]+|react|react-dom\/client|react\/jsx-runtime|react\/jsx-dev-runtime)$/;
+    const forbidden = scannedImports.filter((imp) => {
+      if (!allowedPattern.test(imp.path)) return true;
+      const uiMatch = imp.path.match(/^@\/components\/ui\/([a-z-]+)$/);
+      if (uiMatch && !(UI_KIT_FILES as readonly string[]).includes(uiMatch[1])) return true;
+      return false;
+    });
+    if (forbidden.length > 0) {
+      const forbiddenPaths = forbidden.map((imp) => imp.path).join(", ");
+      throw new Error(
+        `Security Violation: Import "${forbiddenPaths}" is not allowed in plugin code. ` +
+          `Allowed imports: react, react-dom/client, @/components/ui/{${UI_KIT_FILES.join(", ")}}. ` +
+          `Use the shadcn kit and theme tokens instead of external packages, relative paths, or custom CSS.`
+      );
+    }
   }
 
   return transpiler.transformSync(tsCode);
@@ -71,6 +92,7 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data: blob:; media-src https: data: blob:; font-src data:; connect-src https:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
   <title>${escapeHtml(manifest.title)}</title>
   <style>
     :root {
@@ -254,6 +276,147 @@ ${jsCode}
 </html>`;
 }
 
+/**
+ * Builds the sandboxed iframe srcdoc for React (TSX) guest code: the vendored
+ * kit bundle (React + react-dom/client + 17 shadcn components, no external
+ * scripts, origin isolation preserved), compiled kit + guest Tailwind CSS,
+ * the window.polymax bridge with useCapability/openContent, and the CSP the
+ * agent prompt promises. Guest code stays TSX in one file and mounts into #app.
+ */
+export function buildReactSrcdoc(
+  guestJs: string,
+  guestCss: string,
+  manifest: FeatureManifest,
+  kit: { js: string; css: string; tokens: string; csp: string }
+): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="${kit.csp}">
+  <title>${escapeHtml(manifest.title)}</title>
+  <style>
+${kit.tokens}
+  </style>
+  <style>
+${kit.css}
+  </style>
+  <style>
+${guestCss}
+  </style>
+  <script>
+${kit.js}
+  </script>
+  <script>
+    // Polymax Host-Guest Sandboxed Bridge Protocol (React kit build).
+    // Keep in sync with buildFeatureSrcdoc bridge and guest-bridge.js.
+    (function() {
+      const pendingRequests = new Map();
+      let requestId = 0;
+
+      window.addEventListener('message', function(event) {
+        if (!event.data || typeof event.data !== 'object') return;
+        const { polymaxResponseId, result, error } = event.data;
+        if (polymaxResponseId && pendingRequests.has(polymaxResponseId)) {
+          const { resolve, reject } = pendingRequests.get(polymaxResponseId);
+          pendingRequests.delete(polymaxResponseId);
+          if (error) reject(new Error(error));
+          else resolve(result);
+        }
+      });
+
+      function sendHostRequest(action, payload) {
+        return new Promise((resolve, reject) => {
+          const id = ++requestId;
+          pendingRequests.set(id, { resolve, reject });
+          window.parent.postMessage({
+            polymaxAction: action,
+            polymaxRequestId: id,
+            ...payload
+          }, '*');
+        });
+      }
+
+      window.addEventListener('error', function(event) {
+        window.parent.postMessage({
+          polymaxAction: 'runtime.error',
+          error: {
+            message: event.message || 'Unknown error',
+            filename: event.filename || '',
+            lineno: event.lineno || 0,
+            colno: event.colno || 0,
+            stack: event.error ? event.error.stack : '',
+            timestamp: new Date().toISOString()
+          }
+        }, '*');
+      });
+
+      window.addEventListener('unhandledrejection', function(event) {
+        const reason = event.reason;
+        window.parent.postMessage({
+          polymaxAction: 'runtime.error',
+          error: {
+            message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
+            stack: reason && reason.stack ? reason.stack : '',
+            timestamp: new Date().toISOString()
+          }
+        }, '*');
+      });
+
+      window.polymax = {
+        storage: {
+          get: (key) => sendHostRequest('storage.get', { key }),
+          set: (key, value) => sendHostRequest('storage.set', { key, value }),
+          remove: (key) => sendHostRequest('storage.remove', { key }),
+        },
+        invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
+        useCapability: async (capabilityId, input) => {
+          if (!capabilityId) throw new Error('useCapability requires a capabilityId');
+          try {
+            return await sendHostRequest('capability.invoke', { capabilityId, input });
+          } catch (err) {
+            throw err instanceof Error ? err : new Error(String(err));
+          }
+        },
+        openUrl: (url) => sendHostRequest('openUrl', { url }),
+        openContent: (url) => sendHostRequest('openContent', { url }),
+        getContext: () => sendHostRequest('getContext', {}),
+        submit: (command) => sendHostRequest('submit', { command }),
+        ui: {
+          expand: () => sendHostRequest('ui.expand', {}),
+          collapse: () => sendHostRequest('ui.collapse', {}),
+        }
+      };
+      window.polydocks = window.polymax;
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    try {
+${guestJs}
+    } catch (err) {
+      console.error('[Polymax Guest Error]', err);
+      window.parent.postMessage({
+        polymaxAction: 'runtime.error',
+        error: {
+          message: err && err.message ? err.message : String(err),
+          stack: err && err.stack ? err.stack : '',
+          timestamp: new Date().toISOString()
+        }
+      }, '*');
+      const app = document.getElementById('app');
+      if (app) {
+        app.innerHTML = '<div style="color: #FF5A5A; padding: 20px; font-size: 13px; font-family: monospace;"><b>Error executing feature:</b><br/>' + (err && err.message ? err.message : String(err)) + '</div>';
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -283,8 +446,26 @@ export async function writeFeature(
     );
   }
 
-  const transpiledJs = transpileFeatureCode(options.code);
-  const srcdoc = buildFeatureSrcdoc(transpiledJs, options.manifest);
+  const hasImports = codeHasImports(options.code);
+
+  let srcdoc: string;
+  if (hasImports) {
+    // React path: allowlist rewrite + TSX bundling against the vendored kit
+    // (origin isolation preserved, no allow-same-origin, no external scripts).
+    const { bundleFeatureCode, compileGuestCss, getKitJs, getKitCss, getKitTokens, PLUGIN_CSP } =
+      await import("./reactKit");
+    const guestJs = bundleFeatureCode(options.code);
+    const guestCss = await compileGuestCss(options.code);
+    srcdoc = buildReactSrcdoc(guestJs, guestCss, options.manifest, {
+      js: getKitJs(),
+      css: getKitCss(),
+      tokens: getKitTokens(),
+      csp: PLUGIN_CSP,
+    });
+  } else {
+    const transpiledJs = transpileFeatureCode(options.code);
+    srcdoc = buildFeatureSrcdoc(transpiledJs, options.manifest);
+  }
 
   const manifestData: FeatureManifest = {
     ...options.manifest,
@@ -380,8 +561,19 @@ export async function readFeature(cityId: string, featureId: string): Promise<Fe
       srcdoc = await readCityFile(cityId, `features/${featureId}/index.html`);
     } catch {
       if (code) {
-        const js = transpileFeatureCode(code);
-        srcdoc = buildFeatureSrcdoc(js, manifest);
+        if (codeHasImports(code)) {
+          const { bundleFeatureCode, compileGuestCss, getKitJs, getKitCss, getKitTokens, PLUGIN_CSP } =
+            await import("./reactKit");
+          srcdoc = buildReactSrcdoc(bundleFeatureCode(code), await compileGuestCss(code), manifest, {
+            js: getKitJs(),
+            css: getKitCss(),
+            tokens: getKitTokens(),
+            csp: PLUGIN_CSP,
+          });
+        } else {
+          const js = transpileFeatureCode(code);
+          srcdoc = buildFeatureSrcdoc(js, manifest);
+        }
       } else {
         throw new Error(`Feature "${featureId}" is missing compiled srcdoc.`);
       }

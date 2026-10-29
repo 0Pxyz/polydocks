@@ -43,7 +43,7 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .string()
       .min(10)
       .describe(
-        "Complete self-contained TypeScript/JavaScript code for the plugin UI. Forbidden from external imports. Uses window.polydocks.storage for state."
+        "Complete TSX code for the plugin UI. Import allowlist: react, react-dom/client, @/components/ui/* only. Uses window.polydocks bridge (storage, useCapability, openContent)."
       ),
     workspaceId: z
       .string()

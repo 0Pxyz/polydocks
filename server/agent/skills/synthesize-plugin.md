@@ -25,10 +25,13 @@ All synthesized plugins run inside a sandboxed viewport with the following CSS v
 - Fonts: `Inter`, `Syne` (display), and `Geist Mono` (code/numbers)
 
 ### UI Rules
+- Use the shadcn kit (`@/components/ui/*`: badge, button, command, dialog, dropdown-menu, input, popover, progress, scroll-area, separator, sheet, skeleton, slider, sonner, tabs, textarea, tooltip) and theme tokens (`var(--background)`, `var(--foreground)`, `var(--card)`, `var(--primary)`, `var(--muted-foreground)`, `var(--border)`, `var(--accent)` …).
+- Never use hardcoded hex colors or custom CSS where a component or token exists. Keep the dark aesthetic; one accent.
+- Mount into `#app` with `createRoot(document.getElementById("app")).render(<App />)`; no `export` statements.
 - Avoid visual slop: No gratuitous gradients, no low-contrast text, no blurry shadows.
 - Keep controls crisp and tactile with subtle borders (`1px solid var(--border)`).
-- Buttons: `padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;`.
-- Primary actions use `background: var(--accent); color: #0A0A0C; font-weight: 600;`.
+- Buttons: `padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;` — or just use `<Button>`.
+- Primary actions use `background: var(--accent); color: #0A0A0C; font-weight: 600;` — or `<Button variant="default">`.
 
 ---
 
@@ -43,6 +46,12 @@ await window.polydocks.storage.set("session_history", [
   { timestamp: Date.now(), durationMinutes: 25, tag: "Deep Work" }
 ]);
 
+// Open an article/video in the native in-app Reader (no iframe)
+await window.polydocks.openContent("https://example.com/article");
+
+// Call a declared capability through the capability bus
+const result = await window.polydocks.useCapability("timer.start", { minutes: 25 });
+
 // Request dock viewport expansion
 window.polydocks.ui.expand();
 ```
@@ -50,8 +59,8 @@ window.polydocks.ui.expand();
 ---
 
 ## 4. Security Rules
-- **No external imports:** Never use `import` statements in the code string. Code is executed in a browser sandbox; use pure vanilla JavaScript/TypeScript, standard Web APIs (DOM, Canvas, Web Audio, SVG), or inline helper functions.
-- **Self-contained execution:** Wrap initialization logic inside an IIFE or `DOMContentLoaded` listener, mounting to `<div id="app"></div>`.
+- **Import allowlist (enforced):** only `react`, `react-dom/client`, and `@/components/ui/*` (the 17 shadcn components). Any other `import` is rejected with a clear error: no external packages, no relative imports, no external scripts, no `export` statements.
+- **Self-contained execution:** one TSX file; mount into `<div id="app"></div>` with `createRoot(...).render(<App />)`. Use standard Web APIs (DOM, Canvas, Web Audio, SVG) or the kit where they fit.
 
 ---
 

@@ -1,0 +1,132 @@
+/**
+ * Builds the vendored sandbox UI kit:
+ * - server/plugin-kit/kit.bundle.js : React + react-dom/client + all 17 shadcn
+ *   components as an IIFE assigning window.__polymaxKit (regenerate on dep bumps).
+ * - server/plugin-kit/kit.css : Tailwind utilities for the kit components.
+ * - server/plugin-kit/manifest.json : export inventory + sizes.
+ *
+ * Run: bun scripts/build-plugin-kit.ts
+ */
+import fs from "node:fs/promises";
+import path from "node:path";
+import { compile } from "tailwindcss";
+
+const ROOT = path.resolve(import.meta.dir, "..");
+const OUT_DIR = path.join(ROOT, "server", "plugin-kit");
+const UI_DIR = path.join(ROOT, "src", "components", "ui");
+
+const KIT_FILES = [
+  "badge.tsx", "button.tsx", "command.tsx", "dialog.tsx", "dropdown-menu.tsx",
+  "input.tsx", "popover.tsx", "progress.tsx", "scroll-area.tsx", "separator.tsx",
+  "sheet.tsx", "skeleton.tsx", "slider.tsx", "sonner.tsx", "tabs.tsx",
+  "textarea.tsx", "tooltip.tsx",
+];
+
+function extractCandidates(sources: string[]): string[] {
+  const found = new Set<string>();
+  for (const src of sources) {
+    // Quoted strings may hold class names (className="...").
+    for (const m of src.matchAll(/["'`]([^"'`]{1,300})["'`]/g)) {
+      for (const token of m[1].split(/\s+/)) {
+        if (/^[A-Za-z0-9_.:/\[\]#][A-Za-z0-9_.:/\[\]#%()-]*$/.test(token) && token.length < 120) {
+          found.add(token);
+        }
+      }
+    }
+  }
+  return [...found];
+}
+
+async function buildJs(): Promise<{ bytes: number; exports: string[] }> {
+  const result = await Bun.build({
+    entrypoints: [path.join(OUT_DIR, "entry.ts")],
+    target: "browser",
+    format: "iife",
+    globalName: "__polymaxKit",
+    minify: true,
+    sourcemap: "none",
+    loader: { ".tsx": "tsx" },
+  });
+  if (!result.success) {
+    const details = result.logs.map((l) => `${l.level}: ${l.message}`).join("\n");
+    throw new Error(`Kit JS bundling failed:\n${details}`);
+  }
+  const text = await result.outputs[0].text();
+  // Split the React namespaces from the flattened UI exports.
+  const wrapped = `${text}\n;window.__polymaxKit = Object.assign(window.__polymaxKit || {}, { React: window.__polymaxKit.React, ReactDOMClient: window.__polymaxKit.ReactDOMClient, jsx: window.__polymaxKit.jsx, jsxs: window.__polymaxKit.jsxs, jsxDEV: window.__polymaxKit.jsxDEV, Fragment: window.__polymaxKit.Fragment, UI: window.__polymaxKit });\n`;
+  await fs.writeFile(path.join(OUT_DIR, "kit.bundle.js"), wrapped, "utf-8");
+  return { bytes: Buffer.byteLength(wrapped, "utf-8"), exports: [] };
+}
+
+async function loadStylesheet(id: string, base: string): Promise<{ content: string; base: string }> {
+  const raw = id.startsWith(".") ? path.resolve(base, id) : path.join(ROOT, "node_modules", id);
+  const tries = [raw, `${raw}.css`, path.join(raw, "index.css")];
+  for (const p of tries) {
+    try {
+      const content = await fs.readFile(p, "utf-8");
+      return { content, base: path.dirname(p) };
+    } catch {
+      // try next
+    }
+  }
+  throw new Error(`Cannot resolve stylesheet "${id}"`);
+}
+
+async function buildCss(uiSources: string[]): Promise<{ bytes: number }> {
+  const indexCss = await fs.readFile(path.join(ROOT, "src", "index.css"), "utf-8");
+  const themeMatch = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/);
+  if (!themeMatch) throw new Error("Could not find @theme block in src/index.css");
+  const compiler = await compile(
+    `${themeMatch[0]}\n@import "tailwindcss/utilities";`,
+    { base: ROOT, loadStylesheet: loadStylesheet as any }
+  );
+  const css = compiler.build(extractCandidates(uiSources));
+  await fs.writeFile(path.join(OUT_DIR, "kit.css"), css, "utf-8");
+  // Ship tokens + theme so per-publish guest CSS compiles with the same tokens.
+  const tokensCss = await fs.readFile(path.join(ROOT, "src", "styles", "tokens.css"), "utf-8");
+  await fs.writeFile(
+    path.join(OUT_DIR, "theme.css"),
+    `${tokensCss}\n${themeMatch[0]}\n@import "tailwindcss/utilities";`,
+    "utf-8"
+  );
+  return { bytes: Buffer.byteLength(css, "utf-8") };
+}
+
+const uiSources = await Promise.all(
+  KIT_FILES.map((f) => fs.readFile(path.join(UI_DIR, f), "utf-8"))
+);
+
+// Inventory of flattened UI exports (duplicate check).
+const exportNames: string[] = [];
+for (const src of uiSources) {
+  for (const m of src.matchAll(/export\s*\{([^}]*)\}/g)) {
+    for (const part of m[1].split(",")) {
+      const name = part.trim().split(/\s+as\s+/).pop()?.trim();
+      if (name) exportNames.push(name);
+    }
+  }
+}
+const dupes = exportNames.filter((n, i) => exportNames.indexOf(n) !== i);
+if (dupes.length > 0) throw new Error(`Duplicate kit export names: ${[...new Set(dupes)].join(", ")}`);
+
+const js = await buildJs();
+const css = await buildCss(uiSources);
+
+// Vendor the raw design tokens so the sandbox can define the shadcn
+// semantic vars at runtime (prod images ship server/ but not src/).
+await fs.copyFile(
+  path.join(ROOT, "src", "styles", "tokens.css"),
+  path.join(OUT_DIR, "tokens.css")
+);
+
+await fs.writeFile(
+  path.join(OUT_DIR, "manifest.json"),
+  JSON.stringify(
+    { files: KIT_FILES, exports: exportNames, jsBytes: js.bytes, cssBytes: css.bytes, builtAt: new Date().toISOString() },
+    null,
+    2
+  ),
+  "utf-8"
+);
+
+console.log(`[plugin-kit] kit.bundle.js ${(js.bytes / 1024).toFixed(1)}KB, kit.css ${(css.bytes / 1024).toFixed(1)}KB, ${exportNames.length} exports`);

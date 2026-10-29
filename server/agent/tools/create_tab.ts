@@ -33,7 +33,7 @@ export const create_tab: AgentTool<CreateTabArgs> = {
         .string()
         .optional()
         .describe(
-          "TypeScript feature module (.ts) without external imports, interacting via window.polymax bridge"
+          "TSX feature module. Import allowlist: react, react-dom/client, @/components/ui/* only; mounts into #app via window.polymax bridge"
         ),
       html: z
         .string()

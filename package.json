@@ -15,7 +15,7 @@
     "dev": "concurrently -k -p '[{name}]' -n 'web,server' -c 'cyan,yellow' \"bun run dev:web\" \"bun run dev:server\"",
     "dev:web": "vite",
     "dev:server": "bun --watch server/index.ts",
-    "build": "tsc -b && vite build && bun scripts/generate-sw.ts",
+    "build": "bun scripts/build-plugin-kit.ts && tsc -b && vite build && bun scripts/generate-sw.ts",
     "start": "bun server/index.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",

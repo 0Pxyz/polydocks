@@ -38,7 +38,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
         .min(10)
         .optional()
         .describe(
-          "Full replacement TypeScript/JavaScript code. Forbidden from external imports. Uses window.polydocks.storage for state."
+          "Full replacement TSX code. Import allowlist: react, react-dom/client, @/components/ui/* only."
         ),
       patch: patchSchema.optional(),
       changeSummary: z
