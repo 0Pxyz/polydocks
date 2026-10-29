@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { streamAgentLoop } from "./client";
 import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
-import { DEFAULT_MODEL_ID, getMetaModel } from "./models";
+import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
 import {
   clearAgentThread,
@@ -68,6 +68,8 @@ interface ConversationStoreState {
   setOrbState: (state: OrbState) => void;
   setStatusText: (text: string) => void;
   setSelectedModel: (modelId: string) => void;
+  selectedEffort: ReasoningEffort;
+  setSelectedEffort: (effort: ReasoningEffort) => void;
   toggleAgent: (currentActiveToolId?: string) => void;
   sendMessage: (
     prompt?: string,
@@ -102,6 +104,13 @@ interface ConversationStoreState {
 const SIDE_WIDTH_KEY = "polymax-agent-side-width";
 const SOUND_KEY = "polymax-agent-sound";
 const MODEL_KEY = "polymax-agent-model";
+const EFFORT_KEY = "polymax-agent-effort";
+
+function getInitialEffort(): ReasoningEffort {
+  const stored = platformStorage.getItem<string>(EFFORT_KEY);
+  if (isValidReasoningEffort(stored)) return stored;
+  return DEFAULT_REASONING_EFFORT;
+}
 
 function getInitialModel(): string {
   const stored = platformStorage.getItem<string>(MODEL_KEY);
@@ -171,6 +180,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   audioLevel: 0,
   orbState: "idle",
   selectedModel: getInitialModel(),
+  selectedEffort: getInitialEffort(),
   isHydratingThread: false,
   isLoadingOlder: false,
   hasOlderMessages: false,
@@ -257,6 +267,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   setSelectedModel: (selectedModel) => {
     platformStorage.setItem(MODEL_KEY, selectedModel);
     set({ selectedModel });
+  },
+
+  setSelectedEffort: (selectedEffort) => {
+    platformStorage.setItem(EFFORT_KEY, selectedEffort);
+    set({ selectedEffort });
   },
 
   addAttachments: async (files: File[]) => {
@@ -377,6 +392,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       cityId,
       userId: getAgentUserId(),
       modelId: get().selectedModel,
+      reasoningEffort: get().selectedEffort,
       attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       origin,
       retry: options?.retry === true,

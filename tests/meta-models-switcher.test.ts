@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { META_MODELS, DEFAULT_MODEL_ID, getMetaModel } from "../src/lib/agent/models";
+import { META_MODELS, DEFAULT_MODEL_ID, getMetaModel, REASONING_EFFORTS, DEFAULT_REASONING_EFFORT, isValidReasoningEffort, toApiReasoningEffort } from "../src/lib/agent/models";
 import { useConversationStore } from "../src/lib/agent/conversationStore";
 import { platformStorage } from "../src/lib/platform/storage";
 
 describe("Meta Models & Model Switcher (Issue #100)", () => {
   beforeEach(() => {
     platformStorage.clear();
-    useConversationStore.setState({ selectedModel: DEFAULT_MODEL_ID });
+    useConversationStore.setState({ selectedModel: DEFAULT_MODEL_ID, selectedEffort: DEFAULT_REASONING_EFFORT });
   });
 
   describe("1. Meta Model API Catalog", () => {
@@ -47,7 +47,6 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
     it("initializes with default model", () => {
       expect(useConversationStore.getState().selectedModel).toBe("muse-spark-1.3");
     });
-
     it("persists model change to platformStorage and state", () => {
       useConversationStore.getState().setSelectedModel("muse-wonder-1.0");
       expect(useConversationStore.getState().selectedModel).toBe("muse-wonder-1.0");
@@ -56,6 +55,36 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
       useConversationStore.getState().setSelectedModel("meta-llama/Llama-3.2-11B-Vision-Instruct");
       expect(useConversationStore.getState().selectedModel).toBe("meta-llama/Llama-3.2-11B-Vision-Instruct");
       expect(platformStorage.getItem("polymax-agent-model")).toBe("meta-llama/Llama-3.2-11B-Vision-Instruct");
+    });
+  });
+
+  describe("3. Reasoning Effort Selection & Persistence", () => {
+    it("offers auto plus the six documented effort levels, never none", () => {
+      expect(REASONING_EFFORTS).toEqual(["auto", "minimal", "low", "medium", "high", "xhigh", "max"]);
+      expect(DEFAULT_REASONING_EFFORT).toBe("auto");
+    });
+
+    it("validates effort values and maps auto/invalid to omission", () => {
+      expect(isValidReasoningEffort("high")).toBe(true);
+      expect(isValidReasoningEffort("max")).toBe(true);
+      expect(isValidReasoningEffort("auto")).toBe(true);
+      expect(isValidReasoningEffort("none")).toBe(false);
+      expect(isValidReasoningEffort("turbo")).toBe(false);
+      expect(isValidReasoningEffort(undefined)).toBe(false);
+      expect(toApiReasoningEffort("high")).toBe("high");
+      expect(toApiReasoningEffort("auto")).toBeUndefined();
+      expect(toApiReasoningEffort("none")).toBeUndefined();
+      expect(toApiReasoningEffort(undefined)).toBeUndefined();
+    });
+
+    it("persists effort change to platformStorage and state", () => {
+      useConversationStore.getState().setSelectedEffort("high");
+      expect(useConversationStore.getState().selectedEffort).toBe("high");
+      expect(platformStorage.getItem("polymax-agent-effort")).toBe("high");
+
+      useConversationStore.getState().setSelectedEffort("auto");
+      expect(useConversationStore.getState().selectedEffort).toBe("auto");
+      expect(platformStorage.getItem("polymax-agent-effort")).toBe("auto");
     });
   });
 });

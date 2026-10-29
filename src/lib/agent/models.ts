@@ -64,3 +64,34 @@ export const DEFAULT_MODEL_ID = "muse-spark-1.3";
 export function getMetaModel(modelId: string): MetaModelSpec {
   return META_MODELS.find((m) => m.id === modelId) || META_MODELS[0];
 }
+
+/**
+ * Reasoning effort levels for the Meta Model API (Chat Completions:
+ * top-level `reasoning_effort`). Verified against dev.meta.ai/docs/reasoning.
+ * Both muse-spark-1.3 and muse-wonder-1.0 are reasoning models; "none"
+ * returns HTTP 400 on both, so it is not offered. "auto" omits the parameter
+ * and leaves the depth to the model (preserves previous behavior).
+ */
+export const REASONING_EFFORTS = [
+  "auto",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "auto";
+
+export function isValidReasoningEffort(value: unknown): value is ReasoningEffort {
+  return typeof value === "string" && (REASONING_EFFORTS as readonly string[]).includes(value);
+}
+
+/** True when the value must be sent as `reasoning_effort` ("auto" omits it). */
+export function toApiReasoningEffort(value: unknown): string | undefined {
+  if (!isValidReasoningEffort(value) || value === "auto") return undefined;
+  return value;
+}

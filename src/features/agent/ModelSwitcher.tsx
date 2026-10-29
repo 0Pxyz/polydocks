@@ -1,4 +1,4 @@
-import { META_MODELS, getMetaModel } from "@/lib/agent/models";
+import { META_MODELS, REASONING_EFFORTS, getMetaModel, type ReasoningEffort } from "@/lib/agent/models";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,7 @@ interface ModelSwitcherProps {
 }
 
 export function ModelSwitcher({ compact = false, className }: ModelSwitcherProps) {
-  const { selectedModel, setSelectedModel, isStreaming } = useConversationStore();
+  const { selectedModel, setSelectedModel, selectedEffort, setSelectedEffort, isStreaming } = useConversationStore();
   const currentModel = getMetaModel(selectedModel);
 
   return (
@@ -89,6 +89,35 @@ export function ModelSwitcher({ compact = false, className }: ModelSwitcherProps
                   {model.description}
                 </p>
               </DropdownMenuItem>
+            );
+          })}
+        </div>
+
+        <DropdownMenuSeparator className="bg-white/10 my-1" />
+        <DropdownMenuLabel className="px-2 py-1 text-[10px] uppercase font-mono tracking-wider text-muted-foreground">
+          Reasoning effort
+        </DropdownMenuLabel>
+        <div className="flex flex-wrap items-center gap-1 px-2 pb-1.5">
+          {REASONING_EFFORTS.map((effort) => {
+            const isActive = effort === selectedEffort;
+            const label = effort === "auto" ? "Auto" : effort === "xhigh" ? "XHigh" : effort.charAt(0).toUpperCase() + effort.slice(1);
+            return (
+              <button
+                key={effort}
+                type="button"
+                disabled={isStreaming}
+                onClick={() => setSelectedEffort(effort as ReasoningEffort)}
+                title={effort === "auto" ? "Let the model choose reasoning depth" : `reasoning_effort="${effort}"`}
+                className={cn(
+                  "px-2 py-1 rounded-md text-[11px] font-mono transition-colors cursor-pointer",
+                  isActive
+                    ? "bg-[var(--color-primary,#C8FF57)]/15 text-[var(--color-primary,#C8FF57)] font-semibold"
+                    : "text-white/60 hover:bg-white/5 hover:text-white",
+                  isStreaming && "opacity-60 cursor-not-allowed"
+                )}
+              >
+                {label}
+              </button>
             );
           })}
         </div>

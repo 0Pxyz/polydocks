@@ -155,7 +155,7 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Invalid JSON request body" }, 400);
   }
 
-  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model, attachments, retry } = body;
+  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model, reasoningEffort, attachments, retry } = body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
@@ -173,6 +173,15 @@ app.post("/api/agent", async (c) => {
       ? model.trim()
       : undefined;
 
+  // Reasoning effort for the Meta Model API (Chat Completions: top-level
+  // `reasoning_effort`). "auto"/absent omits the parameter; anything outside
+  // the allowlist is dropped so a bad value can never reach the model call.
+  const VALID_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"];
+  const requestedEffort =
+    typeof reasoningEffort === "string" && VALID_EFFORTS.includes(reasoningEffort)
+      ? reasoningEffort
+      : undefined;
+
   return streamSSE(c, async (stream) => {
     await runAgentLoop({
       prompt: prompt.trim(),
@@ -183,6 +192,7 @@ app.post("/api/agent", async (c) => {
       taskId: typeof taskId === "string" ? taskId : undefined,
       origin: origin === "dock-add" ? "dock-add" : "chat",
       modelId: requestedModel,
+      reasoningEffort: requestedEffort,
       attachments: Array.isArray(attachments) ? attachments : undefined,
       history: Array.isArray(history) ? history : [],
       retryLast: retry === true,

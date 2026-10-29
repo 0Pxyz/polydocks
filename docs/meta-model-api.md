@@ -63,6 +63,13 @@ When guaranteed JSON is required (e.g. `MapSpec`, `FeedSummary`):
 - Use `response_format: { type: "json_schema", json_schema: { ... } }`.
 - Recursive schemas are unsupported and return **HTTP 400**; schemas must maintain a flat object tree.
 
+### 3.5. Reasoning Effort (`reasoning_effort`)
+Both `muse-spark-1.3` and `muse-wonder-1.0` are reasoning models (verified against dev.meta.ai/docs/reasoning):
+- On Chat Completions, pass top-level `reasoning_effort` with one of `"minimal" | "low" | "medium" | "high" | "xhigh" | "max"`. Omitting it leaves depth to the model.
+- `"none"` returns **HTTP 400** on both models — never send it.
+- Reasoning tokens count toward the output-token budget and billing.
+- Polymax plumbing: `ModelSwitcher` (effort section) → `conversationStore.selectedEffort` (persisted in `polymax-agent-effort`) → `POST /api/agent { reasoningEffort }` (allowlisted in `server/index.ts`) → `runAgentLoop({ reasoningEffort })` → `reasoning_effort` on both the main and fallback `chat.completions.create` calls.
+
 ---
 
 ## 4. UI Synthesis Skill: Muse Generating Dock Plugins

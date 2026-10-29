@@ -75,6 +75,11 @@ export interface AgentLoopOptions {
   maxSteps?: number;
   llmClient?: typeof llm;
   modelId?: string;
+  /**
+   * Reasoning effort for the Meta Model API (Chat Completions `reasoning_effort`).
+   * "auto"/absent omits the parameter; anything outside the allowlist is dropped.
+   */
+  reasoningEffort?: string;
   systemPrompt?: string;
   signal?: AbortSignal;
   /** Rewind the last completed turn before appending the same prompt again. */
@@ -156,6 +161,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   if (imageAttachments.length > 0 && (!modelId || modelId === MODEL_ID)) {
     effectiveModel = VISION_MODEL_ID;
   }
+
+  // Reasoning effort allowlist mirrors server/index.ts (defense in depth:
+  // runAgentLoop is also reachable without the HTTP validation layer).
+  const VALID_REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh", "max"];
+  const effectiveEffort =
+    typeof options.reasoningEffort === "string" && VALID_REASONING_EFFORTS.includes(options.reasoningEffort)
+      ? options.reasoningEffort
+      : undefined;
 
   let currentStep = 0;
 
@@ -485,6 +498,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         completionParams.tool_choice = "auto";
       }
 
+      if (effectiveEffort) {
+        completionParams.reasoning_effort = effectiveEffort;
+      }
+
       const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
       const choice = response.choices?.[0];
 
@@ -724,6 +741,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       const fallbackResponse = await llmClient.chat.completions.create({
         model: effectiveModel,
         messages: fallbackMessages,
+        ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
       });
 
       const fallbackChoice = fallbackResponse.choices?.[0];
