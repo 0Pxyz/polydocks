@@ -132,6 +132,15 @@ export const GUEST_BRIDGE_SCRIPT = `
       }
     },
     invokeAction: (action, args) => sendHostRequest('capability.invoke', { capabilityId: action, input: args }),
+    // task registers background work with the host tab runtime. The host
+    // keeps the tab entry (and its iframe) alive while tasks run, surfaces
+    // progress, and notifies on completion — work is never tied to the
+    // component lifecycle. Payloads are capped; results stay guest-side.
+    task: {
+      start: (task) => sendHostRequest('task.start', task || {}),
+      update: (id, patch) => sendHostRequest('task.update', Object.assign({ taskId: id }, patch || {})),
+      done: (id, detail) => sendHostRequest('task.done', { taskId: id, detail: detail }),
+    },
     openUrl: (url) => sendHostRequest('openUrl', { url }),
     // openContent opens an article/video in the native in-app Reader
     // (no iframe, so frame-blocking sites still open). Falls back to
