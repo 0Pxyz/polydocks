@@ -225,6 +225,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   };
 
   try {
+
     if (taskId) {
       try {
         updateTaskState(taskId, "running", { progress: 0.05 });
