@@ -50,4 +50,5 @@
 | 2026-10-28 | End-to-end agentic runtime integration benchmark (5 stages) and operational guide | [#94](https://github.com/0Pxyz/polymax/pull/94) |
 | 2026-10-28 | Procedural ASCII world engine, interactive Canvas map renderer, and plan_ascii_world tool | [#98](https://github.com/0Pxyz/polymax/pull/98) |
 | 2026-10-28 | Multimodal chat attachments (images + documents, vision-model routing) integrated end-to-end; chat panel rebuilt on shadcn ScrollArea with prose typography over the attachments composer (carried-over WIP committed and finished)
+| 2026-10-29 | Orb-first capsule sheet restored over multimodal chat: 3-line reply preview, explicit typing mode, compact model switcher and attachment staging in the capsule; full/side untouched + regression test | [#112](https://github.com/0Pxyz/polymax/pull/112) |
 | 2026-10-29 | Installable PWA: web manifest, generated service worker with offline fallback, install entry point in appearance settings, maskable and Apple touch icons |

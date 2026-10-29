@@ -18,6 +18,7 @@ import {
   Paperclip,
   Image as ImageIcon,
   UploadCloud,
+  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
@@ -78,9 +79,9 @@ export function AgentConversation({
   const [showScrollBottom, setShowScrollBottom] = useState<boolean>(false);
   const [isDraggingWidth, setIsDraggingWidth] = useState<boolean>(false);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
+  const [isKeyboardInSheet, setIsKeyboardInSheet] = useState<boolean>(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const sheetTranscriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sheetInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -119,6 +120,17 @@ export function AgentConversation({
     [addAttachments]
   );
 
+  // Dropping files on the capsule reveals the composer so the staged files are visible
+  const handleSheetDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        setIsKeyboardInSheet(true);
+      }
+      handleDrop(e);
+    },
+    [handleDrop]
+  );
+
   // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
   const adjustTextareaHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -134,8 +146,8 @@ export function AgentConversation({
 
   // Handle auto-scroll during streaming
   useEffect(() => {
-    if (layoutState === "closed") return;
-    const el = layoutState === "sheet" ? sheetTranscriptRef.current : transcriptRef.current;
+    if (layoutState !== "side" && layoutState !== "full") return;
+    const el = transcriptRef.current;
     if (!el) return;
 
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
@@ -240,9 +252,13 @@ export function AgentConversation({
   if (layoutState === "closed") return null;
 
   // =========================================================================
-  // 1. SHEET MODE (Bottom-anchored capsule, unified voice + text + transcript)
+  // 1. SHEET MODE (Bottom-anchored capsule: orb first, typing on demand)
   // =========================================================================
   if (layoutState === "sheet") {
+    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
+    const displayText = isStreaming ? statusText : lastAssistantMsg?.content || "";
+    const hasStaged = stagedAttachments.length > 0;
+
     return (
       <AnimatePresence>
         <motion.div
@@ -250,93 +266,106 @@ export function AgentConversation({
           initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
           exit={{ opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleSheetDrop}
           className={cn(
-            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none",
+            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto",
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
-          <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col">
-            {/* Header: Agent info on left, mute/expand/close on right */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-2">
-                <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-75" />
-                <span className="text-xs font-semibold text-white/90 tracking-tight font-sans">
-                  Polymax Agent
-                </span>
-                {isStreaming && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
-                    <span>Thinking…</span>
-                  </span>
-                )}
-              </div>
+          <div className="relative w-full rounded-[28px] bg-[#0c1017]/92 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-5 overflow-hidden">
+            {/* Top Left: Close to dock */}
+            <button
+              type="button"
+              onClick={() => setLayoutState("closed")}
+              className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer z-10"
+              title="Close to dock"
+            >
+              <X className="w-4 h-4" />
+            </button>
 
-              <div className="flex items-center gap-1">
-                <ModelSwitcher compact className="h-6 text-[11px] px-1.5 mr-1" />
-                <button
-                  type="button"
-                  onClick={() => setSoundEnabled(!soundEnabled)}
-                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                  title={soundEnabled ? "Mute audio" : "Unmute audio"}
-                >
-                  {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (messages.length === 0 || window.confirm("Clear this conversation? The same chat stays open.")) {
-                      void clearConversation();
-                    }
-                  }}
-                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                  title="Clear conversation (keeps the same chat)"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLayoutState("full")}
-                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                  title="Expand to full chat"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLayoutState("closed")}
-                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                  title="Close"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            {/* Top Right: thread controls + expand */}
+            <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
+              <ModelSwitcher compact className="h-6 text-[11px] px-1.5 mr-1" />
+              <button
+                type="button"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                title={soundEnabled ? "Mute audio" : "Unmute audio"}
+              >
+                {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (messages.length === 0 || window.confirm("Clear this conversation? The same chat stays open.")) {
+                    void clearConversation();
+                  }
+                }}
+                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                title="Clear conversation (keeps the same chat)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutState("full")}
+                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                title="Expand to full chat"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            {/* Approval Banner if active */}
-            {activeApproval && (
-              <div className="my-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
-                <p className="text-xs font-medium text-amber-300">
-                  {activeApproval.message}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleApproval(true, cityId, { onExperienceCreated, onOpenExperience })}
-                    className="px-2.5 py-1 rounded-md text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-                  >
-                    Allow
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleApproval(false, cityId, { onExperienceCreated, onOpenExperience })}
-                    className="px-2.5 py-1 rounded-md text-xs bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
+            {/* Upper text: streamed reply or pending approval */}
+            <div className="pt-2 px-10 pb-2 min-h-[44px] flex items-center justify-center text-center">
+              {activeApproval ? (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-sm font-medium text-amber-300">
+                    {activeApproval.message}
+                  </p>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleApproval(true, cityId, { onExperienceCreated, onOpenExperience })}
+                      className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+                    >
+                      Allow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApproval(false, cityId, { onExperienceCreated, onOpenExperience })}
+                      className="px-3 py-1 rounded-lg text-xs font-mono bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : displayText ? (
+                <p className="text-sm line-clamp-3 text-foreground font-sans select-text transition-colors">
+                  {displayText}
+                </p>
+              ) : null}
+            </div>
 
+            {/* Center Area: Orb (or compact mic when in keyboard mode) */}
+            <div className="py-2 flex justify-center items-center">
+              {!isKeyboardInSheet ? (
+                <Orb
+                  state={orbState}
+                  size="md"
+                  audioLevel={audioLevel}
+                  onClick={() => {
+                    if (isStreaming) abortStream();
+                    else toggleVoice();
+                  }}
+                />
+              ) : null}
+            </div>
+
+            {/* Staged attachments stay visible while the orb is shown */}
+            {!isKeyboardInSheet && hasStaged && (
             {/* Scrollable Transcript Box */}
             <ScrollArea
               viewportRef={sheetTranscriptRef}
@@ -435,8 +464,6 @@ export function AgentConversation({
               </div>
             </ScrollArea>
 
-            {/* Staging bar for attachments */}
-            {stagedAttachments.length > 0 && (
               <AttachmentStagingBar
                 attachments={stagedAttachments}
                 onRemove={removeAttachment}
@@ -444,77 +471,133 @@ export function AgentConversation({
               />
             )}
 
-            {/* Unified Composer: Attach Button + Voice Orb + Text Input + Send/Stop */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (isStreaming) {
-                  abortStream();
-                  return;
-                }
-                if (!draft.trim() && stagedAttachments.length === 0) return;
-                sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
-              }}
-              className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
-            >
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer shrink-0"
-                title="Attach photo or document"
-              >
-                <Paperclip className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (isStreaming) abortStream();
-                  else toggleVoice();
-                }}
-                className={cn(
-                  "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0",
-                  orbState === "listening"
-                    ? "bg-red-500/20 text-red-400"
-                    : "hover:bg-white/10 text-muted-foreground hover:text-white"
+            {/* Input row in keyboard mode */}
+            {isKeyboardInSheet && (
+              <>
+                {hasStaged && (
+                  <AttachmentStagingBar
+                    attachments={stagedAttachments}
+                    onRemove={removeAttachment}
+                    className="mt-2 rounded-xl"
+                  />
                 )}
-                title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (isStreaming) {
+                      abortStream();
+                      return;
+                    }
+                    if (!draft.trim() && !hasStaged) return;
+                    sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
+                  }}
+                  className="mt-3 flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+                >
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all cursor-pointer shrink-0"
+                    title="Attach photo or document"
+                  >
+                    <Paperclip className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleVoice}
+                    className={cn(
+                      "w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0",
+                      orbState === "listening"
+                        ? "bg-red-500/20 text-red-400"
+                        : "text-muted-foreground hover:text-white hover:bg-white/10"
+                    )}
+                    title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
+                  >
+                    <Orb state={orbState} size="sm" className="scale-60" />
+                  </button>
+                  <input
+                    ref={sheetInputRef}
+                    type="text"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
+                    placeholder="Ask anything, or give a dock command…"
+                    className="flex-1 min-w-0 bg-transparent px-2 py-1 text-sm text-white placeholder-muted-foreground focus:outline-none font-sans"
+                    autoFocus
+                  />
+                  {isStreaming ? (
+                    <button
+                      type="button"
+                      onClick={abortStream}
+                      className="p-2 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all cursor-pointer shrink-0"
+                      title="Stop generation"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!draft.trim() && !hasStaged}
+                      className="p-2 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer font-bold shrink-0"
+                      title="Send message"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </form>
+              </>
+            )}
+
+            {/* Bottom Actions: sound · model · keyboard mode */}
+            <div className="mt-3 flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shrink-0"
+                title={soundEnabled ? "Mute audio" : "Unmute audio"}
               >
-                <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-65" />
+                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </button>
 
-              <input
-                ref={sheetInputRef}
-                type="text"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                placeholder="Ask anything, or give a dock command…"
-                className="flex-1 bg-transparent px-2 py-1 text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans"
-                autoFocus
-              />
+              <ModelSwitcher compact />
 
-              {isStreaming ? (
-                <button
-                  type="button"
-                  onClick={abortStream}
-                  className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer shrink-0"
-                  title="Stop generation"
-                >
-                  <Square className="w-3 h-3 fill-current" />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!draft.trim() && stagedAttachments.length === 0}
-                  className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
-                  title="Send message"
-                >
-                  <Send className="w-3 h-3" />
-                </button>
-              )}
-            </form>
+              <button
+                type="button"
+                onClick={() => setIsKeyboardInSheet(!isKeyboardInSheet)}
+                className={cn(
+                  "w-9 h-9 rounded-full border border-white/5 flex items-center justify-center transition-all cursor-pointer shrink-0",
+                  isKeyboardInSheet
+                    ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border-[var(--accent-lime)]/30"
+                    : "bg-white/[0.06] text-muted-foreground hover:text-white"
+                )}
+                title={isKeyboardInSheet ? "Switch to Orb" : "Type prompt"}
+              >
+                <Keyboard className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drag-and-drop overlay */}
+            {isDraggingOver && (
+              <div className="absolute inset-0 z-20 rounded-[28px] bg-[var(--accent-lime)]/10 border-2 border-dashed border-[var(--accent-lime)]/50 flex items-center justify-center pointer-events-none">
+                <div className="flex items-center gap-2 text-[var(--accent-lime)] text-sm font-medium">
+                  <UploadCloud className="w-5 h-5" />
+                  <span>Drop files here</span>
+                </div>
+              </div>
+            )}
+
+            {/* Hidden file inputs (the capsule renders them itself, the dock surface is not mounted here) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.yaml,.yml,.sh,.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) addAttachments(Array.from(e.target.files));
+                e.target.value = "";
+              }}
+            />
           </div>
         </motion.div>
       </AnimatePresence>
