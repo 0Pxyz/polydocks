@@ -43,7 +43,17 @@ export interface DockLayoutState {
 export const SYSTEM_TOOL_IDS = new Set(["maps"]);
 
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
-export const DEFAULT_PINNED_IDS = ["agent", "maps", "store", "settings"];
+export const DEFAULT_PINNED_IDS = ["agent", "maps", "settings"];
+
+/**
+ * One-way migration for persisted layouts: the Plugin Store is not a dock
+ * item, so existing pins drop it without deleting anything else. Pure so
+ * both the store and tests share it.
+ */
+export function migratePinnedIds(pinnedIds: string[]): string[] {
+  const migrated = pinnedIds.filter((id) => id !== "store");
+  return migrated.length > 0 ? migrated : [...DEFAULT_PINNED_IDS];
+}
 
 export type DockSectionId = "docked" | "yours" | "store" | "create";
 
@@ -137,6 +147,59 @@ export function createItemsForQuery(query: string): DockItem[] {
       kind: "create",
     },
   ];
+}
+
+/**
+ * Static "create with agent" rows for an empty query, mirroring the original
+ * suggestions: city-aware when a city context exists, generic otherwise.
+ */
+export function getStaticCreateRows(cityName?: string): DockItem[] {
+  const city = cityName?.trim();
+  const labels = city
+    ? [`Flashcards for ${city}`, `Compare two sources on ${city}`, `A timeline of ${city}`]
+    : ["Flashcards", "A reading list", "A timeline"];
+  const descriptions = city
+    ? [
+        `Ask the agent to build flashcards for ${city}`,
+        `Ask the agent to compare two sources on ${city}`,
+        `Ask the agent to build a timeline of ${city}`,
+      ]
+    : [
+        "Ask the agent to build flashcards",
+        "Ask the agent to build a reading list",
+        "Ask the agent to build a timeline",
+      ];
+  return labels.map((label, i) => ({
+    id: `create:static:${i}${city ? `:${city}` : ""}`,
+    label,
+    description: descriptions[i],
+    icon: "cards",
+    kind: "create" as const,
+  }));
+}
+
+const EMPTY_QUERY_MAX_ROWS = 6;
+const EMPTY_QUERY_OPEN_MAX = 2;
+const EMPTY_QUERY_CREATE_COUNT = 3;
+
+/**
+ * Curates the empty-query panel so it stays small: open items first (if
+ * any), then unpinned tools, then the static create rows. Pinned,
+ * non-open items are hidden here (already in the dock above) and appear
+ * once the user types.
+ */
+export function sliceEmptyQueryRows(args: {
+  open: DockItem[];
+  yours: DockItem[];
+  /** Extra fixed rows (e.g. the Browse store row) that also take panel space. */
+  reserved?: number;
+}): { open: DockItem[]; yours: DockItem[] } {
+  const open = args.open.slice(0, EMPTY_QUERY_OPEN_MAX);
+  const yours = args.yours.slice(
+    0,
+    Math.max(0, EMPTY_QUERY_MAX_ROWS - EMPTY_QUERY_CREATE_COUNT - open.length - (args.reserved ?? 0))
+  );
+  return { open, yours };
 }
 
 /**
@@ -367,6 +430,26 @@ export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "flashcards", label: "Flashcards", description: "Interactive flashcards", icon: "flashcards", kind: "builtin" },
   { id: "terminal", label: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
   { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
-  { id: "store", label: "Plugin Store", description: "Community plugin store", icon: "store", kind: "builtin" },
+  // No store entry: the Plugin Store is not a dock item. Store plugins are
+  // reachable only through dock search, which installs and opens them.
   { id: "plugins", label: "Plugins", description: "Installed plugins", icon: "plugins", kind: "builtin" },
 ];
+
+/**
+ * Empty-query panel composition: open items, then unpinned tools (sliced to
+ * the panel cap), hiding pinned non-open items that already sit in the dock
+ * above. Pinned items reappear once the user types.
+ */
+export function visibleEmptyQuery(args: {
+  docked: DockItem[];
+  yours: DockItem[];
+  openIds: string[];
+  reserved?: number;
+}): { open: DockItem[]; yours: DockItem[] } {
+  const openSet = new Set(args.openIds);
+  return sliceEmptyQueryRows({
+    open: args.docked.filter((item) => openSet.has(item.id)),
+    yours: args.yours,
+    reserved: args.reserved,
+  });
+}

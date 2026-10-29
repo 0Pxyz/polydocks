@@ -1,4 +1,5 @@
 import { isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { UPDATE_WORD, ARTIFACT_WORD, FIX_WORD } from "./intent-words";
 
 /**
  * Deterministic intent classification for the agent loop.
@@ -19,12 +20,6 @@ export interface IntentHints {
 const THEME_CORE = /\b(wallpaper|fundo|papel de parede|theme|tema)\b/;
 const BACKGROUND_WORD = /\b(background)\b/;
 const THEME_ACTION = /\b(my|this|app|change|set|add|use|apply|meu|minha|este|esta|esse|essa|mudar|colocar|usar|aplicar|trocar)\b/;
-
-const UPDATE_WORD = /\b(update\w*|modify|modif\w*|fix|change\w*|group by|add\w*|adiciona\w*|acrescenta\w*|atualiz\w*|modific\w*|corrig\w*|alter\w*|agrup\w*|muda\w*|mude\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|not working|não funciona|nao funciona|bug)\b/;
-const ARTIFACT_WORD = /\b(plugin|tab|tool|feed|experience|experi[eê]ncia|ferramenta|aba|widget|timer|dashboard|reader|leitor)\b/;
-// Broken-behavior reports: the artifact exists and must be repaired in place,
-// never recreated.
-const FIX_WORD = /\b(fix\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|doesnt work|not working|não funciona|nao funciona|bug)\b/;
 
 export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIntent {
   const lower = (prompt || "").toLowerCase();

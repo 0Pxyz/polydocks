@@ -20,7 +20,7 @@ type FindCapabilitiesInput = z.infer<typeof FindCapabilitiesSchema>;
 export const find_capabilities: AgentTool<typeof FindCapabilitiesSchema> = {
   name: "find_capabilities",
   description:
-    "Discovers available plugin capabilities by searching titles, descriptions, and tags with deterministic keyword scoring.",
+    "Searches enabled plugin capabilities by keyword scoring. Use before any invoke; do not guess capability ids.",
   schema: FindCapabilitiesSchema,
   execute: async (input: FindCapabilitiesInput) => {
     const rawTerms = input.query

@@ -24,9 +24,12 @@ ENV SERVE_STATIC=true
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-# Copy built frontend assets and backend server
+# Copy built frontend assets, backend server, and shared sources.
+# server/ imports type/module siblings under src/ at runtime
+# (e.g. world map bundles), so src/ must ship too — data/ stays a volume.
 COPY --from=builder /app/dist ./dist
 COPY server ./server
+COPY src ./src
 
 # Create data and agent-home directories and assign non-root ownership
 RUN mkdir -p /app/data /app/agent-home && chown -R bun:bun /app

@@ -13,7 +13,7 @@ export interface PublishPluginArgs {
 export const publish_plugin: AgentTool<PublishPluginArgs> = {
   name: "publish_plugin",
   description:
-    "Publishes a verified workspace plugin to the PolyDocks community plugin store, making it discoverable and installable across workspaces with 1-click.",
+    "Shares a verified plugin to the community store. Use only for verified work; do not publish drafts or fixes in progress.",
   schema: z.object({
     pluginId: z.string().describe("ID of the synthesized or modified plugin to share"),
     workspaceId: z.string().optional().describe("Workspace where plugin currently lives"),

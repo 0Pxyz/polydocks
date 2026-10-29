@@ -9,26 +9,28 @@ import {
   XCircle,
   X,
   PushPin,
-  PushPinSlash,
   Wrench,
+  ArrowLeft,
 } from "@phosphor-icons/react";
 import {
-  CommandDialog,
+  Command,
   CommandInput,
   CommandList,
   CommandEmpty,
   CommandGroup,
   CommandItem,
-  CommandSeparator,
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { resolveIcon } from "@/components/icons";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import {
   buildDockSections,
   createItemsForQuery,
+  getStaticCreateRows,
+  visibleEmptyQuery,
   DOCK_CORE_CATALOG,
   type DockItem,
   type DockItemKind,
@@ -45,8 +47,6 @@ export interface CapabilityItem {
 }
 
 interface CommandPaletteProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
   cityId?: string;
   /** Session-created experiences (dynamic tabs) that are not in any store. */
   extraItems?: DockItem[];
@@ -61,6 +61,8 @@ interface CommandPaletteProps {
   onSubmitToolPrompt?: (prompt: string) => void;
   /** Send a fix prompt to the agent for a failed plugin. */
   onFixWithAgent?: (prompt: string) => void;
+  /** Close the panel (the dock X button owns this too). */
+  onClose?: () => void;
 }
 
 interface RegistryEntry {
@@ -78,9 +80,10 @@ const KIND_BADGE: Record<DockItemKind, string> = {
   create: "New",
 };
 
+const ROW_CLASS =
+  "group flex w-full max-w-full items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]";
+
 export function CommandPalette({
-  open: controlledOpen,
-  onOpenChange: controlledOnOpenChange,
   cityId,
   extraItems = [],
   onOpenAgent,
@@ -90,19 +93,9 @@ export function CommandPalette({
   onCloseItem,
   onSubmitToolPrompt,
   onFixWithAgent,
+  onClose,
 }: CommandPaletteProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
-  const setOpen = useCallback(
-    (val: boolean) => {
-      if (controlledOnOpenChange) {
-        controlledOnOpenChange(val);
-      } else {
-        setInternalOpen(val);
-      }
-    },
-    [controlledOnOpenChange]
-  );
+  const closePalette = useCallback(() => onClose?.(), [onClose]);
 
   const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,6 +109,7 @@ export function CommandPalette({
   } | null>(null);
 
   const [query, setQuery] = useState("");
+  const [browseStore, setBrowseStore] = useState(false);
   const [tabItems, setTabItems] = useState<DockItem[]>([]);
   const [storeItems, setStoreItems] = useState<DockItem[]>([]);
   const [failedIds, setFailedIds] = useState<Map<string, string>>(new Map());
@@ -129,17 +123,8 @@ export function CommandPalette({
   const closeTool = useDockStore((s) => s.closeTool);
   const workspacePlugins = useWorkspaceStore((s) => s.workspacePlugins);
 
-  // Global ⌘⇧P / Ctrl+Shift+P shortcut (⌘K is reserved for Agent conversation)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        setOpen(!isOpen);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, setOpen]);
+  // The panel mounts only while open, so the ⌘⇧P shortcut lives in the
+  // always-mounted dock. Fetch once per mount.
 
   // Fetch capabilities when palette opens
   const fetchCapabilities = useCallback(async () => {
@@ -258,13 +243,12 @@ export function CommandPalette({
   }, [fetchCapabilities, fetchDockData]);
 
   useEffect(() => {
-    if (isOpen) {
-      setLastResult(null);
-      setConfirmingCap(null);
-      setQuery("");
-      reload();
-    }
-  }, [isOpen, reload]);
+    setLastResult(null);
+    setConfirmingCap(null);
+    setQuery("");
+    setBrowseStore(false);
+    reload();
+  }, [reload]);
 
   const catalog = useMemo<DockItem[]>(() => {
     const seen = new Set<string>();
@@ -296,24 +280,56 @@ export function CommandPalette({
     [catalog, installedPluginItems]
   );
 
+  const trimmedQuery = query.trim();
+  const isEmptyQuery = trimmedQuery === "";
+
   const sections = useMemo(
     () =>
       buildDockSections({
         catalog: fullCatalog,
         store: storeItems,
         layout: { pinnedIds: pinnedToolIds, openIds },
-        query,
+        query: trimmedQuery,
         createForQuery: createItemsForQuery,
       }),
-    [fullCatalog, storeItems, pinnedToolIds, openIds, query]
+    [fullCatalog, storeItems, pinnedToolIds, openIds, trimmedQuery]
   );
 
   const pinnedSet = useMemo(() => new Set(pinnedToolIds), [pinnedToolIds]);
   const openSet = useMemo(() => new Set(openIds), [openIds]);
 
-  const visibleRowCount = sections.reduce((count, section) => count + section.items.length, 0);
+  const dockedItems = sections[0].items;
+  const yoursItems = sections[1].items;
+  const storeSectionItems = sections[2].items;
 
-  const closePalette = useCallback(() => setOpen(false), [setOpen]);
+  // Empty query stays small: open items, then unpinned tools, then three
+  // static create rows. Pinned non-open items are hidden here (already in
+  // the dock above) and appear once the user types.
+  const showBrowseRow = storeItems.length > 0;
+  const emptySliced = useMemo(
+    () =>
+      visibleEmptyQuery({
+        docked: dockedItems,
+        yours: yoursItems,
+        openIds,
+        reserved: showBrowseRow ? 1 : 0,
+      }),
+    [dockedItems, yoursItems, openIds, showBrowseRow]
+  );
+  const staticCreateRows = useMemo(() => getStaticCreateRows(cityId), [cityId]);
+
+  const capMatches = useMemo(() => {
+    const q = trimmedQuery.toLowerCase();
+    if (!q) return capabilities;
+    return capabilities.filter((cap) =>
+      `${cap.title} ${cap.id} ${cap.description} ${cap.pluginId}`.toLowerCase().includes(q)
+    );
+  }, [capabilities, trimmedQuery]);
+
+  const dockMatchCount = dockedItems.length + yoursItems.length + storeSectionItems.length;
+  const showNoMatchRow =
+    !isEmptyQuery && !browseStore && dockMatchCount === 0 && capMatches.length === 0;
+
 
   const handlePrimaryAction = useCallback(
     (item: DockItem) => {
@@ -402,18 +418,18 @@ export function CommandPalette({
     if (failedIds.has(item.id)) {
       return <Badge variant="destructive">Needs fix</Badge>;
     }
-    if (pinnedSet.has(item.id)) {
-      return <Badge variant="secondary">Pinned</Badge>;
-    }
     if (openSet.has(item.id)) {
       return <Badge variant="secondary">Open</Badge>;
     }
     return <Badge variant="outline">{KIND_BADGE[item.kind]}</Badge>;
   };
 
+  const isPinned = (item: DockItem) => pinnedSet.has(item.id);
+
   const renderDockRow = (item: DockItem) => {
     const Icon = resolveIcon(item.icon);
     const failed = failedIds.has(item.id);
+    const pinned = isPinned(item);
     const canPin = (item.kind === "builtin" || item.kind === "plugin" || item.kind === "tab") && !item.system;
     const showClose = openSet.has(item.id) && !item.system;
     return (
@@ -421,14 +437,14 @@ export function CommandPalette({
         key={`${item.kind}:${item.id}`}
         value={`${item.label} ${item.description} ${item.id}`}
         onSelect={() => handleSelectRow(item)}
-        className="flex items-center justify-between py-2.5 px-3 rounded-lg cursor-pointer"
+        className={ROW_CLASS}
       >
-        <div className="flex items-center gap-2.5 min-w-0 max-w-[75%]">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
           <Icon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-sm font-medium text-white/95 truncate">{item.label}</span>
+          <div className="flex flex-col gap-0 min-w-0">
+            <span className="text-sm text-white/95 truncate" title={item.label}>{item.label}</span>
             {item.description && (
-              <span className="text-xs text-white/40 truncate">{item.description}</span>
+              <span className="text-xs text-white/40 truncate" title={item.description}>{item.description}</span>
             )}
             {failed && (
               <span className="text-xs text-red-300/80 truncate">
@@ -438,21 +454,17 @@ export function CommandPalette({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {renderBadge(item)}
           {canPin && (
             <button
               type="button"
               onClick={() => togglePin(item)}
-              title={pinnedSet.has(item.id) ? "Unpin from dock" : "Pin to dock"}
-              aria-label={pinnedSet.has(item.id) ? `Unpin ${item.label}` : `Pin ${item.label}`}
-              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title={pinned ? "Unpin from dock" : "Pin to dock"}
+              aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
-              {pinnedSet.has(item.id) ? (
-                <PushPinSlash className="w-3.5 h-3.5" />
-              ) : (
-                <PushPin className="w-3.5 h-3.5" />
-              )}
+              <PushPin className="w-3.5 h-3.5" weight={pinned ? "fill" : "regular"} />
             </button>
           )}
           {showClose && (
@@ -461,7 +473,7 @@ export function CommandPalette({
               onClick={() => handleCloseRow(item)}
               title="Close tab"
               aria-label={`Close ${item.label}`}
-              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -472,7 +484,7 @@ export function CommandPalette({
               onClick={() => handleFixRow(item)}
               title="Fix with agent"
               aria-label={`Fix ${item.label} with agent`}
-              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
               <Wrench className="w-3.5 h-3.5" />
             </button>
@@ -481,6 +493,87 @@ export function CommandPalette({
       </CommandItem>
     );
   };
+
+  const renderCreateRow = (item: DockItem, valueSuffix?: string) => (
+    <CommandItem
+      key={item.id}
+      value={`${item.label} ${item.description} ${valueSuffix ?? trimmedQuery}`}
+      onSelect={() => handleSelectRow(item)}
+      className={ROW_CLASS}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
+        <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
+        <div className="flex flex-col gap-0 min-w-0">
+          <span className="text-sm text-white/95 truncate" title={item.label}>
+            {item.label}
+          </span>
+          <span className="text-xs text-white/40 truncate" title={item.description}>
+            {item.description}
+          </span>
+        </div>
+      </div>
+      <Badge variant="outline">New</Badge>
+    </CommandItem>
+  );
+
+  const renderBrowseStoreRow = () => {
+    const StoreIcon = resolveIcon("storefront");
+    return (
+      <CommandItem
+        key="browse-store"
+        value="browse store plugins"
+        onSelect={() => setBrowseStore(true)}
+        className={ROW_CLASS}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
+          <StoreIcon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
+          <div className="flex flex-col gap-0 min-w-0">
+            <span className="text-sm text-white/95 truncate">Browse store</span>
+            <span className="text-xs text-white/40 truncate">
+              {storeItems.length} community {storeItems.length === 1 ? "plugin" : "plugins"}
+            </span>
+          </div>
+        </div>
+      </CommandItem>
+    );
+  };
+
+  const renderBackRow = () => (
+    <CommandItem
+      key="back-all-tools"
+      value="back to all tools"
+      onSelect={() => setBrowseStore(false)}
+      className={ROW_CLASS}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
+        <ArrowLeft className="w-4 h-4 shrink-0 text-white/50" />
+        <span className="text-sm text-white/95">All tools</span>
+      </div>
+    </CommandItem>
+  );
+
+  const renderNoMatchRow = () => (
+    <CommandItem
+      key="no-match-create"
+      value={trimmedQuery}
+      onSelect={() => {
+        closePalette();
+        onSubmitToolPrompt?.(`Create ${trimmedQuery}`);
+      }}
+      className={ROW_CLASS}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
+        <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
+        <div className="flex flex-col gap-0 min-w-0">
+          <span className="text-sm text-white/95 truncate">No match. Ask the agent to create it</span>
+          <span className="text-xs text-white/40 truncate">
+            Create {trimmedQuery} with the agent
+          </span>
+        </div>
+      </div>
+      <Badge variant="outline">New</Badge>
+    </CommandItem>
+  );
 
   // Execute a capability
   const executeCapability = async (cap: CapabilityItem) => {
@@ -570,13 +663,7 @@ export function CommandPalette({
   };
 
   return (
-    <CommandDialog
-      open={isOpen}
-      onOpenChange={setOpen}
-      title="Dock search"
-      description="Find, open, pin and manage dock tools"
-      className="bg-[#0b0d13] border border-white/10 text-white max-w-2xl shadow-2xl"
-    >
+    <Command label="Dock search" className="w-full max-w-full overflow-hidden">
       <div
         onKeyDownCapture={(e) => {
           modifierHeld.current = e.metaKey || e.ctrlKey;
@@ -584,10 +671,13 @@ export function CommandPalette({
         onKeyUpCapture={(e) => {
           modifierHeld.current = e.metaKey || e.ctrlKey;
         }}
+        className="[&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:border-b-0 [&_[data-slot=command-input-wrapper]_svg]:hidden"
       >
       <CommandInput
-        placeholder="Search tools, tabs and plugins…"
+        autoFocus
+        placeholder={installingId ? "Installing…" : "Search or add a tool"}
         onInput={(e) => setQuery(e.currentTarget.value)}
+        className="text-[15px] placeholder:text-muted-foreground"
       />
 
       {/* Confirmation Step for Destructive or External Actions */}
@@ -650,7 +740,13 @@ export function CommandPalette({
         </div>
       )}
 
-      <CommandList className="max-h-[380px] p-2 text-white">
+      {/*
+        Radix wraps scroll content in a generated display:table div that
+        sizes to content instead of the viewport, pushing badges out of
+        view. Pin that wrapper to the viewport width so rows truncate.
+      */}
+      <ScrollArea className="max-h-[248px] [&_div:has(>[cmdk-list])]:w-full [&_div:has(>[cmdk-list])]:table-fixed [&_[cmdk-item][data-selected='true']]:bg-white/[0.08] [&_[cmdk-item][data-selected='true']]:text-white [&_[cmdk-group-heading]]:sticky [&_[cmdk-group-heading]]:top-0 [&_[cmdk-group-heading]]:z-10 [&_[cmdk-group-heading]]:bg-popover">
+      <CommandList className="max-h-none overflow-visible p-2 text-white">
         {loading ? (
           <div className="flex flex-col gap-2 p-2" aria-label="Loading tools">
             <Skeleton className="h-12 w-full bg-white/5" />
@@ -672,39 +768,41 @@ export function CommandPalette({
               </div>
             )}
 
-            {visibleRowCount === 0 ? (
-              <div className="py-6 text-center text-sm text-white/40">
-                No tools match your search.
-              </div>
+            {browseStore ? (
+              <>
+                {renderBackRow()}
+                {storeSectionItems.length > 0 && (
+                  <CommandGroup key="store" heading="Store">
+                    {storeSectionItems.map((item) => renderDockRow(item))}
+                  </CommandGroup>
+                )}
+              </>
+            ) : isEmptyQuery ? (
+              <>
+                {emptySliced.open.length > 0 && (
+                  <CommandGroup key="open" heading="Open now">
+                    {emptySliced.open.map((item) => renderDockRow(item))}
+                  </CommandGroup>
+                )}
+                {(emptySliced.yours.length > 0 || storeItems.length > 0) && (
+                  <CommandGroup key="yours" heading="Your tools">
+                    {emptySliced.yours.map((item) => renderDockRow(item))}
+                    {showBrowseRow && renderBrowseStoreRow()}
+                  </CommandGroup>
+                )}
+                <CommandGroup key="create" heading="Create with agent">
+                  {staticCreateRows.map((item) => renderCreateRow(item, item.id))}
+                </CommandGroup>
+              </>
+            ) : showNoMatchRow ? (
+              renderNoMatchRow()
             ) : (
               sections.map(
                 (section) =>
                   section.items.length > 0 && (
                     <CommandGroup key={section.id} heading={section.title}>
                       {section.items.map((item) =>
-                        item.kind === "create" ? (
-                          <CommandItem
-                            key={item.id}
-                            value={`${item.label} ${item.description} ${query}`}
-                            onSelect={() => handleSelectRow(item)}
-                            className="flex items-center justify-between py-2.5 px-3 rounded-lg cursor-pointer"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <span className="text-sm font-medium text-white/95 truncate">
-                                  {item.label}
-                                </span>
-                                <span className="text-xs text-white/40 truncate">
-                                  {item.description}
-                                </span>
-                              </div>
-                            </div>
-                            <Badge variant="outline">New</Badge>
-                          </CommandItem>
-                        ) : (
-                          renderDockRow(item)
-                        )
+                        item.kind === "create" ? renderCreateRow(item) : renderDockRow(item)
                       )}
                     </CommandGroup>
                   )
@@ -727,17 +825,17 @@ export function CommandPalette({
                     key={cap.id}
                     value={`${cap.title} ${cap.id} ${cap.description} ${pluginId}`}
                     onSelect={() => executeCapability(cap)}
-                    className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="group flex w-full max-w-full items-center justify-between gap-2 py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
                   >
-                    <div className="flex flex-col gap-0.5 max-w-[75%]">
-                      <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                      <div className="flex items-center gap-2 min-w-0">
                         <Terminal className="w-3.5 h-3.5 text-white/50 shrink-0" />
-                        <span className="text-sm font-medium text-white/95 truncate">
+                        <span className="text-sm font-medium text-white/95 truncate" title={cap.title}>
                           {cap.title}
                         </span>
                       </div>
                       {cap.description && (
-                        <span className="text-xs text-white/40 truncate pl-5.5">
+                        <span className="text-xs text-white/40 truncate pl-5.5" title={cap.description}>
                           {cap.description}
                         </span>
                       )}
@@ -754,14 +852,12 @@ export function CommandPalette({
               </CommandGroup>
             ))}
 
-            <CommandSeparator className="my-1 bg-white/10" />
-
             {/* Quick System Actions */}
             <CommandGroup heading="Actions & System">
               {onOpenAgent && (
                 <CommandItem
                   onSelect={() => {
-                    setOpen(false);
+                    closePalette();
                     onOpenAgent();
                   }}
                   className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -777,7 +873,7 @@ export function CommandPalette({
               {onOpenInstallUrl && (
                 <CommandItem
                   onSelect={() => {
-                    setOpen(false);
+                    closePalette();
                     onOpenInstallUrl();
                   }}
                   className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -793,7 +889,7 @@ export function CommandPalette({
               {onOpenMcpConnect && (
                 <CommandItem
                   onSelect={() => {
-                    setOpen(false);
+                    closePalette();
                     onOpenMcpConnect();
                   }}
                   className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -809,12 +905,8 @@ export function CommandPalette({
           </>
         )}
       </CommandList>
-
-      <div className="flex items-center justify-between border-t border-white/10 px-4 py-2 text-[11px] text-white/40">
-        <span>Enter opens · ⌘↵ pins · Esc closes</span>
-        {installingId && <span>Installing…</span>}
+      </ScrollArea>
       </div>
-      </div>
-    </CommandDialog>
+    </Command>
   );
 }

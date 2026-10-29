@@ -12,7 +12,7 @@ export interface ListRecentExecutionsArgs {
 export const list_recent_executions: AgentTool<ListRecentExecutionsArgs> = {
   name: "list_recent_executions",
   description:
-    "Lists recent capability runs and their success/failure status, useful for diagnosing errors and understanding execution history.",
+    "Lists recent capability runs by status. Use to spot failure patterns; not for routine checks.",
   schema: z.object({
     cityId: z.string().optional().describe("Filter by city workspace"),
     pluginId: z.string().optional().describe("Filter by plugin identifier"),

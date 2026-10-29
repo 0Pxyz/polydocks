@@ -4,7 +4,7 @@ import { readCityFile } from "../../workspace/cityWorkspace";
 
 export const read_city_file: AgentTool<{ path: string; cityId?: string }> = {
   name: "read_city_file",
-  description: "Reads the content of a file within the active city workspace (e.g. notes/summary.md).",
+  description: "Reads one file from the city workspace. Use for city notes and sources; do not use for agent-home files (use read_file).",
   schema: z.object({
     path: z.string().describe("Relative path inside the city workspace (e.g. 'notes/intro.md')"),
     cityId: z.string().optional(),

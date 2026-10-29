@@ -7,7 +7,7 @@ const listMapsSchema = z.object({});
 
 export const list_maps: AgentTool = {
   name: "list_maps",
-  description: "List all available world map styles and sources. Only call when the user asks to see or change map styles.",
+  description: "Lists map styles. Use only for explicit style asks; never as routine inspection.",
   schema: listMapsSchema,
   execute: async () => {
     // 1. Bundled maps

@@ -15,7 +15,7 @@ export interface UpdateTabArgs {
 export const update_tab: AgentTool<UpdateTabArgs> = {
   name: "update_tab",
   description:
-    "Updates the TypeScript module, HTML content, or metadata of an existing dynamic dock tool tab.",
+    "Patches an existing dock tab in place. Use for any change to a tab; never create a duplicate tab to change one.",
   schema: z.object({
     id: z.string().describe("Target tab id to update"),
     title: z.string().optional(),

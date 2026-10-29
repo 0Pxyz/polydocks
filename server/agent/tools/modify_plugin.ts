@@ -26,7 +26,7 @@ const patchSchema = z
 export const modify_plugin: AgentTool<ModifyPluginArgs> = {
   name: "modify_plugin",
   description:
-    "Modifies an existing plugin in-place without duplicating dock entries or destroying saved user data. Fix flow: inspect_experience -> patch (patch {find, replace} or full code or metadata-only) -> verify. Never recreate the plugin id.",
+    "Patches an existing plugin in place (patch {find, replace}, full code, or metadata-only; preserves storage, bumps version). Use for every plugin fix or change; never recreate the plugin id to fix.",
   schema: z
     .object({
       id: z
