@@ -45,6 +45,8 @@ import { dock_unpin } from "./dock_unpin";
 import { dock_close } from "./dock_close";
 
 export * from "./types";
+export * from "./meta";
+import { minimalTools, isMinimalSurface } from "./meta";
 export {
   list_tabs,
   open_tab,
@@ -141,3 +143,11 @@ export const defaultTools: AgentTool[] = [
   record_memory,
   plan_ascii_world,
 ];
+
+/**
+ * Surface-aware catalog: AGENT_SURFACE=minimal offers only the meta-tools
+ * (classic tools stay registered underneath as dispatch aliases).
+ */
+export function getToolsForSurface(): AgentTool[] {
+  return isMinimalSurface() ? [...minimalTools] : defaultTools;
+}

@@ -51,6 +51,32 @@ export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIn
 }
 
 /**
+ * Minimal-surface denylists (AGENT_SURFACE=minimal). Whole-tool denial is
+ * applied at catalog time like INTENT_TOOL_DENYLIST; action denial is
+ * enforced at execution time because the meta-tool stays visible.
+ * Theme over-denies dock/fs reads in minimal mode — documented, acceptable:
+ * a theme turn has no business opening tabs or reading files.
+ */
+export const MINIMAL_WHOLE_DENYLIST: Record<AgentIntent, readonly string[]> = {
+  theme: ["web", "map", "dock", "plugins", "fs"],
+  plugin_update: [],
+  plugin_fix: [],
+  research: [],
+  city: [],
+  general: [],
+};
+
+/** Meta-tool actions forbidden per intent (create/delete must never sneak in). */
+export const MINIMAL_ACTION_DENYLIST: Record<AgentIntent, Record<string, readonly string[]>> = {
+  theme: {},
+  plugin_update: { dock: ["create_tab"], plugins: ["create_plugin"] },
+  plugin_fix: { dock: ["create_tab", "delete_tab"], plugins: ["create_plugin"] },
+  research: {},
+  city: {},
+  general: {},
+};
+
+/**
  * Tools that must NOT be offered for a given intent. The model can only
  * call what it is offered, so exclusion here is a hard routing safeguard.
  */

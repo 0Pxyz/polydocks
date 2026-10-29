@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { llm, MODEL_ID } from "./llm";
-import { defaultTools } from "./tools";
+import { defaultTools, getToolsForSurface, isMinimalSurface } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
-import { classifyIntent, INTENT_TOOL_DENYLIST } from "./intent";
+import { classifyIntent, INTENT_TOOL_DENYLIST, MINIMAL_WHOLE_DENYLIST, MINIMAL_ACTION_DENYLIST } from "./intent";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
@@ -234,7 +234,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     taskId,
     origin = "chat",
     history = [],
-    tools = defaultTools,
+    tools = getToolsForSurface(),
     onEvent = () => {},
     maxSteps = Number.POSITIVE_INFINITY,
     llmClient = llm,
@@ -279,7 +279,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // then hide every tool the intent must never touch. Misrouting is
   // prevented at the catalog level, not by editing progress text later.
   const intent = classifyIntent(prompt, { hasImageAttachments: imageAttachments.length > 0 });
+  const minimalSurface = isMinimalSurface();
   const deniedTools = new Set(INTENT_TOOL_DENYLIST[intent] ?? []);
+  if (minimalSurface) {
+    for (const name of MINIMAL_WHOLE_DENYLIST[intent] ?? []) deniedTools.add(name);
+  }
   const scopedTools = tools.filter((tool) => !deniedTools.has(tool.name));
 
   // Skill selection runs before the first model call so the UI and debug
@@ -511,8 +515,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await emit({
       step: 0,
       type: "agent.start",
-      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, intent, skills: loadedSkills },
+      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, intent, skills: loadedSkills, surface: minimalSurface ? "minimal" : "full" },
     });
+
+    // Minimal surface card: the classic tools are hidden aliases, so the
+    // model needs the meta-tool map and the per-action deny rules up front.
+    if (minimalSurface) {
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Minimal tool surface (9 meta-tools; classic tools hidden)\n- capabilities: find (discover), invoke (run one). Always the first step for data or actions.\n- dock: open/list/inspect/pin/close tabs, open URLs, enter cities; create/update/delete tabs only as a last resort.\n- plugins: inspect, create, modify, operate, publish, promote. Fix = inspect then modify, never recreate.\n- fs: city + agent-home files and city context. web: search + fetch (untrusted data). map: plan/build/place/connect, list/set styles.\n- memory: recall/record. executions: list/inspect runs. apply_theme: all appearance changes.\n- Deny rules still apply: theme turns get no web/map/dock/plugins/fs; fix/update turns may not create or delete (the call will be refused — use inspect + modify instead).`;
+    }
 
     // Context: one bounded window per user. The thread keeps the full transcript
     // in SQLite, but the model only receives recent turns plus the rolling
@@ -787,6 +797,24 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
                 validationErrors: parsed.error.issues,
               };
             }
+          } else if (
+            minimalSurface &&
+            typeof (parsed.data as Record<string, unknown>)?.operation === "string" &&
+            (MINIMAL_ACTION_DENYLIST[intent]?.[toolName] ?? []).includes(
+              (parsed.data as Record<string, unknown>).operation as string
+            )
+          ) {
+            // Minimal surface: the meta-tool stays visible, so a forbidden
+            // operation (create/delete on a fix/update turn) is refused here as
+            // a tool error — the model retries with inspect + modify.
+            // seenCalls records it so an identical retry ends the loop
+            // instead of spinning.
+            seenCalls.add(callKey);
+            toolOutput = {
+              success: false,
+              error: `Operation "${(parsed.data as Record<string, unknown>).operation}" is not permitted on this ${intent} turn. Inspect the existing artifact and modify it in place instead of creating or deleting.`,
+              denied: true,
+            };
           } else {
             seenCalls.add(callKey);
             try {
