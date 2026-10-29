@@ -33,7 +33,8 @@ describe("React allowlist + vendored kit bundling", () => {
     const js = bundleFeatureCode(REACT_SAMPLE);
     expect(js).toContain("window.__polymaxKit.React");
     expect(js).toContain("window.__polymaxKit.UI");
-    expect(js).toContain("window.__polymaxKit.jsxDEV");
+    // Production JSX runtime: hashed helpers normalize to jsxs/jsx.
+    expect(js).toContain("window.__polymaxKit.jsxs");
     expect(js).not.toMatch(/^\s*import\s/m);
     expect(js).not.toMatch(/\bjsxDEV_[A-Za-z0-9]+|\bjsx_[A-Za-z0-9]+|\bjsxs_[A-Za-z0-9]+/);
     expect(js).toContain("useState");
