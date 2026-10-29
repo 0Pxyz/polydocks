@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
-import { BookOpen, FileText, Play, Video } from "@phosphor-icons/react";
+import { useEffect, useMemo, useState } from "react";
+import { Play } from "@phosphor-icons/react";
 import { openExternalUrl } from "@/lib/platform";
 import { cn } from "@/lib/cn";
 import { Skeleton } from "@/components/ui/skeleton";
+import { faviconUrl, territoryAccent, videoThumbnailCandidates } from "../sourceMedia";
 import type { CitySourceItem } from "../types";
 
 interface SourcesViewProps {
@@ -38,20 +39,26 @@ function timeLine(item: CitySourceItem): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-function KindGlyph({ kind, className }: { kind?: string; className?: string }) {
-  if (kind === "video") return <Video size={20} className={className} weight="light" />;
-  if (kind === "paper") return <FileText size={20} className={className} weight="light" />;
-  return <BookOpen size={20} className={className} weight="light" />;
-}
+function SourceImage({ item, large, accentKey }: { item: CitySourceItem; large?: boolean; accentKey: string }) {
+  // Saved image wins; otherwise derive from the video id (maxres first,
+  // hq on 404). No image: big favicon on the territory accent color.
+  const candidates = useMemo(
+    () => videoThumbnailCandidates(item.url, item.image),
+    [item.url, item.image]
+  );
+  const [idx, setIdx] = useState(0);
+  useEffect(() => setIdx(0), [item.url, item.image]);
+  const [faviconGone, setFaviconGone] = useState(false);
+  useEffect(() => setFaviconGone(false), [item.domain]);
 
-function SourceImage({ item, large }: { item: CitySourceItem; large?: boolean }) {
-  if (item.image) {
+  if (candidates.length > 0 && idx < candidates.length) {
     return (
       <div className={cn("relative w-full overflow-hidden bg-white/[0.04]", large ? "aspect-[21/9]" : "aspect-video")}>
         <img
-          src={item.image}
+          src={candidates[idx]}
           alt=""
           loading="lazy"
+          onError={() => setIdx((i) => Math.min(i + 1, candidates.length - 1))}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
         {item.kind === "video" && (
@@ -69,14 +76,23 @@ function SourceImage({ item, large }: { item: CitySourceItem; large?: boolean })
       </div>
     );
   }
+  const fav = item.domain ? faviconUrl(item.domain) : null;
+  const letter = (item.domain || item.title || "?").trim().charAt(0).toUpperCase();
   return (
     <div
-      className={cn(
-        "relative flex w-full items-center justify-center bg-white/[0.04] text-muted-foreground/50",
-        large ? "aspect-[21/9]" : "aspect-video"
-      )}
+      className="relative flex w-full items-center justify-center overflow-hidden"
+      style={{ background: territoryAccent(accentKey), aspectRatio: large ? "21 / 9" : "16 / 9" }}
     >
-      <KindGlyph kind={item.kind} className="h-8 w-8" />
+      <span className="text-5xl font-semibold text-white/90">{letter}</span>
+      {fav && !faviconGone && (
+        <img
+          src={fav}
+          alt=""
+          loading="lazy"
+          onError={() => setFaviconGone(true)}
+          className="absolute h-16 w-16 object-contain drop-shadow-lg"
+        />
+      )}
       {item.hook && (
         <div className="absolute inset-x-0 bottom-0 translate-y-1 bg-gradient-to-t from-black/85 to-transparent p-3 pt-8 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
           <p className="text-xs leading-relaxed text-white/90">{item.hook}</p>
@@ -162,7 +178,7 @@ export function SourcesView({ sources, cityName, loading = false, onOpen }: Sour
               onClick={() => (featured.id && onOpen ? onOpen(featured.id) : openExternalUrl(featured.url))}
               className="group block w-full cursor-pointer bg-transparent p-0 text-left"
             >
-              <SourceImage item={featured} large />
+              <SourceImage item={featured} large accentKey={cityName} />
               <h4 className="mt-3 text-xl font-semibold leading-snug text-white transition-colors group-hover:text-[var(--accent-lime)]">
                 {featured.title}
               </h4>
@@ -183,7 +199,7 @@ export function SourcesView({ sources, cityName, loading = false, onOpen }: Sour
                   onClick={() => (item.id && onOpen ? onOpen(item.id) : openExternalUrl(item.url))}
                   className="group block w-full cursor-pointer bg-transparent p-0 text-left"
                 >
-                  <SourceImage item={item} />
+                  <SourceImage item={item} accentKey={cityName} />
                   <h4 className="mt-2.5 text-[15px] font-semibold leading-snug text-white transition-colors group-hover:text-[var(--accent-lime)]">
                     {item.title}
                   </h4>

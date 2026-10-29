@@ -145,6 +145,9 @@ interface ConversationStoreState {
   ) => Promise<void>;
 }
 
+/** Opened-source view: rendered inside the Sources plugin area, never as an overlay. */
+export type OpenedSourceView = NonNullable<ConversationStoreState["readerView"]>;
+
 const SIDE_WIDTH_KEY = "polymax-agent-side-width";
 const SOUND_KEY = "polymax-agent-sound";
 const MODEL_KEY = "polymax-agent-model";
@@ -400,18 +403,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     });
   },
 
-  openReader: (view) => {
-    // The reader panel mounts inside the agent surface, which returns
-    // null when closed (the default). Opening a source must also surface
-    // it, or feed clicks die silently with no tab and no panel.
-    const { layoutState } = get();
-    if (layoutState === "closed") {
-      const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
-      set({ readerView: view, statusText: "", layoutState: isWide ? "side" : "sheet" });
-    } else {
-      set({ readerView: view, statusText: "" });
-    }
-  },
+  openReader: (view) => set({ readerView: view, statusText: "" }),
 
   closeReader: () => set({ readerView: null }),
 

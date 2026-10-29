@@ -142,10 +142,10 @@ describe("sources.open modes (no silent fallbacks)", () => {
     expect(useConversationStore.getState().readerView).toBeNull();
   });
 
-  it("opening a source with the agent surface closed surfaces the reader (closed-chat no-op regression)", () => {
-    // Feed clicks land here while the user browses the city with the chat
-    // closed (the default). AgentConversation returns null when closed, so
-    // setting readerView alone renders nothing: the click dies silently.
+  it("opening a source never forces the chat open (detail lives in Sources)", () => {
+    // Supersedes the closed-chat auto-surface: the opened source renders
+    // in the Sources plugin area, so openReader must leave the chat
+    // layout alone. The detail is visible without any overlay.
     useConversationStore.setState({ layoutState: "closed", readerView: null });
     useConversationStore.getState().openReader({
       sourceId: "s1",
@@ -156,8 +156,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
       markdown: "# T",
     });
     expect(useConversationStore.getState().readerView?.mode).toBe("reader");
-    // The reader panel only mounts when the agent surface is open.
-    expect(useConversationStore.getState().layoutState).not.toBe("closed");
+    expect(useConversationStore.getState().layoutState).toBe("closed");
     useConversationStore.getState().closeReader();
   });
 
@@ -182,6 +181,12 @@ describe("sources.open modes (no silent fallbacks)", () => {
     expect(get("v_kept")).toBe("https://cdn.example.com/kept.jpg");
     expect(get("a_plain")).toBeNull();
     expect(get("v_broken")).toBeNull();
+  });
+
+  it("opening a source never renders an overlay over the chat (Sources area only)", async () => {
+    const src = await Bun.file("src/features/agent/AgentConversation.tsx").text();
+    expect(src).not.toContain("ReaderPanel");
+    expect(src).not.toContain("readerView");
   });
 
   it("sources.open returns the mode per type through the agent surface", async () => {

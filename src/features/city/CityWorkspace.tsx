@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { DynamicTabContainer } from "@/features/dock/DynamicTabContainer";
 import { spring, prefersReducedMotion } from "@/lib/motion";
@@ -6,8 +6,10 @@ import { useCityWorkspace } from "./useCityWorkspace";
 import { CityOverview } from "./CityOverview";
 import { getLastCityTool } from "@/lib/city/cityModel";
 import { useCitySummaryStore } from "@/lib/store/useCitySummaryStore";
+import { useConversationStore } from "@/lib/agent/conversationStore";
 import { NotesView } from "./tools/NotesView";
 import { SourcesView } from "./tools/SourcesView";
+import { SourceDetailView } from "./tools/SourceDetailView";
 import { QuestsView } from "./tools/QuestsView";
 import { TerminalView } from "./tools/TerminalView";
 import { FilesView } from "./tools/FilesView";
@@ -28,6 +30,8 @@ export function CityWorkspace({
   const isReduced = prefersReducedMotion();
 
   const { data, loading, saveNote, toggleQuest, openSource } = useCityWorkspace(cityId);
+  const readerView = useConversationStore((s) => s.readerView);
+  const openedSourceId = readerView?.cityId === cityId ? (readerView.sourceId ?? readerView.url) : null;
 
   // Publish live counts for the dock badges once the workspace loads.
   useEffect(() => {
@@ -46,6 +50,19 @@ export function CityWorkspace({
     }
     onSelectTool?.(toolId);
   };
+
+  // An agent-opened source surfaces in this city's Sources area (same
+  // surface as a feed click), so it stays visible wherever the user is.
+  const lastSurfacedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (openedSourceId && lastSurfacedRef.current !== openedSourceId) {
+      lastSurfacedRef.current = openedSourceId;
+      if (activeTool !== "sources" && activeTool !== "browser") handleSelectTool("sources");
+    }
+    if (!openedSourceId) lastSurfacedRef.current = null;
+    // handleSelectTool is stable by construction (setState + optional callback).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedSourceId, activeTool]);
 
   // Check if activeTool matches an agent dynamic tab
   const dynamicTab = data.dynamicTabs.find((t) => t.id === activeTool);
@@ -88,12 +105,16 @@ export function CityWorkspace({
               onSaveNote={saveNote}
             />
           ) : activeTool === "sources" || activeTool === "browser" ? (
-            <SourcesView
-              sources={data.sources}
-              cityName={data.title}
-              loading={loading}
-              onOpen={(id) => void openSource(id)}
-            />
+            openedSourceId && readerView ? (
+              <SourceDetailView view={readerView} />
+            ) : (
+              <SourcesView
+                sources={data.sources}
+                cityName={data.title}
+                loading={loading}
+                onOpen={(id) => void openSource(id)}
+              />
+            )
           ) : activeTool === "quests" ? (
             <QuestsView
               quests={data.quests}
