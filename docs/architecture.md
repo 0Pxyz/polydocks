@@ -111,7 +111,7 @@ Polymax utilizes the Meta Model API with the `muse-spark-1.3` standard model:
 - **Base URL:** `https://api.meta.ai/v1`
 - **Auth:** Bearer authentication with `MODEL_API_KEY`
 - **Zero Hallucination Validation:** Tool calls are validated via strict Zod schemas; invalid payloads return error text to the model with auto-retry (max 2 retries).
-- **Execution Loop (`server/agent/loop.ts`):** Parallel tool execution up to `MAX_STEPS` (default 8), streamed via Server-Sent Events (SSE).
+- **Execution Loop (`server/agent/loop.ts`):** Parallel tool execution until the model answers without tool calls (no env-imposed step cap; an explicit per-turn `maxSteps` remains available to callers), streamed via Server-Sent Events (SSE).
 
 ### 3.2. Native UI Synthesis (`create_tab`)
 When instructed, the agent synthesizes complete, self-contained micro-applications adhering to Polymax design tokens (Dark Theme: background `#0A0A0C`, accent `#C8FF57`, typography Inter/Syne/Geist Mono).

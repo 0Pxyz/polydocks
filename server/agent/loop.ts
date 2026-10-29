@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
@@ -75,6 +74,8 @@ export interface AgentLoopOptions {
   history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   tools?: AgentTool[];
   onEvent?: AgentEventCallback;
+  /** Optional per-call step cap. Omitted (default): run until the model
+   * answers without tool calls — no env-imposed cutoff. */
   maxSteps?: number;
   llmClient?: typeof llm;
   modelId?: string;
@@ -143,7 +144,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     history = [],
     tools = defaultTools,
     onEvent = () => {},
-    maxSteps = config.MAX_STEPS,
+    maxSteps = Number.POSITIVE_INFINITY,
     llmClient = llm,
     modelId = MODEL_ID,
     systemPrompt = DEFAULT_SYSTEM_PROMPT,
@@ -521,7 +522,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       if (taskId) {
         try {
-          const progress = Math.min(0.95, 0.05 + (currentStep / maxSteps) * 0.9);
+          // Bounded runs report fraction-of-cap progress; unbounded runs
+          // creep slowly so the bar never stalls mid-task.
+          const progress = Number.isFinite(maxSteps)
+            ? Math.min(0.95, 0.05 + (currentStep / maxSteps) * 0.9)
+            : Math.min(0.95, 0.05 + currentStep * 0.02);
           updateTaskState(taskId, "running", { progress });
         } catch {
           // Non-fatal
