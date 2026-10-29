@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   RotateCcw,
+  Trash2,
   Paperclip,
   Image as ImageIcon,
   UploadCloud,
@@ -51,6 +52,9 @@ export function AgentConversation({
     soundEnabled,
     audioLevel,
     orbState,
+    isHydratingThread,
+    isLoadingOlder,
+    hasOlderMessages,
     setLayoutState,
     setSideWidth,
     setDraft,
@@ -63,6 +67,8 @@ export function AgentConversation({
     retryLast,
     abortStream,
     handleApproval,
+    loadOlderMessages,
+    clearConversation,
   } = useConversationStore();
 
   const { dockPosition } = useThemeStore();
@@ -277,6 +283,18 @@ export function AgentConversation({
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    if (messages.length === 0 || window.confirm("Clear this conversation? The same chat stays open.")) {
+                      void clearConversation();
+                    }
+                  }}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Clear conversation (keeps the same chat)"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setLayoutState("full")}
                   className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
                   title="Expand to full chat"
@@ -328,7 +346,9 @@ export function AgentConversation({
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                   <p className="text-xs text-[#9aa5b8]">
-                    Speak or type to research topics, build tools, or explore your workspace.
+                    {isHydratingThread
+                      ? "Restoring your conversation…"
+                      : "Speak or type to research topics, build tools, or explore your workspace."}
                   </p>
                 </div>
               ) : (
@@ -556,6 +576,19 @@ export function AgentConversation({
 
         <button
           type="button"
+          onClick={() => {
+            if (messages.length === 0 || window.confirm("Clear this conversation? The same chat stays open.")) {
+              void clearConversation();
+            }
+          }}
+          className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+          title="Clear conversation (keeps the same chat)"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+
+        <button
+          type="button"
           onClick={() => setLayoutState(isSide ? "full" : "sheet")}
           className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
           title={isSide ? "Expand to full screen" : "Collapse to sheet"}
@@ -584,10 +617,29 @@ export function AgentConversation({
         )}
       >
         <div className="w-full pt-3 pb-8">
+        {/* Scroll-back inside the same thread: never a new conversation */}
+        {hasOlderMessages && (
+          <div className="flex justify-center pb-4">
+            <button
+              type="button"
+              onClick={() => void loadOlderMessages()}
+              disabled={isLoadingOlder}
+              className="px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.04] text-[11px] font-mono text-muted-foreground hover:text-white hover:bg-white/[0.08] disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {isLoadingOlder ? "Loading earlier turns…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
+
         {/* Empty State: centered composer with idle orb */}
         {messages.length === 0 && (
-          <div className="h-full min-h-[360px] flex flex-col items-center justify-center">
+          <div className="h-full min-h-[360px] flex flex-col items-center justify-center gap-3">
             <Orb state="idle" size="md" className="opacity-80 hover:opacity-100 transition-opacity" />
+            {isHydratingThread && (
+              <span className="text-xs font-mono text-muted-foreground">
+                Restoring your conversation…
+              </span>
+            )}
           </div>
         )}
 

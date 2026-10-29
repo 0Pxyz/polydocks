@@ -4,10 +4,13 @@ import type { ChatAttachment } from "./attachments";
 export interface SendAgentMessageOptions {
   prompt: string;
   cityId?: string;
+  userId?: string;
   modelId?: string;
   attachments?: ChatAttachment[];
   origin?: "dock-add" | "chat";
   history?: Array<{ role: "user" | "assistant"; content: string }>;
+  /** Ask the server to rewind the last completed turn before re-running it. */
+  retry?: boolean;
   onEvent: (event: UIEvent) => void;
   signal?: AbortSignal;
 }
@@ -18,7 +21,7 @@ export interface SendAgentMessageOptions {
 export async function streamAgentLoop(
   options: SendAgentMessageOptions
 ): Promise<void> {
-  const { prompt, cityId, modelId, attachments, origin, history = [], onEvent, signal } = options;
+  const { prompt, cityId, userId, modelId, attachments, origin, history = [], retry = false, onEvent, signal } = options;
 
   let response: Response;
   try {
@@ -27,13 +30,16 @@ export async function streamAgentLoop(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
+        ...(userId ? { "X-Polymax-User": userId } : {}),
       },
       body: JSON.stringify({
         prompt,
         cityId,
+        userId,
         modelId,
         attachments,
         origin,
+        retry,
         history,
       }),
       signal,
