@@ -2,10 +2,13 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, ArrowRight, ArrowSquareOut } from "@phosphor-icons/react";
 import { spring } from "@/lib/motion";
+import { useTabState } from "@/lib/tabs/useTabState";
 import type { CitySourceItem } from "./types";
 
 export interface FlashcardsViewProps {
   cityName: string;
+  /** Stable city id for persisted tab state (falls back to cityName). */
+  cityKey?: string;
   sources?: CitySourceItem[];
 }
 
@@ -17,8 +20,9 @@ interface Flashcard {
   sourceDomain: string;
 }
 
-export function FlashcardsView({ cityName, sources = [] }: FlashcardsViewProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+export function FlashcardsView({ cityName, cityKey, sources = [] }: FlashcardsViewProps) {
+  // Deck position persists across tab switches and hibernation.
+  const [currentIndex, setCurrentIndex] = useTabState<number>(`city:${cityKey ?? cityName}:flashcards`, "index", 0);
   const [isFlipped, setIsFlipped] = useState(false);
 
   const cards: Flashcard[] =

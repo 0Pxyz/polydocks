@@ -3,12 +3,15 @@ import { Play } from "@phosphor-icons/react";
 import { openExternalUrl } from "@/lib/platform";
 import { cn } from "@/lib/cn";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTabState } from "@/lib/tabs/useTabState";
 import { faviconUrl, territoryAccent, videoThumbnailCandidates } from "../sourceMedia";
 import type { CitySourceItem } from "../types";
 
 interface SourcesViewProps {
   sources: CitySourceItem[];
   cityName: string;
+  /** Stable city id for persisted tab state (falls back to cityName). */
+  cityKey?: string;
   loading?: boolean;
   /** Open a saved source in the in-chat reader (same path as sources.open). Falls back to a new tab only when absent. */
   onOpen?: (sourceId: string) => void;
@@ -102,9 +105,12 @@ function SourceImage({ item, large, accentKey }: { item: CitySourceItem; large?:
   );
 }
 
-export function SourcesView({ sources, cityName, loading = false, onOpen }: SourcesViewProps) {
-  const [activeFilter, setActiveFilter] = useState<KindFilter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+export function SourcesView({ sources, cityName, cityKey, loading = false, onOpen }: SourcesViewProps) {
+  // Filter + search persist across tab switches and hibernation (platform
+  // tab-lifecycle contract); thumbnail paging stays ephemeral.
+  const tabId = `city:${cityKey ?? cityName}:sources`;
+  const [activeFilter, setActiveFilter] = useTabState<KindFilter>(tabId, "filter", "all");
+  const [searchQuery, setSearchQuery] = useTabState<string>(tabId, "search", "");
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

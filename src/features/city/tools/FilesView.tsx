@@ -9,6 +9,7 @@ import {
   ArrowClockwise,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import { useTabState } from "@/lib/tabs/useTabState";
 
 export interface WorkspaceFileItem {
   path: string;
@@ -24,7 +25,9 @@ interface FilesViewProps {
 
 export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesViewProps) {
   const [files, setFiles] = useState<WorkspaceFileItem[]>([]);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // The open file persists across tab switches and hibernation; content is
+  // refetched on restore (fresh from disk, never a stale snapshot).
+  const [selectedFile, setSelectedFile] = useTabState<string | null>(`city:${cityId}:files`, "selected", null);
   const [fileContent, setFileContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -41,7 +44,9 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
         const data = await res.json();
         const list = data.files || [];
         setFiles(list);
-        if (list.length > 0 && !selectedFile) {
+        if (selectedFile && list.some((f: WorkspaceFileItem) => f.path === selectedFile)) {
+          loadFileContent(selectedFile);
+        } else if (list.length > 0 && !selectedFile) {
           loadFileContent(list[0].path);
         }
       }
