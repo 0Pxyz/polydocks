@@ -7,7 +7,7 @@ import { prefersReducedMotion } from "@/lib/motion";
 export interface ParticleWorldCanvasProps {
   world: ParticleWorld;
   selectedRegionId?: string | null;
-  onSelectRegion?: (region: ParticleRegion | null) => void;
+  onSelectRegion?: (region: ParticleRegion | null, anchor?: { x: number; y: number }) => void;
   className?: string;
   onResetCameraReady?: (resetFn: () => void) => void;
   /** Restored camera (position preserved across navigation). */
@@ -529,7 +529,7 @@ export function ParticleWorldCanvas({
       const hit = hitTestTerritory(mouseX, mouseY);
 
       if (hit) {
-        onSelectRegion?.(hit.region);
+        onSelectRegion?.(hit.region, { x: e.clientX, y: e.clientY });
       } else {
         onSelectRegion?.(null);
       }
@@ -623,7 +623,7 @@ export function ParticleWorldCanvas({
         const touchY = touch.clientY - rect.top;
         const hit = hitTestTerritory(touchX, touchY);
         if (hit) {
-          onSelectRegion?.(hit.region);
+          onSelectRegion?.(hit.region, { x: touch.clientX, y: touch.clientY });
         } else {
           onSelectRegion?.(null);
         }
