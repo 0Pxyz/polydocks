@@ -9,7 +9,6 @@ import {
   XCircle,
   X,
   PushPin,
-  PushPinSlash,
   Wrench,
 } from "@phosphor-icons/react";
 import {
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { resolveIcon } from "@/components/icons";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
@@ -378,18 +378,18 @@ export function CommandPalette({
     if (failedIds.has(item.id)) {
       return <Badge variant="destructive">Needs fix</Badge>;
     }
-    if (pinnedSet.has(item.id)) {
-      return <Badge variant="secondary">Pinned</Badge>;
-    }
     if (openSet.has(item.id)) {
       return <Badge variant="secondary">Open</Badge>;
     }
     return <Badge variant="outline">{KIND_BADGE[item.kind]}</Badge>;
   };
 
+  const isPinned = (item: DockItem) => pinnedSet.has(item.id);
+
   const renderDockRow = (item: DockItem) => {
     const Icon = resolveIcon(item.icon);
     const failed = failedIds.has(item.id);
+    const pinned = isPinned(item);
     const canPin = (item.kind === "builtin" || item.kind === "plugin" || item.kind === "tab") && !item.system;
     const showClose = openSet.has(item.id) && !item.system;
     return (
@@ -397,14 +397,14 @@ export function CommandPalette({
         key={`${item.kind}:${item.id}`}
         value={`${item.label} ${item.description} ${item.id}`}
         onSelect={() => handleSelectRow(item)}
-        className="flex items-center justify-between py-2.5 px-3 rounded-lg cursor-pointer"
+        className="group flex items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
       >
-        <div className="flex items-center gap-2.5 min-w-0 max-w-[75%]">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Icon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-sm font-medium text-white/95 truncate">{item.label}</span>
+          <div className="flex flex-col gap-0 min-w-0">
+            <span className="text-sm text-white/95 truncate" title={item.label}>{item.label}</span>
             {item.description && (
-              <span className="text-xs text-white/40 truncate">{item.description}</span>
+              <span className="text-xs text-white/40 truncate" title={item.description}>{item.description}</span>
             )}
             {failed && (
               <span className="text-xs text-red-300/80 truncate">
@@ -414,21 +414,17 @@ export function CommandPalette({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {renderBadge(item)}
           {canPin && (
             <button
               type="button"
               onClick={() => togglePin(item)}
-              title={pinnedSet.has(item.id) ? "Unpin from dock" : "Pin to dock"}
-              aria-label={pinnedSet.has(item.id) ? `Unpin ${item.label}` : `Pin ${item.label}`}
-              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title={pinned ? "Unpin from dock" : "Pin to dock"}
+              aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
-              {pinnedSet.has(item.id) ? (
-                <PushPinSlash className="w-3.5 h-3.5" />
-              ) : (
-                <PushPin className="w-3.5 h-3.5" />
-              )}
+              <PushPin className="w-3.5 h-3.5" weight={pinned ? "fill" : "regular"} />
             </button>
           )}
           {showClose && (
@@ -437,7 +433,7 @@ export function CommandPalette({
               onClick={() => handleCloseRow(item)}
               title="Close tab"
               aria-label={`Close ${item.label}`}
-              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -448,7 +444,7 @@ export function CommandPalette({
               onClick={() => handleFixRow(item)}
               title="Fix with agent"
               aria-label={`Fix ${item.label} with agent`}
-              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
               <Wrench className="w-3.5 h-3.5" />
             </button>
@@ -621,7 +617,8 @@ export function CommandPalette({
         </div>
       )}
 
-      <CommandList className="max-h-[380px] p-2 text-white">
+      <ScrollArea className="max-h-[248px] [&_[cmdk-item][data-selected='true']]:bg-white/[0.08] [&_[cmdk-item][data-selected='true']]:text-white [&_[cmdk-group-heading]]:sticky [&_[cmdk-group-heading]]:top-0 [&_[cmdk-group-heading]]:z-10 [&_[cmdk-group-heading]]:bg-popover">
+      <CommandList className="max-h-none overflow-visible p-2 text-white">
         {loading ? (
           <div className="flex flex-col gap-2 p-2" aria-label="Loading tools">
             <Skeleton className="h-12 w-full bg-white/5" />
@@ -658,15 +655,15 @@ export function CommandPalette({
                             key={item.id}
                             value={`${item.label} ${item.description} ${query}`}
                             onSelect={() => handleSelectRow(item)}
-                            className="flex items-center justify-between py-2.5 px-3 rounded-lg cursor-pointer"
+                            className="group flex items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
-                              <div className="flex flex-col gap-0.5 min-w-0">
-                                <span className="text-sm font-medium text-white/95 truncate">
+                              <div className="flex flex-col gap-0 min-w-0">
+                                <span className="text-sm text-white/95 truncate" title={item.label}>
                                   {item.label}
                                 </span>
-                                <span className="text-xs text-white/40 truncate">
+                                <span className="text-xs text-white/40 truncate" title={item.description}>
                                   {item.description}
                                 </span>
                               </div>
@@ -780,6 +777,7 @@ export function CommandPalette({
           </>
         )}
       </CommandList>
+      </ScrollArea>
 
       <div className="flex items-center justify-between border-t border-white/10 px-4 py-2 text-[11px] text-white/40">
         <span>Enter opens · ⌘↵ pins · Esc closes</span>
