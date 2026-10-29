@@ -17,6 +17,8 @@ import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
 import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { useTabHostStore } from "@/lib/tabs/tabHostStore";
+import { TabHost } from "@/features/dock/TabHost";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { buildCityDockTools, CITY_TOOL_IDS } from "@/lib/dock/dockModel";
 import { getLastCityTool, setLastCityTool } from "@/lib/city/cityModel";
@@ -30,6 +32,7 @@ export default function App() {
 
   const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
   const { setActiveTool: setDockActiveTool } = useDockStore();
+  const hostTabs = useTabHostStore((s) => s.tabs);
 
   const {
     layoutState,
@@ -74,6 +77,11 @@ export default function App() {
 
   const handleDismissTool = (toolIdToDismiss?: string) => {
     const targetTool = toolIdToDismiss ?? activeToolId;
+    // Explicit dismiss destroys the tab runtime (reopen mounts fresh);
+    // toggling via the dock merely hides it (state kept).
+    if (targetTool && activeExtraTools.some((t) => t.id === targetTool)) {
+      useTabHostStore.getState().closeTab(targetTool);
+    }
     setActiveToolId("");
     if (targetTool) {
       const dockBtn = document.querySelector<HTMLButtonElement>(
@@ -222,6 +230,15 @@ export default function App() {
       dock.closeTool(dock.openIds[0]);
     }
   }, [activeToolId]);
+
+  useEffect(() => {
+    // Host-owned lifecycle: selecting a dynamic plugin tab mounts it once.
+    // The TabHost below keeps it mounted but hidden afterwards, so
+    // returning to it is 0 remounts; hibernated tabs restore on reopen.
+    if (activeToolId && activeExtraTools.some((t) => t.id === activeToolId)) {
+      useTabHostStore.getState().openTab(activeToolId, "plugin");
+    }
+  }, [activeToolId, activeExtraTools]);
 
   const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
   const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
@@ -459,15 +476,25 @@ export default function App() {
               </DockSurface>
             ) : activeExtraTools.some((t) => t.id === activeToolId) ? (
               <DockSurface variant="immersive">
-                <DynamicPluginSandbox
-                  pluginId={activeToolId}
-                  title={activeExtraTools.find((t) => t.id === activeToolId)?.label}
-                  onDismiss={() => handleDismissTool(activeToolId)}
-                  onAskAgentFix={(errorMsg) => {
-                    handleToolPromptSubmit(`Fix tool "${activeToolId}": ${errorMsg}`, {
-                      origin: "dock-fix",
-                    });
-                  }}
+                <TabHost
+                  activeId={activeToolId}
+                  tabs={activeExtraTools
+                    .filter((t) => hostTabs[t.id]?.status === "live")
+                    .map((t) => ({
+                      id: t.id,
+                      render: () => (
+                        <DynamicPluginSandbox
+                          pluginId={t.id}
+                          title={t.label}
+                          onDismiss={() => handleDismissTool(t.id)}
+                          onAskAgentFix={(errorMsg) => {
+                            handleToolPromptSubmit(`Fix tool "${t.id}": ${errorMsg}`, {
+                              origin: "dock-fix",
+                            });
+                          }}
+                        />
+                      ),
+                    }))}
                 />
               </DockSurface>
             ) : isCityMode ? (
