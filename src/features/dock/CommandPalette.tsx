@@ -305,9 +305,16 @@ export function CommandPalette({
   // Empty query stays small: open items, then unpinned tools, then three
   // static create rows. Pinned non-open items are hidden here (already in
   // the dock above) and appear once the user types.
+  const showBrowseRow = storeItems.length > 0;
   const emptySliced = useMemo(
-    () => visibleEmptyQuery({ docked: dockedItems, yours: yoursItems, openIds }),
-    [dockedItems, yoursItems, openIds]
+    () =>
+      visibleEmptyQuery({
+        docked: dockedItems,
+        yours: yoursItems,
+        openIds,
+        reserved: showBrowseRow ? 1 : 0,
+      }),
+    [dockedItems, yoursItems, openIds, showBrowseRow]
   );
   const staticCreateRows = useMemo(() => getStaticCreateRows(cityId), [cityId]);
 
@@ -319,8 +326,7 @@ export function CommandPalette({
     );
   }, [capabilities, trimmedQuery]);
 
-  const dockMatchCount =
-    dockedItems.length + yoursItems.length + storeSectionItems.length + sections[3].items.length;
+  const dockMatchCount = dockedItems.length + yoursItems.length + storeSectionItems.length;
   const showNoMatchRow =
     !isEmptyQuery && !browseStore && dockMatchCount === 0 && capMatches.length === 0;
 
@@ -433,7 +439,7 @@ export function CommandPalette({
         onSelect={() => handleSelectRow(item)}
         className={ROW_CLASS}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
           <Icon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
           <div className="flex flex-col gap-0 min-w-0">
             <span className="text-sm text-white/95 truncate" title={item.label}>{item.label}</span>
@@ -495,7 +501,7 @@ export function CommandPalette({
       onSelect={() => handleSelectRow(item)}
       className={ROW_CLASS}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
         <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
         <div className="flex flex-col gap-0 min-w-0">
           <span className="text-sm text-white/95 truncate" title={item.label}>
@@ -519,7 +525,7 @@ export function CommandPalette({
         onSelect={() => setBrowseStore(true)}
         className={ROW_CLASS}
       >
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
           <StoreIcon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />
           <div className="flex flex-col gap-0 min-w-0">
             <span className="text-sm text-white/95 truncate">Browse store</span>
@@ -539,7 +545,7 @@ export function CommandPalette({
       onSelect={() => setBrowseStore(false)}
       className={ROW_CLASS}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
         <ArrowLeft className="w-4 h-4 shrink-0 text-white/50" />
         <span className="text-sm text-white/95">All tools</span>
       </div>
@@ -556,7 +562,7 @@ export function CommandPalette({
       }}
       className={ROW_CLASS}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
         <Sparkle className="w-4 h-4 shrink-0 text-lime-400" weight="bold" />
         <div className="flex flex-col gap-0 min-w-0">
           <span className="text-sm text-white/95 truncate">No match. Ask the agent to create it</span>
@@ -776,7 +782,7 @@ export function CommandPalette({
                 {(emptySliced.yours.length > 0 || storeItems.length > 0) && (
                   <CommandGroup key="yours" heading="Your tools">
                     {emptySliced.yours.map((item) => renderDockRow(item))}
-                    {storeItems.length > 0 && renderBrowseStoreRow()}
+                    {showBrowseRow && renderBrowseStoreRow()}
                   </CommandGroup>
                 )}
                 <CommandGroup key="create" heading="Create with agent">

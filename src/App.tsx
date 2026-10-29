@@ -314,6 +314,7 @@ export default function App() {
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
             extraTools={activeExtraTools}
+            sessionTools={extraTools}
             onSelectTool={handleSelectTool}
             onCloseItem={(toolId) => {
               if (toolId === "agent") {

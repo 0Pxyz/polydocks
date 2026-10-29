@@ -147,6 +147,8 @@ interface AgenticDockProps {
   isAgentWorking?: boolean;
   isAgentSheetOpen?: boolean;
   extraTools?: DockToolItem[];
+  /** Session-created experiences (palette catalog; installed plugins come from the store fetch). */
+  sessionTools?: DockToolItem[];
   tools?: DockToolItem[];
   /** Close a dock tab (never deletes). */
   onCloseItem?: (toolId: string) => void;
@@ -172,6 +174,7 @@ export function AgenticDock({
   isAgentWorking = false,
   isAgentSheetOpen = false,
   extraTools = [],
+  sessionTools = [],
   tools: explicitTools,
   onCloseItem,
   onSubmitToolPrompt,
@@ -373,7 +376,7 @@ export function AgenticDock({
           >
             <CommandPalette
               cityId={cityName}
-              extraItems={extraTools.map(
+              extraItems={sessionTools.map(
                 (tool): DockItem => ({
                   id: tool.id,
                   label: tool.label,
