@@ -48,7 +48,7 @@ import { generate_image } from "./generate_image";
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList } from "./verbs/dock";
-import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate } from "./verbs/plugins";
+import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback } from "./verbs/plugins";
 import { config } from "../../config";
 
 export * from "./types";
@@ -109,6 +109,7 @@ export {
   pluginsInstall,
   pluginsUninstall,
   pluginsOperate,
+  pluginsRollback,
 };
 
 /**
@@ -177,6 +178,7 @@ export const minimalTools: AgentTool[] = [
   pluginsInstall,
   pluginsUninstall,
   pluginsOperate,
+  pluginsRollback,
 ];
 
 export const fullTools: AgentTool[] = fullToolsList;

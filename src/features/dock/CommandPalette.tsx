@@ -116,6 +116,20 @@ export function CommandPalette({
   const [installingId, setInstallingId] = useState<string | null>(null);
   const modifierHeld = useRef(false);
 
+  // Mirror UI pins to the server record (durable per-workspace truth).
+  // Best-effort: the local pin already applied and stays on failure.
+  const syncPinServer = useCallback((itemId: string, pinned: boolean) => {
+    const wsId = useWorkspaceStore.getState().activeWorkspaceId || "default";
+    const url = pinned
+      ? `/api/workspaces/${encodeURIComponent(wsId)}/pins`
+      : `/api/workspaces/${encodeURIComponent(wsId)}/pins/${encodeURIComponent(itemId)}`;
+    void fetch(url, {
+      method: pinned ? "POST" : "DELETE",
+      headers: pinned ? { "Content-Type": "application/json" } : undefined,
+      body: pinned ? JSON.stringify({ id: itemId }) : undefined,
+    }).catch(() => {});
+  }, []);
+
   const pinnedToolIds = useDockStore((s) => s.pinnedToolIds);
   const openIds = useDockStore((s) => s.openIds);
   const pinTool = useDockStore((s) => s.pinTool);
@@ -376,25 +390,29 @@ export function CommandPalette({
       if (modifierHeld.current && (item.kind === "builtin" || item.kind === "plugin" || item.kind === "tab") && !item.system) {
         if (pinnedSet.has(item.id)) {
           unpinTool(item.id);
+          void syncPinServer(item.id, false);
         } else {
           pinTool(item.id);
+          void syncPinServer(item.id, true);
         }
         return;
       }
       handlePrimaryAction(item);
     },
-    [handlePrimaryAction, pinTool, pinnedSet, unpinTool]
+    [handlePrimaryAction, pinTool, pinnedSet, syncPinServer, unpinTool]
   );
 
   const togglePin = useCallback(
     (item: DockItem) => {
       if (pinnedSet.has(item.id)) {
         unpinTool(item.id);
+        void syncPinServer(item.id, false);
       } else {
         pinTool(item.id);
+        void syncPinServer(item.id, true);
       }
     },
-    [pinTool, pinnedSet, unpinTool]
+    [pinTool, pinnedSet, syncPinServer, unpinTool]
   );
 
   const handleCloseRow = useCallback(

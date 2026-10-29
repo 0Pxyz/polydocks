@@ -77,6 +77,15 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
     const { enforceInstallPolicy } = await import("../installPolicy");
     const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
     if (denied) return denied;
+
+    // Visual kit gate (agent-created code is validated strict).
+    {
+      const { validateSlop } = await import("../../plugins/slop");
+      const report = validateSlop(args.code, { strict: ctx?.actor === "agent" });
+      if (!report.ok) {
+        return { success: false, error: `Design kit violation: ${report.errors.join("; ")}`, code: "slop_violation" };
+      }
+    }
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
 
     // Retry safety: an idempotency key that already executed returns the

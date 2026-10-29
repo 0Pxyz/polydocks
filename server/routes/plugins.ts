@@ -299,6 +299,32 @@ pluginsRouter.post("/lifecycle", async (c) => {
 });
 
 /**
+ * GET /api/plugins/:id/versions - Kept versions of a plugin (edit history).
+ */
+pluginsRouter.get("/:id/versions", async (c) => {
+  const { pluginVersions } = await import("../facade/shared");
+  const out = await pluginVersions(c.req.param("id"));
+  if (!out.ok) return c.json(out, 400);
+  return c.json(out);
+});
+
+/**
+ * POST /api/plugins/:id/rollback - Roll back to a kept version { version }.
+ * Workspace plugins append a new version row with the old content;
+ * registry-tracked ones reactivate via the versions table.
+ */
+pluginsRouter.post("/:id/rollback", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { pluginRollback } = await import("../facade/shared");
+  const out = await pluginRollback(c.req.param("id"), (body as any)?.version, (body as any)?.workspaceId || c.req.query("workspaceId"));
+  if (!out.ok) {
+    const status = (out as any).code === "not_found" ? 404 : 400;
+    return c.json(out, status as any);
+  }
+  return c.json(out);
+});
+
+/**
  * POST /api/plugins/:pluginId/:capability - Invoke a contract capability.
  * Generated surface: every defineCapability registration is invocable
  * here with the same envelope the agent and CLI receive.

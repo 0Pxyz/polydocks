@@ -27,6 +27,12 @@ export const dock_unpin: AgentTool<{ id: string; cityId?: string }> = {
         message: "The map is always in the dock and cannot be removed.",
       };
     }
+    try {
+      const { unpinDockItem } = await import("../../workspace/workspaces");
+      unpinDockItem(ctx.workspaceId || targetCity, resolution.entry.id);
+    } catch {
+      // Non-fatal: the client-side unpin still applies.
+    }
     return {
       success: true,
       id: resolution.entry.id,

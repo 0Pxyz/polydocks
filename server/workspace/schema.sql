@@ -228,6 +228,16 @@ CREATE TABLE IF NOT EXISTS workspace_plugins (
   FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
 
+-- Dock pins: server record of pinned items per workspace scope.
+-- The client keeps its own pin cache; this table is the durable truth
+-- the agent, CLI and routes share (pin persists across sessions).
+CREATE TABLE IF NOT EXISTS dock_pins (
+  workspace_id TEXT NOT NULL,
+  item_id TEXT NOT NULL,
+  pinned_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, item_id)
+);
+
 CREATE TABLE IF NOT EXISTS registry_plugins (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

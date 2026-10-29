@@ -82,6 +82,9 @@ COMMANDS:
                                        Same handler as POST /api/plugins/:id/:capability
   plugins lifecycle --op <create|modify|publish|install|uninstall> [--k v]
                                        Same handler as POST /api/plugins/lifecycle
+  plugins versions <pluginId>          List kept versions (edit history)
+  plugins rollback <pluginId> --version <v> [--workspace <id>]
+                                       Roll back to a kept version
   dock tabs [--city <id>]              List dock tabs (same as GET /api/dock/tabs)
   dock action --op <op> [--k v] [--city <id>]
                                        Dock verb (same as POST /api/dock/action)
@@ -345,7 +348,7 @@ async function handlePlugins(
     process.exit(1);
   }
 
-  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", "install", "invoke", or "lifecycle".`);
+  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", "install", "invoke", "lifecycle", "versions", or "rollback".`);
   process.exit(1);
 }
 
@@ -414,6 +417,29 @@ async function handlePluginsLifecycle(
   });
   printEnvelope(out, options);
   process.exit(out.ok ? 0 : 1);
+}
+
+/** plugins versions <pluginId> | plugins rollback <pluginId> --version <v>. */
+async function handlePluginsVersions(
+  posArgs: string[],
+  rawTail: string[],
+  subcommand: string,
+  options: CliOptions
+): Promise<void> {
+  const { parseContractFlags } = await import("../server/plugins/contractCli");
+  const { input } = parseContractFlags(rawTail);
+  const shared = await import("../server/facade/shared");
+  const pluginId = posArgs[0] || (input as any).pluginId;
+  if (!pluginId) {
+    console.error(`Error: Usage: polydocks plugins ${subcommand} <pluginId> [--version <v>]`);
+    process.exit(1);
+  }
+  const out =
+    subcommand === "versions"
+      ? await shared.pluginVersions(pluginId)
+      : await shared.pluginRollback(pluginId, (input as any).version, options.workspace || (input as any).workspaceId);
+  printEnvelope(out, options);
+  process.exit((out as any)?.ok ? 0 : 1);
 }
 
 /** dock <tabs|action|scope|appearance> — same handlers as /api/dock. */
@@ -643,6 +669,11 @@ async function main(): Promise<void> {
         if (subcommand === "lifecycle") {
           const tail = rawArgs.slice(rawArgs.indexOf("lifecycle") + 1);
           await handlePluginsLifecycle(positional, tail, options);
+          break;
+        }
+        if (subcommand === "versions" || subcommand === "rollback") {
+          const tail = rawArgs.slice(rawArgs.indexOf(subcommand) + 1);
+          await handlePluginsVersions(positional, tail, subcommand, options);
           break;
         }
         await handlePlugins(subcommand, positional, options);
