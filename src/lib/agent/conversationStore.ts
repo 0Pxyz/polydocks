@@ -400,7 +400,18 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     });
   },
 
-  openReader: (view) => set({ readerView: view, statusText: "" }),
+  openReader: (view) => {
+    // The reader panel mounts inside the agent surface, which returns
+    // null when closed (the default). Opening a source must also surface
+    // it, or feed clicks die silently with no tab and no panel.
+    const { layoutState } = get();
+    if (layoutState === "closed") {
+      const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+      set({ readerView: view, statusText: "", layoutState: isWide ? "side" : "sheet" });
+    } else {
+      set({ readerView: view, statusText: "" });
+    }
+  },
 
   closeReader: () => set({ readerView: null }),
 

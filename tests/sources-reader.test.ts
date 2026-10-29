@@ -142,6 +142,25 @@ describe("sources.open modes (no silent fallbacks)", () => {
     expect(useConversationStore.getState().readerView).toBeNull();
   });
 
+  it("opening a source with the agent surface closed surfaces the reader (closed-chat no-op regression)", () => {
+    // Feed clicks land here while the user browses the city with the chat
+    // closed (the default). AgentConversation returns null when closed, so
+    // setting readerView alone renders nothing: the click dies silently.
+    useConversationStore.setState({ layoutState: "closed", readerView: null });
+    useConversationStore.getState().openReader({
+      sourceId: "s1",
+      mode: "reader",
+      title: "T",
+      url: "https://example.com/a",
+      cityId: CITY,
+      markdown: "# T",
+    });
+    expect(useConversationStore.getState().readerView?.mode).toBe("reader");
+    // The reader panel only mounts when the agent surface is open.
+    expect(useConversationStore.getState().layoutState).not.toBe("closed");
+    useConversationStore.getState().closeReader();
+  });
+
   it("sources.open returns the mode per type through the agent surface", async () => {
     const mk = (kind: string, url: string, fullText: string | null) => {
       const id = `t_${Math.random().toString(36).slice(2, 8)}`;
