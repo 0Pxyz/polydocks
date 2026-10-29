@@ -33,7 +33,8 @@ describe("React allowlist + vendored kit bundling", () => {
     const js = bundleFeatureCode(REACT_SAMPLE);
     expect(js).toContain("window.__polymaxKit.React");
     expect(js).toContain("window.__polymaxKit.UI");
-    expect(js).toContain("window.__polymaxKit.jsxDEV");
+    // Production JSX runtime: hashed helpers normalize to jsxs/jsx.
+    expect(js).toContain("window.__polymaxKit.jsxs");
     expect(js).not.toMatch(/^\s*import\s/m);
     expect(js).not.toMatch(/\bjsxDEV_[A-Za-z0-9]+|\bjsx_[A-Za-z0-9]+|\bjsxs_[A-Za-z0-9]+/);
     expect(js).toContain("useState");
@@ -97,4 +98,12 @@ describe("React allowlist + vendored kit bundling", () => {
     expect(back.code).toContain("useState");
     db.query("DELETE FROM plugin_files WHERE workspace_id = ?").run(ws);
   }, 30000);
+
+  it("ships a production React build without development warnings", () => {
+    const kit = getKitJs();
+    expect(kit).toContain("globalThis.__polymaxKit");
+    expect(kit).not.toContain("Internal React error");
+    expect(kit).not.toContain("Download the React DevTools");
+    expect(kit).not.toContain("__DEV__");
+  });
 });

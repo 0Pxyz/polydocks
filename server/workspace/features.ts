@@ -256,6 +256,9 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
   <script>
     try {
 ${escapeInlineScript(jsCode)}
+      // Mounted without throwing: tell the host the UI is live. The host
+      // shows its error row (never raw text) if this never arrives.
+      window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
       window.parent.postMessage({
@@ -397,6 +400,9 @@ ${escapeInlineScript(kit.js)}
   <script>
     try {
 ${escapeInlineScript(guestJs)}
+      // Mounted without throwing: tell the host the UI is live. The host
+      // shows its error row (never raw text) if this never arrives.
+      window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
       window.parent.postMessage({

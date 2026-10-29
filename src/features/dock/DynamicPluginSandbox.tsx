@@ -38,6 +38,10 @@ export function DynamicPluginSandbox({
   const [error, setError] = useState<string | null>(null);
   const [readerUrl, setReaderUrl] = useState<string | null>(null);
   const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // New builds post `polymaxAction: "ui.ready"` after mounting (see
+  // buildFeatureSrcdoc/buildReactSrcdoc). Only those get strict timeout
+  // behavior; legacy srcdocs keep the lenient auto-reveal below.
+  const requiresReadyRef = useRef(false);
 
   const fetchSrcdoc = useCallback(async () => {
     try {
@@ -53,6 +57,8 @@ export function DynamicPluginSandbox({
         throw new Error(`Failed to load ${title || pluginId} (HTTP ${res.status})`);
       }
       const text = await res.text();
+      requiresReadyRef.current =
+        text.includes('polymaxAction: "ui.ready"') || text.includes("polymaxAction: 'ui.ready'");
       setSrcdoc(text);
     } catch (err: any) {
       setError(err?.message || `Failed to load ${title || pluginId}`);
@@ -95,14 +101,23 @@ export function DynamicPluginSandbox({
     };
   }, [workspaceId, pluginId, onDismiss]);
 
-  // 3-second ready handshake timeout once srcdoc is mounted
+  // 3-second ready handshake timeout once srcdoc is mounted.
+  // Strict for new builds (ready marker present): no ready signal means the
+  // guest never mounted, so surface the error row with reload + agent fix
+  // instead of revealing potentially raw output.
   useEffect(() => {
     if (!srcdoc || fetching) return;
 
     handshakeTimerRef.current = setTimeout(() => {
       if (!isReady) {
-        // If iframe loaded without explicit handshake, check if document is ready or gracefully reveal
-        setIsReady(true);
+        if (requiresReadyRef.current) {
+          setError(
+            `Failed to load ${title || pluginId} (mount timeout: no ready signal from guest)`
+          );
+        } else {
+          // Legacy srcdoc without a ready post: gracefully reveal on load.
+          setIsReady(true);
+        }
       }
     }, 3000);
 
@@ -111,11 +126,14 @@ export function DynamicPluginSandbox({
         clearTimeout(handshakeTimerRef.current);
       }
     };
-  }, [srcdoc, fetching, isReady]);
+  }, [srcdoc, fetching, isReady, title, pluginId]);
 
   const handleIframeLoad = () => {
-    // When iframe triggers native load event
-    setIsReady(true);
+    // When iframe triggers native load event. New builds wait for the
+    // explicit ready signal instead (see timeout above).
+    if (!requiresReadyRef.current) {
+      setIsReady(true);
+    }
   };
 
   const handleAskAgent = () => {
