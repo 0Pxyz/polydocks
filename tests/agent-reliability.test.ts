@@ -169,8 +169,10 @@ describe("Scenario C: plugin update never recreates", () => {
   });
 
   it("create_plugin refuses to overwrite and points at modify_plugin", async () => {
+    // The duplicate guard checks registries AND plugin_files namespaces.
     db.query("DELETE FROM workspace_plugins WHERE plugin_id = 'test-guard-dup'").run();
     db.query("DELETE FROM plugins WHERE id = 'test-guard-dup'").run();
+    db.query("DELETE FROM plugin_files WHERE plugin_id = 'test-guard-dup'").run();
     try {
       const first = await create_plugin.execute(
         { id: "test-guard-dup", name: "Guard", description: "guard", code: "const a = 1;" },
@@ -186,6 +188,7 @@ describe("Scenario C: plugin update never recreates", () => {
     } finally {
       db.query("DELETE FROM workspace_plugins WHERE plugin_id = 'test-guard-dup'").run();
       db.query("DELETE FROM plugins WHERE id = 'test-guard-dup'").run();
+      db.query("DELETE FROM plugin_files WHERE plugin_id = 'test-guard-dup'").run();
     }
   });
 });
