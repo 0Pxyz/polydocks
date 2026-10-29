@@ -16,6 +16,7 @@ import {
 } from "../workspace/thread";
 import { maybeCompactAgentThread } from "./threadCompaction";
 import { getMemoryContext } from "./memory";
+import { extractUsage, recordTurnUsage } from "./usage";
 import {
   getSession,
   createSession,
@@ -172,6 +173,41 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   let currentStep = 0;
 
+  // Skill selection runs before the first model call so the UI and debug
+  // logs show exactly which skills shape this turn (next to model).
+  const loadedSkills: string[] = [];
+
+  // Measured cost accounting: every Chat Completions response carries
+  // `usage`, accumulated here and reported in `agent.finish`.
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  const noteUsage = (response: unknown) => {
+    const u = extractUsage(response);
+    totalInputTokens += u.inputTokens;
+    totalOutputTokens += u.outputTokens;
+  };
+  const finishPayload = async (text: string) => {
+    const { turn, daily } = await recordTurnUsage({
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      steps: currentStep,
+      skills: loadedSkills,
+    });
+    return {
+      text,
+      steps: currentStep,
+      model: effectiveModel,
+      skills: loadedSkills,
+      inputTokens: turn.inputTokens,
+      outputTokens: turn.outputTokens,
+      costUsd: turn.costUsd,
+      dailyTurns: daily.turns,
+      dailyInputTokens: daily.inputTokens,
+      dailyOutputTokens: daily.outputTokens,
+      dailyCostUsd: daily.costUsd,
+    };
+  };
+
   // Resolve workspace context. Session persistence (SQLite rows, JSONL
   // transcripts, SSE replay buffers) belongs to the background/task path
   // only: explicit sessionId or taskId. The interactive single-thread path
@@ -232,10 +268,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         // Non-fatal
       }
     }
-
-    // Skill selection runs before the first model call so the UI and debug
-    // logs show exactly which skills shape this turn (next to model).
-    const loadedSkills: string[] = [];
 
     // Build tool registry map and OpenAI-compatible tools definitions
     const toolMap = new Map<string, AgentTool>();
@@ -521,6 +553,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
 
       const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
+      noteUsage(response);
       const choice = response.choices?.[0];
 
       if (!choice || !choice.message) {
@@ -559,7 +592,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         await emit({
           step: currentStep,
           type: "agent.finish",
-          payload: { text: finalText, steps: currentStep },
+          payload: await finishPayload(finalText),
         });
 
         return {
@@ -761,6 +794,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         messages: fallbackMessages,
         ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
       });
+      noteUsage(fallbackResponse);
 
       const fallbackChoice = fallbackResponse.choices?.[0];
       if (fallbackChoice?.message?.content) {
@@ -801,10 +835,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await emit({
       step: currentStep,
       type: "agent.finish",
-      payload: {
-        text: fallbackText,
-        steps: currentStep,
-      },
+      payload: await finishPayload(fallbackText),
     });
 
     return {
