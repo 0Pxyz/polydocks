@@ -9,6 +9,8 @@ interface SourcesViewProps {
   sources: CitySourceItem[];
   cityName: string;
   loading?: boolean;
+  /** Open a saved source in the in-chat reader (same path as sources.open). Falls back to a new tab only when absent. */
+  onOpen?: (sourceId: string) => void;
 }
 
 type KindFilter = "all" | "article" | "paper" | "video";
@@ -84,7 +86,7 @@ function SourceImage({ item, large }: { item: CitySourceItem; large?: boolean })
   );
 }
 
-export function SourcesView({ sources, cityName, loading = false }: SourcesViewProps) {
+export function SourcesView({ sources, cityName, loading = false, onOpen }: SourcesViewProps) {
   const [activeFilter, setActiveFilter] = useState<KindFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -157,7 +159,7 @@ export function SourcesView({ sources, cityName, loading = false }: SourcesViewP
             <button
               key={featured.url}
               type="button"
-              onClick={() => openExternalUrl(featured.url)}
+              onClick={() => (featured.id && onOpen ? onOpen(featured.id) : openExternalUrl(featured.url))}
               className="group block w-full cursor-pointer bg-transparent p-0 text-left"
             >
               <SourceImage item={featured} large />
@@ -178,7 +180,7 @@ export function SourcesView({ sources, cityName, loading = false }: SourcesViewP
                 <button
                   key={item.id || item.url}
                   type="button"
-                  onClick={() => openExternalUrl(item.url)}
+                  onClick={() => (item.id && onOpen ? onOpen(item.id) : openExternalUrl(item.url))}
                   className="group block w-full cursor-pointer bg-transparent p-0 text-left"
                 >
                   <SourceImage item={item} />

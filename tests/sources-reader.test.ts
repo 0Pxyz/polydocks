@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll } from "bun:test
 import { resolveSourceMode, videoEmbedUrl } from "../server/plugins/sources";
 import { htmlToMarkdown } from "../server/reader/service";
 import { adaptBackendEvent } from "../src/lib/agent/events";
-import { useConversationStore } from "../src/lib/agent/conversationStore";
+import { useConversationStore, applyReaderOpened } from "../src/lib/agent/conversationStore";
 import { invoke_capability } from "../server/agent/tools/invoke_capability";
 import { PluginRegistry } from "../server/plugins/registry";
 import { initializeFirstPartyPlugins } from "../server/plugins/first-party/index";
@@ -108,6 +108,23 @@ describe("sources.open modes (no silent fallbacks)", () => {
       expect(ui.markdown).toBe("# T");
       expect(ui.cityId).toBe(CITY);
     }
+  });
+
+  it("wires the emitted event all the way to reader UI state", () => {
+    const ui = adaptBackendEvent({
+      type: "reader.open",
+      step: 3,
+      payload: { id: "s9", url: "https://example.com/a", mode: "video", title: "V", embedUrl: "https://x/y", cityId: CITY },
+    });
+    expect(ui?.type).toBe("reader.open");
+    // The store case delegates here: if nothing listened, the panel would
+    // never open (regression test for the old browser.open black hole).
+    applyReaderOpened(ui as any);
+    const view = useConversationStore.getState().readerView;
+    expect(view?.mode).toBe("video");
+    expect(view?.embedUrl).toBe("https://x/y");
+    useConversationStore.getState().closeReader();
+    expect(useConversationStore.getState().readerView).toBeNull();
   });
 
   it("opening changes UI state; closing returns to the feed", () => {

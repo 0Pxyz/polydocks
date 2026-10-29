@@ -99,6 +99,13 @@ describe("Contract: one definition, every surface", () => {
     expect(agentEnv.data.title).toBe("Deep Work Rules");
     expect(agentEnv.data.image).toBe("https://example.com/img/deep.jpg");
     expect(agentEnv.data.site).toBe("example.com");
+    // fullText stays out of the envelope (12KB would bloat every surface),
+    // but the row must carry it: the reader depends on saved text, not refetch.
+    const row = db
+      .query("SELECT full_text FROM sources WHERE id = ?")
+      .get(agentEnv.id) as any;
+    expect(typeof row?.full_text).toBe("string");
+    expect(row.full_text.length).toBeGreaterThan(0);
     expect(agentEnv.events.some((e: any) => e.type === "source.added")).toBe(true);
     const savedId = agentEnv.id as string;
     expect(typeof savedId).toBe("string");

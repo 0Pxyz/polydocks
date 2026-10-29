@@ -13,6 +13,7 @@ export interface CitySourceItem {
   publishedAt?: string | null;
   readMinutes?: number | null;
   durationSec?: number | null;
+  fullText?: string | null;
 }
 
 export interface CityNoteItem {

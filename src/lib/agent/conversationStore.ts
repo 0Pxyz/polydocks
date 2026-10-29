@@ -679,21 +679,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
-          case "reader.open": {
-            get().openReader({
-              sourceId: event.id,
-              mode: event.mode || "external",
-              title: event.title || event.url,
-              url: event.url,
-              cityId: event.cityId,
-              site: event.site,
-              image: event.image ?? undefined,
-              markdown: event.markdown,
-              embedUrl: event.embedUrl,
-              reason: event.reason,
-            });
+          case "reader.open":
+            applyReaderOpened(event);
             break;
-          }
 
           case "city.entered": {            try {
               const { useNavigationStore } = await import("@/lib/store/useNavigationStore");
@@ -955,3 +943,34 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     }
   },
 }));
+
+/**
+ * Applies a reader.open UI event to the store. Exported so tests prove the
+ * wiring: an emitted event with no listener here means the reader never
+ * opens (the old browser.open hole).
+ */
+export function applyReaderOpened(event: {
+  id?: string;
+  mode?: "video" | "reader" | "embed" | "external";
+  title?: string;
+  url: string;
+  cityId?: string;
+  site?: string;
+  image?: string | null;
+  markdown?: string;
+  embedUrl?: string;
+  reason?: string;
+}): void {
+  useConversationStore.getState().openReader({
+    sourceId: event.id,
+    mode: event.mode || "external",
+    title: event.title || event.url,
+    url: event.url,
+    cityId: event.cityId,
+    site: event.site,
+    image: event.image ?? undefined,
+    markdown: event.markdown,
+    embedUrl: event.embedUrl,
+    reason: event.reason,
+  });
+}
