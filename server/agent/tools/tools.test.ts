@@ -80,14 +80,19 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("generate_image");
   });
 
-  it("minimal surface is the eleven verb tools", () => {
+  it("minimal surface is the verb tools", () => {
     const names = minimalTools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
+        "chat.toggle",
+        "dock.background",
         "dock.close",
+        "dock.focus",
         "dock.list",
+        "dock.next",
         "dock.open",
         "dock.pin",
+        "dock.prev",
         "dock.unpin",
         "plugins.create",
         "plugins.edit",
