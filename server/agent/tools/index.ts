@@ -2,6 +2,7 @@ import type { AgentTool } from "./types";
 import { list_tabs } from "./list_tabs";
 import { open_tab } from "./open_tab";
 import { open_intent } from "./open_intent";
+import { enter_city } from "./enter_city";
 import { inspect_tab } from "./inspect_tab";
 import { close_tray } from "./close_tray";
 import { create_tab } from "./create_tab";
@@ -48,6 +49,7 @@ export {
   list_tabs,
   open_tab,
   open_intent,
+  enter_city,
   inspect_tab,
   close_tray,
   dock_search,
@@ -97,6 +99,7 @@ export const defaultTools: AgentTool[] = [
   list_tabs,
   open_tab,
   open_intent,
+  enter_city,
   inspect_tab,
   close_tray,
   dock_search,

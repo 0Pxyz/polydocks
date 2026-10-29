@@ -872,6 +872,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
+        // Entering a city switches the UI into its workspace. Without this
+        // event the agent opens tabs in the global scope and city content
+        // shows nothing (dock marks it open, viewport stays empty).
+        if (
+          toolName === "enter_city" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).action === "city.enter" &&
+          typeof (toolOutput as any).cityId === "string"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "city.enter",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
         // Dock layout directives: the client applies these through the shared
         // dock layer and reads the resulting state back.
         if (

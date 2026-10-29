@@ -14,7 +14,7 @@
 
 ## Naming and existence
 
-City ids are slugs (`city-<topic>-foundations`). Before building, check what exists: `read_city_file({path: "notes/overview.md", cityId})` succeeding means the city is already built; a throw means it is missing. Never build twice, never invent decorative links.
+City ids are slugs (`city-<topic>-foundations`). Before building, check what exists: `read_city_file({path: "notes/overview.md", cityId})` succeeding means the city is already built; a throw means it is missing. Never build twice, never invent decorative links. To show anything inside a city, `enter_city` first — `open_tab` without the city scope opens the global view and shows nothing from the city.
 
 ## Common mistakes
 

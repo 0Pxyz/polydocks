@@ -25,7 +25,7 @@ const placeCitySchema = z.object({
 export const place_city: AgentTool = {
   name: "place_city",
   description:
-    "Pins a city point on the map (writes map_points). Use after build_city in plan-build-place order; never before the workspace exists. Fails when the city does not exist — only announce a placement from the returned point id, never from the request.",
+    "Pins a city point on the map (writes map_points). Use after build_city in plan-build-place order; never before the workspace exists. Fails when the city does not exist. Only announce a placement from the returned point id, never from the request — and never cite coordinates as proof: the particle world renders from the city workspace, not from these numbers.",
   schema: placeCitySchema,
   execute: async ({ title, regionHint, near, x, y, mapId = "gloom" }) => {
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-");

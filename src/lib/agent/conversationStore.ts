@@ -611,13 +611,30 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             // The world view refreshes on this DOM signal (poll/focus
             // alone left new cities invisible for 30s or more).
             if (typeof window !== "undefined") {
-              window.dispatchEvent(new CustomEvent("polymax:cities-changed"));
+              const detail =
+                event.type === "map.point.added"
+                  ? { cityId: (event as any).cityId, title: (event as any).title }
+                  : undefined;
+              window.dispatchEvent(new CustomEvent("polymax:cities-changed", { detail }));
             }
             set({
               statusText:
                 event.type === "map.point.added" && event.title
                   ? `Mapped "${event.title}".`
                   : "Map updated.",
+            });
+            break;
+          }
+
+          case "city.entered": {
+            try {
+              const { useNavigationStore } = await import("@/lib/store/useNavigationStore");
+              if (event.cityId) useNavigationStore.getState().enterCity(event.cityId);
+            } catch {
+              // Non-fatal: status text below still tells the user where to go.
+            }
+            set({
+              statusText: event.cityId ? `Entered "${event.cityId}".` : "Entered the city.",
             });
             break;
           }

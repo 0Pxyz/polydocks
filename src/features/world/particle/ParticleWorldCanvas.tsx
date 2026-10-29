@@ -14,6 +14,8 @@ export interface ParticleWorldCanvasProps {
   initialCamera?: { x: number; y: number; zoom: number } | null;
   /** Called when the user pans or zooms (for position persistence). */
   onCameraChange?: (camera: { x: number; y: number; zoom: number }) => void;
+  /** Territory id to announce with an expanding ring (new city just placed). */
+  pulseRegionId?: string | null;
 }
 
 export function ParticleWorldCanvas({
@@ -24,6 +26,7 @@ export function ParticleWorldCanvas({
   onResetCameraReady,
   initialCamera = null,
   onCameraChange,
+  pulseRegionId = null,
 }: ParticleWorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -41,6 +44,10 @@ export function ParticleWorldCanvas({
 
   const selectedRegionIdRef = useRef<string | null | undefined>(selectedRegionId);
   selectedRegionIdRef.current = selectedRegionId;
+
+  // New-city announcement ring (set by the view when a city is just placed).
+  const pulseRegionIdRef = useRef<string | null>(pulseRegionId);
+  pulseRegionIdRef.current = pulseRegionId;
 
   // Animation & simulation state
   const animFrameIdRef = useRef<number | null>(null);
@@ -126,6 +133,7 @@ export function ParticleWorldCanvas({
 
       const activeSelectedId = selectedRegionIdRef.current;
       const activeHoveredId = hoveredRegionIdRef.current;
+      const activePulseId = pulseRegionIdRef.current;
 
       // 1. Draw Conduits (Inter-Region Splines)
       world.conduits.forEach((conduit) => {
@@ -300,6 +308,20 @@ export function ParticleWorldCanvas({
       world.territories.forEach((t) => {
         const isSelected = t.id === activeSelectedId;
         const isHovered = t.id === activeHoveredId;
+
+        // New-city announcement: expanding accent ring around the territory
+        // that was just placed (static ring when reduced motion is on).
+        if (t.id === activePulseId) {
+          const period = 1600;
+          const phase = isReducedMotion ? 0.5 : (currentTime % period) / period;
+          ctx.beginPath();
+          ctx.arc(t.center.x, t.center.y, t.radius * (0.95 + 0.4 * phase), 0, Math.PI * 2);
+          ctx.strokeStyle = t.accentColor;
+          ctx.globalAlpha = isReducedMotion ? 0.85 : Math.max(0, 0.9 * (1 - phase));
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+        }
 
         // Landmark Center Circle (restrained glow)
         ctx.beginPath();

@@ -146,6 +146,12 @@ export type UIEvent =
       step: number;
       /** One streamed text fragment (append to the provisional reply). */
       delta: string;
+    }
+  | {
+      type: "city.entered";
+      step: number;
+      /** City workspace id to switch the view into. */
+      cityId: string;
     };
 
 /**
@@ -438,6 +444,13 @@ export function adaptBackendEvent(raw: {
         type: "agent.text_delta",
         step,
         delta: typeof payload.delta === "string" ? payload.delta : "",
+      };
+
+    case "city.enter":
+      return {
+        type: "city.entered",
+        step,
+        cityId: String(payload.cityId || ""),
       };
 
     case "error":
