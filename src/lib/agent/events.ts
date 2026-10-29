@@ -72,6 +72,29 @@ export type UIEvent =
       mapId: string;
     }
   | {
+      type: "plugin.created";
+      step: number;
+      plugin: ExperienceManifest;
+      workspaceId?: string;
+    }
+  | {
+      type: "plugin.updated";
+      step: number;
+      plugin: ExperienceManifest;
+      workspaceId?: string;
+    }
+  | {
+      type: "plugin.published";
+      step: number;
+      plugin: ExperienceManifest;
+    }
+  | {
+      type: "plugin.operated";
+      step: number;
+      pluginId: string;
+      action?: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -105,6 +128,19 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       const title = typeof args?.title === "string" ? args.title : "";
       return title ? `Building "${title}"…` : "Building the interactive experience…";
     }
+    case "create_plugin": {
+      const name = typeof args?.name === "string" ? args.name : "";
+      return name ? `Building tool "${name}"…` : "Building the tool…";
+    }
+    case "modify_plugin":
+      return "Updating the tool…";
+    case "operate_plugin": {
+      const action = typeof args?.action === "string" ? args.action : "";
+      return action ? `Running "${action}"…` : "Running the tool…";
+    }
+    case "publish_plugin":
+    case "promote_to_plugin":
+      return "Publishing the tool…";
     case "update_tab":
       return "Updating the interactive experience…";
     case "delete_tab": {
@@ -149,11 +185,6 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     case "search_files":
     case "recall_memory":
     case "record_memory":
-    case "create_plugin":
-    case "modify_plugin":
-    case "operate_plugin":
-    case "publish_plugin":
-    case "promote_to_plugin":
       return null;
     default:
       return null;
@@ -253,6 +284,39 @@ export function adaptBackendEvent(raw: {
         experienceId: String(payload.tabId || payload.id || ""),
         url: payload.url ? String(payload.url) : undefined,
         payload: (payload.payload as Record<string, unknown>) || undefined,
+      };
+
+    case "plugin.created":
+    case "plugin.updated":
+      return {
+        type: raw.type as "plugin.created" | "plugin.updated",
+        step,
+        plugin: {
+          id: String(payload.pluginId || payload.id || ""),
+          title: String(payload.name || payload.title || payload.pluginId || "New Tool"),
+          icon: payload.icon ? String(payload.icon) : undefined,
+          scope: payload.workspaceId ? String(payload.workspaceId) : undefined,
+        },
+        workspaceId: payload.workspaceId ? String(payload.workspaceId) : undefined,
+      };
+
+    case "plugin.published":
+      return {
+        type: "plugin.published",
+        step,
+        plugin: {
+          id: String(payload.pluginId || payload.id || ""),
+          title: String(payload.name || payload.title || payload.pluginId || "New Tool"),
+          icon: payload.icon ? String(payload.icon) : undefined,
+        },
+      };
+
+    case "plugin.operated":
+      return {
+        type: "plugin.operated",
+        step,
+        pluginId: String(payload.pluginId || ""),
+        action: payload.action ? String(payload.action) : undefined,
       };
 
     case "map.changed":

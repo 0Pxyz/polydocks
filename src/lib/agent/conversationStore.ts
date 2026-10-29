@@ -12,6 +12,7 @@ import {
   type ThreadMessageRecord,
 } from "./thread";
 import { platformStorage } from "@/lib/platform/storage";
+import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import type { OrbState } from "@/features/agent/Orb";
 
 export type LayoutState = "closed" | "sheet" | "full" | "side";
@@ -380,7 +381,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       origin,
       retry: options?.retry === true,
       signal: abortCtrl.signal,
-      onEvent: (event: UIEvent) => {
+      onEvent: async (event: UIEvent) => {
         const { soundEnabled } = get();
 
         switch (event.type) {
@@ -403,6 +404,57 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             set({
               isBuildingTool: false,
               statusText: `Mounted "${event.experience.title}" in the dock.`,
+            });
+            break;
+
+          case "plugin.created":
+          case "plugin.updated": {
+            const isNew = event.type === "plugin.created";
+            // Refresh the workspace registry so the dock picks up the tool,
+            // then mount + open it through the same path as tab experiences.
+            try {
+              const targetWorkspace =
+                event.workspaceId ||
+                useWorkspaceStore.getState().activeWorkspaceId ||
+                "default";
+              await useWorkspaceStore.getState().fetchWorkspacePlugins(targetWorkspace);
+            } catch {
+              // Non-fatal: dock mount below still shows the tool
+            }
+            callbacks?.onExperienceCreated?.({
+              id: event.plugin.id,
+              title: event.plugin.title,
+              icon: event.plugin.icon,
+            });
+            set({
+              isBuildingTool: false,
+              statusText: isNew
+                ? `Mounted "${event.plugin.title}" in the dock.`
+                : `Updated "${event.plugin.title}".`,
+            });
+            callbacks?.onOpenExperience?.(event.plugin.id);
+            if (!isDockAdd) {
+              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+                set({ layoutState: "side" });
+              } else {
+                set({ layoutState: "closed" });
+              }
+            }
+            break;
+          }
+
+          case "plugin.published":
+            set({
+              isBuildingTool: false,
+              statusText: `Published "${event.plugin.title}" to the store.`,
+            });
+            break;
+
+          case "plugin.operated":
+            set({
+              statusText: event.action
+                ? `Ran "${event.action}".`
+                : "Done.",
             });
             break;
 
