@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { buildFeatureSrcdoc, escapeInlineScript } from "./features";
+import { buildFeatureSrcdoc, buildReactSrcdoc, escapeInlineScript } from "./features";
+import { getKitJs, getKitCss, getKitTokens, PLUGIN_CSP } from "./reactKit";
 
 // Fixture shaped like minified react-dom output: a literal "</script>"
 // inside a JS string. The HTML parser ends <script> at that literal even
@@ -37,5 +38,23 @@ describe("buildFeatureSrcdoc: hostile code cannot break out of <script>", () => 
     // The hostile literal survives only in escaped form.
     expect(srcdoc).toContain("<\\/script>");
     expect(srcdoc).not.toContain('"<script></script>"');
+  });
+
+  it("emits a mount ready signal after guest code runs (vanilla + React)", () => {
+    const vanilla = buildFeatureSrcdoc("console.log(1);", {
+      id: "test-ready",
+      title: "Ready Test",
+    } as any);
+    expect(vanilla).toContain('polymaxAction: "ui.ready"');
+
+    const react = buildReactSrcdoc("console.log(1);", ".a{color:red}", {
+      id: "test-ready-react",
+      title: "Ready Test",
+    } as any, { js: getKitJs(), css: getKitCss(), tokens: getKitTokens(), csp: PLUGIN_CSP });
+    expect(react).toContain('polymaxAction: "ui.ready"');
+    // Balanced even with the 1MB production kit inlined.
+    const opens = react.match(/<script(\s|>)/gi) || [];
+    const closes = react.match(/<\/script\s*>/gi) || [];
+    expect(closes.length).toBe(opens.length);
   });
 });
