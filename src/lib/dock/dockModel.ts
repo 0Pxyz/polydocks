@@ -39,7 +39,17 @@ export interface DockLayoutState {
 export const SYSTEM_TOOL_IDS = new Set(["maps"]);
 
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
-export const DEFAULT_PINNED_IDS = ["agent", "maps", "store", "settings"];
+export const DEFAULT_PINNED_IDS = ["agent", "maps", "settings"];
+
+/**
+ * One-way migration for persisted layouts: the Plugin Store is not a dock
+ * item, so existing pins drop it without deleting anything else. Pure so
+ * both the store and tests share it.
+ */
+export function migratePinnedIds(pinnedIds: string[]): string[] {
+  const migrated = pinnedIds.filter((id) => id !== "store");
+  return migrated.length > 0 ? migrated : [...DEFAULT_PINNED_IDS];
+}
 
 export type DockSectionId = "docked" | "yours" | "store" | "create";
 

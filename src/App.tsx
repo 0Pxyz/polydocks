@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
-import { AgenticDock, type DockToolItem, STORE_DOCK_TOOL } from "@/features/dock/AgenticDock";
+import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
@@ -62,8 +62,9 @@ export default function App() {
       iconKey: wp.plugin?.icon || wp.pluginId,
     }));
 
+  // The Plugin Store is not a dock item: store plugins are reachable only
+  // through dock search, which installs and opens them directly.
   const activeExtraTools = [
-    STORE_DOCK_TOOL,
     ...extraTools.filter((t) => t.id !== "store"),
     ...workspaceDockTools.filter((wt) => wt.id !== "store" && !extraTools.some((et) => et.id === wt.id)),
   ];

@@ -3,6 +3,7 @@ import { platformStorage } from "@/lib/platform/storage";
 import {
   applyDockDirective,
   DEFAULT_PINNED_IDS,
+  migratePinnedIds,
   type DockDirective,
 } from "@/lib/dock/dockModel";
 
@@ -11,7 +12,7 @@ const DOCK_LAYOUT_KEY = "polymax-dock-layout";
 function loadPinnedIds(): string[] {
   const stored = platformStorage.getItem<{ pinnedIds?: string[] }>(DOCK_LAYOUT_KEY);
   if (stored?.pinnedIds && Array.isArray(stored.pinnedIds) && stored.pinnedIds.length > 0) {
-    return stored.pinnedIds;
+    return migratePinnedIds(stored.pinnedIds);
   }
   return [...DEFAULT_PINNED_IDS];
 }

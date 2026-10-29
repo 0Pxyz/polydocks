@@ -5,6 +5,7 @@ import {
   computeVisibleCap,
   createItemsForQuery,
   getStaticCreateRows,
+  migratePinnedIds,
   scoreDockItem,
   sliceEmptyQueryRows,
   DEFAULT_PINNED_IDS,
@@ -237,8 +238,19 @@ describe("applyDockDirective", () => {
     expect(applyDockDirective(state, { op: "unpin", id: "browser" }, known).ok).toBe(true);
   });
 
-  test("defaults keep the curated core and the map is system", () => {
-    expect(DEFAULT_PINNED_IDS).toContain("maps");
+  test("defaults keep the curated core without the store", () => {
+    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "maps", "settings"]);
+    expect(DEFAULT_PINNED_IDS).not.toContain("store");
     expect(SYSTEM_TOOL_IDS.has("maps")).toBe(true);
+  });
+
+  test("the Plugin Store migrates out of persisted pins without deleting", () => {
+    expect(migratePinnedIds(["agent", "maps", "store", "settings"])).toEqual([
+      "agent",
+      "maps",
+      "settings",
+    ]);
+    expect(migratePinnedIds(["agent", "maps"])).toEqual(["agent", "maps"]);
+    expect(migratePinnedIds(["store"])).toEqual(["agent", "maps", "settings"]);
   });
 });
