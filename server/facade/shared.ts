@@ -86,6 +86,11 @@ export const DOCK_OPS = [
   "tabs.pin",
   "tabs.unpin",
   "tabs.close",
+  "tabs.focus",
+  "tabs.next",
+  "tabs.prev",
+  "tabs.background",
+  "chat.toggle",
   "tabs.create",
   "tabs.update",
   "scope.enter",
@@ -126,7 +131,13 @@ export async function dockAction(
           ...ctx,
           cityId: (params.cityId as string) || ctx.cityId,
         });
-        return { ok: true, data, events: [] };
+        const { DOCK_ACTIONS, visibleDockItems } = await import("../workspace/dockItems");
+        const contextId = (params.cityId as string) || ctx.cityId || null;
+        return {
+          ok: true,
+          data: { ...(data as object), actions: DOCK_ACTIONS, dockItems: visibleDockItems(contextId) },
+          events: [],
+        };
       }
       case "tabs.open": {
         const { open_tab } = await import("../agent/tools/open_tab");
@@ -138,7 +149,10 @@ export async function dockAction(
           { tabId: params.tabId, cityId: params.cityId } as any,
           { ...ctx, cityId: (params.cityId as string) || ctx.cityId }
         );
-        return { ok: true, data, events: [{ type: "tray.open", payload: params }] };
+        const { openDockItem } = await import("../workspace/dockItems");
+        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const record = openDockItem(params.tabId, contextId);
+        return { ok: true, data: { ...(data as object), dockItem: record }, events: [{ type: "tray.open", payload: params }] };
       }
       case "tabs.pin":
       case "tabs.unpin": {
@@ -162,7 +176,56 @@ export async function dockAction(
           ...ctx,
           cityId: (params.cityId as string) || ctx.cityId,
         });
-        return { ok: true, data, events: [] };
+        const { closeDockItem } = await import("../workspace/dockItems");
+        const record = closeDockItem(params.id);
+        return { ok: true, data: { ...(data as object), dockItem: record }, events: [{ type: "tray.closed", payload: params }] };
+      }
+      case "tabs.focus": {
+        const { visibleDockItems, openDockItem } = await import("../workspace/dockItems");
+        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const visible = visibleDockItems(contextId);
+        const index = typeof params.index === "number" ? params.index : 0;
+        const target = visible[index];
+        if (!target) {
+          return { ok: false, error: "tabs.focus: index out of range.", retryable: false, code: "not_found" };
+        }
+        const record = openDockItem(target.id, contextId);
+        return { ok: true, data: { id: record.id, dockItem: record }, events: [{ type: "tab.focused", payload: { id: record.id } }] };
+      }
+      case "tabs.next":
+      case "tabs.prev": {
+        const { visibleDockItems, openDockItem } = await import("../workspace/dockItems");
+        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const visible = visibleDockItems(contextId);
+        if (visible.length === 0) {
+          return { ok: false, error: `${op}: nothing to focus.`, retryable: false, code: "not_found" };
+        }
+        const direction = op === "tabs.next" ? 1 : -1;
+        const currentIndex = visible.findIndex((r) => r.state === "focused");
+        const nextIndex = currentIndex < 0 ? 0 : (currentIndex + direction + visible.length) % visible.length;
+        const record = openDockItem(visible[nextIndex].id, contextId);
+        return { ok: true, data: { id: record.id, dockItem: record }, events: [{ type: "tab.focused", payload: { id: record.id } }] };
+      }
+      case "tabs.background": {
+        if (typeof params.id !== "string" || !params.id) {
+          return { ok: false, error: "tabs.background needs { id }.", retryable: false, code: "invalid_input" };
+        }
+        const { backgroundDockItem } = await import("../workspace/dockItems");
+        const record = backgroundDockItem(params.id);
+        if (!record) {
+          return { ok: false, error: `No dock item "${params.id}" found.`, retryable: false, code: "not_found" };
+        }
+        return { ok: true, data: { id: record.id, dockItem: record }, events: [{ type: "tab.backgrounded", payload: { id: record.id } }] };
+      }
+      case "chat.toggle": {
+        const { getDockItem, openDockItem, closeDockItem } = await import("../workspace/dockItems");
+        const chat = getDockItem("agent");
+        if (chat?.state === "focused" || chat?.state === "open") {
+          const record = closeDockItem("agent");
+          return { ok: true, data: { id: "agent", dockItem: record }, events: [{ type: "chat.hidden", payload: {} }] };
+        }
+        const record = openDockItem("agent", null);
+        return { ok: true, data: { id: "agent", dockItem: record }, events: [{ type: "chat.focused", payload: {} }] };
       }
       case "tabs.create": {
         const { create_tab } = await import("../agent/tools/create_tab");

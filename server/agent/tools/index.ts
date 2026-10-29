@@ -47,7 +47,7 @@ import { generate_image } from "./generate_image";
 // Verb tools (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/list and
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
-import { dockOpen, dockClose, dockPin, dockUnpin, dockList } from "./verbs/dock";
+import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
 import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback } from "./verbs/plugins";
 import { config } from "../../config";
 
@@ -104,6 +104,11 @@ export {
   dockPin,
   dockUnpin,
   dockList,
+  dockFocus,
+  dockNext,
+  dockPrev,
+  dockBackground,
+  chatToggle,
   pluginsCreate,
   pluginsEdit,
   pluginsInstall,
@@ -165,7 +170,7 @@ const fullToolsList: AgentTool[] = [
 
 /**
  * Minimal verb catalog (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/
- * list + plugins.create/edit/install/uninstall/operate.
+ * list/focus/next/prev/background + chat.toggle + plugins.create/edit/install/uninstall/operate.
  */
 export const minimalTools: AgentTool[] = [
   dockOpen,
@@ -173,6 +178,11 @@ export const minimalTools: AgentTool[] = [
   dockPin,
   dockUnpin,
   dockList,
+  dockFocus,
+  dockNext,
+  dockPrev,
+  dockBackground,
+  chatToggle,
   pluginsCreate,
   pluginsEdit,
   pluginsInstall,

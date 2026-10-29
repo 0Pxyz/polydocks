@@ -55,8 +55,54 @@ export const dockUnpin: AgentTool<{ id: string; cityId?: string }> = {
 export const dockList: AgentTool<{ cityId?: string }> = {
   name: "dock.list",
   description:
-    "List what the dock holds, with pinned flags. Start here: open what exists before installing, install before creating. Same handler as GET /api/dock/tabs and the CLI.",
+    "List what the dock holds, with pinned flags. Start here: open what exists before installing, install before creating. Same handler as GET /api/dock/tabs and the CLI. Returns the single action registry (tabs.focus/next/prev/close/background, chat.toggle) with shortcuts.",
   schema: z.object({ ...cityScope }),
   execute: (args, ctx) => dockAction("tabs.list", args as Record<string, unknown>, actorCtx(ctx)),
+};
+
+export const dockFocus: AgentTool<{ index: number; cityId?: string }> = {
+  name: "dock.focus",
+  description:
+    "Focus the nth open dock item in visual order. Same handler as POST /api/dock/action (tabs.focus) and the CLI.",
+  schema: z.object({
+    index: z.number().int().min(0).describe("Zero-based index into the visible dock order"),
+    ...cityScope,
+  }),
+  execute: (args, ctx) => dockAction("tabs.focus", args as Record<string, unknown>, actorCtx(ctx)),
+};
+
+export const dockNext: AgentTool<{ cityId?: string }> = {
+  name: "dock.next",
+  description:
+    "Focus the next dock item. Same handler as POST /api/dock/action (tabs.next) and the CLI.",
+  schema: z.object({ ...cityScope }),
+  execute: (args, ctx) => dockAction("tabs.next", args as Record<string, unknown>, actorCtx(ctx)),
+};
+
+export const dockPrev: AgentTool<{ cityId?: string }> = {
+  name: "dock.prev",
+  description:
+    "Focus the previous dock item. Same handler as POST /api/dock/action (tabs.prev) and the CLI.",
+  schema: z.object({ ...cityScope }),
+  execute: (args, ctx) => dockAction("tabs.prev", args as Record<string, unknown>, actorCtx(ctx)),
+};
+
+export const dockBackground: AgentTool<{ id: string; cityId?: string }> = {
+  name: "dock.background",
+  description:
+    "Move a dock item to background (keeps running, frees its panel). Same handler as POST /api/dock/action and the CLI.",
+  schema: z.object({
+    id: z.string().min(1).describe("Tab or plugin id to background"),
+    ...cityScope,
+  }),
+  execute: (args, ctx) => dockAction("tabs.background", args as Record<string, unknown>, actorCtx(ctx)),
+};
+
+export const chatToggle: AgentTool<{ cityId?: string }> = {
+  name: "chat.toggle",
+  description:
+    "Focus or toggle the chat panel. Same handler as POST /api/dock/action (chat.toggle) and the CLI.",
+  schema: z.object({ ...cityScope }),
+  execute: (args, ctx) => dockAction("chat.toggle", args as Record<string, unknown>, actorCtx(ctx)),
 };
 

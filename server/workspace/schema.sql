@@ -238,6 +238,18 @@ CREATE TABLE IF NOT EXISTS dock_pins (
   PRIMARY KEY (workspace_id, item_id)
 );
 
+-- Dock items: durable single source for dock state.
+-- One row per dock item (plugin). context_id is opaque (null = global).
+CREATE TABLE IF NOT EXISTS dock_items (
+  id TEXT PRIMARY KEY,
+  plugin_id TEXT NOT NULL,
+  context_id TEXT,
+  state TEXT NOT NULL DEFAULT 'closed',
+  item_order INTEGER NOT NULL DEFAULT 0,
+  panel TEXT,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS registry_plugins (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
