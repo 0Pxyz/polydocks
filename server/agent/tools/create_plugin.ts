@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
-import { pluginRegistry } from "../../plugins/registry";
+import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync } from "../../plugins/verify";
 
 export interface CreatePluginArgs {
   id: string;
@@ -43,7 +43,7 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .string()
       .min(10)
       .describe(
-        "Complete self-contained TypeScript/JavaScript code for the plugin UI. Forbidden from external imports. Uses window.polydocks.storage for state."
+        "Complete TSX code for the plugin UI. Import allowlist: react, react-dom/client, @/components/ui/* only. Uses window.polydocks bridge (storage, useCapability, openContent)."
       ),
     workspaceId: z
       .string()
@@ -69,17 +69,35 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
   execute: async (args, ctx) => {
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
 
-    // Update-instead-of-recreate guard: an existing id means the user (or a
-    // previous turn) wants modify_plugin, not a silent overwrite.
-    if (pluginRegistry.has(args.id)) {
+    // Retry safety: an idempotency key that already executed returns the
+    // cached result before the duplicate guard (a retry is not a recreate).
+    if (args.idempotencyKey && args.idempotencyKey.trim().length > 0) {
+      try {
+        const { db } = await import("../../workspace/db");
+        const hit = db
+          .query("SELECT response_json FROM idempotency_keys WHERE key = ?")
+          .get(args.idempotencyKey.trim()) as any;
+        if (hit?.response_json) {
+          return JSON.parse(hit.response_json);
+        }
+      } catch {
+        // Fall through to normal execution.
+      }
+    }
+
+    // Update-instead-of-recreate guard: ids are normalized to lowercase and
+    // checked across registry + tab/plugin namespaces in every scope.
+    const normalized = normalizePluginId(args.id);
+    const taken = isPluginIdTaken(normalized);
+    if (taken.taken) {
       return {
         success: false,
-        error: `Plugin "${args.id}" already exists. Use modify_plugin to update the existing plugin instead of recreating it.`,
+        error: `Plugin "${normalized}" already exists (${taken.namespaces.join(", ")}). Use modify_plugin to update the existing plugin instead of recreating it.`,
       };
     }
 
-    return await PluginService.synthesizePlugin({
-      id: args.id,
+    const created = await PluginService.synthesizePlugin({
+      id: normalized,
       name: args.name,
       description: args.description,
       icon: args.icon,
@@ -89,5 +107,17 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       actor: "agent",
       idempotencyKey: args.idempotencyKey,
     });
+    if (!created.success) return created;
+
+    const verification = await verifyPluginStateAsync(normalized, workspaceId);
+    if (!verification.ok) {
+      return {
+        success: false,
+        error: verification.error || "Plugin verification failed after create",
+        verification,
+        pluginId: normalized,
+      };
+    }
+    return { ...created, verification };
   },
 };

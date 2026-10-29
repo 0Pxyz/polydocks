@@ -22,7 +22,7 @@ Inject this skill whenever the user asks the agent to build, synthesize, create,
    - Must be a complete HTML document (`<!DOCTYPE html><html>...</html>`).
    - All CSS must reside in `<style>` tags.
    - All JS must reside in `<script>` tags.
-   - **Zero External CDNs:** Never import external `<script src="https://...">` or CSS links. External CDN requests are blocked by Content Security Policy.
+   - **Zero External CDNs:** Never import external `<script src="https://...">` or CSS links. The sandbox serves a real Content-Security-Policy (`script-src 'unsafe-inline'`, `style-src 'unsafe-inline'`, no external sources) that blocks them; the iframe keeps origin isolation (`sandbox="allow-scripts"`, no `allow-same-origin`).
 
 2. **Design Tokens & Dark Aesthetic:**
    - Background: `#0A0A0C` (or `var(--bg-canvas)`)
@@ -46,8 +46,43 @@ Inject this skill whenever the user asks the agent to build, synthesize, create,
    // Open external URL in Browser dock tab:
    window.polymax.openUrl("https://arxiv.org/abs/2301.12345");
 
+   // Open an article/video in the native in-app Reader (no iframe, so
+   // frame-blocking sites still open; video via embed):
+   window.polymax.openContent("https://arxiv.org/abs/2301.12345");
+
+   // Call a declared capability through the capability bus (policy, timeout
+   // and audit apply; handle loading/error states in UI):
+   const result = await window.polymax.useCapability("feed.refresh", { limit: 20 });
+
    // Request dock tray expansion:
    window.polymax.ui.expand();
+   ```
+
+4. **Prefer React + shadcn for new tools (`code`, not `html`):**
+   - Write TSX in a single file. Allowed imports only: `react`, `react-dom/client`, and `@/components/ui/*` (badge, button, command, dialog, dropdown-menu, input, popover, progress, scroll-area, separator, sheet, skeleton, slider, sonner, tabs, textarea, tooltip). Anything else is rejected.
+   - Use the shadcn components and theme tokens (`var(--background)`, `var(--primary)`, `var(--muted-foreground)`, `var(--border)` …) — never hardcoded hex colors or custom CSS where a component exists.
+   - No `export` statements. Mount into `#app`, e.g. `createRoot(document.getElementById("app")).render(<App />)`.
+   - Example:
+   ```tsx
+   import { Button } from "@/components/ui/button";
+   import { Badge } from "@/components/ui/badge";
+   import { useState } from "react";
+   import { createRoot } from "react-dom/client";
+
+   function App() {
+     const [n, setN] = useState(0);
+     return (
+       <div className="flex flex-col gap-4 p-6">
+         <Badge>count {n}</Badge>
+         <Button onClick={() => setN(n + 1)}>Bump</Button>
+         <Button variant="ghost" onClick={() => window.polymax.openContent("https://example.com/a")}>
+           Open in reader
+         </Button>
+       </div>
+     );
+   }
+
+   createRoot(document.getElementById("app")).render(<App />);
    ```
 
 4. **Design Rules & Slop Elimination (docs/design-slop.md):**
@@ -459,10 +494,12 @@ When creating tools via `create_tab`, you can provide TypeScript code via the `c
 The runtime saves it to `workspace/<city>/features/<tabId>/feature.ts` and deterministically transpiles it to browser JavaScript.
 
 ### Rules for `feature.ts`:
-- Single file, clean TypeScript.
-- **Forbidden from importing:** Do NOT write `import ...` or `export ...`. The code runs directly inside the sandboxed document.
+- Single file, clean TypeScript (TSX allowed).
+- **Import allowlist (enforced):** only `react`, `react-dom/client`, and `@/components/ui/*` (the 17 shadcn components). Any other import is rejected with a clear error: no external packages, no relative imports, no external scripts.
+- Use the shadcn components and theme tokens (`var(--background)`, `var(--primary)`, …). Never use hardcoded hex colors or custom CSS where a component exists.
+- No `export` statements: mount into `#app` with `createRoot(document.getElementById("app")).render(<App />)`.
 - Root element `#app` is provided automatically.
-- Global `window.polymax` is available immediately with `storage`, `openUrl`, `getContext`, `submit`, and `ui.expand`.
+- Global `window.polymax` is available immediately with `storage`, `openUrl`, `openContent` (native Reader), `useCapability`, `getContext`, `submit`, and `ui.expand`.
 
 ```typescript
 // feature.ts - Concept Mastery Matrix & XP Tracker

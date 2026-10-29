@@ -1,6 +1,10 @@
 import { PluginRegistry, type InstalledPluginRecord } from "../plugins/registry";
 import type { PluginManifest } from "../plugins/manifest";
 import { writeFeature, readFeature } from "../workspace/features";
+import { getPluginFile } from "../workspace/pluginFiles";
+import { saveVersion, rollbackPlugin } from "../plugins/versions";
+import { validatePluginCode } from "../plugins/validate";
+import { bundleFeatureCode, codeHasImports } from "../workspace/reactKit";
 import { addPluginToWorkspace } from "../workspace/workspaces";
 import { publishToRegistry, type RegistryPluginRecord } from "../plugins/communityRegistry";
 import { db } from "../workspace/db";
@@ -183,6 +187,22 @@ export class PluginService {
           createdAt: new Date().toISOString(),
         };
 
+        // 0. Pre-publish validation for React (TSX) code: bundle + mount in a
+        // server-side render test. Failure blocks activation and the error is
+        // returned to the agent. Hex colors are warnings only.
+        let preWarnings: string[] = [];
+        if (codeHasImports(input.code)) {
+          const pre = await validatePluginCode({ code: input.code, bundle: bundleFeatureCode });
+          preWarnings = pre.warnings;
+          if (!pre.ok) {
+            return {
+              success: false,
+              error: pre.error || "Pre-publish validation failed",
+              warnings: preWarnings,
+            };
+          }
+        }
+
         // 1. Transpile and write feature module
         await writeFeature(workspaceId, pluginId, {
           manifest: featureManifest,
@@ -220,12 +240,38 @@ export class PluginService {
         };
 
         const registry = PluginRegistry.getInstance();
-        const installResult = registry.install(pluginManifest);
+        // Draft -> validate -> activate: transpile first (throws on invalid
+        // code, leaving the live version untouched), then register.
+        let installResult;
+        try {
+          installResult = registry.install(pluginManifest);
+        } catch (err: any) {
+          return {
+            success: false,
+            error: err?.message || "Failed to register plugin manifest",
+          };
+        }
         if (!installResult.success) {
           return {
             success: false,
             error: installResult.error || "Failed to register plugin manifest",
           };
+        }
+
+        // Record the activated version with code snapshot (history kept).
+        try {
+          const stored = getPluginFile(pluginId, workspaceId);
+          saveVersion({
+            pluginId,
+            version: "1.0.0",
+            workspaceId,
+            manifestJson: JSON.stringify(pluginManifest),
+            sourceCode: stored?.code ?? input.code,
+            srcdoc: stored?.srcdoc ?? "",
+            status: "active",
+          });
+        } catch {
+          // Non-fatal: registry row is already live.
         }
 
         // 3. Mount into workspace dock
@@ -247,6 +293,7 @@ export class PluginService {
           action: "dock.tool_mounted",
           message: `Plugin "${input.name}" successfully synthesized and mounted to workspace "${workspaceId}".`,
           mounted,
+          ...(preWarnings.length > 0 ? { warnings: preWarnings } : {}),
         };
       }
     );
@@ -282,7 +329,14 @@ export class PluginService {
     const currentVersion = existingPlugin?.version || "1.0.0";
     const nextVersion = bumpPatchVersion(currentVersion);
     const name = input.name || existingPlugin?.name || existingFeature?.manifest.title || pluginId;
-    const description = input.description || existingPlugin?.manifest.description || "";
+    // Registry manifests require a non-empty description; fall back through
+    // the feature title so filesystem-only legacies (no description field)
+    // still upgrade cleanly on a fresh database.
+    const description =
+      input.description ||
+      existingPlugin?.manifest.description ||
+      (existingFeature?.manifest.title as string) ||
+      `${name} tool`;
     const icon = input.icon || existingPlugin?.manifest.icon || existingFeature?.manifest.icon || "Cards";
 
     const updatedFeatureManifest = {
@@ -293,13 +347,27 @@ export class PluginService {
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Write updated feature module
+    // 0. Pre-publish validation for React (TSX) code: blocks activation.
+    if (codeHasImports(input.code)) {
+      const pre = await validatePluginCode({ code: input.code, bundle: bundleFeatureCode });
+      if (!pre.ok) {
+        return {
+          success: false,
+          error: pre.error || "Pre-publish validation failed",
+          warnings: pre.warnings,
+        };
+      }
+    }
+
+    // 1. Write updated feature module (transpile validates; throws before
+    // touching the registry so the live version stays intact on bad code).
     await writeFeature(workspaceId, pluginId, {
       manifest: updatedFeatureManifest,
       code: input.code,
     });
 
-    // 2. Update PluginManifest
+    // 2. Update PluginManifest (transactional versioned write inside install;
+    // on failure the previous live version stays active).
     const updatedPluginManifest: PluginManifest = {
       ...(existingPlugin?.manifest || {
         apiVersion: 1,
@@ -325,12 +393,38 @@ export class PluginService {
       ],
     };
 
-    const installResult = registry.install(updatedPluginManifest);
+    let installResult;
+    try {
+      installResult = registry.install(updatedPluginManifest);
+    } catch (err: any) {
+      // Keep the previous version live; roll back the registry pointer.
+      rollbackPlugin(pluginId, currentVersion);
+      return {
+        success: false,
+        error: err?.message || "Failed to update plugin manifest in registry",
+      };
+    }
     if (!installResult.success) {
+      rollbackPlugin(pluginId, currentVersion);
       return {
         success: false,
         error: installResult.error || "Failed to update plugin manifest in registry",
       };
+    }
+
+    try {
+      const stored = getPluginFile(pluginId, workspaceId);
+      saveVersion({
+        pluginId,
+        version: nextVersion,
+        workspaceId,
+        manifestJson: JSON.stringify(updatedPluginManifest),
+        sourceCode: stored?.code ?? input.code,
+        srcdoc: stored?.srcdoc ?? "",
+        status: "active",
+      });
+    } catch {
+      // Non-fatal
     }
 
     recordAudit({

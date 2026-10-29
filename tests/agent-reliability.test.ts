@@ -57,7 +57,8 @@ describe("Intent routing (deterministic, no special cases)", () => {
   it("routes artifact updates to plugin_update, never research/city", () => {
     expect(classifyIntent("Update the existing feed to group articles by topic")).toBe("plugin_update");
     expect(classifyIntent("Modify plugin pomodoro to add streaks")).toBe("plugin_update");
-    expect(classifyIntent("Fix this tool, it crashes on load")).toBe("plugin_update");
+    // Broken behavior routes to plugin_fix (patch in place, never recreate).
+    expect(classifyIntent("Fix this tool, it crashes on load")).toBe("plugin_fix");
   });
 
   it("keeps research and city intents on their existing matchers", () => {

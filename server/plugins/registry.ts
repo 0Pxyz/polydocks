@@ -40,6 +40,9 @@ export class PluginRegistry {
   /**
    * Install or update a plugin manifest.
    * Validates manifest schema and apiVersion: 1 before persisting.
+   * Versioned write: the previous live row is archived into plugin_versions
+   * (superseded) inside the same transaction, so a failed publish keeps the
+   * previous version live and rollback can restore it.
    */
   public install(rawManifest: unknown): {
     success: boolean;
@@ -55,26 +58,71 @@ export class PluginRegistry {
     const now = new Date().toISOString();
 
     const existing = db
-      .query<{ id: string; created_at: string }, [string]>(
-        "SELECT id, created_at FROM plugins WHERE id = ?"
+      .query<{ id: string; created_at: string; manifest_json: string; version: string }, [string]>(
+        "SELECT id, created_at, manifest_json, version FROM plugins WHERE id = ?"
       )
       .get(manifest.id);
 
     const createdAt = existing?.created_at || now;
 
-    db.query(
-      `INSERT OR REPLACE INTO plugins (id, name, version, manifest_json, enabled, trust, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      manifest.id,
-      manifest.name,
-      manifest.version,
-      JSON.stringify(manifest),
-      1, // enabled by default on install
-      manifest.trust,
-      createdAt,
-      now
-    );
+    const writeTxn = db.transaction(() => {
+      // Archive the previous live version before overwriting.
+      if (existing) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS plugin_versions (
+            plugin_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            workspace_id TEXT NOT NULL DEFAULT 'default',
+            manifest_json TEXT NOT NULL,
+            source_code TEXT,
+            srcdoc TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (plugin_id, version)
+          );
+        `);
+        db.query(
+          `INSERT INTO plugin_versions (plugin_id, version, workspace_id, manifest_json, source_code, srcdoc, status, created_at)
+           VALUES (?, ?, 'default', ?, NULL, '', 'superseded', ?)
+           ON CONFLICT(plugin_id, version) DO UPDATE SET status = 'superseded'`
+        ).run(existing.id, existing.version, existing.manifest_json, now);
+      }
+
+      db.query(
+        `INSERT INTO plugins (id, name, version, manifest_json, enabled, trust, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           version = excluded.version,
+           manifest_json = excluded.manifest_json,
+           trust = excluded.trust,
+           updated_at = excluded.updated_at`
+      ).run(
+        manifest.id,
+        manifest.name,
+        manifest.version,
+        JSON.stringify(manifest),
+        1, // enabled by default on install
+        manifest.trust,
+        createdAt,
+        now
+      );
+
+      db.query(
+        `INSERT INTO plugin_versions (plugin_id, version, workspace_id, manifest_json, source_code, srcdoc, status, created_at)
+         VALUES (?, ?, 'default', ?, NULL, '', 'active', ?)
+         ON CONFLICT(plugin_id, version) DO UPDATE SET
+           manifest_json = excluded.manifest_json,
+           status = 'active',
+           created_at = excluded.created_at`
+      ).run(manifest.id, manifest.version, JSON.stringify(manifest), now);
+    });
+
+    try {
+      writeTxn();
+    } catch (err: any) {
+      return { success: false, error: err?.message || "Failed to persist plugin version" };
+    }
 
     return {
       success: true,
