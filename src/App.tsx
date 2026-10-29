@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem, STORE_DOCK_TOOL } from "@/features/dock/AgenticDock";
@@ -20,6 +20,9 @@ import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import type { DockItem } from "@/lib/dock/dockModel";
+import { buildCityDockTools, CITY_TOOL_IDS } from "@/lib/dock/dockModel";
+import { getLastCityTool, setLastCityTool } from "@/lib/city/cityModel";
+import { useCitySummaryStore } from "@/lib/store/useCitySummaryStore";
 import { cn } from "@/lib/cn";
 
 export default function App() {
@@ -156,25 +159,6 @@ export default function App() {
     setDockActiveTool(nextTool);
   };
 
-  // Compelling demonstration of the dock dynamically expanding itself
-  const handleSynthesizeTool = (topic = selectedCity || "General") => {
-    setExtraTools((prev) => {
-      if (prev.some((t) => t.id === "flashcards")) return prev;
-      return [
-        ...prev,
-        {
-          id: "flashcards",
-          label: `${topic} Flashcards`,
-          type: "icon",
-          icon: resolveIcon("cards"),
-          iconKey: "cards",
-        },
-      ];
-    });
-    setActiveToolId("flashcards");
-    setDockActiveTool("flashcards");
-  };
-
   const handleToolPromptSubmit = (prompt: string, meta?: Record<string, unknown>) => {
     const isFlashcards = prompt.toLowerCase().includes("flashcard");
     const targetCity = viewMode === "city" ? (activeCityId || selectedCity) : undefined;
@@ -240,6 +224,48 @@ export default function App() {
       dock.closeTool(dock.openIds[0]);
     }
   }, [activeToolId]);
+
+  const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
+  const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
+
+  // City tools live in the dock while inside a city (contextual, never
+  // pinned globally) with live badges from real workspace counts.
+  const cityTools: DockToolItem[] = useMemo(
+    () =>
+      buildCityDockTools(citySummary).map(
+        (item): DockToolItem => ({
+          id: item.id,
+          label: item.label,
+          type: "icon",
+          iconKey: item.icon,
+          badge: item.badge,
+          tooltipDetail: item.tooltipDetail,
+        })
+      ),
+    [citySummary]
+  );
+  const cityToolIds = useMemo(() => cityTools.map((t) => t.id), [cityTools]);
+
+  // Entering a city reopens the last-used tool; first visit opens nothing.
+  useEffect(() => {
+    if (viewMode === "city" && cityId) {
+      const last = getLastCityTool(cityId);
+      setActiveToolId(last ?? "");
+      setDockActiveTool(last ?? "");
+    }
+  }, [viewMode, cityId, setDockActiveTool]);
+
+  // Remember the last-used tool per city while inside one.
+  useEffect(() => {
+    if (
+      viewMode === "city" &&
+      cityId &&
+      activeToolId &&
+      (CITY_TOOL_IDS as readonly string[]).includes(activeToolId)
+    ) {
+      setLastCityTool(cityId, activeToolId);
+    }
+  }, [viewMode, cityId, activeToolId]);
 
   useEffect(() => {
     // Restore the single persistent thread once per session. Layout changes
@@ -316,6 +342,8 @@ export default function App() {
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
             extraTools={activeExtraTools}
+            tools={isCityMode ? cityTools : undefined}
+            contextualIds={isCityMode ? cityToolIds : undefined}
             onSelectTool={handleSelectTool}
             onOpenSearch={() => setPaletteOpen(true)}
             isBuilding={isBuildingTool}
@@ -467,15 +495,8 @@ export default function App() {
                 <div className="w-full">
                   <CityView
                     cityName={activeCityId || selectedCity || "workspace"}
-                    activeToolId={activeToolId === "city" || !activeToolId ? "overview" : activeToolId}
+                    activeToolId={!activeToolId ? "" : activeToolId}
                     onSelectTool={handleSelectTool}
-                    onSynthesizeTool={handleSynthesizeTool}
-                    onBackToWorld={() => {
-                      exitToWorld();
-                      setSelectedCity(undefined);
-                      setActiveToolId("maps");
-                      setDockActiveTool("maps");
-                    }}
                   />
                 </div>
               </DockSurface>
