@@ -81,7 +81,7 @@ const KIND_BADGE: Record<DockItemKind, string> = {
 };
 
 const ROW_CLASS =
-  "group flex items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]";
+  "group flex w-full max-w-full items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]";
 
 export function CommandPalette({
   cityId,
@@ -663,7 +663,7 @@ export function CommandPalette({
   };
 
   return (
-    <Command label="Dock search">
+    <Command label="Dock search" className="w-full max-w-full overflow-hidden">
       <div
         onKeyDownCapture={(e) => {
           modifierHeld.current = e.metaKey || e.ctrlKey;
@@ -740,7 +740,12 @@ export function CommandPalette({
         </div>
       )}
 
-      <ScrollArea className="max-h-[248px] [&_[cmdk-item][data-selected='true']]:bg-white/[0.08] [&_[cmdk-item][data-selected='true']]:text-white [&_[cmdk-group-heading]]:sticky [&_[cmdk-group-heading]]:top-0 [&_[cmdk-group-heading]]:z-10 [&_[cmdk-group-heading]]:bg-popover">
+      {/*
+        Radix wraps scroll content in a generated display:table div that
+        sizes to content instead of the viewport, pushing badges out of
+        view. Pin that wrapper to the viewport width so rows truncate.
+      */}
+      <ScrollArea className="max-h-[248px] [&_div:has(>[cmdk-list])]:w-full [&_div:has(>[cmdk-list])]:table-fixed [&_[cmdk-item][data-selected='true']]:bg-white/[0.08] [&_[cmdk-item][data-selected='true']]:text-white [&_[cmdk-group-heading]]:sticky [&_[cmdk-group-heading]]:top-0 [&_[cmdk-group-heading]]:z-10 [&_[cmdk-group-heading]]:bg-popover">
       <CommandList className="max-h-none overflow-visible p-2 text-white">
         {loading ? (
           <div className="flex flex-col gap-2 p-2" aria-label="Loading tools">
@@ -820,17 +825,17 @@ export function CommandPalette({
                     key={cap.id}
                     value={`${cap.title} ${cap.id} ${cap.description} ${pluginId}`}
                     onSelect={() => executeCapability(cap)}
-                    className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
+                    className="group flex w-full max-w-full items-center justify-between gap-2 py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
                   >
-                    <div className="flex flex-col gap-0.5 max-w-[75%]">
-                      <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                      <div className="flex items-center gap-2 min-w-0">
                         <Terminal className="w-3.5 h-3.5 text-white/50 shrink-0" />
-                        <span className="text-sm font-medium text-white/95 truncate">
+                        <span className="text-sm font-medium text-white/95 truncate" title={cap.title}>
                           {cap.title}
                         </span>
                       </div>
                       {cap.description && (
-                        <span className="text-xs text-white/40 truncate pl-5.5">
+                        <span className="text-xs text-white/40 truncate pl-5.5" title={cap.description}>
                           {cap.description}
                         </span>
                       )}
