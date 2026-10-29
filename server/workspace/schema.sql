@@ -153,6 +153,35 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
   FOREIGN KEY (conversation_id) REFERENCES city_conversations(id) ON DELETE CASCADE
 );
 
+-- Single persistent agent thread per user
+-- One transcript per user, independent of the active city or the current view.
+-- Older turns are folded into a rolling summary so the model never reloads the whole history.
+
+CREATE TABLE IF NOT EXISTS agent_threads (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  title TEXT,
+  summary TEXT,
+  summary_through_seq INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_thread_messages (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  thread_id TEXT NOT NULL,
+  role TEXT NOT NULL, -- 'user' | 'assistant' | 'system'
+  content TEXT NOT NULL,
+  city_id TEXT,
+  attachments_json TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (thread_id) REFERENCES agent_threads(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_thread_messages_thread_seq
+  ON agent_thread_messages(thread_id, seq);
+
 -- PolyDocks V2 Multi-Workspace Architecture
 
 CREATE TABLE IF NOT EXISTS workspaces (

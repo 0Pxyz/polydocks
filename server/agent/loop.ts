@@ -7,6 +7,14 @@ import { loadSkill, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchInt
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
+import {
+  appendThreadMessage,
+  deleteThreadMessage,
+  getThreadContext,
+  rewindLastThreadTurn,
+  type AgentThreadAttachment,
+} from "../workspace/thread";
+import { maybeCompactAgentThread } from "./threadCompaction";
 import { getMemoryContext } from "./memory";
 import {
   getSession,
@@ -50,6 +58,7 @@ export interface ChatAttachment {
 
 export interface AgentLoopOptions {
   prompt: string;
+  userId?: string;
   sessionId?: string;
   workspaceId?: string;
   cityId?: string;
@@ -64,6 +73,8 @@ export interface AgentLoopOptions {
   modelId?: string;
   systemPrompt?: string;
   signal?: AbortSignal;
+  /** Rewind the last completed turn before appending the same prompt again. */
+  retryLast?: boolean;
 }
 
 export interface AgentLoopResult {
@@ -107,6 +118,7 @@ The user's workspace is your primary operating environment: notes, files, termin
 export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoopResult> {
   const {
     prompt,
+    userId,
     cityId,
     sessionId,
     workspaceId,
@@ -120,7 +132,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     modelId = MODEL_ID,
     systemPrompt = DEFAULT_SYSTEM_PROMPT,
     signal,
+    retryLast = false,
   } = options;
+
+  // The persistent thread is the source of truth for conversational context.
+  // Callers that omit userId (CLI, background tasks, unit tests) keep using
+  // the explicit history argument.
+  const threadUserId = userId?.trim() || undefined;
+  let threadUserMessageId: string | null = null;
+  let assistantPersisted = false;
 
   const attachments = options.attachments || [];
   const imageAttachments = attachments.filter((a) => a.isImage || (a.type && a.type.startsWith("image/")));
@@ -317,9 +337,22 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    // Initialize conversation messages with SQLite persistence
+    // Context: one bounded window per user. The thread keeps the full transcript
+    // in SQLite, but the model only receives recent turns plus the rolling
+    // summary of older ones.
     let effectiveHistory = history;
-    if (cityId && history.length === 0) {
+    let threadSummary = "";
+
+    if (threadUserId) {
+      if (retryLast) rewindLastThreadTurn(threadUserId);
+
+      const context = getThreadContext(threadUserId);
+      threadSummary = context.summary;
+      effectiveHistory = context.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+    } else if (cityId && history.length === 0) {
       const persisted = getCityConversationMessages(cityId, 20);
       effectiveHistory = persisted.map((m) => ({
         role: m.role,
@@ -329,7 +362,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }));
     }
 
-    if (cityId) {
+    if (threadUserId) {
+      const threadAttachments =
+        attachments.length > 0 ? (attachments as AgentThreadAttachment[]) : undefined;
+      const storedUserMessage = appendThreadMessage(threadUserId, "user", prompt, {
+        cityId,
+        attachments: threadAttachments,
+      });
+      threadUserMessageId = storedUserMessage.id;
+    } else if (cityId) {
       appendCityMessage(cityId, "user", prompt);
     }
 
@@ -358,12 +399,18 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       userMessageContent = text;
     }
 
+    let finalSystemPrompt = cityId
+      ? `${activeSystemPrompt}\n\n## Active City Workspace Scope: "${cityId}"\nOperate within this city only when the user's request pertains to it. Do not assume or dump city context unless requested.`
+      : activeSystemPrompt;
+
+    if (threadSummary) {
+      finalSystemPrompt = `${finalSystemPrompt}\n\n---\n## Durable Conversation Memory (older turns, summarized)\nThis is the user's ongoing conversation, not a new one. Continue from it naturally and do not restate it unless asked.\n\n${threadSummary}`;
+    }
+
     const messages: any[] = [
       {
         role: "system",
-        content: cityId
-          ? `${activeSystemPrompt}\n\n## Active City Workspace Scope: "${cityId}"\nOperate within this city only when the user's request pertains to it. Do not assume or dump city context unless requested.`
-          : activeSystemPrompt,
+        content: finalSystemPrompt,
       },
       ...effectiveHistory,
       {
@@ -390,6 +437,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           type: "error",
           payload: { code: "aborted", message: "Task execution cancelled by user." },
         });
+
+        if (threadUserId && threadUserMessageId && !assistantPersisted) {
+          deleteThreadMessage(threadUserId, threadUserMessageId);
+        }
+
         return {
           status: "error",
           error: "Execution cancelled",
@@ -431,7 +483,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // If no tool calls, the model provided its final textual answer
       if (!toolCalls || toolCalls.length === 0) {
         const finalText = assistantMessage.content || "";
-        if (cityId) {
+        if (threadUserId) {
+          appendThreadMessage(threadUserId, "assistant", finalText);
+          assistantPersisted = true;
+          void maybeCompactAgentThread({
+            userId: threadUserId,
+            llmClient,
+            modelId: effectiveModel,
+          }).catch(() => {});
+        } else if (cityId) {
           appendCityMessage(cityId, "assistant", finalText);
         }
 
@@ -620,7 +680,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         "I've structured your knowledge territory and prepared the workspace. You can explore the cities on the map or ask me to dive into any specific concept.";
     }
 
-    if (cityId) {
+    if (threadUserId) {
+      appendThreadMessage(threadUserId, "assistant", fallbackText);
+      assistantPersisted = true;
+      void maybeCompactAgentThread({
+        userId: threadUserId,
+        llmClient,
+        modelId: effectiveModel,
+      }).catch(() => {});
+    } else if (cityId) {
       appendCityMessage(cityId, "assistant", fallbackText);
     }
 
@@ -650,6 +718,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       steps: currentStep,
     };
   } catch (err: any) {
+    if (threadUserId && threadUserMessageId && !assistantPersisted) {
+      // Roll back the prompt so retrying the turn does not duplicate it.
+      deleteThreadMessage(threadUserId, threadUserMessageId);
+    }
+
     if (err?.name === "AbortError" || signal?.aborted) {
       if (taskId) {
         try {
