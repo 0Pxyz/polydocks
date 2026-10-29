@@ -6,7 +6,7 @@ four verbs (open, close, edit, pin).
 
 | Surface | Controls | Shape |
 | :--- | :--- | :--- |
-| `/api/plugins` | Plugin lifecycle (create/edit/install/uninstall/operate, registry) and **every** capability as `POST /api/plugins/:id/:capability` | `{ ok, data?, events? }` / `{ ok:false, error, retryable, code? }` |
+| `/api/plugins` | Plugin lifecycle (create/edit/install/uninstall/operate, versions, rollback, registry) and **every** capability as `POST /api/plugins/:id/:capability` | `{ ok, data?, events? }` / `{ ok:false, error, retryable, code? }` |
 | `/api/dock` | Dock verbs: open/close/pin/unpin/list tabs, city scope enter/get, appearance apply | Same envelope; state changes also emit `events[]` |
 | `/api/agent` | Agent loop (`POST /api/agent`, SSE), sessions, tasks, approvals, memory, thread, models, status | Same envelope; loop streams SSE |
 
@@ -19,9 +19,11 @@ Product routes delegate to one shared layer (`server/facade/shared.ts`); the HTT
 | Current route | Surface | Notes |
 | :--- | :--- | :--- |
 | `POST /api/plugins/:pluginId/:capability` | plugins | Canonical invoke; CLI `plugins invoke` and `plugins.operate` delegate here |
-| `POST /api/plugins/lifecycle` | plugins | Synthesis lifecycle (`create\|modify\|publish\|install\|uninstall`); agent create/install/publish gated by `INSTALL_POLICY` |
+| `POST /api/plugins/lifecycle` | plugins | Synthesis lifecycle (`create\|modify\|publish\|install\|uninstall`); agent create/modify/install/publish gated by `INSTALL_POLICY` |
+| `GET /api/plugins/:id/versions` | plugins | Kept versions (edit history for rollback) |
+| `POST /api/plugins/:id/rollback` | plugins | Roll back to a kept version (workspace: new row with old content; registry: reactivate) |
 | `POST /api/dock/action` | dock | Verbs (`tabs.open/close/pin/unpin/list/create/update`, `scope.enter/get`, `appearance.apply`) |
-| `GET /api/dock/tabs` | dock | Tabs mounted in the dock |
+| `GET /api/dock/tabs` | dock | Tabs with `pinned` flags (durable `dock_pins` record, not just client cache) |
 | `GET /api/plugins`, `POST /:id/toggle`, `DELETE /:id`, `GET /:id/executions` | plugins | Lifecycle + introspection |
 | `GET /api/capabilities`, `POST /invoke`, `POST /:id/invoke` | plugins | Discovery; approvals under it conceptually belong to agent (see below) |
 | `GET /api/registry`, `POST /publish`, `POST /:id/install` | plugins | Community store |
@@ -31,7 +33,7 @@ Product routes delegate to one shared layer (`server/facade/shared.ts`); the HTT
 | `POST /api/mcp` | plugins | External agents drive capabilities over MCP |
 | `POST /api/plugins/mcp/connect`, `POST /install-url` | plugins | Lifecycle transports |
 | `GET /api/cities/:id/tabs`, `/:id/tabs/:tabId/srcdoc`, `/:id/features/:tabId` | dock | Tabs mounted in the dock |
-| `GET /api/workspaces*` (incl. `:id/plugins`, `srcdoc`) | dock | Workspace = dock scope; mounts per workspace |
+| `GET /api/workspaces*` (incl. `:id/plugins` + `pinned[]`, `:id/pins` POST/DELETE, `srcdoc`) | dock | Workspace = dock scope; mounts per workspace; server pin record merged by the UI |
 | `POST /api/dock/action`, `GET /api/dock/tabs`, `POST /api/dock/scope`, `POST /api/dock/appearance` | dock | Facade (`PRODUCT_SURFACE=facade`); delegates to existing tab/enter/theme executors |
 | `POST /api/agent` (SSE) | agent | Tool-calling loop |
 | `GET /api/sessions`, `/tasks` (+ `/api/agent/sessions`, `/api/agent/tasks` under facade) | agent | Same routers, product paths under facade |
@@ -81,6 +83,8 @@ curl -s -X POST localhost:3000/api/agent/approvals/abc123 \
 # CLI parity (same handlers, same envelope with --json)
 bun bin/polydocks plugins invoke cities quest_add --title "Read" --city stoicism --json
 bun bin/polydocks plugins lifecycle --op create --id my-tool --name "My Tool" --description "..." --code "..." --workspaceId default
+bun bin/polydocks plugins versions my-tool
+bun bin/polydocks plugins rollback my-tool --version 1.0.0
 bun bin/polydocks dock tabs --city stoicism --json
 bun bin/polydocks dock open notes --city stoicism --json
 bun bin/polydocks dock pin my-tool --city stoicism --json

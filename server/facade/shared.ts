@@ -250,6 +250,21 @@ export async function pluginLifecycle(
       };
     }
   }
+  // Visual kit gate: create/edit with code, publish with stored code.
+  // Agent-created code is validated strict (structural slop fails);
+  // legacy/first-party code gets warnings. Fails closed with rule names.
+  if (op === "create" || (op === "modify" && typeof (params as any).code === "string")) {
+    const { validateSlop } = await import("../plugins/slop");
+    const report = validateSlop(String((params as any).code ?? ""), { strict: ctx.actor === "agent" });
+    if (!report.ok) {
+      return {
+        ok: false,
+        error: `Design kit violation: ${report.errors.join("; ")}`,
+        retryable: false,
+        code: "slop_violation",
+      };
+    }
+  }
   try {
     const eventName =
       op === "create" ? "plugin.created" : op === "modify" ? "plugin.updated" : op === "publish" ? "plugin.published" : op === "install" ? "plugin.installed" : "plugin.uninstalled";
@@ -298,6 +313,25 @@ export async function pluginLifecycle(
       WorkspaceService.removePluginFromWorkspace(workspaceId, pluginId);
       return { ok: true, data: { pluginId, workspaceId, uninstalled: true }, events: [{ type: eventName, payload: { pluginId } }] };
     }
+    if (op === "publish") {
+      const pluginId = (params as any).pluginId as string;
+      if (pluginId) {
+        const { getPluginFile } = await import("../workspace/pluginFiles");
+        const stored = getPluginFile(pluginId, (params as any).workspaceId as string || ctx.workspaceId);
+        if (stored?.sourceCode) {
+          const { validateSlop } = await import("../plugins/slop");
+          const report = validateSlop(stored.sourceCode, { strict: ctx.actor === "agent" });
+          if (!report.ok) {
+            return {
+              ok: false,
+              error: `Design kit violation in stored code: ${report.errors.join("; ")}`,
+              retryable: false,
+              code: "slop_violation",
+            };
+          }
+        }
+      }
+    }
     const mod =
       op === "create"
         ? await import("../agent/tools/create_plugin")
@@ -317,6 +351,99 @@ export async function pluginLifecycle(
 }
 
 // ---------------------------------------------------------------------------
+/** List kept versions of a plugin (workspace files + registry history). */
+export async function pluginVersions(pluginId: string): Promise<FacadeEnvelope> {
+  if (!pluginId) {
+    return { ok: false, error: "versions needs { pluginId }.", retryable: false, code: "invalid_input" };
+  }
+  try {
+    const { listVersions } = await import("../plugins/versions");
+    const { listPluginFiles } = await import("../workspace/pluginFiles");
+    const { db } = await import("../workspace/db");
+    const seen = new Map<string, { version: string; via: string; workspaceId?: string }>();
+    let workspaces: string[] = ["default"];
+    try {
+      workspaces = (db.query("SELECT DISTINCT workspace_id as id FROM plugin_files").all() as any[]).map((r) => r.id);
+    } catch {
+      // Fall back to default.
+    }
+    for (const ws of workspaces) {
+      try {
+        for (const p of listPluginFiles(ws)) {
+          if (p.pluginId === pluginId && !seen.has(`ws:${p.version}`)) {
+            seen.set(`ws:${p.version}`, { version: p.version, via: "workspace", workspaceId: ws });
+          }
+        }
+      } catch {
+        // Workspace may not exist; ignore.
+      }
+    }
+    for (const v of listVersions(pluginId)) {
+      if (!seen.has(`reg:${v.version}`)) {
+        seen.set(`reg:${v.version}`, { version: v.version, via: "registry", workspaceId: v.workspaceId });
+      }
+    }
+    return { ok: true, data: { pluginId, versions: [...seen.values()] }, events: [] };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Versions lookup failed.", retryable: false };
+  }
+}
+
+/**
+ * Roll back a plugin to a kept version. Workspace plugins: append a new
+ * version row with the old content (history is append-only, nothing is
+ * overwritten or deleted). Registry-tracked plugins: reactivate via the
+ * versions table.
+ */
+export async function pluginRollback(
+  pluginId: string,
+  version: string,
+  workspaceId?: string
+): Promise<FacadeEnvelope> {
+  if (!pluginId || !version) {
+    return { ok: false, error: "rollback needs { pluginId, version }.", retryable: false, code: "invalid_input" };
+  }
+  try {
+    const { getPluginFile, upsertPluginFile } = await import("../workspace/pluginFiles");
+    const ws = workspaceId || "default";
+    const target = getPluginFile(pluginId, ws, version) || getPluginFile(pluginId, undefined, version);
+    if (target) {
+      const bumped = bumpPatch(target.version);
+      const manifest = { ...(target.manifest as object), version: bumped } as any;
+      upsertPluginFile({
+        workspaceId: target.workspaceId,
+        pluginId,
+        version: bumped,
+        manifest,
+        sourceCode: target.sourceCode,
+        srcdoc: target.srcdoc,
+      });
+      return {
+        ok: true,
+        data: { pluginId, version: bumped, restoredFrom: target.version, via: "workspace" },
+        events: [{ type: "plugin.updated", payload: { pluginId, version: bumped } }],
+      };
+    }
+    const { rollbackPlugin, listVersions } = await import("../plugins/versions");
+    if (!listVersions(pluginId).some((v) => v.version === version)) {
+      return { ok: false, error: `Version "${version}" of "${pluginId}" is not kept.`, retryable: false, code: "not_found" };
+    }
+    const restored = rollbackPlugin(pluginId, version);
+    if (!restored.success) {
+      return { ok: false, error: restored.error || "Rollback failed.", retryable: true };
+    }
+    return { ok: true, data: { pluginId, version: restored.version, via: "registry" }, events: [{ type: "plugin.updated", payload: { pluginId } }] };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Rollback failed.", retryable: true };
+  }
+}
+
+function bumpPatch(version: string): string {
+  const m = String(version || "").match(/^(\d+)\.(\d+)\.(\d+)(.*)$/);
+  if (!m) return `${version || "1.0.0"}-rollback-1`;
+  return `${m[1]}.${m[2]}.${Number(m[3]) + 1}${m[4]}`;
+}
+
 // agent.* — the agent's own surface: loop-adjacent state (sessions, tasks,
 // approvals, memory, models, runtime status). Same functions serve the
 // facade routes, the CLI and the thin agent tools.

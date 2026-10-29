@@ -21,7 +21,12 @@ export interface SlopReport {
   warnings: string[];
 }
 
-export function validateSlop(code: string): SlopReport {
+/**
+ * @param strict - agent-created plugins fail closed on structural slop
+ * (Badge/Card/bordered boxes). Legacy first-party code only gets warnings.
+ */
+export function validateSlop(code: string, opts?: { strict?: boolean }): SlopReport {
+  const strict = opts?.strict ?? false;
   const errors: string[] = [];
   const warnings: string[] = [];
   const src = code || "";
@@ -45,14 +50,20 @@ export function validateSlop(code: string): SlopReport {
   }
 
   if (/<(Badge|Pill)\b/.test(src)) {
-    warnings.push("Badge/Pill components: state as plain text, never decorative chips");
+    const msg = "Badge/Pill components: state as plain text, never decorative chips";
+    if (strict) errors.push(msg);
+    else warnings.push(msg);
   }
   if (/<Card[\s>]/.test(src)) {
-    warnings.push("Card containers: let content breathe on the surface instead of boxing it");
+    const msg = "Card containers: let content breathe on the surface instead of boxing it";
+    if (strict) errors.push(msg);
+    else warnings.push(msg);
   }
   const borderDecls = src.match(/border\s*:\s*1px solid[^;}]*[;}]/g) ?? [];
   if (borderDecls.length > 0) {
-    warnings.push(`${borderDecls.length} explicit bordered box(es): prefer a subtle surface step, no outline borders`);
+    const msg = `${borderDecls.length} explicit bordered box(es): prefer a subtle surface step, no outline borders`;
+    if (strict) errors.push(msg);
+    else warnings.push(msg);
   }
 
   return { ok: errors.length === 0, errors, warnings };

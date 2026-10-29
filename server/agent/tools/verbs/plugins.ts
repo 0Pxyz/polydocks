@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "../../types";
-import { invokeCapability, pluginLifecycle } from "../../../facade/shared";
+import { dockAction, invokeCapability, pluginLifecycle, pluginRollback } from "../../../facade/shared";
 
 function actorCtx(ctx: { cityId?: string; workspaceId?: string; sessionId?: string }) {
   return { actor: "agent" as const, cityId: ctx.cityId, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId };
@@ -14,7 +14,7 @@ const userApproved = {
 export const pluginsCreate: AgentTool<Record<string, unknown>> = {
   name: "plugins.create",
   description:
-    "Create a new plugin (experience) that mounts in the dock. Only when dock.list and the store have nothing suitable. Validated against the design kit; pass { userApproved: true } once the user explicitly said yes. Same handler as POST /api/plugins/lifecycle and the CLI.",
+    "Create a new plugin (experience) that mounts in the dock. Only when dock.list and the store have nothing suitable. Validated against the design kit; agent origin needs { userApproved: true }. Same handler as POST /api/plugins/lifecycle and the CLI.",
   schema: z
     .object({
       id: z.string().min(1),
@@ -51,7 +51,7 @@ export const pluginsEdit: AgentTool<Record<string, unknown>> = {
 export const pluginsInstall: AgentTool<Record<string, unknown>> = {
   name: "plugins.install",
   description:
-    "Install a store plugin into a workspace (or mount a local one). Store lookup first; pass { userApproved: true } once the user explicitly said yes. Same handler as POST /api/plugins/lifecycle and the CLI.",
+    "Install a store plugin into a workspace (or mount a local one). Store lookup first; agent origin needs { userApproved: true }. Same handler as POST /api/plugins/lifecycle and the CLI.",
   schema: z
     .object({
       pluginId: z.string().min(1),
@@ -90,4 +90,16 @@ export const pluginsOperate: AgentTool<{ plugin: string; capability: string; inp
       ...actorCtx(ctx),
       cityId: args.cityId || ctx.cityId,
     }),
+};
+
+export const pluginsRollback: AgentTool<{ pluginId: string; version: string; workspaceId?: string }> = {
+  name: "plugins.rollback",
+  description:
+    "Roll back a plugin to a kept version (new row with the old content; history is append-only). Same handler as POST /api/plugins/:id/rollback and the CLI.",
+  schema: z.object({
+    pluginId: z.string().min(1).describe("Plugin id"),
+    version: z.string().min(1).describe("Kept version to restore"),
+    workspaceId: z.string().optional(),
+  }),
+  execute: (args, ctx) => pluginRollback(args.pluginId, args.version, args.workspaceId || ctx.workspaceId),
 };

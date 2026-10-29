@@ -38,6 +38,19 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
     const { enforceInstallPolicy } = await import("../installPolicy");
     const denied = enforceInstallPolicy(ctx?.actor, (input as any).userApproved);
     if (denied) return denied;
+
+    // Visual kit gate on the stored code (agent-published code is strict).
+    {
+      const { getPluginFile } = await import("../../workspace/pluginFiles");
+      const stored = getPluginFile(input.pluginId, input.workspaceId || ctx?.workspaceId || ctx?.cityId);
+      if (stored?.sourceCode) {
+        const { validateSlop } = await import("../../plugins/slop");
+        const report = validateSlop(stored.sourceCode, { strict: ctx?.actor === "agent" });
+        if (!report.ok) {
+          return { success: false, error: `Design kit violation in stored code: ${report.errors.join("; ")}`, code: "slop_violation" };
+        }
+      }
+    }
     const workspaceId = input.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
 
     return await PluginService.publishPlugin({

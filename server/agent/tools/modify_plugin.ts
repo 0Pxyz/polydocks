@@ -75,6 +75,15 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
     const { enforceInstallPolicy } = await import("../installPolicy");
     const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
     if (denied) return denied;
+
+    // Visual kit gate on full replacement code (agent-created is strict).
+    if (args.code) {
+      const { validateSlop } = await import("../../plugins/slop");
+      const report = validateSlop(args.code, { strict: ctx?.actor === "agent" });
+      if (!report.ok) {
+        return { success: false, error: `Design kit violation: ${report.errors.join("; ")}`, code: "slop_violation" };
+      }
+    }
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
     const normalized = normalizePluginId(args.id);
 
