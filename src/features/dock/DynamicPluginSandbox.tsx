@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createHostBridge } from "./bridge/host-bridge";
+import { ReaderView } from "./ReaderView";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { cn } from "@/lib/cn";
 
@@ -35,6 +36,7 @@ export function DynamicPluginSandbox({
   const [fetching, setFetching] = useState<boolean>(true);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [readerUrl, setReaderUrl] = useState<string | null>(null);
   const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchSrcdoc = useCallback(async () => {
@@ -63,7 +65,9 @@ export function DynamicPluginSandbox({
     fetchSrcdoc();
   }, [fetchSrcdoc]);
 
-  // Connect host postMessage bridge scoped to workspace + plugin
+  // Connect host postMessage bridge scoped to workspace + plugin.
+  // openContent opens the native in-app Reader (articles render as app
+  // components, video as embeds — no iframe, no cross-plugin messaging).
   useEffect(() => {
     const targetWin = iframeRef.current?.contentWindow || null;
     const bridge = createHostBridge(targetWin, {
@@ -73,6 +77,7 @@ export function DynamicPluginSandbox({
       pluginId,
       storagePrefix: "polydocks",
       onCollapse: onDismiss,
+      onOpenContent: (url) => setReaderUrl(url),
       onReady: () => {
         if (handshakeTimerRef.current) {
           clearTimeout(handshakeTimerRef.current);
@@ -136,6 +141,10 @@ export function DynamicPluginSandbox({
         className
       )}
     >
+      {readerUrl ? (
+        <ReaderView url={readerUrl} onBack={() => setReaderUrl(null)} />
+      ) : (
+        <>
       {/* Quiet Status Row on Failure or Timeout */}
       {error && (
         <div className="w-full flex items-center justify-center gap-2 py-3 text-xs text-[#9aa5b8] bg-transparent">
@@ -185,6 +194,8 @@ export function DynamicPluginSandbox({
             !isReady || error ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto"
           )}
         />
+      )}
+        </>
       )}
     </div>
   );

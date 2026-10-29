@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs/promises";
+import path from "node:path";
 import app from "../server/index";
 import { create_tab } from "../server/agent/tools/create_tab";
 import { inspect_experience } from "../server/agent/tools/inspect_experience";
@@ -31,8 +33,30 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
     db.query("DELETE FROM plugin_grants WHERE plugin_id LIKE 'gen_%'").run();
   });
 
+  async function cleanTestFeature() {
+    // create_tab guards on the registry + SQLite plugin namespaces (not just
+    // the filesystem), so the test must start with neither present.
+    try {
+      db.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(testExpId);
+      db.query("DELETE FROM plugins WHERE id = ?").run(testExpId);
+      db.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(testExpId);
+      db.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(testExpId);
+    } catch {
+      // tables may not exist in very old flows; filesystem cleanup still runs
+    }
+    for (const kind of ["features", "tabs"]) {
+      await fs
+        .rm(path.join(process.cwd(), "workspace", testCity, kind, testExpId), {
+          recursive: true,
+          force: true,
+        })
+        .catch(() => {});
+    }
+  }
+
   describe("Experience Synthesis with Manifest & Capabilities", () => {
     it("creates a dynamic experience with declared capabilities and permissions", async () => {
+      await cleanTestFeature();
       const code = `
         const root = document.getElementById('app');
         root.innerHTML = '<h1>Stoic Flashcards</h1>';

@@ -9,11 +9,13 @@ import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { mcpRouter } from "./api/mcp";
 import { citiesRouter } from "./routes/cities";
 import { mapsRouter } from "./routes/maps";
+import { worldRouter } from "./routes/world";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
 import { threadRouter } from "./routes/thread";
+import { readerRouter } from "./reader/route";
 import { resolveUserId } from "./identity";
 import { sessionsRouter } from "./routes/sessions";
 import { tasksRouter } from "./routes/tasks";
@@ -22,11 +24,33 @@ import { taskExecutionEngine } from "./agent/taskRunner";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
+import { isVoiceRealtimeRequest, voiceSessionIdFrom, voiceWebsocketHandlers } from "./voice/proxy";
 
 // Bootstrap persistent agent-home filesystem structure on startup
 await initAgentHome().catch((err) => {
   console.error("[Polymax Server] Failed to initialize agent-home:", err);
 });
+
+// One-time idempotent import of workspace plugin files into SQLite
+// (plugin_files is the source of truth; workspace/ is ephemeral in prod).
+// Skipped under bun test: migration is a production boot concern and would
+// import mid-run fixture files into the shared test database.
+if (config.NODE_ENV !== "test") {
+  try {
+    const { migrateWorkspacePluginFiles } = await import("./workspace/pluginFiles");
+    const report = await migrateWorkspacePluginFiles();
+    if (report.imported > 0 || report.conflicts.length > 0) {
+      console.log(
+        `[Polymax Server] Plugin migration: ${report.imported} imported, ${report.skipped} skipped, ${report.conflicts.length} conflicts`
+      );
+      for (const c of report.conflicts.slice(0, 10)) {
+        console.log(`[Polymax Server] Plugin migration conflict: ${c.workspaceId}/${c.pluginId} kept ${c.kept}`);
+      }
+    }
+  } catch (err) {
+    console.error("[Polymax Server] Plugin migration failed (non-fatal):", err);
+  }
+}
 
 // Recover any interrupted background tasks from previous server instance
 taskExecutionEngine.recoverInterruptedTasks();
@@ -122,6 +146,9 @@ app.route("/api/agent/memory", memoryRouter);
 // Mount the single persistent agent thread (transcript + bounded context)
 app.route("/api/agent/thread", threadRouter);
 
+// Native Reader backend (SSRF-guarded article/video loader)
+app.route("/api/reader", readerRouter);
+
 // Mount Persistent Work Sessions & Background Task Engine (Issue #76)
 app.route("/api/sessions", sessionsRouter);
 app.route("/api/tasks", tasksRouter);
@@ -129,6 +156,9 @@ app.route("/api/artifacts", artifactsRouter);
 
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);
+
+// Mount Knowledge World router (cities + conceptual links for the particle map)
+app.route("/api/world", worldRouter);
 
 // Experience runtime error reporting endpoints
 app.post("/api/experiences/:id/errors", async (c) => {
@@ -214,7 +244,19 @@ if (config.NODE_ENV === "production" || process.env.SERVE_STATIC === "true") {
 
 export default {
   port: config.PORT,
-  fetch: app.fetch,
+  fetch(req: Request, server: any) {
+    if (isVoiceRealtimeRequest(req)) {
+      const sessionId = voiceSessionIdFrom(req);
+      try {
+        if (server?.upgrade?.(req, { data: { sessionId } })) return undefined as any;
+      } catch {
+        // Fall through to an explicit error below
+      }
+      return new Response("Voice realtime requires a WebSocket upgrade.", { status: 426 });
+    }
+    return app.fetch(req, server);
+  },
+  websocket: voiceWebsocketHandlers,
 };
 
 if (import.meta.main) {

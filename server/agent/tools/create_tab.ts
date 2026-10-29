@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { writeCityFile } from "../../workspace/cityWorkspace";
-import { writeFeature } from "../../workspace/features";
+import { writeLegacyFeature, writeFeature } from "../../workspace/features";
+import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
 
 export interface CreateTabArgs {
   id: string;
@@ -33,7 +33,7 @@ export const create_tab: AgentTool<CreateTabArgs> = {
         .string()
         .optional()
         .describe(
-          "TypeScript feature module (.ts) without external imports, interacting via window.polymax bridge"
+          "TSX feature module. Import allowlist: react, react-dom/client, @/components/ui/* only; mounts into #app via window.polymax bridge"
         ),
       html: z
         .string()
@@ -53,8 +53,19 @@ export const create_tab: AgentTool<CreateTabArgs> = {
   execute: async (args, ctx) => {
     const targetCity = args.cityId || ctx.cityId || (args.scope === "global" ? "global" : args.id);
 
+    // Update-instead-of-recreate guard: normalized id checked across
+    // registry + tab/plugin namespaces in every scope, not just this city.
+    const normalized = normalizePluginId(args.id);
+    const taken = isPluginIdTaken(normalized);
+    if (taken.taken) {
+      return {
+        success: false,
+        error: `Tab "${normalized}" already exists (${taken.namespaces.join(", ")}). Use update_tab to modify the existing experience instead of recreating it.`,
+      };
+    }
+
     const manifest = {
-      id: args.id,
+      id: normalized,
       title: args.title,
       icon: args.icon || "Layers",
       scope: args.scope || "city",
@@ -65,33 +76,54 @@ export const create_tab: AgentTool<CreateTabArgs> = {
 
     if (args.code) {
       // Modern feature module path
-      await writeFeature(targetCity, args.id, {
+      await writeFeature(targetCity, normalized, {
         manifest,
         code: args.code,
       });
 
+      ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+      const verification = await verifyPluginStateAsync(normalized, targetCity);
+      if (!verification.ok) {
+        return {
+          success: false,
+          error: verification.error || "Tab verification failed after create",
+          verification,
+          tab: manifest,
+          cityId: targetCity,
+        };
+      }
       return {
         success: true,
         tab: manifest,
         cityId: targetCity,
         action: "tab.created",
         format: "feature-ts",
+        verification,
       };
     }
 
-    // Legacy HTML blob path
+    // Legacy HTML blob path (SQLite single source of truth, no FS mirroring)
     const rawHtml = args.html || "";
-    await writeCityFile(targetCity, `tabs/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-    await writeCityFile(targetCity, `tabs/${args.id}/index.html`, rawHtml);
-    await writeCityFile(targetCity, `features/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-    await writeCityFile(targetCity, `features/${args.id}/index.html`, rawHtml);
+    await writeLegacyFeature(targetCity, normalized, manifest, rawHtml);
 
+    ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+    const verification = await verifyPluginStateAsync(normalized, targetCity);
+    if (!verification.ok) {
+      return {
+        success: false,
+        error: verification.error || "Tab verification failed after create",
+        verification,
+        tab: manifest,
+        cityId: targetCity,
+      };
+    }
     return {
       success: true,
       tab: manifest,
       cityId: targetCity,
       action: "tab.created",
       format: "legacy-html",
+      verification,
     };
   },
 };

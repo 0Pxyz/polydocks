@@ -82,4 +82,24 @@ describe("City Workspace & SQLite Engine", () => {
       /Security Violation/
     );
   });
+
+  it("lists DB-only plugins even when workspace/ files are gone (redeploy)", async () => {
+    const { writeFeature } = await import("./features");
+    const { ensurePluginFilesTable } = await import("./pluginFiles");
+    ensurePluginFilesTable();
+    await writeFeature(TEST_CITY, "db-only-plug", {
+      manifest: { id: "db-only-plug", title: "DB Only" },
+      code: `document.getElementById('app').textContent = 'db';`,
+    });
+
+    // Simulate a redeploy wiping workspace/ while ./data (SQLite) survives.
+    await fs.rm(path.join(TEST_DIR, "features"), { recursive: true, force: true }).catch(() => {});
+    await fs.rm(path.join(TEST_DIR, "tabs"), { recursive: true, force: true }).catch(() => {});
+
+    const ctx = await getCityContext(TEST_CITY);
+    expect(ctx.tabs).toContain("db-only-plug");
+    expect(ctx.features).toContain("db-only-plug");
+
+    db.query("DELETE FROM plugin_files WHERE workspace_id = ?").run(TEST_CITY);
+  });
 });

@@ -4,6 +4,7 @@ import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { classifyIntent, INTENT_TOOL_DENYLIST } from "./intent";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
@@ -43,6 +44,7 @@ export interface AgentStepEvent {
     | "plugin.updated"
     | "plugin.published"
     | "plugin.operated"
+    | "theme.apply"
     | "agent.finish"
     | "error";
   payload?: Record<string, unknown>;
@@ -119,7 +121,11 @@ The user's workspace is your primary operating environment: notes, files, termin
 
 4. Separate Internal State from User Responses:
 - Never dump mounted tool lists, dock experience IDs, internal inspection logs, resource sizes, or empty quest/feed scaffolding into your response unless specifically asked.
-- Provide direct, elegant, and useful answers reflecting the actual outcome.`;
+- Provide direct, elegant, and useful answers reflecting the actual outcome.
+
+5. Organize and Integrate, Inline First:
+- Your role is to organize and integrate (capabilities, MCPs, APIs); you do not design from scratch.
+- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.`;
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
@@ -155,11 +161,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const imageAttachments = attachments.filter((a) => a.isImage || (a.type && a.type.startsWith("image/")));
   const textAttachments = attachments.filter((a) => !a.isImage && !(a.type && a.type.startsWith("image/")));
 
-  // Automatically route prompts with image attachments to the catalog vision model when on the default agent model
-  const VISION_MODEL_ID = process.env.MODEL_VISION_ID || "meta-llama/Llama-3.2-11B-Vision-Instruct";
+  // Model routing for image attachments: Muse Spark and Muse Wonder take
+  // image input natively with full tool calling (dev.meta.ai/docs/models,
+  // image-understanding), so the default model is kept. An explicit
+  // MODEL_VISION_ID escape hatch still overrides when a deployment needs it.
+  const VISION_OVERRIDE = process.env.MODEL_VISION_ID;
   let effectiveModel = modelId;
-  if (imageAttachments.length > 0 && (!modelId || modelId === MODEL_ID)) {
-    effectiveModel = VISION_MODEL_ID;
+  if (imageAttachments.length > 0 && VISION_OVERRIDE && (!modelId || modelId === MODEL_ID)) {
+    effectiveModel = VISION_OVERRIDE;
   }
 
   // Reasoning effort allowlist mirrors server/index.ts (defense in depth:
@@ -171,6 +180,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       : undefined;
 
   let currentStep = 0;
+
+  // Intent routing runs BEFORE tools are offered: classify the request,
+  // then hide every tool the intent must never touch. Misrouting is
+  // prevented at the catalog level, not by editing progress text later.
+  const intent = classifyIntent(prompt, { hasImageAttachments: imageAttachments.length > 0 });
+  const deniedTools = new Set(INTENT_TOOL_DENYLIST[intent] ?? []);
+  const scopedTools = tools.filter((tool) => !deniedTools.has(tool.name));
 
   // Resolve workspace context. Session persistence (SQLite rows, JSONL
   // transcripts, SSE replay buffers) belongs to the background/task path
@@ -225,6 +241,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   };
 
   try {
+
     if (taskId) {
       try {
         updateTaskState(taskId, "running", { progress: 0.05 });
@@ -236,12 +253,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await emit({
       step: 0,
       type: "agent.start",
-      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel },
+      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, intent },
     });
 
-    // Build tool registry map and OpenAI-compatible tools definitions
+    // Build tool registry map and OpenAI-compatible tools definitions.
+    // Intent-scoped: denied tools are not offered at all, so the model
+    // cannot misroute (e.g. web research for a theme change).
     const toolMap = new Map<string, AgentTool>();
-    const formattedTools = tools.map((tool) => {
+    const formattedTools = scopedTools.map((tool) => {
       toolMap.set(tool.name, tool);
       return {
         type: "function" as const,
@@ -285,6 +304,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         (p) => `- ${p.name} (${p.id}): ${p.manifest.description} [${(p.manifest.capabilities || []).map((c) => c.id).join(", ")}]`
       );
       activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):\n${summaryLines.join("\n")}`;
+    }
+
+    // Per-turn workspace mount state: id, version, enabled. The agent
+    // organizes and integrates mounted tools; it does not redesign them.
+    try {
+      const { listWorkspacePlugins } = await import("../workspace/workspaces");
+      const mounted = listWorkspacePlugins(effectiveWorkspaceId).slice(0, 30);
+      if (mounted.length > 0) {
+        const mountLines = mounted.map(
+          (m) => `- ${m.pluginId} v${m.plugin?.version || "?"} ${m.enabled ? "enabled" : "disabled"}`
+        );
+        activeSystemPrompt = `${activeSystemPrompt}\n\n## Mounted Plugins in workspace "${effectiveWorkspaceId}" (id, version, state — fix in place with inspect_experience/modify_plugin, never recreate):\n${mountLines.join("\n")}`;
+      }
+    } catch {
+      // Non-fatal if workspace lookup encounters an issue
     }
 
     // Reflective Execution & Failure Retry Guidelines
@@ -356,6 +390,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
+    if (intent === "theme") {
+      try {
+        const themeSkillPrompt = await loadSkill("theme");
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Theme Customization\n${themeSkillPrompt}`;
+      } catch {
+        // Non-fatal
+      }
+    }
+
     if (isWorldPlanningIntent(prompt)) {
       try {
         const worldSkillPrompt = await loadSkill("world-planning");
@@ -406,8 +449,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     if (imageAttachments.length > 0) {
       const parts: any[] = [];
       let text = prompt;
+      const refs = imageAttachments.map((img) => `[Attached image: ${img.name} (attachmentId: ${img.id})]`);
+      if (refs.length > 0) text = `${refs.join("\n")}\n${text}`;
       for (const doc of textAttachments) {
-        text += `\n\n[Attached File: ${doc.name} (${doc.type})]:\n\`\`\`\n${doc.textContent || ""}\n\`\`\``;
+        text += `\n\n[Attached File: ${doc.name} (${doc.type}, id: ${doc.id})]:\n\`\`\`\n${doc.textContent || ""}\n\`\`\``;
       }
       parts.push({ type: "text", text });
       for (const img of imageAttachments) {
@@ -422,7 +467,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     } else if (textAttachments.length > 0) {
       let text = prompt;
       for (const doc of textAttachments) {
-        text += `\n\n[Attached File: ${doc.name} (${doc.type})]:\n\`\`\`\n${doc.textContent || ""}\n\`\`\``;
+        text += `\n\n[Attached File: ${doc.name} (${doc.type}, id: ${doc.id})]:\n\`\`\`\n${doc.textContent || ""}\n\`\`\``;
       }
       userMessageContent = text;
     }
@@ -541,7 +586,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         await emit({
           step: currentStep,
           type: "agent.finish",
-          payload: { text: finalText, steps: currentStep },
+          payload: { text: finalText, steps: currentStep, model: effectiveModel, intent },
         });
 
         return {
@@ -650,6 +695,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
+        // Dock layout directives: the client applies these through the shared
+        // dock layer and reads the resulting state back.
+        if (
+          (toolName === "dock_pin" || toolName === "dock_unpin" || toolName === "dock_close") &&
+          toolOutput &&
+          typeof toolOutput === "object"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "dock.layout",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
         if (toolName === "open_intent" && toolOutput && typeof toolOutput === "object") {
           await emit({
             step: currentStep,
@@ -723,6 +782,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             payload: toolOutput as Record<string, unknown>,
           });
         }
+
+        if (
+          toolName === "apply_theme" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).success === true
+        ) {
+          await emit({
+            step: currentStep,
+            type: "theme.apply",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
       }
     }
 
@@ -786,6 +858,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       payload: {
         text: fallbackText,
         steps: currentStep,
+        model: effectiveModel,
+        intent,
       },
     });
 

@@ -23,6 +23,10 @@ export type UIEvent =
       step: number;
       prompt: string;
       cityId?: string;
+      /** Effective model handling this turn (may differ from the selected one). */
+      model?: string;
+      /** Deterministic intent the turn was routed under. */
+      intent?: string;
     }
   | {
       type: "tool.started";
@@ -48,6 +52,14 @@ export type UIEvent =
       type: "dock.open_experience";
       step: number;
       experienceId: string;
+    }
+  | {
+      type: "dock.layout";
+      step: number;
+      op: "open" | "close" | "pin" | "unpin";
+      itemId: string;
+      success: boolean;
+      message?: string;
     }
   | {
       type: "experience.primed";
@@ -95,6 +107,12 @@ export type UIEvent =
       action?: string;
     }
   | {
+      type: "theme.applied";
+      step: number;
+      applied: Record<string, unknown>;
+      attachmentId?: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -104,6 +122,8 @@ export type UIEvent =
       step: number;
       text: string;
       steps: number;
+      model?: string;
+      intent?: string;
     }
   | {
       type: "agent.error";
@@ -138,6 +158,8 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       const action = typeof args?.action === "string" ? args.action : "";
       return action ? `Running "${action}"…` : "Running the tool…";
     }
+    case "apply_theme":
+      return "Applying theme…";
     case "publish_plugin":
     case "promote_to_plugin":
       return "Publishing the tool…";
@@ -166,6 +188,14 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     case "open_intent": {
       const tabId = typeof args?.tabId === "string" ? args.tabId : typeof args?.id === "string" ? args.id : "";
       return tabId ? `Opening ${tabId}…` : "Opening experience in workspace…";
+    }
+    case "dock_pin":
+    case "dock_unpin":
+    case "dock_close": {
+      const id = typeof args?.id === "string" ? args.id : "";
+      if (toolName === "dock_pin") return id ? `Pinning ${id}…` : "Pinning to the dock…";
+      if (toolName === "dock_unpin") return id ? `Unpinning ${id}…` : "Unpinning from the dock…";
+      return id ? `Closing ${id}…` : "Closing…";
     }
     // Trivial bookkeeping, internal inspections, and instant queries are silent
     case "list_tabs":
@@ -209,6 +239,8 @@ export function adaptBackendEvent(raw: {
         step,
         prompt: String(payload.prompt || ""),
         cityId: payload.cityId ? String(payload.cityId) : undefined,
+        model: payload.model ? String(payload.model) : undefined,
+        intent: payload.intent ? String(payload.intent) : undefined,
       };
 
     case "tool.start": {
@@ -277,6 +309,21 @@ export function adaptBackendEvent(raw: {
         experienceId: String(payload.tabId || payload.id || ""),
       };
 
+    case "dock.layout": {
+      const op = String(payload.action || "").replace("dock.", "");
+      if (op !== "open" && op !== "close" && op !== "pin" && op !== "unpin") {
+        return null;
+      }
+      return {
+        type: "dock.layout",
+        step,
+        op,
+        itemId: String(payload.id || ""),
+        success: payload.success !== false,
+        message: typeof payload.message === "string" ? payload.message : undefined,
+      };
+    }
+
     case "tab.prime":
       return {
         type: "experience.primed",
@@ -319,6 +366,19 @@ export function adaptBackendEvent(raw: {
         action: payload.action ? String(payload.action) : undefined,
       };
 
+    case "theme.apply": {
+      const applied =
+        payload.applied && typeof payload.applied === "object"
+          ? (payload.applied as Record<string, unknown>)
+          : {};
+      return {
+        type: "theme.applied",
+        step,
+        applied,
+        attachmentId: payload.attachmentId ? String(payload.attachmentId) : undefined,
+      };
+    }
+
     case "map.changed":
       return {
         type: "map.changed",
@@ -344,6 +404,8 @@ export function adaptBackendEvent(raw: {
         step,
         text: String(payload.text || ""),
         steps: Number(payload.steps || step),
+        model: payload.model ? String(payload.model) : undefined,
+        intent: payload.intent ? String(payload.intent) : undefined,
       };
 
     case "error":

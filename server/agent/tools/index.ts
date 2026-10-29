@@ -25,9 +25,11 @@ import { promote_to_plugin } from "./promote_to_plugin";
 import { inspect_execution } from "./inspect_execution";
 import { list_recent_executions } from "./list_recent_executions";
 import { create_plugin } from "./create_plugin";
+import { connect_cities } from "./connect_cities";
 import { modify_plugin } from "./modify_plugin";
 import { operate_plugin } from "./operate_plugin";
 import { publish_plugin } from "./publish_plugin";
+import { apply_theme } from "./apply_theme";
 import { list_files } from "./list_files";
 import { read_file } from "./read_file";
 import { write_file } from "./write_file";
@@ -36,6 +38,10 @@ import { search_files } from "./search_files";
 import { recall_memory } from "./recall_memory";
 import { record_memory } from "./record_memory";
 import { plan_ascii_world } from "./plan_ascii_world";
+import { dock_search } from "./dock_search";
+import { dock_pin } from "./dock_pin";
+import { dock_unpin } from "./dock_unpin";
+import { dock_close } from "./dock_close";
 
 export * from "./types";
 export {
@@ -44,6 +50,11 @@ export {
   open_intent,
   inspect_tab,
   close_tray,
+  dock_search,
+  dock_pin,
+  dock_unpin,
+  dock_close,
+  apply_theme,
   create_tab,
   update_tab,
   delete_tab,
@@ -65,6 +76,7 @@ export {
   inspect_execution,
   list_recent_executions,
   create_plugin,
+  connect_cities,
   modify_plugin,
   operate_plugin,
   publish_plugin,
@@ -87,6 +99,11 @@ export const defaultTools: AgentTool[] = [
   open_intent,
   inspect_tab,
   close_tray,
+  dock_search,
+  dock_pin,
+  dock_unpin,
+  dock_close,
+  apply_theme,
   create_tab,
   update_tab,
   delete_tab,
@@ -108,6 +125,7 @@ export const defaultTools: AgentTool[] = [
   inspect_execution,
   list_recent_executions,
   create_plugin,
+  connect_cities,
   modify_plugin,
   operate_plugin,
   publish_plugin,

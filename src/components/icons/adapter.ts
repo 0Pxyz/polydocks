@@ -39,6 +39,8 @@ import {
   CheckCircle,
   Eye,
   Sliders,
+  Gear,
+  Storefront,
   Shield,
   Lightbulb,
   Plus,
@@ -66,7 +68,9 @@ const ICON_MAP: Record<string, IconComponent> = {
   maps: Compass,
   maptrifold: Compass,
 
-  settings: Sliders,
+  settings: Gear,
+  gear: Gear,
+  storefront: Storefront,
   plus: Plus,
 
   files: Folder,
@@ -214,6 +218,23 @@ function hashString(str: string): number {
 }
 
 /**
+ * Resolves an icon key while guaranteeing it is not already taken: the first
+ * tool keeps its natural icon, later duplicates fall back to deterministic
+ * distinct glyphs. Callers add the returned component to `used`.
+ */
+export function resolveUniqueIcon(
+  name?: string | null,
+  used: Set<IconComponent> = new Set()
+): IconComponent {
+  const primary = resolveIcon(name);
+  if (!used.has(primary)) return primary;
+  for (const fallback of DIVERSE_FALLBACK_PALETTE) {
+    if (!used.has(fallback)) return fallback;
+  }
+  return primary;
+}
+
+/**
  * Resolves an icon identifier (case-insensitive) to a typed Phosphor component.
  * Uses exact catalog lookup, word-token inference, and deterministic palette hashing
  * to guarantee that dynamic tools get distinct, meaningful icons rather than
@@ -266,4 +287,6 @@ export {
   Lightning,
   NotePencil,
   Files,
+  Gear,
+  Storefront,
 };

@@ -4,6 +4,8 @@ const envSchema = z.object({
   MODEL_BASE_URL: z.string().url().default("https://api.meta.ai/v1"),
   MODEL_ID: z.string().default("muse-spark-1.3"),
   MODEL_API_KEY: z.string().optional().default(""),
+  MODEL_REALTIME_URL: z.string().url().default("wss://api.meta.ai/v1/asr/realtime"),
+  MODEL_VOICE_MODEL: z.string().default("muse-voice-transcribe-1.0"),
   TINYFISH_API_KEY: z.string().optional().default(""),
   MAX_STEPS: z.coerce.number().int().positive().default(20),
   PORT: z.coerce.number().int().positive().default(3000),

@@ -267,6 +267,35 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created_at ON idempotency_keys(created_at);
 
+CREATE TABLE IF NOT EXISTS plugin_files (
+  workspace_id TEXT NOT NULL,
+  plugin_id TEXT NOT NULL,
+  version TEXT NOT NULL DEFAULT '1.0.0',
+  manifest_json TEXT NOT NULL,
+  source_code TEXT,
+  srcdoc TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, plugin_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_plugin_files_lookup
+  ON plugin_files(workspace_id, plugin_id);
+
+CREATE TABLE IF NOT EXISTS plugin_versions (
+  plugin_id TEXT NOT NULL,
+  version TEXT NOT NULL,
+  workspace_id TEXT NOT NULL DEFAULT 'default',
+  manifest_json TEXT NOT NULL,
+  source_code TEXT,
+  srcdoc TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (plugin_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_plugin_versions_lookup
+  ON plugin_versions(plugin_id, status);
+
 CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,

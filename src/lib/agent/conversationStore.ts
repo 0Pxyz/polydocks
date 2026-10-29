@@ -4,6 +4,7 @@ import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
+import { THEMES, useThemeStore, type ThemeId, type DockStyleId, type DockPosition } from "@/lib/theme";
 import {
   clearAgentThread,
   fetchAgentThread,
@@ -13,6 +14,8 @@ import {
 } from "./thread";
 import { platformStorage } from "@/lib/platform/storage";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
+import { useDockStore } from "@/lib/store/useDockStore";
+import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
 import type { OrbState } from "@/features/agent/Orb";
 
 export type LayoutState = "closed" | "sheet" | "full" | "side";
@@ -27,6 +30,8 @@ export interface ConversationMessage {
   /** Server sequence inside the single persistent thread. */
   seq?: number;
   attachments?: ChatAttachment[];
+  /** Effective model that produced this reply (may differ from selection). */
+  model?: string;
   error?: {
     code?: string;
     message: string;
@@ -52,6 +57,9 @@ interface ConversationStoreState {
   isLoadingOlder: boolean;
   hasOlderMessages: boolean;
   oldestMessageSeq: number | null;
+  /** Model + intent actually executing the current turn (null when idle). */
+  activeModel: string | null;
+  activeIntent: string | null;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -77,6 +85,7 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
     },
     options?: {
       origin?: "dock-add" | "chat";
@@ -88,6 +97,7 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
     }
   ) => Promise<void>;
   abortStream: () => void;
@@ -97,6 +107,7 @@ interface ConversationStoreState {
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
     }
   ) => Promise<void>;
 }
@@ -185,6 +196,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   isLoadingOlder: false,
   hasOlderMessages: false,
   oldestMessageSeq: null,
+  activeModel: null,
+  activeIntent: null,
 
   setLayoutState: (layoutState) => set({ layoutState }),
 
@@ -353,7 +366,13 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const attachmentsToSend = [...get().stagedAttachments].filter(
       (attachment) => !attachment.isImage || Boolean(attachment.dataUrl)
     );
-    if ((!rawPrompt && attachmentsToSend.length === 0) || get().isStreaming) return;
+    if (!rawPrompt && attachmentsToSend.length === 0) return;
+    if (get().isStreaming) {
+      // Never silently drop a request: the previous turn is still running,
+      // so say so instead of leaving the user staring at stale progress.
+      set({ statusText: "Still working on the previous request — wait for it or stop it first." });
+      return;
+    }
 
     const prompt = rawPrompt || (attachmentsToSend.length > 0 ? "Inspect the attached files." : "");
     const origin = options?.origin || "chat";
@@ -387,6 +406,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const abortCtrl = new AbortController();
     activeAbortController = abortCtrl;
 
+    // Tracks whether the stream delivered a terminal event. If the server
+    // dies mid-turn (crash, network cut), no finish/error ever arrives and
+    // the UI would otherwise stay "streaming" forever, swallowing retries.
+    let sawTerminalEvent = false;
+
     await streamAgentLoop({
       prompt,
       cityId,
@@ -402,7 +426,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
         switch (event.type) {
           case "agent.started":
-            set({ orbState: "thinking" });
+            set({
+              orbState: "thinking",
+              activeModel: event.model || null,
+              activeIntent: event.intent || null,
+            });
             break;
 
           case "tool.started":
@@ -490,6 +518,35 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             }
             break;
 
+          case "dock.layout": {
+            // Agent-driven dock change: the server already validated the id
+            // against workspace data; admit it to the known set and verify
+            // the state transition by reading it back. Failures surface as
+            // status text instead of pretending the dock changed.
+            if (!event.success) {
+              set({ statusText: event.message || `Couldn't change the dock.` });
+              break;
+            }
+            const dock = useDockStore.getState();
+            const knownIds = new Set([
+              ...Object.keys(DOCK_TOOL_DESCRIPTIONS),
+              ...useWorkspaceStore.getState().workspacePlugins.map((wp) => wp.pluginId),
+              ...dock.pinnedToolIds,
+              ...dock.openIds,
+              event.itemId,
+            ]);
+            const result = dock.applyDirective({ op: event.op, id: event.itemId }, knownIds);
+            if (event.op === "close" && result.ok) {
+              callbacks?.onCloseExperience?.(event.itemId);
+            }
+            set({
+              statusText: result.ok
+                ? result.message
+                : `Couldn't ${event.op} "${event.itemId}": ${result.message}`,
+            });
+            break;
+          }
+
           case "approval.required":
             set({
               orbState: "idle",
@@ -500,11 +557,14 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "agent.finished": {
             const replyText = event.text || "Done.";
+            sawTerminalEvent = true;
             set((state) => ({
               isStreaming: false,
               isBuildingTool: false,
               orbState: isDockAdd ? "idle" : "speaking",
               statusText: "",
+              activeModel: null,
+              activeIntent: null,
               messages: [
                 ...state.messages,
                 {
@@ -512,6 +572,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                   role: "assistant",
                   content: replyText,
                   timestamp: Date.now(),
+                  ...(event.model ? { model: event.model } : {}),
                 },
               ],
             }));
@@ -530,6 +591,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "agent.error": {
             const isUnauthorized = event.code === "model_unauthorized";
+            sawTerminalEvent = true;
             const errorObj = {
               code: event.code,
               message: isUnauthorized
@@ -548,14 +610,128 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                 isBuildingTool: false,
                 orbState: "error",
                 statusText: errorObj.message,
+                activeModel: null,
+                activeIntent: null,
                 messages: updatedMessages,
               };
             });
             break;
           }
+
+          case "theme.applied": {
+            const applied = event.applied || {};
+            const failures: string[] = [];
+
+            let wallpaperUrl =
+              typeof applied.wallpaperUrl === "string" ? applied.wallpaperUrl : undefined;
+            if (!wallpaperUrl && event.attachmentId) {
+              const lastUser = [...get().messages].reverse().find((m) => m.role === "user");
+              const match = lastUser?.attachments?.find((a) => a.id === event.attachmentId);
+              if (match?.dataUrl) {
+                wallpaperUrl = match.dataUrl;
+              } else {
+                failures.push("couldn't resolve the attached image — please re-attach it");
+              }
+            }
+
+            try {
+              const themeApi = useThemeStore.getState();
+              if (applied.theme !== undefined) {
+                if (typeof applied.theme === "string" && THEMES.some((t) => t.id === applied.theme)) {
+                  themeApi.setTheme(applied.theme as ThemeId);
+                } else {
+                  failures.push(`unknown theme "${String(applied.theme)}"`);
+                }
+              }
+              if (applied.accentColor !== undefined) {
+                if (typeof applied.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(applied.accentColor)) {
+                  themeApi.setCustomAccentColor(applied.accentColor);
+                } else {
+                  failures.push(`invalid accent color "${String(applied.accentColor)}"`);
+                }
+              }
+              if (applied.dockStyle !== undefined) {
+                const valid = ["glass", "solid", "bare", "lift"] as const;
+                if (typeof applied.dockStyle === "string" && (valid as readonly string[]).includes(applied.dockStyle)) {
+                  themeApi.setDockStyle(applied.dockStyle as DockStyleId);
+                } else {
+                  failures.push(`unknown dock style "${String(applied.dockStyle)}"`);
+                }
+              }
+              if (applied.dockPosition !== undefined) {
+                if (applied.dockPosition === "top" || applied.dockPosition === "bottom") {
+                  themeApi.setDockPosition(applied.dockPosition as DockPosition);
+                } else {
+                  failures.push(`unknown dock position "${String(applied.dockPosition)}"`);
+                }
+              }
+              if (applied.clearWallpaper === true) {
+                themeApi.clearWallpaper();
+              } else if (wallpaperUrl) {
+                const fit =
+                  applied.wallpaperFit === "cover" || applied.wallpaperFit === "contain" || applied.wallpaperFit === "tile"
+                    ? applied.wallpaperFit
+                    : undefined;
+                const opacity = typeof applied.wallpaperOpacity === "number" ? applied.wallpaperOpacity : undefined;
+                const blur = typeof applied.wallpaperBlur === "number" ? applied.wallpaperBlur : undefined;
+                themeApi.setWallpaper(wallpaperUrl, { fit, opacity, blur });
+              }
+            } catch (err: any) {
+              failures.push(err?.message || "theme store unavailable");
+            }
+
+            // Verify against the real store state — report what actually applied.
+            const live = useThemeStore.getState();
+            const mismatches: string[] = [];
+            if (applied.theme !== undefined && live.theme !== applied.theme) mismatches.push("theme");
+            if (applied.accentColor !== undefined && live.customAccentColor !== applied.accentColor) {
+              mismatches.push("accent");
+            }
+            if (wallpaperUrl && live.wallpaperUrl !== wallpaperUrl) mismatches.push("wallpaper");
+            const problems = [...failures, ...mismatches.map((m) => `${m} did not persist`)];
+
+            if (problems.length === 0) {
+              set({ isBuildingTool: false, statusText: "Theme updated — verified in the live theme store." });
+            } else {
+              // Persist the failure on the user turn (the finish event clears
+              // transient status text, so a silent clear must not hide this).
+              const message = `Theme partially applied: ${problems.join("; ")}.`;
+              set((state) => {
+                const updatedMessages = [...state.messages];
+                const lastMsg = updatedMessages[updatedMessages.length - 1];
+                if (lastMsg && lastMsg.role === "user") {
+                  lastMsg.error = { message };
+                }
+                return { isBuildingTool: false, statusText: message, messages: updatedMessages };
+              });
+            }
+            break;
+          }
         }
       },
     });
+
+    // A stream that ends with no terminal event (server crash, network cut)
+    // must not leave the UI stuck in "streaming" with a stale progress line.
+    if (!sawTerminalEvent) {
+      const errorObj = { code: "stream_ended", message: "Stream ended unexpectedly. Check the connection and retry." };
+      set((state) => {
+        const updatedMessages = [...state.messages];
+        const lastMsg = updatedMessages[updatedMessages.length - 1];
+        if (lastMsg && lastMsg.role === "user" && !lastMsg.error) {
+          lastMsg.error = errorObj;
+        }
+        return {
+          isStreaming: false,
+          isBuildingTool: false,
+          orbState: "error",
+          statusText: errorObj.message,
+          activeModel: null,
+          activeIntent: null,
+          messages: updatedMessages,
+        };
+      });
+    }
 
     set({ isStreaming: false, isBuildingTool: false });
     activeAbortController = null;
@@ -563,7 +739,10 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   retryLast: async (cityId, callbacks) => {
     const { messages, isStreaming } = get();
-    if (isStreaming) return;
+    if (isStreaming) {
+      set({ statusText: "Still working on the previous request — wait for it or stop it first." });
+      return;
+    }
 
     // Find the last user message
     const lastUserIndex = [...messages].map((m) => m.role).lastIndexOf("user");

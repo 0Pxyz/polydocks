@@ -107,6 +107,29 @@ export function createHostBridge(
           return true;
         }
 
+        case "openContent": {
+          if (typeof data.url === "string") {
+            const trimmed = data.url.trim();
+            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+              // Native Reader path: open article/video inside the app. Falls
+              // back to the legacy Browser-tab handler when no Reader is wired.
+              if (options.onOpenContent) {
+                options.onOpenContent(trimmed);
+              } else if (options.onOpenUrl) {
+                options.onOpenUrl(trimmed);
+              } else if (typeof window !== "undefined") {
+                window.open(trimmed, "_blank", "noopener,noreferrer");
+              }
+              respond(requestId, true);
+            } else {
+              respond(requestId, null, "Forbidden URL protocol. Only HTTP/HTTPS permitted.");
+            }
+          } else {
+            respond(requestId, null, "Invalid URL argument.");
+          }
+          return true;
+        }
+
         case "submit": {
           if (typeof data.command === "string") {
             options.onSubmitCommand?.(data.command);

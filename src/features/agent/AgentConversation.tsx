@@ -18,28 +18,70 @@ import {
   Paperclip,
   Image as ImageIcon,
   UploadCloud,
-  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
-import { startVoiceInput, type VoiceRecognitionHandle } from "@/lib/agent/speech";
+import {
+  connectRealtimeVoice,
+  createMicPcmStreamer,
+  type MicPcmStreamer,
+} from "@/lib/agent/realtimeVoice";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 
 interface AgentConversationProps {
   cityId?: string;
   onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
   onOpenExperience?: (expId: string) => void;
+  onCloseExperience?: (expId: string) => void;
+}
+
+/**
+ * Short display name for the model that produced a reply (visibility into
+ * which model handled the task, including automatic vision routing).
+ */
+function modelShortName(modelId: string): string {
+  const short = modelId.split("/").pop() || modelId;
+  return short.length > 28 ? `${short.slice(0, 28)}…` : short;
+}
+
+/**
+ * One-line summary for the collapsed sheet: streaming status, otherwise the
+ * latest assistant reply (markdown stripped), otherwise the last user prompt.
+ */
+function shortSummary(
+  messages: Array<{ role: string; content: string }>,
+  isHydrating: boolean,
+  isStreaming: boolean,
+  statusText: string
+): string {
+  if (isStreaming && statusText) return statusText;
+  if (isStreaming) return "Thinking…";
+  if (isHydrating && messages.length === 0) return "Restoring your conversation…";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "assistant" && m.content.trim()) {
+      const line = m.content.split("\n").map((s) => s.trim()).find((s) => s.length > 0) || "";
+      const clean = line.replace(/[`*_#[\]()!>-]/g, "").trim();
+      if (!clean) return "Done.";
+      return clean.length > 140 ? `${clean.slice(0, 140)}…` : clean;
+    }
+  }
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  if (lastUser?.content.trim()) {
+    return lastUser.content.length > 140 ? `${lastUser.content.slice(0, 140)}…` : lastUser.content;
+  }
+  return "Speak or type to research topics, build tools, or explore your workspace.";
 }
 
 export function AgentConversation({
   cityId,
   onExperienceCreated,
   onOpenExperience,
+  onCloseExperience,
 }: AgentConversationProps) {
   const {
     layoutState,
@@ -50,6 +92,7 @@ export function AgentConversation({
     isStreaming,
     statusText,
     activeApproval,
+    activeModel,
     soundEnabled,
     audioLevel,
     orbState,
@@ -64,6 +107,7 @@ export function AgentConversation({
     setSoundEnabled,
     setAudioLevel,
     setOrbState,
+    setStatusText,
     sendMessage,
     retryLast,
     abortStream,
@@ -79,15 +123,16 @@ export function AgentConversation({
   const [showScrollBottom, setShowScrollBottom] = useState<boolean>(false);
   const [isDraggingWidth, setIsDraggingWidth] = useState<boolean>(false);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
-  const [isKeyboardInSheet, setIsKeyboardInSheet] = useState<boolean>(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const sheetTranscriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sheetInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const voiceHandleRef = useRef<VoiceRecognitionHandle | null>(null);
+  const realtimeRef = useRef<{ close: () => void; stopMic: () => void } | null>(null);
+  // One-shot anchor: expanding to full/side lands on the last user message,
+  // never at the top after a reload. Reset when leaving the expanded views.
+  const anchoredRef = useRef(false);
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -121,16 +166,14 @@ export function AgentConversation({
     [addAttachments]
   );
 
-  // Dropping files on the capsule reveals the composer so the staged files are visible
-  const handleSheetDrop = useCallback(
-    (e: React.DragEvent) => {
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        setIsKeyboardInSheet(true);
-      }
-      handleDrop(e);
-    },
-    [handleDrop]
-  );
+  // Cleanup realtime voice session on unmount
+  useEffect(() => {
+    return () => {
+      realtimeRef.current?.stopMic();
+      realtimeRef.current?.close();
+      realtimeRef.current = null;
+    };
+  }, []);
 
   // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
   const adjustTextareaHeight = useCallback(() => {
@@ -145,10 +188,11 @@ export function AgentConversation({
     adjustTextareaHeight();
   }, [draft, adjustTextareaHeight]);
 
-  // Handle auto-scroll during streaming
+  // Handle auto-scroll during streaming (expanded views only; the sheet
+  // shows a compact Orb + summary instead of a transcript)
   useEffect(() => {
-    if (layoutState === "closed") return;
-    const el = layoutState === "sheet" ? sheetTranscriptRef.current : transcriptRef.current;
+    if (layoutState === "closed" || layoutState === "sheet") return;
+    const el = transcriptRef.current;
     if (!el) return;
 
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
@@ -158,8 +202,30 @@ export function AgentConversation({
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
-  // Track scroll position natively on the Radix ScrollArea viewport (React
-  // does not delegate scroll events to it)
+  // Anchor expanded views on the last user message (once per open, after
+  // hydration). Reloads never start at the top of the history.
+  useEffect(() => {
+    if (layoutState !== "full" && layoutState !== "side") {
+      anchoredRef.current = false;
+      return;
+    }
+    if (isHydratingThread || messages.length === 0 || isStreaming) return;
+    if (anchoredRef.current) return;
+    const container = transcriptRef.current;
+    if (!container) return;
+    anchoredRef.current = true;
+    const users = container.querySelectorAll('[data-msg-role="user"]');
+    const last = users[users.length - 1] as HTMLElement | undefined;
+    if (!last) {
+      container.scrollTo({ top: container.scrollHeight });
+      return;
+    }
+    const cRect = container.getBoundingClientRect();
+    const lRect = last.getBoundingClientRect();
+    container.scrollTo({ top: container.scrollTop + (lRect.top - cRect.top) - 72 });
+  }, [layoutState, isHydratingThread, messages, isStreaming]);
+
+  // Track scroll position on the native transcript viewport
   useEffect(() => {
     if (layoutState !== "side" && layoutState !== "full") return;
     const el = transcriptRef.current;
@@ -188,43 +254,85 @@ export function AgentConversation({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const toggleVoice = () => {
-    if (orbState === "listening") {
-      voiceHandleRef.current?.stop();
-      voiceHandleRef.current = null;
+  const toggleVoice = useCallback(async () => {
+    // Single Orb toggle: stop an active realtime session, else start one.
+    if (realtimeRef.current) {
+      realtimeRef.current.stopMic();
+      realtimeRef.current.close();
+      realtimeRef.current = null;
       setOrbState("idle");
       return;
     }
 
-    setOrbState("listening");
-    const handle = startVoiceInput(
-      (transcript, isFinal) => {
-        setDraft(transcript);
-        if (isFinal) {
-          sendMessage(transcript, cityId, { onExperienceCreated, onOpenExperience });
-        }
-      },
-      (level) => setAudioLevel(level),
-      () => {
-        setOrbState("idle");
-      },
-      () => {
-        setOrbState("idle");
-      }
-    );
-
-    if (handle) {
-      voiceHandleRef.current = handle;
-    } else {
-      setOrbState("idle");
+    if (typeof window === "undefined" || !("mediaDevices" in navigator)) {
+      setStatusText("Voice input is not supported in this browser.");
+      return;
     }
-  };
+
+    setOrbState("listening");
+    setStatusText("Listening… speak now. Tap the Orb to stop.");
+
+    try {
+      const session = connectRealtimeVoice({
+        onPartial: (text) => setDraft(text),
+        onFinal: (text) => {
+          if (!text.trim()) return;
+          setDraft("");
+          void sendMessage(text, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
+        },
+        onLevel: (level) => setAudioLevel(level),
+        onError: (message) => {
+          setStatusText(message);
+          setOrbState("error");
+          window.setTimeout(() => {
+            if (!realtimeRef.current) setOrbState("idle");
+          }, 2500);
+        },
+        onClose: () => {
+          realtimeRef.current = null;
+          setOrbState("idle");
+          setStatusText("");
+        },
+      });
+
+      const streamer: MicPcmStreamer = await createMicPcmStreamer(
+        (pcm) => {
+          if (session.ws.readyState === WebSocket.OPEN) {
+            try {
+              session.ws.send(pcm);
+            } catch {
+              // Ignore transient send failures
+            }
+          }
+        },
+        (level) => setAudioLevel(level)
+      );
+
+      realtimeRef.current = {
+        stopMic: () => streamer.stop(),
+        close: () => {
+          try {
+            if (session.ws.readyState === WebSocket.OPEN) {
+              session.ws.send(JSON.stringify({ type: "endStream" }));
+            }
+          } catch {
+            // Ignore
+          }
+          // Give the server a beat to flush final transcripts, then close.
+          window.setTimeout(() => session.close(), 600);
+        },
+      };
+    } catch {
+      setOrbState("idle");
+      setStatusText("Microphone permission denied.");
+    }
+  }, [cityId, onExperienceCreated, onOpenExperience, onCloseExperience, sendMessage, setAudioLevel, setDraft, setOrbState, setStatusText]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (isStreaming) return;
-      sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
+      sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
     }
   };
 
@@ -253,13 +361,9 @@ export function AgentConversation({
   if (layoutState === "closed") return null;
 
   // =========================================================================
-  // 1. SHEET MODE (Bottom-anchored capsule: orb first, typing on demand)
+  // 1. SHEET MODE (Bottom-anchored capsule, unified voice + text + transcript)
   // =========================================================================
   if (layoutState === "sheet") {
-    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant");
-    const displayText = isStreaming ? statusText : lastAssistantMsg?.content || "";
-    const hasStaged = stagedAttachments.length > 0;
-
     return (
       <AnimatePresence>
         <motion.div
@@ -267,204 +371,145 @@ export function AgentConversation({
           initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
           exit={{ opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleSheetDrop}
           className={cn(
-            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto",
+            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none",
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
-          <div className="relative w-full rounded-[28px] bg-[#0c1017]/92 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-5 overflow-hidden">
-            {/* Top Left: Close to dock */}
-            <button
-              type="button"
-              onClick={() => setLayoutState("closed")}
-              className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer z-10"
-              title="Close to dock"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col max-h-[calc(100dvh-120px)]">
+            {/* Header: status on left, mute/expand/close on right (no Orb here — single Orb lives in the composer) */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "w-2 h-2 rounded-full",
+                    orbState === "listening" || orbState === "speaking"
+                      ? "bg-[var(--accent-lime)] animate-pulse"
+                      : orbState === "thinking"
+                        ? "bg-[var(--accent-lime)]/70 animate-ping"
+                        : orbState === "error"
+                          ? "bg-red-400"
+                          : "bg-white/25"
+                  )}
+                />
+                {isStreaming && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
+                    <span>Thinking…</span>
+                  </span>
+                )}
+              </div>
 
-            {/* Top Right: thread controls + expand */}
-            <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-              <ModelSwitcher compact className="h-6 text-[11px] px-1.5 mr-1" />
-              <button
-                type="button"
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title={soundEnabled ? "Mute audio" : "Unmute audio"}
-              >
-                {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title={soundEnabled ? "Mute audio" : "Unmute audio"}
+                >
+                  {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (messages.length === 0 || window.confirm("Clear this conversation? The same chat stays open.")) {
+                      void clearConversation();
+                    }
+                  }}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Clear conversation (keeps the same chat)"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLayoutState("full")}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Expand to full chat"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLayoutState("closed")}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Approval Banner if active */}
+            {activeApproval && (
+              <div className="my-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col gap-2">
+                <p className="text-xs font-medium text-amber-300">
+                  {activeApproval.message}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleApproval(true, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                    className="px-2.5 py-1 rounded-md text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+                  >
+                    Allow
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApproval(false, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                    className="px-2.5 py-1 rounded-md text-xs bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Compact status: single Orb (voice toggle) + short summary.
+                The collapsed sheet never renders the transcript, so a reload
+                can't start at the top — tap to expand the full conversation. */}
+            <div className="my-3 flex items-center gap-3 rounded-2xl bg-black/30 border border-white/[0.07] pl-1.5 pr-2 py-1.5">
               <button
                 type="button"
                 onClick={() => {
-                  if (messages.length === 0 || window.confirm("Clear this conversation? The same chat stays open.")) {
-                    void clearConversation();
-                  }
+                  if (isStreaming) abortStream();
+                  else void toggleVoice();
                 }}
-                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title="Clear conversation (keeps the same chat)"
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0",
+                  orbState === "listening"
+                    ? "bg-red-500/20 text-red-400"
+                    : "hover:bg-white/10 text-muted-foreground hover:text-white"
+                )}
+                title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Orb state={orbState} size="sm" audioLevel={audioLevel} />
               </button>
+
               <button
                 type="button"
                 onClick={() => setLayoutState("full")}
-                className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title="Expand to full chat"
+                className="flex-1 min-w-0 text-left cursor-pointer group/summary"
+                title="Expand full conversation"
               >
-                <Maximize2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Upper text: streamed reply or pending approval */}
-            <div className="pt-2 px-10 pb-2 min-h-[44px] flex items-center justify-center text-center">
-              {activeApproval ? (
-                <div className="flex flex-col items-center gap-2">
-                  <p className="text-sm font-medium text-amber-300">
-                    {activeApproval.message}
-                  </p>
-                  <div className="flex items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => handleApproval(true, cityId, { onExperienceCreated, onOpenExperience })}
-                      className="px-3 py-1 rounded-lg text-xs font-mono font-bold bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
-                    >
-                      Allow
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleApproval(false, cityId, { onExperienceCreated, onOpenExperience })}
-                      className="px-3 py-1 rounded-lg text-xs font-mono bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : displayText ? (
-                <p className="text-sm line-clamp-3 text-foreground font-sans select-text transition-colors">
-                  {displayText}
+                <p className="text-xs text-white/85 leading-snug truncate font-sans">
+                  {shortSummary(messages, isHydratingThread, isStreaming, statusText)}
                 </p>
-              ) : null}
+                <p className="text-[10px] font-mono text-muted-foreground/70 group-hover/summary:text-muted-foreground transition-colors">
+                  {messages.length > 0
+                    ? `${messages.length} messages${activeModel ? ` · ${modelShortName(activeModel)}` : ""} · tap to expand`
+                    : "Tap to expand"}
+                </p>
+              </button>
+
+              {isStreaming && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping shrink-0" />
+              )}
             </div>
 
-            {/* Center Area: Orb (or compact mic when in keyboard mode) */}
-            <div className="py-2 flex justify-center items-center">
-              {!isKeyboardInSheet ? (
-                <Orb
-                  state={orbState}
-                  size="md"
-                  audioLevel={audioLevel}
-                  onClick={() => {
-                    if (isStreaming) abortStream();
-                    else toggleVoice();
-                  }}
-                />
-              ) : null}
-            </div>
-
-            {/* Scrollable Transcript Box */}
-            <ScrollArea
-              viewportRef={sheetTranscriptRef}
-              className="my-3 max-h-64 min-h-[72px] [&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0 [&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]"
-            >
-              <div className="px-1 space-y-2.5 select-text scroll-smooth">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
-                  <p className="text-xs text-[#9aa5b8]">
-                    {isHydratingThread
-                      ? "Restoring your conversation…"
-                      : "Speak or type to research topics, build tools, or explore your workspace."}
-                  </p>
-                </div>
-              ) : (
-                messages.map((msg) => {
-                  const isUser = msg.role === "user";
-                  const isTool = msg.role === "tool";
-
-                  if (isTool) {
-                    return (
-                      <div
-                        key={msg.id}
-                        className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/70 py-0.5"
-                      >
-                        <span className="text-[var(--accent-lime)] text-[9px]">✦</span>
-                        <span className="truncate">{msg.content}</span>
-                      </div>
-                    );
-                  }
-
-                  if (isUser) {
-                    return (
-                      <div key={msg.id} className="flex flex-col items-end gap-1">
-                        <div className="max-w-[85%] rounded-2xl px-3.5 py-1.5 bg-white/[0.08] text-white text-xs leading-relaxed">
-                          {msg.content}
-                        </div>
-                        <MessageAttachments attachments={msg.attachments} />
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className="prose prose-invert prose-sm max-w-none pr-2 leading-relaxed prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs"
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ href, children }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[var(--accent-lime)] hover:underline"
-                            >
-                              {children}
-                            </a>
-                          ),
-                          code({ className, children, ...props }) {
-                            const match = /language-(\w+)/.exec(className || "");
-                            const isInline = !match && !String(children).includes("\n");
-                            if (isInline) {
-                              return (
-                                <code
-                                  className="px-1 py-0.5 rounded bg-white/10 font-mono text-[11px] text-[var(--accent-lime)]"
-                                  {...props}
-                                >
-                                  {children}
-                                </code>
-                              );
-                            }
-                            return (
-                              <pre className="my-1.5 p-2 rounded-lg bg-black/60 border border-white/5 font-mono text-[11px] overflow-x-auto text-[#e2e8f0]">
-                                <code>{children}</code>
-                              </pre>
-                            );
-                          },
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  );
-                })
-              )}
-
-              {/* Status indicator during streaming */}
-              {isStreaming && statusText && (
-                <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)] py-1">
-                  <span className="animate-spin text-xs">✦</span>
-                  <span className="truncate">{statusText}</span>
-                </div>
-              )}
-              </div>
-            </ScrollArea>
-
-            {/* Staged attachments stay visible while the orb is shown */}
-            {!isKeyboardInSheet && hasStaged && (
+            {/* Staging bar for attachments */}
+            {stagedAttachments.length > 0 && (
               <AttachmentStagingBar
                 attachments={stagedAttachments}
                 onRemove={removeAttachment}
@@ -472,133 +517,66 @@ export function AgentConversation({
               />
             )}
 
-            {/* Input row in keyboard mode */}
-            {isKeyboardInSheet && (
-              <>
-                {hasStaged && (
-                  <AttachmentStagingBar
-                    attachments={stagedAttachments}
-                    onRemove={removeAttachment}
-                    className="mt-2 rounded-xl"
-                  />
-                )}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (isStreaming) {
-                      abortStream();
-                      return;
-                    }
-                    if (!draft.trim() && !hasStaged) return;
-                    sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience });
-                  }}
-                  className="mt-3 flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
-                >
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 transition-all cursor-pointer shrink-0"
-                    title="Attach photo or document"
-                  >
-                    <Paperclip className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleVoice}
-                    className={cn(
-                      "w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0",
-                      orbState === "listening"
-                        ? "bg-red-500/20 text-red-400"
-                        : "text-muted-foreground hover:text-white hover:bg-white/10"
-                    )}
-                    title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
-                  >
-                    <Orb state={orbState} size="sm" className="scale-60" />
-                  </button>
-                  <input
-                    ref={sheetInputRef}
-                    type="text"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder="Ask anything, or give a dock command…"
-                    className="flex-1 min-w-0 bg-transparent px-2 py-1 text-sm text-white placeholder-muted-foreground focus:outline-none font-sans"
-                    autoFocus
-                  />
-                  {isStreaming ? (
-                    <button
-                      type="button"
-                      onClick={abortStream}
-                      className="p-2 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all cursor-pointer shrink-0"
-                      title="Stop generation"
-                    >
-                      <Square className="w-3.5 h-3.5 fill-current" />
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={!draft.trim() && !hasStaged}
-                      className="p-2 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer font-bold shrink-0"
-                      title="Send message"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </form>
-              </>
-            )}
-
-            {/* Bottom Actions: sound · model · keyboard mode */}
-            <div className="mt-3 flex items-center justify-between gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className="w-9 h-9 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/5 flex items-center justify-center text-muted-foreground hover:text-white transition-all cursor-pointer shrink-0"
-                title={soundEnabled ? "Mute audio" : "Unmute audio"}
-              >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </button>
-
-              <ModelSwitcher compact />
-
-              <button
-                type="button"
-                onClick={() => setIsKeyboardInSheet(!isKeyboardInSheet)}
-                className={cn(
-                  "w-9 h-9 rounded-full border border-white/5 flex items-center justify-center transition-all cursor-pointer shrink-0",
-                  isKeyboardInSheet
-                    ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] border-[var(--accent-lime)]/30"
-                    : "bg-white/[0.06] text-muted-foreground hover:text-white"
-                )}
-                title={isKeyboardInSheet ? "Switch to Orb" : "Type prompt"}
-              >
-                <Keyboard className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Drag-and-drop overlay */}
-            {isDraggingOver && (
-              <div className="absolute inset-0 z-20 rounded-[28px] bg-[var(--accent-lime)]/10 border-2 border-dashed border-[var(--accent-lime)]/50 flex items-center justify-center pointer-events-none">
-                <div className="flex items-center gap-2 text-[var(--accent-lime)] text-sm font-medium">
-                  <UploadCloud className="w-5 h-5" />
-                  <span>Drop files here</span>
-                </div>
-              </div>
-            )}
-
-            {/* Hidden file inputs (the capsule renders them itself, the dock surface is not mounted here) */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.yaml,.yml,.sh,.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) addAttachments(Array.from(e.target.files));
-                e.target.value = "";
+            {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript) */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (isStreaming) {
+                  abortStream();
+                  return;
+                }
+                if (!draft.trim() && stagedAttachments.length === 0) return;
+                sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
               }}
-            />
+              className="relative z-10 shrink-0 flex flex-col gap-1 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+            >
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer shrink-0"
+                  title="Attach photo or document"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Single Orb lives in the summary row above — composer keeps attach + input + send */}
+                <input
+                  ref={sheetInputRef}
+                  type="text"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  placeholder="Ask anything, or give a dock command…"
+                  className="flex-1 min-w-0 bg-transparent px-2 py-1 text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans"
+                  autoFocus
+                />
+
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={abortStream}
+                    className="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                    title="Stop generation"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() && stagedAttachments.length === 0}
+                    className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
+                    title="Send message"
+                  >
+                    <Send className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-start pl-1">
+                <ModelSwitcher align="start" />
+              </div>
+            </form>
           </div>
         </motion.div>
       </AnimatePresence>
@@ -646,7 +624,6 @@ export function AgentConversation({
           isBottom ? "pt-4" : "pt-[calc(var(--dock-top-offset,88px)+12px)]"
         )}
       >
-        <ModelSwitcher className="mr-1" />
         {!isSide && (
           <button
             type="button"
@@ -690,17 +667,15 @@ export function AgentConversation({
         </button>
       </div>
 
-      {/* Transcript Area */}
-      <ScrollArea
-        viewportRef={transcriptRef}
+      {/* Transcript Area (z-0; bottom-padded so final rows clear the footer composer) */}
+      <div
+        ref={transcriptRef}
         className={cn(
-          "flex-1 min-h-0 px-4 sm:px-6",
-          "[&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0",
-          "[&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]",
+          "relative z-0 flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-4 sm:px-6 [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]",
           !isSide && "max-w-[720px] mx-auto"
         )}
       >
-        <div className="w-full pt-3 pb-8">
+        <div className="w-full pt-3 pb-32">
         {/* Scroll-back inside the same thread: never a new conversation */}
         {hasOlderMessages && (
           <div className="flex justify-center pb-4">
@@ -715,10 +690,13 @@ export function AgentConversation({
           </div>
         )}
 
-        {/* Empty State: centered composer with idle orb */}
+        {/* Empty State: text only (single Orb lives in the composer) */}
         {messages.length === 0 && (
-          <div className="h-full min-h-[360px] flex flex-col items-center justify-center gap-3">
-            <Orb state="idle" size="md" className="opacity-80 hover:opacity-100 transition-opacity" />
+          <div className="h-full min-h-[360px] flex flex-col items-center justify-center gap-3 text-center px-6">
+            <p className="text-sm text-white/85 font-sans">Ask anything to start.</p>
+            <p className="text-xs font-mono text-muted-foreground">
+              Tap the Orb in the composer below to dictate.
+            </p>
             {isHydratingThread && (
               <span className="text-xs font-mono text-muted-foreground">
                 Restoring your conversation…
@@ -748,8 +726,13 @@ export function AgentConversation({
 
             if (isUser) {
               return (
-                <div key={msg.id} className="flex flex-col items-end gap-1.5 w-full">
-                  <div className="max-w-[75%] rounded-[20px] px-4 py-2.5 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed shadow-sm">
+                <div
+                  key={msg.id}
+                  data-msg-role="user"
+                  data-msg-id={msg.id}
+                  className="flex flex-col items-end gap-1.5 w-full"
+                >
+                  <div className="max-w-[75%] rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
                     {msg.content}
                   </div>
                   <MessageAttachments attachments={msg.attachments} />
@@ -763,7 +746,7 @@ export function AgentConversation({
                       {msg.error.code !== "model_unauthorized" && (
                         <button
                           type="button"
-                          onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience })}
+                          onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
                           className="underline hover:text-white transition-colors cursor-pointer"
                         >
                           Retry
@@ -779,6 +762,8 @@ export function AgentConversation({
             return (
               <div
                 key={msg.id}
+                data-msg-role="assistant"
+                data-msg-id={msg.id}
                 className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
               >
                 <ReactMarkdown
@@ -835,6 +820,11 @@ export function AgentConversation({
 
                 {/* Hover actions: Copy & Retry on last message */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
+                  {msg.model && (
+                    <span className="text-[10px] text-muted-foreground/60" title={`Answered by ${msg.model}`}>
+                      {modelShortName(msg.model)}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleCopyMessage(msg.id, msg.content)}
@@ -848,7 +838,7 @@ export function AgentConversation({
                   {isLastMessage && !isStreaming && (
                     <button
                       type="button"
-                      onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience })}
+                      onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
                       className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
                       title="Retry message"
                     >
@@ -870,7 +860,7 @@ export function AgentConversation({
           )}
         </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Floating Scroll to Bottom button */}
       {showScrollBottom && (
@@ -887,10 +877,10 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Composer: clean footer aligned with the transcript column */}
+      {/* Composer: bottom-anchored footer band with solid blur background (z-10 above transcript) */}
       <div
         className={cn(
-          "shrink-0 px-4 sm:px-6 pt-4 pb-5 pointer-events-auto",
+          "relative z-10 shrink-0 px-4 sm:px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-events-auto bg-[var(--bg-void)]/85 backdrop-blur-xl",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
@@ -922,67 +912,74 @@ export function AgentConversation({
             </div>
           )}
 
-          <div className="flex items-end">
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              placeholder="Ask anything"
-              className="flex-1 bg-transparent px-3.5 py-2 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
-            />
-
-            {/* Right Composer Controls */}
-            <div className="flex items-center gap-1.5 pb-1 pr-1">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title="Attach file"
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
-                title="Attach image"
-              >
-                <ImageIcon className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleVoice}
-                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-                title="Voice input"
-              >
-                <Orb state={orbState} size="sm" className="scale-75" />
-              </button>
-
-              {isStreaming ? (
+          <div className="grid grid-cols-1 gap-1">
+            <div className="flex items-end gap-1">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                placeholder="Ask anything"
+                className="flex-1 min-w-0 bg-transparent px-3.5 pt-2 pb-1 text-sm sm:text-base text-white placeholder-muted-foreground focus:outline-none resize-none font-sans max-h-36 leading-relaxed"
+              />
+              <div className="flex items-center gap-1 pb-1 pr-1 shrink-0">
+                {/* Single Orb: realtime voice toggle */}
                 <button
                   type="button"
-                  onClick={abortStream}
-                  className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
-                  title="Stop generation"
+                  onClick={() => void toggleVoice()}
+                  className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
+                  title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
                 >
-                  <Square className="w-4 h-4 fill-current" />
+                  <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-75" />
                 </button>
-              ) : (
+
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={abortStream}
+                    className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 flex items-center justify-center transition-all cursor-pointer"
+                    title="Stop generation"
+                  >
+                    <Square className="w-4 h-4 fill-current" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                    disabled={!draft.trim() && stagedAttachments.length === 0}
+                    className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Footer toolbar: model/effort picker left, attachments right — coexists with input via grid */}
+            <div className="flex items-center justify-between gap-2 px-1.5 pb-0.5">
+              <ModelSwitcher align="start" />
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience })}
-                  disabled={!draft.trim() && stagedAttachments.length === 0}
-                  className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
-                  title="Send message"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Attach file"
                 >
-                  <Send className="w-4 h-4" />
+                  <Paperclip className="w-4 h-4" />
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-white transition-colors cursor-pointer"
+                  title="Attach image"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

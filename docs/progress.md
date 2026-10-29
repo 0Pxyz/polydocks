@@ -52,3 +52,7 @@
 | 2026-10-28 | Multimodal chat attachments (images + documents, vision-model routing) integrated end-to-end; chat panel rebuilt on shadcn ScrollArea with prose typography over the attachments composer (carried-over WIP committed and finished)
 | 2026-10-29 | Orb-first capsule sheet restored over multimodal chat: 3-line reply preview, explicit typing mode, compact model switcher and attachment staging in the capsule; full/side untouched + regression test | [#112](https://github.com/0Pxyz/polymax/pull/112) |
 | 2026-10-29 | Installable PWA: web manifest, generated service worker with offline fallback, install entry point in appearance settings, maskable and Apple touch icons |
+| 2026-10-29 | Particle world as primary Maps: unified city-territory spec from backend cities + persisted links, connect_cities agent tool, calm labels, camera persistence |
+| 2026-10-29 | Chat overflow fix (flex-1 transcript, pb-10, z-10 composer), single-Orb realtime STT via backend WS proxy (Meta wss ASR, key server-side) |
+| 2026-10-29 | Dock search: find, open, pin and control tools without growing the dock | [#123](https://github.com/0Pxyz/polymax/pull/123) |
+| 2026-10-29 | Immersive map and city: enter from popover, city tools live in the dock | [#124](https://github.com/0Pxyz/polymax/pull/124) |

@@ -6,6 +6,10 @@ const source = readFileSync(
   resolve(__dirname, "../src/features/agent/AgentConversation.tsx"),
   "utf8"
 );
+const switcher = readFileSync(
+  resolve(__dirname, "../src/features/agent/ModelSwitcher.tsx"),
+  "utf8"
+);
 
 function sheetBlock(): string {
   const start = source.indexOf("1. SHEET MODE");
@@ -15,51 +19,63 @@ function sheetBlock(): string {
   return source.slice(start, end);
 }
 
-describe("chat orb-first sheet capsule", () => {
+describe("chat capsule sheet (voice-first, footer picker)", () => {
   const sheet = sheetBlock();
 
-  test("keeps the clamped reply preview and adds the scrollable thread transcript", () => {
-    expect(sheet).toContain("line-clamp-3");
-    expect(sheet).toContain("ScrollArea");
-    expect(sheet).toContain("sheetTranscriptRef");
-    // Staging stays in orb mode only; keyboard mode stages in its own input row.
-    expect(sheet).toContain("!isKeyboardInSheet && hasStaged");
+  test("capsule header shows agent status with thinking indicator", () => {
+    expect(sheet).not.toContain("Polymax Agent");
+    expect(sheet).toContain("Thinking…");
   });
 
-  test("keeps the orb as the primary capsule control", () => {
-    expect(sheet).toContain("<Orb");
-    expect(sheet).toContain('size="md"');
-    expect(sheet).toContain("Close to dock");
-    expect(sheet).toContain("Expand to full chat");
+  test("footer composer mounts the model picker", () => {
+    expect(sheet).toContain("<ModelSwitcher");
   });
 
-  test("typing is an explicit mode toggled from the capsule footer", () => {
-    expect(sheet).toContain("isKeyboardInSheet");
-    expect(sheet).toContain("Type prompt");
-    expect(sheet).toContain("Switch to Orb");
+  test("model picker offers end-to-end reasoning effort", () => {
+    expect(switcher).toContain("Reasoning effort");
+    expect(switcher).toContain("reasoning_effort");
+    // The old local-only footnote must stay gone: effort reaches the backend.
+    expect(switcher).not.toContain("Backend still receives modelId only");
   });
 
-  test("model switcher stays reachable from the sheet", () => {
-    expect(sheet).toContain("<ModelSwitcher compact");
+  test("sheet shows compact Orb + summary instead of a transcript", () => {
+    expect(sheet).toContain("shortSummary");
+    expect(sheet).toContain("tap to expand");
+    // Restore copy lives in the shared shortSummary helper (used by the sheet).
+    expect(source).toContain("Restoring your conversation");
+    expect(sheet).not.toContain("ScrollArea");
+    expect(sheet).not.toContain("sheetTranscriptRef");
+    expect(sheet).not.toContain("overflow-y-auto");
   });
 
-  test("attachments work from the sheet without the full transcript", () => {
+  test("single orb toggles realtime voice", () => {
+    expect(sheet).toContain("toggleVoice");
+    // Session management lives at component scope; the sheet wires the toggle.
+    expect(source).toContain("connectRealtimeVoice");
+    expect(source).toContain("stopMic");
+  });
+
+  test("attachments staging, paste and file input stay in the sheet", () => {
     expect(sheet).toContain("AttachmentStagingBar");
-    expect(sheet).toContain("handleSheetDrop");
     expect(sheet).toContain("handlePaste");
-    expect(sheet).toContain('type="file"');
-    // Send is enabled when attachments are staged even with an empty draft.
-    expect(sheet).toContain("!draft.trim() && !hasStaged");
+    expect(source).toContain('type="file"');
+    expect(sheet).toContain("stagedAttachments.length === 0");
+  });
+
+  test("approval banner and clear-conversation control exist", () => {
+    expect(sheet).toContain("activeApproval");
+    expect(sheet).toContain("clearConversation");
   });
 });
 
 describe("chat full/side views", () => {
   const fullSide = source.slice(source.indexOf("2. FULL-SCREEN"));
 
-  test("transcript, typography and attachments are untouched", () => {
-    expect(fullSide).toContain("ScrollArea");
+  test("transcript, typography and attachments use the native viewport", () => {
+    expect(fullSide).toContain("overflow-y-auto");
     expect(fullSide).toContain("MessageAttachments");
     expect(fullSide).toContain("AttachmentStagingBar");
     expect(fullSide).toContain("ReactMarkdown");
+    expect(fullSide).not.toContain("ScrollArea");
   });
 });
