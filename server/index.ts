@@ -9,6 +9,7 @@ import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { mcpRouter } from "./api/mcp";
 import { citiesRouter } from "./routes/cities";
 import { mapsRouter } from "./routes/maps";
+import { worldRouter } from "./routes/world";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
@@ -130,6 +131,9 @@ app.route("/api/artifacts", artifactsRouter);
 
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);
+
+// Mount Knowledge World router (cities + conceptual links for the particle map)
+app.route("/api/world", worldRouter);
 
 // Experience runtime error reporting endpoints
 app.post("/api/experiences/:id/errors", async (c) => {

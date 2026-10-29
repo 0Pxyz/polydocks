@@ -9,6 +9,10 @@ export interface ParticleWorldCanvasProps {
   onSelectRegion?: (region: ParticleRegion | null) => void;
   className?: string;
   onResetCameraReady?: (resetFn: () => void) => void;
+  /** Restored camera (position preserved across navigation). */
+  initialCamera?: { x: number; y: number; zoom: number } | null;
+  /** Called when the user pans or zooms (for position persistence). */
+  onCameraChange?: (camera: { x: number; y: number; zoom: number }) => void;
 }
 
 export function ParticleWorldCanvas({
@@ -17,6 +21,8 @@ export function ParticleWorldCanvas({
   onSelectRegion,
   className = "",
   onResetCameraReady,
+  initialCamera = null,
+  onCameraChange,
 }: ParticleWorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -39,14 +45,26 @@ export function ParticleWorldCanvas({
   const animFrameIdRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(performance.now());
   const isReducedMotion = prefersReducedMotion();
+  const isVisibleRef = useRef<boolean>(true);
 
-  // Reset/Center camera
+  // Reset/Center camera, keeping the world clear of the fixed Dock capsule.
   const centerCamera = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    if (initialCamera) {
+      setCamera({ ...initialCamera });
+      return;
+    }
+
     const availableW = canvas.clientWidth || window.innerWidth;
     const availableH = canvas.clientHeight || window.innerHeight;
+
+    // Dock offsets published by AgenticDock as CSS vars (px). Center the
+    // world in the visible area instead of under the fixed capsule.
+    const rootStyle = getComputedStyle(document.documentElement);
+    const topOffset = parseFloat(rootStyle.getPropertyValue("--dock-top-offset")) || 0;
+    const bottomOffset = parseFloat(rootStyle.getPropertyValue("--dock-bottom-offset")) || 0;
 
     const fitZoom = Math.min(
       availableW / world.width,
@@ -56,14 +74,14 @@ export function ParticleWorldCanvas({
 
     const initialZoom = Math.max(0.45, Math.min(fitZoom, 1.2));
     const initialX = (availableW - world.width * initialZoom) / 2;
-    const initialY = (availableH - world.height * initialZoom) / 2;
+    const initialY = (availableH - world.height * initialZoom + topOffset - bottomOffset) / 2;
 
     setCamera({
       x: Math.round(initialX),
       y: Math.round(initialY),
       zoom: initialZoom,
     });
-  }, [world.width, world.height]);
+  }, [world.width, world.height, initialCamera]);
 
   useEffect(() => {
     centerCamera();
@@ -270,13 +288,13 @@ export function ParticleWorldCanvas({
         const isSelected = t.id === activeSelectedId;
         const isHovered = t.id === activeHoveredId;
 
-        // Landmark Center Circle Glow
+        // Landmark Center Circle (restrained glow)
         ctx.beginPath();
         ctx.arc(t.center.x, t.center.y, isSelected ? 12 : 9, 0, Math.PI * 2);
         ctx.fillStyle = isSelected
-          ? "rgba(200, 255, 87, 0.22)"
+          ? "rgba(200, 255, 87, 0.14)"
           : isHovered
-          ? "rgba(255, 255, 255, 0.16)"
+          ? "rgba(255, 255, 255, 0.12)"
           : "rgba(0, 0, 0, 0.4)";
         ctx.fill();
         ctx.strokeStyle = isSelected ? t.accentColor : "rgba(255, 255, 255, 0.35)";
@@ -298,44 +316,25 @@ export function ParticleWorldCanvas({
         }
         ctx.fillText(t.landmark, t.center.x, t.center.y);
 
-        // Readable Territory Label Pill
+        // Territory label: plain type with soft shadow (no boxes or tags).
+        // Fades out at low zoom so labels never stack into noise.
         const labelY = t.center.y + (isSelected ? 20 : 18);
-        ctx.font = `${
-          isSelected ? "bold 12px" : "11px"
-        } "Geist Mono", "JetBrains Mono", ui-monospace, monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-
-        const textMetrics = ctx.measureText(t.label);
-        const textW = textMetrics.width;
-        const pillPadX = 6;
-        const pillH = 18;
-
-        // Background dark pill for guaranteed contrast
-        ctx.fillStyle = isSelected ? "rgba(12, 16, 24, 0.95)" : "rgba(6, 8, 14, 0.85)";
-        ctx.fillRect(
-          t.center.x - textW / 2 - pillPadX,
-          labelY - 2,
-          textW + pillPadX * 2,
-          pillH
-        );
-
-        ctx.strokeStyle = isSelected
-          ? t.accentColor
-          : isHovered
-          ? "rgba(255, 255, 255, 0.3)"
-          : "rgba(255, 255, 255, 0.08)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(
-          t.center.x - textW / 2 - pillPadX,
-          labelY - 2,
-          textW + pillPadX * 2,
-          pillH
-        );
-
-        // Text
-        ctx.fillStyle = isSelected ? t.accentColor : isHovered ? "#FFFFFF" : "#D1D5DB";
-        ctx.fillText(t.label, t.center.x, labelY + 1);
+        const labelAlpha =
+          isSelected || isHovered ? 1 : Math.max(0, Math.min(1, (camera.zoom - 0.55) / 0.3));
+        if (labelAlpha > 0.02) {
+          ctx.save();
+          ctx.globalAlpha = labelAlpha;
+          ctx.font = `${
+            isSelected ? "600 12px" : "11px"
+          } "Geist Mono", "JetBrains Mono", ui-monospace, monospace`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = isSelected ? t.accentColor : isHovered ? "#FFFFFF" : "#C9CFD9";
+          ctx.fillText(t.label, t.center.x, labelY + 1);
+          ctx.restore();
+        }
       });
 
       ctx.restore();
@@ -346,7 +345,7 @@ export function ParticleWorldCanvas({
       }
     };
 
-    // Tab visibility handling to save resources
+    // Tab visibility + offscreen handling to save resources
     const handleVisibilityChange = () => {
       if (document.hidden) {
         if (animFrameIdRef.current) {
@@ -355,11 +354,26 @@ export function ParticleWorldCanvas({
         }
       } else {
         lastTimeRef.current = performance.now();
-        if (!animFrameIdRef.current && !isReducedMotion) {
+        if (!animFrameIdRef.current && !isReducedMotion && isVisibleRef.current) {
           animFrameIdRef.current = requestAnimationFrame(loop);
         }
       }
     };
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        isVisibleRef.current = entry.isIntersecting;
+        if (!entry.isIntersecting && animFrameIdRef.current) {
+          cancelAnimationFrame(animFrameIdRef.current);
+          animFrameIdRef.current = null;
+        } else if (entry.isIntersecting && !animFrameIdRef.current && !isReducedMotion && !document.hidden) {
+          lastTimeRef.current = performance.now();
+          animFrameIdRef.current = requestAnimationFrame(loop);
+        }
+      },
+      { threshold: 0 }
+    );
+    io.observe(canvas);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
@@ -368,6 +382,7 @@ export function ParticleWorldCanvas({
 
     return () => {
       isRunning = false;
+      io.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (animFrameIdRef.current) {
         cancelAnimationFrame(animFrameIdRef.current);
@@ -455,6 +470,8 @@ export function ParticleWorldCanvas({
       } else {
         onSelectRegion?.(null);
       }
+    } else {
+      onCameraChange?.(camera);
     }
   };
 
@@ -476,6 +493,11 @@ export function ParticleWorldCanvas({
     const newY = mouseY - (mouseY - camera.y) * (newZoom / camera.zoom);
 
     setCamera({
+      x: Math.round(newX),
+      y: Math.round(newY),
+      zoom: newZoom,
+    });
+    onCameraChange?.({
       x: Math.round(newX),
       y: Math.round(newY),
       zoom: newZoom,
@@ -543,6 +565,8 @@ export function ParticleWorldCanvas({
           onSelectRegion?.(null);
         }
       }
+    } else if (hasMovedRef.current) {
+      onCameraChange?.(camera);
     }
     setIsDragging(false);
     touchStartDistRef.current = null;

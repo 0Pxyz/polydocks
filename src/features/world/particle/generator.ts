@@ -114,7 +114,7 @@ export function generateParticleWorld(
   const height = options.height ?? 850;
   const seed = options.customSeed ?? spec.seed;
   const particlesPerTerritory = options.particlesPerTerritory ?? 85;
-  const ambientDensity = options.ambientDensity ?? 45;
+  const ambientDensity = options.ambientDensity ?? 24;
 
   const rng = createMulberry32(seed);
 
@@ -343,8 +343,8 @@ export function generateParticleWorld(
           baseRadius: 1.4,
           currentRadius: 1.4,
           color: "#E4E4E7", // Zinc-200
-          alpha: 0.55,
-          baseAlpha: 0.55,
+          alpha: 0.4,
+          baseAlpha: 0.4,
           isPath: true,
           pathId: pairKey,
           pathProgress: progress,
@@ -366,7 +366,7 @@ export function generateParticleWorld(
         controlPoint1: cp1,
         controlPoint2: cp2,
         length: dist,
-        color: "rgba(161, 161, 170, 0.22)", // Subtle Zinc
+        color: "rgba(161, 161, 170, 0.12)", // Subdued conduit — cities stay the focus
         particles: conduitParticles,
       });
     });

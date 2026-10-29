@@ -29,8 +29,15 @@ Call `plan_map({ interests: ["<Topic Name>"] })`.
 Call `build_city({ cityId: "<city-slug-foundations>", topic: "<Topic Name>", depth: "deep" })`.
 - This executes the 6-stage autonomous pipeline in one call: queries TinyFish for verified primary sources, generates conceptual summaries, writes overview notes to `workspace/<city>/`, and structures progressive mastery quests.
 - Do NOT make separate manual loops of `search_web` and `fetch_page` when `build_city` is available—it batches and caches discovery automatically.
+- New cities appear on the particle world map automatically (it reads the workspace). No restart needed.
 
-### Step 3: Conclude with Pedagogical Summary
+### Step 3: Connect Related Cities (`connect_cities`)
+When two cities share a real conceptual relationship, call `connect_cities({ fromCityId, toCityId, reason })`.
+- Both cities must already exist (use `build_city` first for new topics).
+- The link renders as a conduit on the particle world map. Only link genuinely related topics.
+- Never invent decorative links; the reason must name the shared concept (e.g. probability, decision-making under uncertainty).
+
+### Step 4: Conclude with Pedagogical Summary
 Conclude the turn immediately after tools complete:
 1. Announce the newly charted region and cities on the map.
 2. Summarize key foundational paradigms and primary sources discovered.

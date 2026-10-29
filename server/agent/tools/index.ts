@@ -25,6 +25,7 @@ import { promote_to_plugin } from "./promote_to_plugin";
 import { inspect_execution } from "./inspect_execution";
 import { list_recent_executions } from "./list_recent_executions";
 import { create_plugin } from "./create_plugin";
+import { connect_cities } from "./connect_cities";
 import { modify_plugin } from "./modify_plugin";
 import { operate_plugin } from "./operate_plugin";
 import { publish_plugin } from "./publish_plugin";
@@ -65,6 +66,7 @@ export {
   inspect_execution,
   list_recent_executions,
   create_plugin,
+  connect_cities,
   modify_plugin,
   operate_plugin,
   publish_plugin,
@@ -108,6 +110,7 @@ export const defaultTools: AgentTool[] = [
   inspect_execution,
   list_recent_executions,
   create_plugin,
+  connect_cities,
   modify_plugin,
   operate_plugin,
   publish_plugin,

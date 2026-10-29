@@ -437,9 +437,10 @@ export default function App() {
               <div className="fixed inset-0 z-0 w-full h-full animate-in fade-in duration-300">
                 <WorldView
                   activeCityId={undefined}
-                  onEnterCity={(cityName) => {
-                    setSelectedCity(cityName);
-                    enterCity(cityName);
+                  onEnterCity={(cityName, cityId) => {
+                    const id = cityId || cityName;
+                    setSelectedCity(id);
+                    enterCity(id);
                     setActiveToolId("");
                     setDockActiveTool("");
                   }}
