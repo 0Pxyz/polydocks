@@ -4,6 +4,13 @@ import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, getMetaModel } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
+import {
+  clearAgentThread,
+  fetchAgentThread,
+  fetchOlderThreadMessages,
+  getAgentUserId,
+  type ThreadMessageRecord,
+} from "./thread";
 import { platformStorage } from "@/lib/platform/storage";
 import type { OrbState } from "@/features/agent/Orb";
 
@@ -16,6 +23,8 @@ export interface ConversationMessage {
   origin?: "dock-add" | "chat";
   toolName?: string;
   timestamp: number;
+  /** Server sequence inside the single persistent thread. */
+  seq?: number;
   attachments?: ChatAttachment[];
   error?: {
     code?: string;
@@ -38,11 +47,18 @@ interface ConversationStoreState {
   audioLevel: number;
   orbState: OrbState;
   selectedModel: string;
+  isHydratingThread: boolean;
+  isLoadingOlder: boolean;
+  hasOlderMessages: boolean;
+  oldestMessageSeq: number | null;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
   setSideWidth: (width: number) => void;
   setDraft: (draft: string) => void;
+  hydrateThread: () => Promise<void>;
+  loadOlderMessages: () => Promise<void>;
+  clearConversation: () => Promise<void>;
   addAttachments: (files: File[]) => Promise<void>;
   removeAttachment: (id: string) => void;
   clearAttachments: () => void;
@@ -61,6 +77,7 @@ interface ConversationStoreState {
     },
     options?: {
       origin?: "dock-add" | "chat";
+      retry?: boolean;
     }
   ) => Promise<void>;
   retryLast: (
@@ -115,6 +132,28 @@ function getInitialLayoutState(): LayoutState {
 }
 
 let activeAbortController: AbortController | null = null;
+let hydrationPromise: Promise<void> | null = null;
+
+function toConversationMessage(message: ThreadMessageRecord): ConversationMessage {
+  const parsed = Date.parse(message.createdAt);
+  return {
+    id: message.id,
+    role: message.role === "system" ? "assistant" : message.role,
+    content: message.content,
+    timestamp: Number.isFinite(parsed) ? parsed : Date.now(),
+    seq: message.seq,
+    attachments: message.attachments,
+  };
+}
+
+function oldestSeqOf(messages: ConversationMessage[]): number | null {
+  let oldest: number | null = null;
+  for (const message of messages) {
+    if (typeof message.seq !== "number") continue;
+    if (oldest === null || message.seq < oldest) oldest = message.seq;
+  }
+  return oldest;
+}
 
 export const useConversationStore = create<ConversationStoreState>((set, get) => ({
   layoutState: getInitialLayoutState(),
@@ -131,8 +170,88 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   audioLevel: 0,
   orbState: "idle",
   selectedModel: getInitialModel(),
+  isHydratingThread: false,
+  isLoadingOlder: false,
+  hasOlderMessages: false,
+  oldestMessageSeq: null,
 
   setLayoutState: (layoutState) => set({ layoutState }),
+
+  hydrateThread: async () => {
+    if (get().messages.length > 0) return;
+    if (hydrationPromise) return hydrationPromise;
+
+    hydrationPromise = (async () => {
+      set({ isHydratingThread: true });
+      try {
+        const snapshot = await fetchAgentThread();
+        if (!snapshot) return;
+
+        set((state) => {
+          const known = new Set(state.messages.map((message) => message.id));
+          const fresh = snapshot.messages
+            .map(toConversationMessage)
+            .filter((message) => !known.has(message.id));
+          const merged = fresh.length > 0 ? [...fresh, ...state.messages] : state.messages;
+
+          return {
+            messages: merged,
+            hasOlderMessages: snapshot.hasMore,
+            oldestMessageSeq: oldestSeqOf(merged),
+          };
+        });
+      } finally {
+        set({ isHydratingThread: false });
+      }
+    })().finally(() => {
+      hydrationPromise = null;
+    });
+
+    return hydrationPromise;
+  },
+
+  loadOlderMessages: async () => {
+    const { hasOlderMessages, oldestMessageSeq, isLoadingOlder } = get();
+    if (!hasOlderMessages || oldestMessageSeq === null || isLoadingOlder) return;
+
+    set({ isLoadingOlder: true });
+    try {
+      const page = await fetchOlderThreadMessages(oldestMessageSeq);
+      if (!page) return;
+
+      set((state) => {
+        const known = new Set(state.messages.map((message) => message.id));
+        const older = page.messages
+          .map(toConversationMessage)
+          .filter((message) => !known.has(message.id));
+        const merged = older.length > 0 ? [...older, ...state.messages] : state.messages;
+
+        return {
+          messages: merged,
+          hasOlderMessages: page.hasMore,
+          oldestMessageSeq: oldestSeqOf(merged),
+        };
+      });
+    } finally {
+      set({ isLoadingOlder: false });
+    }
+  },
+
+  clearConversation: async () => {
+    const cleared = await clearAgentThread();
+    if (!cleared) {
+      set({ statusText: "Couldn't clear the conversation. Try again." });
+      return;
+    }
+
+    set({
+      messages: [],
+      hasOlderMessages: false,
+      oldestMessageSeq: null,
+      activeApproval: null,
+      statusText: "",
+    });
+  },
 
   setSelectedModel: (selectedModel) => {
     platformStorage.setItem(MODEL_KEY, selectedModel);
@@ -213,7 +332,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   sendMessage: async (promptToSend, cityId, callbacks, options) => {
     const rawPrompt = (promptToSend ?? get().draft).trim();
-    const attachmentsToSend = [...get().stagedAttachments];
+    // Drop stale image previews without stored payloads: they render as
+    // placeholders in the transcript and must never be re-sent to the model.
+    const attachmentsToSend = [...get().stagedAttachments].filter(
+      (attachment) => !attachment.isImage || Boolean(attachment.dataUrl)
+    );
     if ((!rawPrompt && attachmentsToSend.length === 0) || get().isStreaming) return;
 
     const prompt = rawPrompt || (attachmentsToSend.length > 0 ? "Inspect the attached files." : "");
@@ -248,20 +371,14 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const abortCtrl = new AbortController();
     activeAbortController = abortCtrl;
 
-    const historyForBackend = get()
-      .messages.filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
-
     await streamAgentLoop({
       prompt,
       cityId,
+      userId: getAgentUserId(),
       modelId: get().selectedModel,
       attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       origin,
-      history: historyForBackend,
+      retry: options?.retry === true,
       signal: abortCtrl.signal,
       onEvent: (event: UIEvent) => {
         const { soundEnabled } = get();
@@ -386,11 +503,22 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
     const lastUserMsg = messages[lastUserIndex];
     const lastOrigin = lastUserMsg.origin;
+    // Only re-send payloads that still exist. Transcript placeholders for
+    // oversized images have no dataUrl and would fail model validation.
+    const lastAttachments = (lastUserMsg.attachments || []).filter(
+      (attachment) => !attachment.isImage || Boolean(attachment.dataUrl)
+    );
     // Clear error from last user message and discard subsequent failed/tool attempts
     const prunedMessages = messages.slice(0, lastUserIndex);
 
-    set({ messages: prunedMessages });
-    await get().sendMessage(lastUserMsg.content, cityId, callbacks, { origin: lastOrigin });
+    set({
+      messages: prunedMessages,
+      stagedAttachments: lastAttachments ? [...lastAttachments] : [],
+    });
+    await get().sendMessage(lastUserMsg.content, cityId, callbacks, {
+      origin: lastOrigin,
+      retry: true,
+    });
   },
 
   handleApproval: async (approved, cityId, callbacks) => {
