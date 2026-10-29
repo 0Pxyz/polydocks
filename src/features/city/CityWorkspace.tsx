@@ -4,6 +4,7 @@ import { DynamicTabContainer } from "@/features/dock/DynamicTabContainer";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 import { useCityWorkspace } from "./useCityWorkspace";
 import { CityOverview } from "./CityOverview";
+import { getLastCityTool } from "@/lib/city/cityModel";
 import { NotesView } from "./tools/NotesView";
 import { SourcesView } from "./tools/SourcesView";
 import { QuestsView } from "./tools/QuestsView";
@@ -100,14 +101,9 @@ export function CityWorkspace({
             <PluginsView
               onDismiss={() => handleSelectTool("overview")}
             />
-          ) : (
-            <CityOverview
-              data={data}
-              onSelectTool={handleSelectTool}
-              onSynthesizeTool={onSynthesizeTool}
-              onBackToWorld={onBackToWorld}
-            />
-          )}
+          ) : activeTool === "" || activeTool === "overview" ? (
+            <CityOverview data={data} isFirstVisit={!getLastCityTool(cityId)} />
+          ) : null}
         </motion.div>
       </AnimatePresence>
     </div>
