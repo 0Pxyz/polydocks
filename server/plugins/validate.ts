@@ -21,6 +21,40 @@ export function findHardcodedHex(code: string): string[] {
 }
 
 /**
+ * Design-slop patterns that make generated UI look foreign inside the app
+ * (docs/design-slop.md). Warning only, never a publish blocker: controls
+ * like TabsList carry their own chrome, and edge cases exist. Each hit
+ * nudges the agent toward the native look: borderless surfaces, whitespace
+ * grouping, sentence case, normal tracking, theme tokens.
+ */
+const SLOP_PATTERNS: Array<{ re: RegExp; hint: string }> = [
+  {
+    re: /bg-card[^"'`]*border-|border-(?:border|input)[^"'`]*bg-card/,
+    hint: "bordered card container (bg-card + border). Let content breathe on the surface; separate with whitespace, or a borderless subtle surface step at most.",
+  },
+  {
+    re: /<Separator[\s/>]/,
+    hint: "<Separator> rule. Rely on whitespace, alignment, and grouping instead of horizontal rules.",
+  },
+  {
+    re: /tracking-tight(?:er)?|tracking-widest/,
+    hint: "tight/widest tracking. Use normal tracking; never negative tracking on UI text.",
+  },
+  {
+    re: /uppercase/,
+    hint: "uppercase styling. Prefer sentence case and let hierarchy do the work.",
+  },
+];
+
+export function findSlopPatterns(code: string): string[] {
+  const hits: string[] = [];
+  for (const { re, hint } of SLOP_PATTERNS) {
+    if (re.test(code)) hits.push(hint);
+  }
+  return hits;
+}
+
+/**
  * Mounts the bundled guest JS in a server-side DOM (happy-dom) with the real
  * vendored kit: createRoot is stubbed to capture the root element, which is
  * then rendered with react-dom/server. Asserts it renders without throwing.
@@ -150,6 +184,10 @@ export async function validatePluginCode(input: {
     warnings.push(
       `Hardcoded color ${hex} — prefer a theme token (var(--background), var(--primary), …) or a shadcn component. Warning only for now.`
     );
+  }
+
+  for (const slop of findSlopPatterns(input.code)) {
+    warnings.push(`Design slop (docs/design-slop.md): ${slop} Warning only for now.`);
   }
 
   const render = await validatePluginRender(guestJs);

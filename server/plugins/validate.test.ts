@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { db } from "../workspace/db";
-import { validatePluginRender, validatePluginCode, findHardcodedHex } from "./validate";
+import { validatePluginRender, validatePluginCode, findHardcodedHex, findSlopPatterns } from "./validate";
 import { bundleFeatureCode } from "../workspace/reactKit";
 import { PluginService } from "../services/pluginService";
 
@@ -45,6 +45,15 @@ describe("Pre-publish validation", () => {
     expect(res.ok).toBe(true);
     expect(res.warnings.length).toBeGreaterThan(0);
     expect(res.warnings[0]).toContain("#C8FF57");
+  });
+
+  it("warns on design slop instead of hard-rejecting", async () => {
+    const sloppy = `${GOOD}\nconst x = '<div className="rounded-xl border border-border bg-card"><Separator /><p className="uppercase tracking-tight">hi</p></div>';`;
+    expect(findSlopPatterns(sloppy).length).toBeGreaterThan(0);
+    expect(findSlopPatterns(GOOD)).toEqual([]);
+    const res = await validatePluginCode({ code: sloppy, bundle: bundleFeatureCode });
+    expect(res.ok).toBe(true);
+    expect(res.warnings.some((w) => w.includes("Design slop"))).toBe(true);
   });
 
   it("blocks activation when the render test fails, keeping the previous version live", async () => {

@@ -15,7 +15,7 @@ export interface UpdateTabArgs {
 export const update_tab: AgentTool<UpdateTabArgs> = {
   name: "update_tab",
   description:
-    "Patches an existing dock tab in place. Use for any change to a tab; never create a duplicate tab to change one.",
+    "Patches an existing dock tab in place. Use for any change to a tab; never create a duplicate tab to change one. UI must look native: theme tokens only, no bordered cards, no separators, no decorative pills, sentence case (docs/design-slop.md).",
   schema: z.object({
     id: z.string().describe("Target tab id to update"),
     title: z.string().optional(),
