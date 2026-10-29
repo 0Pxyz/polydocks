@@ -48,16 +48,6 @@ export function ensureDefaultWorkspace(): WorkspaceRecord {
       FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
       FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
     );
-
-    -- Dock pins: server record of pinned items per workspace scope.
-    -- The client keeps its own pin cache; this table is the durable truth
-    -- the agent, CLI and routes share (pin persists across sessions).
-    CREATE TABLE IF NOT EXISTS dock_pins (
-      workspace_id TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      pinned_at TEXT NOT NULL,
-      PRIMARY KEY (workspace_id, item_id)
-    );
   `);
 
   const existingDefault = db
@@ -319,40 +309,4 @@ export function setWorkspacePluginStatus(
     WHERE workspace_id = ? AND plugin_id = ?
   `).run(enabled ? 1 : 0, workspaceId, pluginId);
   return result.changes > 0;
-}
-
-/**
- * Dock pins: durable pin record per workspace scope, shared by the agent,
- * CLI and routes. The client keeps its own pin cache for instant layout;
- * this table is the truth that survives sessions, reloads and reinstalls.
- */
-export function pinDockItem(workspaceId: string, itemId: string): void {
-  ensureDefaultWorkspace();
-  db.query(
-    `INSERT OR IGNORE INTO dock_pins (workspace_id, item_id, pinned_at) VALUES (?, ?, ?)`
-  ).run(workspaceId, itemId, new Date().toISOString());
-}
-
-export function unpinDockItem(workspaceId: string, itemId: string): boolean {
-  ensureDefaultWorkspace();
-  const result = db.query(
-    `DELETE FROM dock_pins WHERE workspace_id = ? AND item_id = ?`
-  ).run(workspaceId, itemId);
-  return result.changes > 0;
-}
-
-export function listDockPins(workspaceId: string): string[] {
-  ensureDefaultWorkspace();
-  const rows = db.query(
-    `SELECT item_id FROM dock_pins WHERE workspace_id = ? ORDER BY pinned_at ASC`
-  ).all(workspaceId) as Array<{ item_id: string }>;
-  return rows.map((r) => r.item_id);
-}
-
-export function isDockPinned(workspaceId: string, itemId: string): boolean {
-  ensureDefaultWorkspace();
-  const row = db.query(
-    `SELECT 1 as one FROM dock_pins WHERE workspace_id = ? AND item_id = ?`
-  ).get(workspaceId, itemId) as any;
-  return Boolean(row?.one);
 }

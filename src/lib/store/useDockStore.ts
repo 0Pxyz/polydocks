@@ -35,7 +35,6 @@ export interface DockState {
   setSideBySide: (enabled: boolean) => void;
   pinTool: (toolId: string) => void;
   unpinTool: (toolId: string) => void;
-  mergeServerPins: (ids: string[]) => void;
   openTool: (toolId: string) => void;
   closeTool: (toolId: string) => void;
   /**
@@ -98,26 +97,6 @@ export const useDockStore = create<DockState>((set, get) => ({
   unpinTool: (toolId) =>
     set((state) => {
       const pinnedToolIds = state.pinnedToolIds.filter((id) => id !== toolId);
-      persistPinnedIds(pinnedToolIds);
-      return { pinnedToolIds };
-    }),
-
-  /**
-   * Merge the server pin record (durable per-workspace truth) into the
-   * local pin set. Union: local instant pins stay, server pins are added.
-   */
-  mergeServerPins: (ids: string[]) =>
-    set((state) => {
-      const known = new Set(state.pinnedToolIds);
-      let changed = false;
-      for (const id of ids) {
-        if (typeof id === "string" && id && !known.has(id)) {
-          known.add(id);
-          changed = true;
-        }
-      }
-      if (!changed) return state;
-      const pinnedToolIds = [...known];
       persistPinnedIds(pinnedToolIds);
       return { pinnedToolIds };
     }),

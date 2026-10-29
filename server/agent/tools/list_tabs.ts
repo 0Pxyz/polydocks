@@ -29,22 +29,12 @@ export const list_tabs: AgentTool<{ cityId?: string }> = {
       }
     }
 
-    let pinned: string[] = [];
-    try {
-      const { listDockPins } = await import("../../workspace/workspaces");
-      pinned = listDockPins(ctx.workspaceId || targetCity || "default");
-    } catch {
-      pinned = [];
-    }
-    const isPinned = (id: string) => pinned.includes(id);
-
     return {
-      builtin: BUILTIN_TABS.map((t) => ({ ...t, pinned: isPinned(t.id) })),
+      builtin: BUILTIN_TABS,
       dynamic: dynamicTabs.map((id) => ({
         id,
         kind: "dynamic",
         cityId: targetCity,
-        pinned: isPinned(id),
       })),
     };
   },
