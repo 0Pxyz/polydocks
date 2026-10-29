@@ -242,3 +242,23 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
   plugins: "Installed plugins",
   city: "Current city workspace",
 };
+
+/**
+ * The builtin catalog the search palette can resolve without any fetch.
+ * Mirrors the server builtin list (server/agent/tools/dockCatalog.ts).
+ */
+export const DOCK_CORE_CATALOG: DockItem[] = [
+  { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
+  { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin", system: true },
+  { id: "browser", label: "Research & Sources", description: "Research and sources", icon: "browser", kind: "builtin" },
+  { id: "notes", label: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
+  { id: "files", label: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
+  { id: "papers", label: "Papers", description: "Reading list and papers", icon: "papers", kind: "builtin" },
+  { id: "sources", label: "Sources", description: "Saved sources", icon: "sources", kind: "builtin" },
+  { id: "quests", label: "Quests", description: "Mastery quests and progress", icon: "quests", kind: "builtin" },
+  { id: "flashcards", label: "Flashcards", description: "Interactive flashcards", icon: "flashcards", kind: "builtin" },
+  { id: "terminal", label: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
+  { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
+  { id: "store", label: "Plugin Store", description: "Community plugin store", icon: "store", kind: "builtin" },
+  { id: "plugins", label: "Plugins", description: "Installed plugins", icon: "plugins", kind: "builtin" },
+];
