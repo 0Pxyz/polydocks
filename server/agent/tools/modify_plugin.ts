@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
-import { normalizePluginId, verifyPluginStateAsync } from "../../plugins/verify";
+import { normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
 import { readFeature } from "../../workspace/features";
 
 export interface ModifyPluginArgs {
@@ -107,6 +107,10 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
         actor: "agent",
       });
       if (!updated.success) return updated;
+      ensurePluginRegisteredAndMounted(normalized, workspaceId, {
+        title: updated.name,
+        icon: args.icon,
+      });
       const verification = await verifyPluginStateAsync(normalized, workspaceId);
       if (!verification.ok) {
         return {
@@ -163,7 +167,6 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       } catch {
         // Non-fatal: verification below reports registry state.
       }
-      const { ensurePluginRegisteredAndMounted } = await import("../../plugins/verify");
       ensurePluginRegisteredAndMounted(normalized, workspaceId, manifest);
       const verification = await verifyPluginStateAsync(normalized, workspaceId);
       if (!verification.ok) {
@@ -197,6 +200,10 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
     });
     if (!updated.success) return updated;
 
+    ensurePluginRegisteredAndMounted(normalized, workspaceId, {
+      title: updated.name,
+      icon: args.icon,
+    });
     const verification = await verifyPluginStateAsync(normalized, workspaceId);
     if (!verification.ok) {
       return {

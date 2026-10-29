@@ -45,6 +45,9 @@ async function buildJs(): Promise<{ bytes: number }> {
     minify: true,
     sourcemap: "none",
     loader: { ".tsx": "tsx" },
+    // Production React (react-dom development strings like "Internal React
+    // error" must never ship inside plugin srcdocs).
+    define: { "process.env.NODE_ENV": '"production"' },
   });
   if (!result.success) {
     const details = result.logs.map((l) => `${l.level}: ${l.message}`).join("\n");

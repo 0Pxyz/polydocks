@@ -1,5 +1,4 @@
 import { Window } from "happy-dom";
-import { renderToString } from "react-dom/server";
 import { getKitJs } from "../workspace/reactKit";
 
 export interface RenderValidation {
@@ -37,6 +36,15 @@ export async function validatePluginRender(guestJs: string): Promise<{ ok: boole
     win.document.write(`<!DOCTYPE html><html><body><div id="app"></div></body></html>`);
     const run = (win as any).eval.bind(win) as (src: string) => unknown;
 
+    // Scheduler globals the kit renderer expects (from the Node runtime).
+    try {
+      if (typeof MessageChannel !== "undefined" && typeof (win as any).MessageChannel === "undefined") {
+        (win as any).MessageChannel = MessageChannel;
+      }
+    } catch {
+      // best effort
+    }
+
     run(getKitJs());
     const kit = (win as any).__polymaxKit;
     if (!kit?.React) {
@@ -44,6 +52,8 @@ export async function validatePluginRender(guestJs: string): Promise<{ ok: boole
     }
 
     // Browser APIs components may touch during render; inert no-ops here.
+    // Plus a stub window.polymax bridge: production always defines it before
+    // guest code runs, so module-scope bridge calls must not crash validation.
     run(`(function() {
       try {
         if (typeof window.matchMedia !== "function") {
@@ -55,6 +65,19 @@ export async function validatePluginRender(guestJs: string): Promise<{ ok: boole
         if (typeof window.IntersectionObserver === "undefined") {
           window.IntersectionObserver = class { observe(){} unobserve(){} disconnect(){} };
         }
+        const bridgeStub = {
+          storage: { get: async () => null, set: async () => true, remove: async () => true },
+          invoke: async () => null,
+          useCapability: async () => null,
+          invokeAction: async () => null,
+          openUrl: () => {},
+          openContent: () => {},
+          getContext: async () => ({}),
+          submit: () => {},
+          ui: { expand: () => {}, collapse: () => {} },
+        };
+        window.polymax = window.polymax || bridgeStub;
+        window.polydocks = window.polydocks || window.polymax;
         try {
           Object.defineProperty(window, "parent", { value: { postMessage(){} }, configurable: true });
         } catch (e) { /* parent stays self; postMessage below still sunk */ }
@@ -88,7 +111,8 @@ export async function validatePluginRender(guestJs: string): Promise<{ ok: boole
 
     let html: string;
     try {
-      html = renderToString(captured as any);
+      // The kit's own server renderer: same React copy as the components.
+      html = kit.renderToString(captured as any);
     } catch (err: any) {
       return { ok: false, error: `Render threw: ${err?.message || String(err)}` };
     }

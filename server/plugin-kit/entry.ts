@@ -8,8 +8,18 @@
  */
 import * as React from "react";
 import * as ReactDOMClient from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { jsx, jsxs, Fragment } from "react/jsx-runtime";
-import { jsxDEV } from "react/jsx-dev-runtime";
+
+/**
+ * Dev-variant JSX helper, implemented over the production runtime: the
+ * transpiler emits version-hashed jsxDEV_<hash> calls in development, which
+ * the kit normalizes to this function. Extra dev args (key, source, self)
+ * are accepted and ignored — the element is identical.
+ */
+function jsxDEV(type: any, props: any, _key?: any, _isStatic?: any, _source?: any, _self?: any) {
+  return jsx(type, props);
+}
 
 import * as badge from "@/components/ui/badge";
 import * as button from "@/components/ui/button";
@@ -52,6 +62,7 @@ const UI = {  ...badge,
   React,
   // Mutable copy: validation stubs createRoot to capture the root element.
   ReactDOMClient: { ...ReactDOMClient },
+  renderToString,
   jsx,
   jsxs,
   jsxDEV,

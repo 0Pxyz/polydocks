@@ -255,7 +255,7 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
   <div id="app"></div>
   <script>
     try {
-${jsCode}
+${escapeInlineScript(jsCode)}
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
       window.parent.postMessage({
@@ -306,7 +306,7 @@ ${kit.css}
 ${guestCss}
   </style>
   <script>
-${kit.js}
+${escapeInlineScript(kit.js)}
   </script>
   <script>
     // Polymax Host-Guest Sandboxed Bridge Protocol (React kit build).
@@ -396,7 +396,7 @@ ${kit.js}
   <div id="app"></div>
   <script>
     try {
-${guestJs}
+${escapeInlineScript(guestJs)}
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
       window.parent.postMessage({
@@ -424,6 +424,21 @@ function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+/**
+ * Escapes JS for inlining inside an HTML <script> element.
+ * The HTML parser ends the element at a literal `</script` (even inside a
+ * JS string) and treats `<!--` as an escape hatch, so both must be
+ * neutralized. Backslash-escaping is a no-op for JS string/regex/template
+ * semantics (`<\/` === `/`), keeping the code byte-identical at runtime.
+ * Single helper for every inline path: use it wherever JS goes into srcdoc.
+ */
+export function escapeInlineScript(js: string): string {
+  return js
+    .replace(/<\/script/gi, "<\\/script")
+    .replace(/<!--/g, "<\\!--")
+    .replace(/<script/gi, "<\\script");
 }
 
 /**
@@ -663,6 +678,10 @@ export async function listFeatures(
 
 /**
  * Deletes a feature from SQLite and the legacy filesystem mirror.
+ * Also removes the workspace mount and, when nothing references the id
+ * anymore (no mounts, no file rows anywhere), the auto-created registry row,
+ * so create -> delete -> create lifecycles keep working. Version history in
+ * plugin_versions is preserved for audit.
  */
 export async function deleteFeature(cityId: string, featureId: string): Promise<void> {
   try {
@@ -670,6 +689,19 @@ export async function deleteFeature(cityId: string, featureId: string): Promise<
     ensurePluginFilesTable();
     const { db } = await import("./db");
     db.query("DELETE FROM plugin_files WHERE workspace_id = ? AND plugin_id = ?").run(cityId, featureId);
+    db.query("DELETE FROM workspace_plugins WHERE workspace_id = ? AND plugin_id = ?").run(cityId, featureId);
+    const mountsLeft = (
+      db.query("SELECT COUNT(*) as c FROM workspace_plugins WHERE plugin_id = ?").get(featureId) as any
+    )?.c as number;
+    const filesLeft = (
+      db.query("SELECT COUNT(*) as c FROM plugin_files WHERE plugin_id = ?").get(featureId) as any
+    )?.c as number;
+    if (!mountsLeft && !filesLeft) {
+      const reg = db.query("SELECT trust FROM plugins WHERE id = ?").get(featureId) as any;
+      if (reg?.trust === "generated") {
+        db.query("DELETE FROM plugins WHERE id = ?").run(featureId);
+      }
+    }
   } catch {
     // Non-fatal: filesystem cleanup below still runs.
   }

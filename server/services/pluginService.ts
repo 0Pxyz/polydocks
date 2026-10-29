@@ -329,7 +329,14 @@ export class PluginService {
     const currentVersion = existingPlugin?.version || "1.0.0";
     const nextVersion = bumpPatchVersion(currentVersion);
     const name = input.name || existingPlugin?.name || existingFeature?.manifest.title || pluginId;
-    const description = input.description || existingPlugin?.manifest.description || "";
+    // Registry manifests require a non-empty description; fall back through
+    // the feature title so filesystem-only legacies (no description field)
+    // still upgrade cleanly on a fresh database.
+    const description =
+      input.description ||
+      existingPlugin?.manifest.description ||
+      (existingFeature?.manifest.title as string) ||
+      `${name} tool`;
     const icon = input.icon || existingPlugin?.manifest.icon || existingFeature?.manifest.icon || "Cards";
 
     const updatedFeatureManifest = {

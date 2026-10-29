@@ -33,19 +33,23 @@ await initAgentHome().catch((err) => {
 
 // One-time idempotent import of workspace plugin files into SQLite
 // (plugin_files is the source of truth; workspace/ is ephemeral in prod).
-try {
-  const { migrateWorkspacePluginFiles } = await import("./workspace/pluginFiles");
-  const report = await migrateWorkspacePluginFiles();
-  if (report.imported > 0 || report.conflicts.length > 0) {
-    console.log(
-      `[Polymax Server] Plugin migration: ${report.imported} imported, ${report.skipped} skipped, ${report.conflicts.length} conflicts`
-    );
-    for (const c of report.conflicts.slice(0, 10)) {
-      console.log(`[Polymax Server] Plugin migration conflict: ${c.workspaceId}/${c.pluginId} kept ${c.kept}`);
+// Skipped under bun test: migration is a production boot concern and would
+// import mid-run fixture files into the shared test database.
+if (config.NODE_ENV !== "test") {
+  try {
+    const { migrateWorkspacePluginFiles } = await import("./workspace/pluginFiles");
+    const report = await migrateWorkspacePluginFiles();
+    if (report.imported > 0 || report.conflicts.length > 0) {
+      console.log(
+        `[Polymax Server] Plugin migration: ${report.imported} imported, ${report.skipped} skipped, ${report.conflicts.length} conflicts`
+      );
+      for (const c of report.conflicts.slice(0, 10)) {
+        console.log(`[Polymax Server] Plugin migration conflict: ${c.workspaceId}/${c.pluginId} kept ${c.kept}`);
+      }
     }
+  } catch (err) {
+    console.error("[Polymax Server] Plugin migration failed (non-fatal):", err);
   }
-} catch (err) {
-  console.error("[Polymax Server] Plugin migration failed (non-fatal):", err);
 }
 
 // Recover any interrupted background tasks from previous server instance
