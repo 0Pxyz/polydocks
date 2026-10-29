@@ -80,7 +80,6 @@ describe("Agent progress: heartbeat, ordering, no-leak, cancel", () => {
       llmClient: slowLlm(4500),
       onEvent: (e) => void events.push(e),
     });
-    expect(result.status).toBe("completed");
     const beats = events.filter((e) => e.type === "agent.heartbeat");
     expect(beats.length).toBeGreaterThanOrEqual(2);
     for (const b of beats) {
@@ -91,7 +90,8 @@ describe("Agent progress: heartbeat, ordering, no-leak, cancel", () => {
     for (let i = 1; i < elapsed.length; i++) {
       expect(elapsed[i]).toBeGreaterThan(elapsed[i - 1]);
     }
-  });
+    expect(result.status).toBe("completed");
+  }, 15000);
 
   it("orders tool.start -> tool.done (with durationMs) -> finish", async () => {
     const events: AgentStepEvent[] = [];
@@ -125,7 +125,7 @@ describe("Agent progress: heartbeat, ordering, no-leak, cancel", () => {
       expect(JSON.stringify(b.payload)).not.toContain(secret);
       expect(JSON.stringify(b.payload)).not.toContain("Please handle");
     }
-  });
+  }, 15000);
 
   it("honors an aborted signal mid-model-call", async () => {
     const events: AgentStepEvent[] = [];

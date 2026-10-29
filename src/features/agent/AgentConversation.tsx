@@ -94,6 +94,7 @@ export function AgentConversation({
     activity,
     lastEventAt,
     currentPhase,
+    streamingText,
     activeApproval,
     activeModel,
     soundEnabled,
@@ -887,6 +888,11 @@ export function AgentConversation({
           {/* Live progress during streaming: one row per step, then the stuck line */}
           {isStreaming && (
             <div className="flex flex-col gap-1 py-1" aria-live="polite">
+              {streamingText && (
+                <div className="w-full leading-relaxed whitespace-pre-wrap text-[15px] text-foreground/90 font-sans pb-1">
+                  {streamingText}
+                </div>
+              )}
               {activity.map((row) => {
                 const elapsed = Math.max(
                   0,

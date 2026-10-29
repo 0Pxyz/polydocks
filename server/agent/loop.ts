@@ -34,6 +34,7 @@ export interface AgentStepEvent {
   type:
     | "agent.start"
     | "agent.heartbeat"
+    | "agent.text_delta"
     | "tool.start"
     | "tool.done"
     | "tab.created"
@@ -96,6 +97,87 @@ export interface AgentLoopResult {
   text?: string;
   steps: number;
   error?: string;
+}
+
+/**
+ * Runs one model call with streaming primary: text deltas are forwarded as
+ * they arrive (first paint <1s instead of 6-15s of silence) and tool calls
+ * are accumulated from `tool_calls` chunks. Returns a legacy-shaped
+ * `{ choices: [{ message }], usage }` so the loop below is untouched.
+ * Providers/clients that answer with a plain object (older mocks,
+ * non-streaming deployments) fall back to a single call.
+ */
+async function createModelResponse(input: {
+  llmClient: typeof llm;
+  completionParams: any;
+  signal?: AbortSignal;
+  onTextDelta: (delta: string) => void | Promise<void>;
+}): Promise<any> {
+  const { llmClient, completionParams, signal, onTextDelta } = input;
+  let streamed: any = null;
+  try {
+    streamed = await llmClient.chat.completions.create(
+      { ...completionParams, stream: true, stream_options: { include_usage: true } },
+      { signal } as any
+    );
+  } catch (err) {
+    // An abort must propagate (cancel): retrying as a single call would
+    // resurrect a turn the user just killed.
+    if (signal?.aborted) throw err;
+    streamed = null;
+  }
+  if (!streamed || typeof streamed[Symbol.asyncIterator] !== "function") {
+    // Plain object answer (provider answered directly instead of streaming,
+    // or a non-streaming client such as test mocks): use it as the legacy
+    // response. Exactly one model call per step — never call again here,
+    // or stateful clients and billing would see double calls.
+    if (streamed) return streamed;
+    return llmClient.chat.completions.create(completionParams, { signal } as any);
+  }
+
+  let content = "";
+  const toolAcc = new Map<number, { id: string; name: string; args: string }>();
+  let usage: unknown = null;
+  for await (const chunk of streamed as AsyncIterable<any>) {
+    if (chunk?.usage) usage = chunk.usage;
+    const delta = chunk?.choices?.[0]?.delta;
+    if (!delta) continue;
+    if (typeof delta.content === "string" && delta.content.length > 0) {
+      content += delta.content;
+      await onTextDelta(delta.content);
+    }
+    const tcs = (delta as any).tool_calls;
+    if (Array.isArray(tcs)) {
+      for (const tc of tcs) {
+        const idx = typeof tc.index === "number" ? tc.index : 0;
+        const cur = toolAcc.get(idx) ?? { id: "", name: "", args: "" };
+        if (typeof tc.id === "string" && tc.id.length > 0) cur.id = tc.id;
+        const fn = tc.function ?? {};
+        if (typeof fn.name === "string" && fn.name.length > 0) cur.name = fn.name;
+        if (typeof fn.arguments === "string") cur.args += fn.arguments;
+        toolAcc.set(idx, cur);
+      }
+    }
+  }
+  const tool_calls = [...toolAcc.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([idx, t], i) => ({
+      id: t.id || `stream_call_${idx}_${i}`,
+      type: "function",
+      function: { name: t.name, arguments: t.args },
+    }));
+  return {
+    choices: [
+      {
+        message: {
+          role: "assistant",
+          content,
+          ...(tool_calls.length > 0 ? { tool_calls } : {}),
+        },
+      },
+    ],
+    usage: usage ?? {},
+  };
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Agent, an autonomous dock and workspace operator powered by Meta Muse Spark.
@@ -571,7 +653,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       currentPhase = "thinking";
       currentTool = undefined;
-      const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
+      // Streaming primary: text deltas are forwarded as agent.text_delta
+      // (first paint <1s instead of 6-15s of silence) and tool calls are
+      // accumulated from chunks. Legacy object responses (older mocks,
+      // non-streaming clients) are used as-is, so this degrades cleanly.
+      const response = await createModelResponse({
+        llmClient,
+        completionParams,
+        signal,
+        onTextDelta: (delta) =>
+          emit({
+            step: currentStep,
+            type: "agent.text_delta",
+            payload: { delta },
+          }),
+      });
       noteUsage(response);
       const choice = response.choices?.[0];
 

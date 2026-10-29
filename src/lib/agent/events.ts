@@ -140,6 +140,12 @@ export type UIEvent =
       phase: "thinking" | "running_tool";
       /** Machine tool name while running_tool, if any. */
       tool?: string;
+    }
+  | {
+      type: "agent.text_delta";
+      step: number;
+      /** One streamed text fragment (append to the provisional reply). */
+      delta: string;
     };
 
 /**
@@ -425,6 +431,13 @@ export function adaptBackendEvent(raw: {
         elapsedMs: Number(payload.elapsedMs || 0),
         phase: payload.phase === "running_tool" ? "running_tool" : "thinking",
         tool: typeof payload.tool === "string" ? payload.tool : undefined,
+      };
+
+    case "agent.text_delta":
+      return {
+        type: "agent.text_delta",
+        step,
+        delta: typeof payload.delta === "string" ? payload.delta : "",
       };
 
     case "error":

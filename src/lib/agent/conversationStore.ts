@@ -62,6 +62,8 @@ interface ConversationStoreState {
   lastEventAt: number;
   /** What the loop last reported waiting on. */
   currentPhase: string;
+  /** Provisional reply text assembled from streamed deltas (cleared on finish). */
+  streamingText: string;
   activeApproval: ApprovalRequest | null;
   soundEnabled: boolean;
   audioLevel: number;
@@ -203,6 +205,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   activity: [],
   lastEventAt: 0,
   currentPhase: "",
+  streamingText: "",
   activeApproval: null,
   soundEnabled: getInitialSound(),
   audioLevel: 0,
@@ -375,6 +378,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       statusText: "Canceled request.",
       activity: [],
       currentPhase: "",
+      streamingText: "",
     });
   },
 
@@ -455,12 +459,19 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             });
             break;
 
+          case "agent.text_delta":
+            if (event.delta) {
+              set((state) => ({ streamingText: state.streamingText + event.delta }));
+            }
+            break;
+
           case "agent.started":
             set({
               orbState: "thinking",
               activeModel: event.model || null,
               activeIntent: event.intent || null,
               activity: [],
+              streamingText: "",
               currentPhase: "Thinking",
             });
             break;
@@ -613,6 +624,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               statusText: "",
               activity: [],
               currentPhase: "",
+              streamingText: "",
               activeModel: null,
               activeIntent: null,
               messages: [
@@ -664,6 +676,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                   row.state === "running" ? { ...row, state: "error" as const, finishedAt: Date.now() } : row
                 ),
                 currentPhase: "",
+                streamingText: "",
                 activeModel: null,
                 activeIntent: null,
                 messages: updatedMessages,
@@ -782,6 +795,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
           statusText: errorObj.message,
           activity: [],
           currentPhase: "",
+          streamingText: "",
           activeModel: null,
           activeIntent: null,
           messages: updatedMessages,
