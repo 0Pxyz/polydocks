@@ -175,7 +175,6 @@ export function AgenticDock({
   const capsuleRef = useRef<HTMLDivElement>(null);
 
   const [internalActiveToolId, setInternalActiveToolId] = useState<string>("");
-  const [transientMessage, setTransientMessage] = useState<string | null>(null);
   const [barWidth, setBarWidth] = useState<number>(
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
@@ -260,12 +259,11 @@ export function AgenticDock({
   };
 
   const activeStatus =
-    transientMessage ||
-    (isBuilding
+    isBuilding
       ? statusText || `Building ${buildingName || "tool"}…`
       : statusText && (statusText.includes("Couldn't") || statusText.includes("Failed"))
       ? statusText
-      : null);
+      : null;
 
   const defaultTools = cityName ? CITY_DOCK_TOOLS : HOME_DOCK_TOOLS;
   const baseTools = explicitTools ?? defaultTools;
