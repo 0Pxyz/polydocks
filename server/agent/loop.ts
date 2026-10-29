@@ -3,7 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { loadSkill, stripSkillMetadata, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
@@ -233,11 +233,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    await emit({
-      step: 0,
-      type: "agent.start",
-      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel },
-    });
+    // Skill selection runs before the first model call so the UI and debug
+    // logs show exactly which skills shape this turn (next to model).
+    const loadedSkills: string[] = [];
 
     // Build tool registry map and OpenAI-compatible tools definitions
     const toolMap = new Map<string, AgentTool>();
@@ -255,6 +253,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     // Context-aware dynamic skill injection and progressive disclosure
     let activeSystemPrompt = systemPrompt;
+
+    // App map: always loaded, hard budget ~700 tokens. Domain skills add detail.
+    try {
+      const overview = stripSkillMetadata(await loadSkill("app-overview"));
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
+      loadedSkills.push("app-overview");
+    } catch {
+      // Non-fatal
+    }
 
     // Safe injection of agent operational guidelines (AGENTS.md) and user profile (USER.md)
     try {
@@ -304,6 +311,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       try {
         const tabSkillPrompt = await loadSkill("create-tab");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Dynamic Tab Synthesis\n${tabSkillPrompt}`;
+        loadedSkills.push("create-tab");
       } catch {
         // Non-fatal
       }
@@ -313,6 +321,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       try {
         const pluginSkillPrompt = await loadSkill("synthesize-plugin");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Synthesize & Modify PolyDocks Plugins\n${pluginSkillPrompt}`;
+        loadedSkills.push("synthesize-plugin");
       } catch {
         // Non-fatal
       }
@@ -339,6 +348,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
                 ? "Web Research & Primary Source Discovery (TinyFish)"
                 : plugin.name;
             activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: ${skillHeading}\n${skillPrompt}`;
+            loadedSkills.push(skillName);
             if (plugin.id === "search") researchSkillInjected = true;
           } catch {
             // Non-fatal
@@ -351,6 +361,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       try {
         const researchSkillPrompt = await loadSkill("web-research");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Primary Source Discovery (TinyFish)\n${researchSkillPrompt}`;
+        loadedSkills.push("web-research");
       } catch {
         // Non-fatal
       }
@@ -360,10 +371,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       try {
         const worldSkillPrompt = await loadSkill("world-planning");
         activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Knowledge Territories & World Map Planning\n${worldSkillPrompt}`;
+        loadedSkills.push("world-planning");
       } catch {
         // Non-fatal
       }
     }
+
+    await emit({
+      step: 0,
+      type: "agent.start",
+      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, skills: loadedSkills },
+    });
 
     // Context: one bounded window per user. The thread keeps the full transcript
     // in SQLite, but the model only receives recent turns plus the rolling
