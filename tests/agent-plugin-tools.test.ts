@@ -11,9 +11,11 @@ import { db } from "../server/workspace/db";
 describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
   beforeEach(() => {
     ensureDefaultWorkspace();
-    // Clean up test plugins
+    // Clean up test plugins (plugin_files included: the duplicate guard
+    // checks that namespace, so stale rows fail re-runs against a live DB)
     db.query("DELETE FROM workspace_plugins WHERE plugin_id LIKE 'test-%'").run();
     db.query("DELETE FROM plugins WHERE id LIKE 'test-%'").run();
+    db.query("DELETE FROM plugin_files WHERE plugin_id LIKE 'test-%'").run();
   });
 
   describe("Intent Detection (isPluginSynthesisIntent)", () => {

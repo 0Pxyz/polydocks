@@ -20,6 +20,17 @@ describe("Intent routing: update/fix classifier (PT+EN)", () => {
     { prompt: "muda o layout da dashboard", expected: "plugin_update" },
     { prompt: "add a streak counter to my timer tool", expected: "plugin_update" },
     { prompt: "adiciona um contador de streak na minha ferramenta", expected: "plugin_update" },
+    // Restyle requests mention theme words but target an artifact: they must
+    // route to plugin_update, never to theme (which would strip the plugin
+    // tools and stall the loop). Regression for the Bitcoin Pricing View freeze.
+    {
+      prompt:
+        "Melhora a UI/UX do plugin Bitcoin Pricing View. Ele não se adapta ao tema e fica ruim com o fundo. Refaz usando os componentes shadcn do app e o design system, para ficar mais bonito.",
+      expected: "plugin_update",
+    },
+    { prompt: "melhora o plugin pomodoro, deixa mais bonito", expected: "plugin_update" },
+    { prompt: "refaz a dashboard usando shadcn e o design system", expected: "plugin_update" },
+    { prompt: "fix the reader background, it renders badly", expected: "plugin_fix" },
     // Non-artifact prompts stay out of the plugin lanes.
     { prompt: "what is quantum computing?", expected: "general" },
     { prompt: "o que é computação quântica?", expected: "general" },

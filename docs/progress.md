@@ -58,3 +58,4 @@
 | 2026-10-29 | Immersive map and city: enter from popover, city tools live in the dock | [#124](https://github.com/0Pxyz/polymax/pull/124) |
 | 2026-10-29 | Plugin reliability: SQLite source of truth, versioned publish, native reader, React with shadcn allowlist | [#125](https://github.com/0Pxyz/polymax/pull/125) |
 | 2026-10-29 | Agent skills: app map, domain skills with backend contracts, and drift tests | [#126](https://github.com/0Pxyz/polymax/pull/126) |
+| 2026-10-29 | Intent routing fix (plugin_update outranks theme; melhor/refaz/bonito stems) unblocks artifact restyle prompts that mention tema/fundo; Bitcoin Pricing View rebuilt on shadcn kit + theme tokens (v1.0.1); test DB hygiene for plugin_files |
