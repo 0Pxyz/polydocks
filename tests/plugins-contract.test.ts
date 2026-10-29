@@ -68,6 +68,9 @@ describe("Contract: one definition, every surface", () => {
   beforeEach(() => {
     stubFetch();
     db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
+    // Hermetic TinyFish fetch: drop cached markdown so the stubbed
+    // api.fetch.tinyfish.ai responses above are always consulted.
+    db.query("DELETE FROM discovery_cache WHERE query_type = 'fetch'").run();
     // First-use approval, as a user would grant once: external fetch and
     // city writes are policy-gated without these.
     const registry = PluginRegistry.getInstance();
