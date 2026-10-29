@@ -19,7 +19,6 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
-  CommandSeparator,
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -670,11 +669,13 @@ export function CommandPalette({
         onKeyUpCapture={(e) => {
           modifierHeld.current = e.metaKey || e.ctrlKey;
         }}
+        className="[&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:border-b-0 [&_[data-slot=command-input-wrapper]_svg]:hidden"
       >
       <CommandInput
         autoFocus
-        placeholder="Search tools, tabs and plugins…"
+        placeholder={installingId ? "Installing…" : "Search or add a tool"}
         onInput={(e) => setQuery(e.currentTarget.value)}
+        className="text-[15px] placeholder:text-muted-foreground"
       />
 
       {/* Confirmation Step for Destructive or External Actions */}
@@ -844,8 +845,6 @@ export function CommandPalette({
               </CommandGroup>
             ))}
 
-            <CommandSeparator className="my-1 bg-white/10" />
-
             {/* Quick System Actions */}
             <CommandGroup heading="Actions & System">
               {onOpenAgent && (
@@ -900,11 +899,6 @@ export function CommandPalette({
         )}
       </CommandList>
       </ScrollArea>
-
-      <div className="flex items-center justify-between border-t border-white/10 px-4 py-2 text-[11px] text-white/40">
-        <span>Enter opens · ⌘↵ pins · Esc closes</span>
-        {installingId && <span>Installing…</span>}
-      </div>
       </div>
     </Command>
   );

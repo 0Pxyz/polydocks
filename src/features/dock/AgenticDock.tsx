@@ -581,7 +581,7 @@ export function AgenticDock({
               isBottom ? "-top-8" : "-bottom-8"
             )}
           >
-            Search tools
+            Search tools · Enter opens · ⌘↵ pins · Esc closes
           </span>
         </button>
       </motion.div>
