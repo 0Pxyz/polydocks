@@ -47,6 +47,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     expect(GUEST_BRIDGE_SCRIPT).toContain("openContent:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("useCapability:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("getContext:");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("task:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("ui:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("expand:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("collapse:");
@@ -263,6 +264,53 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     } as any);
 
     expect(submittedCmd).toBe("synthesize practice drill");
+  });
+
+  it("registers background tasks with the host runtime (never tied to the component)", async () => {
+    const targetWin = new MockTargetWindow() as any;
+    const events: any[] = [];
+    const bridge = createHostBridge(targetWin, {
+      cityId: "city-1",
+      tabId: "tab-1",
+      onTaskEvent: (e) => {
+        events.push(e);
+      },
+    });
+
+    // task.start requires a label and resolves with a host id.
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "task.start", polymaxRequestId: 801 },
+    } as any);
+    expect(targetWin.receivedMessages[0].error).toContain("requires a label");
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "task.start", polymaxRequestId: 802, label: "Export CSV" },
+    } as any);
+    expect(targetWin.receivedMessages[1].result.id).toBeTruthy();
+    expect(events[0]).toMatchObject({ type: "start", tabId: "tab-1", label: "Export CSV" });
+    const taskId = targetWin.receivedMessages[1].result.id as string;
+
+    // task.update / task.done route by id; missing ids are rejected.
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "task.update", polymaxRequestId: 803 },
+    } as any);
+    expect(targetWin.receivedMessages[2].error).toContain("requires a taskId");
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "task.update", polymaxRequestId: 804, taskId, status: "running", detail: "50%" },
+    } as any);
+    expect(targetWin.receivedMessages[3].result).toBe(true);
+    expect(events[1]).toMatchObject({ type: "update", taskId, status: "running" });
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "task.done", polymaxRequestId: 805, taskId },
+    } as any);
+    expect(events[2]).toMatchObject({ type: "done", taskId, status: "done" });
   });
 
   it("ignores messages from untrusted window sources", async () => {

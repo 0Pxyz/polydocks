@@ -21,6 +21,7 @@ import type { IconComponent } from "@/components/icons/adapter";
 import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
 import { useConversationStore } from "@/lib/agent/conversationStore";
+import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { computeVisibleCap, orderVisibleIds, DOCK_CORE_CATALOG, type DockItem } from "@/lib/dock/dockModel";
 import { CommandPalette } from "./CommandPalette";
@@ -297,6 +298,15 @@ export function AgenticDock({
   }, []);
   const { dockStyle, dockPosition } = useThemeStore();
   const isBottom = dockPosition === "bottom";
+  // Running background tasks (registered via polymax.task) surface as a
+  // quiet dot on the owning tool: work continues with the tab hidden.
+  const runningTaskTabIds = useTabHostStore((s) => {
+    const ids = new Set<string>();
+    for (const t of Object.values(s.tasks)) {
+      if (t.status === "running") ids.add(t.tabId);
+    }
+    return ids;
+  });
   // When the reduced chat sits beside the content, the fixed dock recenters
   // in the remaining space instead of the full width (otherwise icons spill
   // out of the capsule and the dock reads as cut off).
@@ -547,6 +557,12 @@ export function AgenticDock({
                   <span className="pointer-events-none absolute -top-1 -right-1 z-10 min-w-5 h-5 px-1 rounded-full bg-white/15 text-white text-[10px] font-mono font-semibold flex items-center justify-center">
                     {tool.badge}
                   </span>
+                )}
+                {tool.badge === undefined && runningTaskTabIds.has(tool.id) && (
+                  <span
+                    className="pointer-events-none absolute -top-0.5 -right-0.5 z-10 h-2 w-2 rounded-full bg-[var(--accent-lime)] animate-pulse"
+                    title="Background task running"
+                  />
                 )}
 
                 {/* Tooltip */}

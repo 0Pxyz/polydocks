@@ -245,6 +245,59 @@ export function createHostBridge(
           return true;
         }
 
+        case "task.start": {
+          const label = typeof data.label === "string" ? data.label.trim().slice(0, 200) : "";
+          if (!label) {
+            respond(requestId, null, "task.start requires a label");
+            return true;
+          }
+          const taskId =
+            typeof data.taskId === "string" && data.taskId.trim()
+              ? data.taskId.trim().slice(0, 120)
+              : `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+          options.onTaskEvent?.({
+            type: "start",
+            tabId,
+            taskId,
+            label,
+            detail: typeof data.detail === "string" ? data.detail.slice(0, 500) : undefined,
+          });
+          respond(requestId, { id: taskId });
+          return true;
+        }
+
+        case "task.update": {
+          if (typeof data.taskId !== "string" || !data.taskId) {
+            respond(requestId, null, "task.update requires a taskId");
+            return true;
+          }
+          options.onTaskEvent?.({
+            type: "update",
+            tabId,
+            taskId: data.taskId,
+            detail: typeof data.detail === "string" ? data.detail.slice(0, 500) : undefined,
+            status: data.status === "running" || data.status === "done" || data.status === "error" ? data.status : undefined,
+          });
+          respond(requestId, true);
+          return true;
+        }
+
+        case "task.done": {
+          if (typeof data.taskId !== "string" || !data.taskId) {
+            respond(requestId, null, "task.done requires a taskId");
+            return true;
+          }
+          options.onTaskEvent?.({
+            type: "done",
+            tabId,
+            taskId: data.taskId,
+            detail: typeof data.detail === "string" ? data.detail.slice(0, 500) : undefined,
+            status: data.status === "error" ? "error" : "done",
+          });
+          respond(requestId, true);
+          return true;
+        }
+
         case "runtime.error": {
           options.onError?.(data.error);
 

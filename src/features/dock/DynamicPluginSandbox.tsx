@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createHostBridge } from "./bridge/host-bridge";
 import { ReaderView } from "./ReaderView";
+import { TaskNotice } from "./TaskNotice";
+import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { cn } from "@/lib/cn";
 
@@ -88,6 +90,14 @@ export function DynamicPluginSandbox({
       storagePrefix: "polydocks",
       onCollapse: onDismiss,
       onOpenContent: (url) => setReaderUrl(url),
+      onTaskEvent: (event) => {
+        const store = useTabHostStore.getState();
+        if (event.type === "start") {
+          store.registerTask(pluginId, { id: event.taskId, label: event.label || "Task", detail: event.detail });
+        } else {
+          store.updateTask(event.taskId, event.status || (event.type === "done" ? "done" : "running"), event.detail);
+        }
+      },
       onReady: () => {
         if (handshakeTimerRef.current) {
           clearTimeout(handshakeTimerRef.current);
@@ -217,6 +227,9 @@ export function DynamicPluginSandbox({
           )}
         />
       )}
+      {/* Background task status: work registered via polymax.task keeps a
+          quiet row here so results that finish while hidden are seen. */}
+      {isReady && !readerUrl && <TaskNotice tabId={pluginId} />}
         </>
       )}
     </div>
