@@ -264,7 +264,13 @@ export async function compileGuestCss(tsCode: string): Promise<string> {
  */
 export function bundleFeatureCode(tsCode: string): string {
   const rewritten = rewriteKitImports(tsCode);
-  const transpiler = new Bun.Transpiler({ loader: "tsx", target: "browser" });
+  // Production JSX runtime: with NODE_ENV=production the transpiler emits
+  // jsx_/jsxs_ helpers (never jsxDEV_), matching the production kit bundle.
+  const transpiler = new Bun.Transpiler({
+    loader: "tsx",
+    target: "browser",
+    define: { "process.env.NODE_ENV": '"production"' },
+  });
   let js = transpiler.transformSync(rewritten);
   // Normalize the automatic JSX runtime helpers to the vendored kit. Bun's
   // transpiler emits version-hashed identifiers (jsxDEV_<hash> in dev,
