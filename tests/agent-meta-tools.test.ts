@@ -111,8 +111,9 @@ describe("Agent Meta-Tools & First-Party Plugin Orchestration", () => {
       expect(capturedSystemPrompt).toContain("search");
       expect(capturedSystemPrompt).toContain("workspace");
 
-      // 2. Verify manifest-driven skill trigger injected web-research skill
-      expect(capturedSystemPrompt).toContain("Autonomous Web Research & City Feed Curation");
+      // 2. Verify intent-selected research skill is injected
+      expect(capturedSystemPrompt).toContain("Specialized Skill: content-and-reader");
+      expect(capturedSystemPrompt).toContain("search_web");
     });
   });
 });

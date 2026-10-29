@@ -34,8 +34,16 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
   });
 
   async function cleanTestFeature() {
-    // create_tab guards on both the modern features/ module and the legacy
-    // tabs/ blob, so the test must start with neither present.
+    // create_tab guards on the registry + SQLite plugin namespaces (not just
+    // the filesystem), so the test must start with neither present.
+    try {
+      db.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(testExpId);
+      db.query("DELETE FROM plugins WHERE id = ?").run(testExpId);
+      db.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(testExpId);
+      db.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(testExpId);
+    } catch {
+      // tables may not exist in very old flows; filesystem cleanup still runs
+    }
     for (const kind of ["features", "tabs"]) {
       await fs
         .rm(path.join(process.cwd(), "workspace", testCity, kind, testExpId), {

@@ -67,8 +67,22 @@ export const GUEST_BRIDGE_SCRIPT = `
       remove: (key) => sendHostRequest('storage.remove', { key }),
     },
     invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
+    // useCapability calls the existing capability bus (policy, timeout and
+    // audit apply host-side). Returns a promise; rejects with the host error.
+    useCapability: async (capabilityId, input) => {
+      if (!capabilityId) throw new Error('useCapability requires a capabilityId');
+      try {
+        return await sendHostRequest('capability.invoke', { capabilityId, input });
+      } catch (err) {
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+    },
     invokeAction: (action, args) => sendHostRequest('capability.invoke', { capabilityId: action, input: args }),
     openUrl: (url) => sendHostRequest('openUrl', { url }),
+    // openContent opens an article/video in the native in-app Reader
+    // (no iframe, so frame-blocking sites still open). Falls back to
+    // openUrl behavior when no Reader is wired host-side.
+    openContent: (url) => sendHostRequest('openContent', { url }),
     getContext: () => sendHostRequest('getContext', {}),
     submit: (command) => sendHostRequest('submit', { command }),
     ui: {

@@ -5,7 +5,7 @@ import { listFiles } from "../../system/filesystem";
 export const list_files: AgentTool<{ path?: string; recursive?: boolean; maxDepth?: number }> = {
   name: "list_files",
   description:
-    "Lists files and directories relative to the persistent agent-home root (e.g. 'artifacts', 'memory', 'workspaces').",
+    "Lists agent-home files. Use for the agent's own disk; never for city contents (use get_city_context or read_city_file).",
   schema: z.object({
     path: z.string().optional().describe("Directory path relative to agent-home (defaults to root '.')"),
     recursive: z.boolean().optional().describe("Whether to recursively scan nested directories"),

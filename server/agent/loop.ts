@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
 import { classifyIntent, INTENT_TOOL_DENYLIST } from "./intent";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
@@ -17,6 +16,8 @@ import {
 } from "../workspace/thread";
 import { maybeCompactAgentThread } from "./threadCompaction";
 import { getMemoryContext } from "./memory";
+import { AGENT_GUIDELINES_EXTRACT } from "./guidelines";
+import { extractUsage, recordTurnUsage } from "./usage";
 import {
   getSession,
   createSession,
@@ -24,7 +25,6 @@ import {
   TaskExecutionEngine,
 } from "./taskRunner";
 import { readFileSafe } from "../system/filesystem";
-import path from "node:path";
 
 // Auto-register first party plugins
 initializeFirstPartyPlugins();
@@ -74,6 +74,8 @@ export interface AgentLoopOptions {
   history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   tools?: AgentTool[];
   onEvent?: AgentEventCallback;
+  /** Optional per-call step cap. Omitted (default): run until the model
+   * answers without tool calls — no env-imposed cutoff. */
   maxSteps?: number;
   llmClient?: typeof llm;
   modelId?: string;
@@ -121,7 +123,11 @@ The user's workspace is your primary operating environment: notes, files, termin
 
 4. Separate Internal State from User Responses:
 - Never dump mounted tool lists, dock experience IDs, internal inspection logs, resource sizes, or empty quest/feed scaffolding into your response unless specifically asked.
-- Provide direct, elegant, and useful answers reflecting the actual outcome.`;
+- Provide direct, elegant, and useful answers reflecting the actual outcome.
+
+5. Organize and Integrate, Inline First:
+- Your role is to organize and integrate (capabilities, MCPs, APIs); you do not design from scratch.
+- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.`;
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
@@ -138,7 +144,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     history = [],
     tools = defaultTools,
     onEvent = () => {},
-    maxSteps = config.MAX_STEPS,
+    maxSteps = Number.POSITIVE_INFINITY,
     llmClient = llm,
     modelId = MODEL_ID,
     systemPrompt = DEFAULT_SYSTEM_PROMPT,
@@ -183,6 +189,41 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const intent = classifyIntent(prompt, { hasImageAttachments: imageAttachments.length > 0 });
   const deniedTools = new Set(INTENT_TOOL_DENYLIST[intent] ?? []);
   const scopedTools = tools.filter((tool) => !deniedTools.has(tool.name));
+
+  // Skill selection runs before the first model call so the UI and debug
+  // logs show exactly which skills shape this turn (next to model).
+  const loadedSkills: string[] = [];
+
+  // Measured cost accounting: every Chat Completions response carries
+  // `usage`, accumulated here and reported in `agent.finish`.
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  const noteUsage = (response: unknown) => {
+    const u = extractUsage(response);
+    totalInputTokens += u.inputTokens;
+    totalOutputTokens += u.outputTokens;
+  };
+  const finishPayload = async (text: string) => {
+    const { turn, daily } = await recordTurnUsage({
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      steps: currentStep,
+      skills: loadedSkills,
+    });
+    return {
+      text,
+      steps: currentStep,
+      model: effectiveModel,
+      skills: loadedSkills,
+      inputTokens: turn.inputTokens,
+      outputTokens: turn.outputTokens,
+      costUsd: turn.costUsd,
+      dailyTurns: daily.turns,
+      dailyInputTokens: daily.inputTokens,
+      dailyOutputTokens: daily.outputTokens,
+      dailyCostUsd: daily.costUsd,
+    };
+  };
 
   // Resolve workspace context. Session persistence (SQLite rows, JSONL
   // transcripts, SSE replay buffers) belongs to the background/task path
@@ -246,11 +287,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
-    await emit({
-      step: 0,
-      type: "agent.start",
-      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, intent },
-    });
+    // Single agent.start is emitted after skill selection (below), with both
+    // intent and the selected skills in the payload.
 
     // Build tool registry map and OpenAI-compatible tools definitions.
     // Intent-scoped: denied tools are not offered at all, so the model
@@ -271,15 +309,18 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Context-aware dynamic skill injection and progressive disclosure
     let activeSystemPrompt = systemPrompt;
 
-    // Safe injection of agent operational guidelines (AGENTS.md) and user profile (USER.md)
+    // App map: always loaded, hard budget ~700 tokens. Domain skills add detail.
     try {
-      const agentsDoc = await readFileSafe("AGENTS.md");
-      if (agentsDoc?.content) {
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Workspace Operational Guidelines (AGENTS.md)\n${agentsDoc.content}`;
-      }
+      const overview = stripSkillMetadata(await loadSkill("app-overview"));
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
+      loadedSkills.push("app-overview");
     } catch {
       // Non-fatal
     }
+
+    // Runtime extract of the operating guidelines (AGENTS.md). The full file
+    // is contributor guidance; the loop injects only the distilled extract.
+    activeSystemPrompt = `${activeSystemPrompt}\n\n---\n${AGENT_GUIDELINES_EXTRACT}`;
 
     try {
       const userProfile = await readFileSafe("USER.md");
@@ -302,6 +343,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):\n${summaryLines.join("\n")}`;
     }
 
+    // Per-turn workspace mount state: id, version, enabled. The agent
+    // organizes and integrates mounted tools; it does not redesign them.
+    try {
+      const { listWorkspacePlugins } = await import("../workspace/workspaces");
+      const mounted = listWorkspacePlugins(effectiveWorkspaceId).slice(0, 30);
+      if (mounted.length > 0) {
+        const mountLines = mounted.map(
+          (m) => `- ${m.pluginId} v${m.plugin?.version || "?"} ${m.enabled ? "enabled" : "disabled"}`
+        );
+        activeSystemPrompt = `${activeSystemPrompt}\n\n## Mounted Plugins in workspace "${effectiveWorkspaceId}" (id, version, state — fix in place with inspect_experience/modify_plugin, never recreate):\n${mountLines.join("\n")}`;
+      }
+    } catch {
+      // Non-fatal if workspace lookup encounters an issue
+    }
+
     // Reflective Execution & Failure Retry Guidelines
     activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Execution Introspection & Failure Retry Protocol\n- When a tool or capability invocation returns an error, do NOT fail silently or give up.\n- Use inspect_execution(executionId) or list_recent_executions to inspect the root cause, schema mismatches, or system boundaries.\n- Adjust the input arguments, supply missing required parameters, or invoke a suitable fallback capability.`;
 
@@ -315,21 +371,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Non-fatal if memory retrieval encounters an issue
     }
 
-    if (origin === "dock-add" || isTabSynthesisIntent(prompt)) {
-      try {
-        const tabSkillPrompt = await loadSkill("create-tab");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Dynamic Tab Synthesis\n${tabSkillPrompt}`;
-      } catch {
-        // Non-fatal
-      }
+    // Domain skills: at most two per turn, chosen by intent. Missing files
+    // are skipped (a skill may not exist yet); the tools stay available.
+    const domainSkills = selectDomainSkills(prompt);
+    if (origin === "dock-add" && !domainSkills.includes("plugins") && !domainSkills.includes("dock-and-tabs")) {
+      domainSkills.unshift("dock-and-tabs");
     }
-
-    if (isPluginSynthesisIntent(prompt)) {
+    for (const name of domainSkills.slice(0, 2)) {
       try {
-        const pluginSkillPrompt = await loadSkill("synthesize-plugin");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Synthesize & Modify PolyDocks Plugins\n${pluginSkillPrompt}`;
+        const content = stripSkillMetadata(await loadSkill(name));
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: ${name}\n${content}`;
+        loadedSkills.push(name);
       } catch {
-        // Non-fatal
+        // Non-fatal: skill file not present yet.
       }
     }
 
@@ -337,57 +391,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request Instructions (origin: dock-add)\n1. Build exactly one tool for this request using create_tab.\n2. If sources or information are needed (such as flashcards, reading list, or timeline), research first using search_web or city context.\n3. Choose a fitting catalog icon name for the tool.\n4. Call open_tab to mount and open the created tool in the workspace.\n5. In your final text response, reply with at most one sentence confirming the tool was mounted.`;
     }
 
-    // Manifest-driven skills & fallback
-    const lowerPrompt = prompt.toLowerCase();
-    let researchSkillInjected = false;
-
-    for (const plugin of installedPlugins) {
-      if (plugin.manifest.skill) {
-        const { file, triggers } = plugin.manifest.skill;
-        const matchesTrigger = triggers.some((t) => lowerPrompt.includes(t.toLowerCase()));
-        if (matchesTrigger) {
-          try {
-            const skillName = path.basename(file, ".md");
-            const skillPrompt = await loadSkill(skillName);
-            const skillHeading =
-              plugin.id === "search"
-                ? "Web Research & Primary Source Discovery (TinyFish)"
-                : plugin.name;
-            activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: ${skillHeading}\n${skillPrompt}`;
-            if (plugin.id === "search") researchSkillInjected = true;
-          } catch {
-            // Non-fatal
-          }
-        }
-      }
-    }
-
-    if (!researchSkillInjected && isResearchIntent(prompt)) {
-      try {
-        const researchSkillPrompt = await loadSkill("web-research");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Primary Source Discovery (TinyFish)\n${researchSkillPrompt}`;
-      } catch {
-        // Non-fatal
-      }
-    }
-
-    if (intent === "theme") {
-      try {
-        const themeSkillPrompt = await loadSkill("theme");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Theme Customization\n${themeSkillPrompt}`;
-      } catch {
-        // Non-fatal
-      }
-    }
-
-    if (isWorldPlanningIntent(prompt)) {
-      try {
-        const worldSkillPrompt = await loadSkill("world-planning");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Knowledge Territories & World Map Planning\n${worldSkillPrompt}`;
-      } catch {
-        // Non-fatal
-      }
-    }
+    // Intent-selected domain skills (above) replaced the manifest-driven
+    // loader and the per-intent skill conditionals: selection is capped at
+    // two and every file is verified by drift tests. Tool gating for every
+    // intent (including theme) still happens up front via INTENT_TOOL_DENYLIST.
+    await emit({
+      step: 0,
+      type: "agent.start",
+      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, intent, skills: loadedSkills },
+    });
 
     // Context: one bounded window per user. The thread keeps the full transcript
     // in SQLite, but the model only receives recent turns plus the rolling
@@ -474,6 +486,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     ];
 
     const retryCounts = new Map<string, number>();
+    // Same tool with identical arguments already ran this turn: refuse the
+    // duplicate so the model changes approach instead of looping.
+    const seenCalls = new Set<string>();
 
     while (currentStep < maxSteps) {
       if (signal?.aborted) {
@@ -507,7 +522,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       if (taskId) {
         try {
-          const progress = Math.min(0.95, 0.05 + (currentStep / maxSteps) * 0.9);
+          // Bounded runs report fraction-of-cap progress; unbounded runs
+          // creep slowly so the bar never stalls mid-task.
+          const progress = Number.isFinite(maxSteps)
+            ? Math.min(0.95, 0.05 + (currentStep / maxSteps) * 0.9)
+            : Math.min(0.95, 0.05 + currentStep * 0.02);
           updateTaskState(taskId, "running", { progress });
         } catch {
           // Non-fatal
@@ -529,6 +548,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
 
       const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
+      noteUsage(response);
       const choice = response.choices?.[0];
 
       if (!choice || !choice.message) {
@@ -567,7 +587,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         await emit({
           step: currentStep,
           type: "agent.finish",
-          payload: { text: finalText, steps: currentStep, model: effectiveModel, intent },
+          payload: { ...(await finishPayload(finalText)), intent },
         });
 
         return {
@@ -605,7 +625,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         const registeredTool = toolMap.get(toolName);
         let toolOutput: unknown;
 
-        if (!registeredTool) {
+        const callKey = `${toolName}:${JSON.stringify(rawArgs)}`;
+        if (seenCalls.has(callKey)) {
+          toolOutput = {
+            error: `Duplicate tool call: "${toolName}" already ran this turn with the same arguments. Stop and change approach instead of retrying it.`,
+            duplicate: true,
+          };
+        } else if (!registeredTool) {
           toolOutput = { error: `Tool "${toolName}" is not registered in catalog.` };
         } else {
           // Validate arguments against strict Zod schema with auto-retry protocol
@@ -626,6 +652,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               };
             }
           } else {
+            seenCalls.add(callKey);
             try {
               toolOutput = await registeredTool.execute(parsed.data, {
                 cityId,
@@ -796,6 +823,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         messages: fallbackMessages,
         ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
       });
+      noteUsage(fallbackResponse);
 
       const fallbackChoice = fallbackResponse.choices?.[0];
       if (fallbackChoice?.message?.content) {
@@ -836,12 +864,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await emit({
       step: currentStep,
       type: "agent.finish",
-      payload: {
-        text: fallbackText,
-        steps: currentStep,
-        model: effectiveModel,
-        intent,
-      },
+      payload: { ...(await finishPayload(fallbackText)), intent },
     });
 
     return {

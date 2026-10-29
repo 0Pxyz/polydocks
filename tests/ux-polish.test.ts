@@ -36,9 +36,9 @@ describe("Polymax UX Polish & Native Experiences", () => {
       expect(ids).toEqual(["agent", "maps", "settings"]);
     });
 
-    it("presents full knowledge capability dock inside a city (agent, maps, browser, notes, files, settings)", () => {
+    it("presents the city tools in the dock inside a city (agent, maps, sources, notes, files, quests, flashcards, terminal, settings)", () => {
       const ids = CITY_DOCK_TOOLS.map((t) => t.id);
-      expect(ids).toEqual(["agent", "maps", "browser", "notes", "files", "settings"]);
+      expect(ids).toEqual(["agent", "maps", "sources", "notes", "files", "quests", "flashcards", "terminal", "settings"]);
     });
   });
 
@@ -67,7 +67,7 @@ describe("Polymax UX Polish & Native Experiences", () => {
   describe("4. Native Experiences & Design Slop Elimination", () => {
     it("ensures CORE_DOCK_TOOLS preserve backward-compatible surface definitions", () => {
       expect(HOME_DOCK_TOOLS.length).toBe(3);
-      expect(CITY_DOCK_TOOLS.length).toBe(6);
+      expect(CITY_DOCK_TOOLS.length).toBe(9);
     });
   });
 });

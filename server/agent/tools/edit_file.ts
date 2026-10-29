@@ -5,7 +5,7 @@ import { editFileSafe } from "../../system/filesystem";
 export const edit_file: AgentTool<{ path: string; target: string; replacement: string }> = {
   name: "edit_file",
   description:
-    "Performs an exact targeted drop-in text replacement in a file. Target must match uniquely.",
+    "Replaces one unique substring in an agent-home file. Use for surgical edits; do not use when the target is ambiguous or for city files.",
   schema: z.object({
     path: z.string().describe("File path relative to agent-home"),
     target: z.string().describe("Exact substring to replace (must match uniquely in the file)"),

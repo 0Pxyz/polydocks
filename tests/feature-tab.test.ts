@@ -44,14 +44,14 @@ describe("Feature Modules & Dynamic Tab Runtime", () => {
     expect(js).not.toContain(": Card");
   });
 
-  it("strictly forbids external imports in guest feature modules", () => {
+  it("rejects non-allowlisted imports with a clear error", () => {
     const maliciousCode = `
       import fs from "node:fs";
       const data = fs.readFileSync("/etc/passwd");
     `;
 
     expect(() => transpileFeatureCode(maliciousCode)).toThrow(
-      "Security Violation: Feature modules must be self-contained. Forbidden imports detected: [node:fs]"
+      'Security Violation: Import "node:fs" is not allowed in plugin code.'
     );
 
     const relativeImport = `
@@ -59,8 +59,16 @@ describe("Feature Modules & Dynamic Tab Runtime", () => {
     `;
 
     expect(() => transpileFeatureCode(relativeImport)).toThrow(
-      "Security Violation: Feature modules must be self-contained"
+      'Security Violation: Import "./helper.js" is not allowed in plugin code.'
     );
+  });
+
+  it("accepts allowlisted React and shadcn imports for kit bundling", () => {
+    const reactCode = `
+      import { Button } from "@/components/ui/button";
+      import { useState } from "react";
+    `;
+    expect(() => transpileFeatureCode(reactCode)).not.toThrow();
   });
 
   it("builds sandboxed srcdoc with design tokens and polymax bridge", () => {
@@ -78,6 +86,10 @@ describe("Feature Modules & Dynamic Tab Runtime", () => {
     expect(srcdoc).toContain("storage.get");
     expect(srcdoc).toContain("ui.expand");
     expect(srcdoc).toContain("openUrl");
+
+    // CSP: no external scripts/styles (what the prompt promises)
+    expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
+    expect(srcdoc).toContain("script-src 'unsafe-inline'");
 
     // Code inclusion
     expect(srcdoc).toContain("console.log('Mounted');");

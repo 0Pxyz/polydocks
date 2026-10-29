@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Crosshair, Dices } from "lucide-react";
 import { ParticleWorldCanvas } from "./ParticleWorldCanvas";
-import { ParticleRegionInspector } from "./ParticleRegionInspector";
+import { ParticleRegionPopover } from "./ParticleRegionPopover";
 import { generateParticleWorld } from "./generator";
 import { useCityBuildStream } from "../useCityBuildStream";
 import {
@@ -39,6 +39,7 @@ export function ParticleWorldView({
   const [cities, setCities] = useState<CitySummary[]>(FALLBACK_CITIES);
   const [links, setLinks] = useState<WorldLink[]>([]);
   const [selectedRegion, setSelectedRegion] = useState<ParticleRegion | null>(null);
+  const [selectionAnchor, setSelectionAnchor] = useState<{ x: number; y: number } | null>(null);
   const [customSeed, setCustomSeed] = useState<number | undefined>(undefined);
   const [foundPrompt, setFoundPrompt] = useState<{ nx: number; ny: number; screenX: number; screenY: number } | null>(null);
   const [foundTopicText, setFoundTopicText] = useState("");
@@ -100,17 +101,18 @@ export function ParticleWorldView({
   // Restore camera position after returning from a city (stable per world).
   const [initialCamera] = useState<MapCamera | null>(() => getCachedCamera(specKey) || null);
 
-  const handleSelectRegion = useCallback((region: ParticleRegion | null) => {
-    setSelectedRegion(region);
-  }, []);
-
-  const handleSelectConnected = useCallback(
-    (regionId: string) => {
-      const target = worldSpec.regions.find((r) => r.id === regionId);
-      if (target) setSelectedRegion(target);
+  const handleSelectRegion = useCallback(
+    (region: ParticleRegion | null, anchor?: { x: number; y: number }) => {
+      setSelectedRegion(region);
+      setSelectionAnchor(region && anchor ? anchor : null);
     },
-    [worldSpec]
+    []
   );
+
+  const handleClosePopover = useCallback(() => {
+    setSelectedRegion(null);
+    setSelectionAnchor(null);
+  }, []);
 
   const handleRandomizeSeed = useCallback(() => {
     setCustomSeed(Math.floor(Math.random() * 90000) + 10000);
@@ -211,11 +213,10 @@ export function ParticleWorldView({
         </div>
       )}
 
-      <ParticleRegionInspector
+      <ParticleRegionPopover
         region={selectedRegion}
-        worldSpec={worldSpec}
-        onClose={() => setSelectedRegion(null)}
-        onSelectConnected={handleSelectConnected}
+        anchor={selectionAnchor}
+        onClose={handleClosePopover}
         onEnterCity={onEnterCity}
       />
 

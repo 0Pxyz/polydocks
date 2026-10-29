@@ -44,10 +44,67 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     expect(GUEST_BRIDGE_SCRIPT).toContain("window.polymax =");
     expect(GUEST_BRIDGE_SCRIPT).toContain("storage:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("openUrl:");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("openContent:");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("useCapability:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("getContext:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("ui:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("expand:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("collapse:");
+  });
+
+  it("routes openContent to the native Reader and falls back to onOpenUrl", async () => {
+    const targetWin = new MockTargetWindow() as any;
+    let readerUrl = "";
+    const bridge = createHostBridge(targetWin, {
+      cityId: "city-1",
+      tabId: "tab-1",
+      onOpenContent: (url) => {
+        readerUrl = url;
+      },
+    });
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: {
+        polymaxAction: "openContent",
+        polymaxRequestId: 701,
+        url: "https://example.com/article",
+      },
+    } as any);
+
+    expect(readerUrl).toBe("https://example.com/article");
+    expect(targetWin.receivedMessages[0].result).toBe(true);
+
+    // Forbidden scheme is rejected.
+    await bridge.handleMessage({
+      source: targetWin,
+      data: {
+        polymaxAction: "openContent",
+        polymaxRequestId: 702,
+        url: "javascript:alert(1)",
+      },
+    } as any);
+    expect(targetWin.receivedMessages[1].error).toContain("Forbidden URL protocol");
+
+    // Without onOpenContent, falls back to onOpenUrl (legacy Browser path).
+    const fallbackWin = new MockTargetWindow() as any;
+    let openedUrl = "";
+    const fallback = createHostBridge(fallbackWin, {
+      cityId: "city-1",
+      tabId: "tab-1",
+      onOpenUrl: (url) => {
+        openedUrl = url;
+      },
+    });
+    await fallback.handleMessage({
+      source: fallbackWin,
+      data: {
+        polymaxAction: "openContent",
+        polymaxRequestId: 703,
+        url: "https://example.com/video",
+      },
+    } as any);
+    expect(openedUrl).toBe("https://example.com/video");
   });
 
   it("persists data with strict per-city and per-tab isolation", async () => {

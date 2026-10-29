@@ -1,13 +1,6 @@
 # Skill: Theme Customization (apply_theme)
 
-> **Skill Identifier:** `theme`
-> **Source Target:** `server/agent/skills/theme.md`
-
----
-
-## 1. When to Use This Skill
-
-Activate this skill ONLY when the user asks to change the application's
+> Activate this skill ONLY when the user asks to change the application's
 appearance: theme, wallpaper/background image, accent color, dock style or
 position (e.g. "Add this background to my theme", "mude o papel de parede",
 "use this image as my wallpaper").
@@ -19,7 +12,7 @@ planning. Theme edits never require web search.
 
 The theme lives entirely in the client. The `apply_theme` tool validates the
 request server-side and the UI applies it to the real theme store
-(`src/lib/theme.ts`: `setTheme`, `setCustomAccentColor`, `setWallpaper`,
+(the `src/lib/theme` module: `setTheme`, `setCustomAccentColor`, `setWallpaper`,
 `setDockStyle`, `setDockPosition`, `clearWallpaper`), persisted to local
 storage. Your final reply must confirm the actual applied values.
 
@@ -51,3 +44,8 @@ instead of substituting another one.
 - NEVER call `search_web` or `fetch_page` for a theme request.
 - NEVER claim success without a successful `apply_theme` result.
 - NEVER touch workspaces, cities, plugins, or tabs for a theme request.
+
+<!--
+Source files (maintainer refs, stripped before injection):
+server/agent/tools/apply_theme.ts, src/lib/theme.ts
+-->

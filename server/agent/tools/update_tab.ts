@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { writeCityFile } from "../../workspace/cityWorkspace";
-import { readFeature, writeFeature } from "../../workspace/features";
+import { readFeature, writeFeature, writeLegacyFeature } from "../../workspace/features";
+import { normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
 
 export interface UpdateTabArgs {
   id: string;
@@ -15,7 +15,7 @@ export interface UpdateTabArgs {
 export const update_tab: AgentTool<UpdateTabArgs> = {
   name: "update_tab",
   description:
-    "Updates the TypeScript module, HTML content, or metadata of an existing dynamic dock tool tab.",
+    "Patches an existing dock tab in place. Use for any change to a tab; never create a duplicate tab to change one.",
   schema: z.object({
     id: z.string().describe("Target tab id to update"),
     title: z.string().optional(),
@@ -32,8 +32,9 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
     if (!targetCity) {
       throw new Error("Cannot update a tab without an active city workspace scope.");
     }
+    const normalized = normalizePluginId(args.id);
 
-    const current = await readFeature(targetCity, args.id);
+    const current = await readFeature(targetCity, normalized);
     const manifest = { ...current.manifest };
 
     if (args.title) manifest.title = args.title;
@@ -41,35 +42,58 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
     manifest.updatedAt = new Date().toISOString();
 
     if (args.code) {
-      await writeFeature(targetCity, args.id, {
+      await writeFeature(targetCity, normalized, {
         manifest,
         code: args.code,
       });
 
+      ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+      const verification = await verifyPluginStateAsync(normalized, targetCity);
+      if (!verification.ok) {
+        return {
+          success: false,
+          error: verification.error || "Tab verification failed after update",
+          verification,
+          tab: manifest,
+          cityId: targetCity,
+        };
+      }
       return {
         success: true,
         tab: manifest,
         cityId: targetCity,
         action: "tab.updated",
         format: "feature-ts",
+        verification,
       };
     }
 
-    // Mirror to both features/ and tabs/
-    await writeCityFile(targetCity, `features/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-    await writeCityFile(targetCity, `tabs/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-
+    // Legacy HTML blob path (SQLite single source of truth)
     if (args.html) {
-      await writeCityFile(targetCity, `features/${args.id}/index.html`, args.html);
-      await writeCityFile(targetCity, `tabs/${args.id}/index.html`, args.html);
+      await writeLegacyFeature(targetCity, normalized, manifest, args.html);
+    } else {
+      // Metadata-only update: persist manifest with existing srcdoc.
+      await writeLegacyFeature(targetCity, normalized, manifest, current.srcdoc);
     }
 
+    ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+    const verification = await verifyPluginStateAsync(normalized, targetCity);
+    if (!verification.ok) {
+      return {
+        success: false,
+        error: verification.error || "Tab verification failed after update",
+        verification,
+        tab: manifest,
+        cityId: targetCity,
+      };
+    }
     return {
       success: true,
       tab: manifest,
       cityId: targetCity,
       action: "tab.updated",
       format: current.format,
+      verification,
     };
   },
 };

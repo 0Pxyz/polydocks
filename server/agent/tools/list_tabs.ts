@@ -12,7 +12,7 @@ const BUILTIN_TABS = [
 
 export const list_tabs: AgentTool<{ cityId?: string }> = {
   name: "list_tabs",
-  description: "Lists tabs registered in the active dock. Only call when the user explicitly asks what tabs or tools are open or available.",
+  description: "Lists tabs registered in the active dock. Use only when the user explicitly asks what exists; never for greetings, answers, or routine bookkeeping.",
   schema: z.object({
     cityId: z.string().optional().describe("Optional city slug to list tabs for"),
   }),

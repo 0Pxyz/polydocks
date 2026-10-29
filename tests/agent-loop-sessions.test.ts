@@ -282,7 +282,7 @@ describe("Session-Aware Agent Loop & Task Dispatch (Issue #79)", () => {
       llmClient: mockLlm,
     });
 
-    expect(capturedSystemPrompt).toContain("Workspace Operational Guidelines (AGENTS.md)");
+    expect(capturedSystemPrompt).toContain("Operating guidelines (distilled from AGENTS.md)");
     expect(capturedSystemPrompt).toContain("User Profile & Preferences (USER.md)");
     expect(capturedSystemPrompt).toContain("Security & Untrusted Web Content Boundary");
   });

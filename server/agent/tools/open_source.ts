@@ -3,7 +3,7 @@ import type { AgentTool } from "./types";
 
 export const open_source: AgentTool<{ url: string; title?: string }> = {
   name: "open_source",
-  description: "Opens an external web source or research paper URL in the Browser dock tab.",
+  description: "Shows a URL in the Browser tab. Use to display a link; it fetches no text (use fetch_page) and primes no study state (use open_intent).",
   schema: z.object({
     url: z.string().url().describe("Valid HTTP or HTTPS URL to open"),
     title: z.string().optional().describe("Optional title for tab display"),
