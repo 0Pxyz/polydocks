@@ -5,7 +5,7 @@ import type { AgentTool } from "./types";
 export const plan_map: AgentTool = {
   name: "plan_map",
   description:
-    "Plans or expands the procedural world knowledge map with new regions and topic cities based on user interests. Only call when the user explicitly requests to create or map a new knowledge territory, domain, or world map.",
+    "Returns a MapSpec (one region per interest) and emits map.changed. Use only for explicit territory asks; it creates no workspaces (use build_city).",
   schema: z.object({
     interests: z.array(z.string()).describe("List of topics or domains to learn, e.g. ['Machine Learning', 'Quantum Physics']"),
     existingSpec: z.any().optional().describe("Existing semantic MapSpec to expand without disturbing established territories"),

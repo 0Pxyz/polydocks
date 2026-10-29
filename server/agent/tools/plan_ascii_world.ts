@@ -15,7 +15,7 @@ const BIOMES: [AsciiBiome, ...AsciiBiome[]] = [
 export const plan_ascii_world: AgentTool = {
   name: "plan_ascii_world",
   description:
-    "Plans a renderer-independent semantic AsciiWorldSpec for a subject. Defines regions, concepts, landmarks, and road connections. The procedural ASCII engine renders this into an interactive world map.",
+    "Drafts a renderer-independent ASCII world spec. Use only for explicit ASCII-map asks; for the real map use plan_map.",
   schema: z.object({
     subject: z.string().describe("The subject or field to map (e.g., 'Quantum Computing', 'Stoicism', 'Poker')"),
     regions: z

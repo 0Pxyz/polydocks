@@ -56,3 +56,5 @@
 | 2026-10-29 | Chat overflow fix (flex-1 transcript, pb-10, z-10 composer), single-Orb realtime STT via backend WS proxy (Meta wss ASR, key server-side) |
 | 2026-10-29 | Dock search: find, open, pin and control tools without growing the dock | [#123](https://github.com/0Pxyz/polymax/pull/123) |
 | 2026-10-29 | Immersive map and city: enter from popover, city tools live in the dock | [#124](https://github.com/0Pxyz/polymax/pull/124) |
+| 2026-10-29 | Plugin reliability: SQLite source of truth, versioned publish, native reader, React with shadcn allowlist | [#125](https://github.com/0Pxyz/polymax/pull/125) |
+| 2026-10-29 | Agent skills: app map, domain skills with backend contracts, and drift tests | [#126](https://github.com/0Pxyz/polymax/pull/126) |

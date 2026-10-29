@@ -9,7 +9,7 @@ export const recall_memory: AgentTool<{
 }> = {
   name: "recall_memory",
   description:
-    "Recalls relevant long-term memories, user preferences, architectural decisions, and daily insights from persistent agent storage.",
+    "Recalls stored preferences, decisions, and insights. Use before answering from memory; do not present guesses as memories.",
   schema: z.object({
     query: z
       .string()

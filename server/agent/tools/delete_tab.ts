@@ -9,7 +9,7 @@ export const delete_tab: AgentTool<{
 }> = {
   name: "delete_tab",
   description:
-    "Deletes a dynamic dock tool tab or feature module from the city workspace. Requires explicit user approval flag.",
+    "Removes a tab permanently and needs userApproved true. Use only for explicit deletion asks (closing uses close_tray); without approval it only pauses.",
   schema: z.object({
     id: z.string().describe("Identifier of the dynamic tab to delete"),
     userApproved: z

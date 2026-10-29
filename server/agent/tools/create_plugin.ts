@@ -23,7 +23,7 @@ export interface CreatePluginArgs {
 export const create_plugin: AgentTool<CreatePluginArgs> = {
   name: "create_plugin",
   description:
-    "Synthesizes and mounts a new software plugin / micro-app directly into the persistent PolyDocks workspace dock. Code must be self-contained TypeScript/JavaScript interacting with window.polydocks / window.polymax bridge.",
+    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin) or for city tabs (use create_tab).",
   schema: z.object({
     id: z
       .string()

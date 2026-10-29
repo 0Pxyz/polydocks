@@ -15,7 +15,7 @@ type InvokeCapabilityInput = z.infer<typeof InvokeCapabilitySchema>;
 export const invoke_capability: AgentTool<typeof InvokeCapabilitySchema> = {
   name: "invoke_capability",
   description:
-    "Invokes an authorized plugin capability by its unique ID through the typed capability bus.",
+    "Runs one authorized capability by id through policy and audit. Use for actions with existing capabilities; do not use to build tools or fetch the open web.",
   schema: InvokeCapabilitySchema,
   execute: async (input: InvokeCapabilityInput, context) => {
     const result = await capabilityBus.invoke(input.id, input.input, {

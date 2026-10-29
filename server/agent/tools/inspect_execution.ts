@@ -9,7 +9,7 @@ export interface InspectExecutionArgs {
 export const inspect_execution: AgentTool<InspectExecutionArgs> = {
   name: "inspect_execution",
   description:
-    "Inspects the outcome and failure details of a capability execution: returns arguments, output, error message, duration, and status.",
+    "Shows one capability run's arguments, output, error, and duration. Use to diagnose a failure; not for routine checks.",
   schema: z.object({
     executionId: z.string().min(1).describe("The execution ID (e.g. exec_...) to inspect"),
   }),

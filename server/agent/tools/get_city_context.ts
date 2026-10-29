@@ -5,7 +5,7 @@ import { getCityContext } from "../../workspace/cityWorkspace";
 export const get_city_context: AgentTool<{ cityId?: string }> = {
   name: "get_city_context",
   description:
-    "Retrieves the active city workspace context, including metadata, notes, sources, and dynamic tabs. Only call when the user explicitly requests city context, notes, or sources.",
+    "Reads city metadata, notes, sources, and tabs. Use only for explicit city-state asks; never on greetings, and never to read a single file (use read_city_file).",
   schema: z.object({
     cityId: z.string().optional().describe("City identifier; defaults to current active city"),
   }),
