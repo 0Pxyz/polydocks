@@ -23,7 +23,6 @@ import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import {
@@ -159,8 +158,7 @@ export function AgentConversation({
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
-  // Track scroll position natively on the Radix ScrollArea viewport (React
-  // does not delegate scroll events to it)
+  // Track scroll position on the native transcript viewport
   useEffect(() => {
     if (layoutState !== "side" && layoutState !== "full") return;
     const el = transcriptRef.current;
@@ -404,12 +402,13 @@ export function AgentConversation({
               </div>
             )}
 
-            {/* Scrollable Transcript Box (flex-1 shrinks; generous bottom pad so rows never hide behind composer) */}
-            <ScrollArea
-              viewportRef={sheetTranscriptRef}
-              className="relative z-0 my-3 min-h-0 flex-1 max-h-64 [&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0 [&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]"
+            {/* Scrollable Transcript Box: native overflow viewport (flex-1 shrinks;
+                generous bottom pad so rows never slide behind the composer) */}
+            <div
+              ref={sheetTranscriptRef}
+              className="relative z-0 my-3 min-h-0 flex-1 max-h-64 overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]"
             >
-              <div className="px-1 pt-1 pb-10 space-y-2.5 select-text scroll-smooth">
+              <div className="px-1 pt-1 pb-24 space-y-2.5 select-text">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                   <p className="text-xs text-[#9aa5b8]">
@@ -500,7 +499,7 @@ export function AgentConversation({
                 </div>
               )}
               </div>
-            </ScrollArea>
+            </div>
 
             {/* Staging bar for attachments */}
             {stagedAttachments.length > 0 && (
@@ -679,16 +678,14 @@ export function AgentConversation({
       </div>
 
       {/* Transcript Area (z-0; bottom-padded so final rows clear the footer composer) */}
-      <ScrollArea
-        viewportRef={transcriptRef}
+      <div
+        ref={transcriptRef}
         className={cn(
-          "relative z-0 flex-1 min-h-0 px-4 sm:px-6",
-          "[&_[data-slot=scroll-area-scrollbar]]:w-2 [&_[data-slot=scroll-area-scrollbar]]:p-0 [&_[data-slot=scroll-area-scrollbar]]:border-l-0",
-          "[&_[data-slot=scroll-area-thumb]]:bg-[var(--border-subtle)] [&_[data-slot=scroll-area-thumb]:hover]:bg-[var(--border-hover)]",
+          "relative z-0 flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-4 sm:px-6 [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]",
           !isSide && "max-w-[720px] mx-auto"
         )}
       >
-        <div className="w-full pt-3 pb-10">
+        <div className="w-full pt-3 pb-32">
         {/* Scroll-back inside the same thread: never a new conversation */}
         {hasOlderMessages && (
           <div className="flex justify-center pb-4">
@@ -861,7 +858,7 @@ export function AgentConversation({
           )}
         </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Floating Scroll to Bottom button */}
       {showScrollBottom && (
@@ -878,10 +875,10 @@ export function AgentConversation({
         </button>
       )}
 
-      {/* Composer: footer grid (input row + toolbar row), layered above transcript */}
+      {/* Composer: bottom-anchored footer band with solid blur background (z-10 above transcript) */}
       <div
         className={cn(
-          "relative z-10 shrink-0 px-4 sm:px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-events-auto",
+          "relative z-10 shrink-0 px-4 sm:px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pointer-events-auto bg-[var(--bg-void)]/85 backdrop-blur-xl",
           !isSide && "w-full max-w-[720px] mx-auto"
         )}
       >
