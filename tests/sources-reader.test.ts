@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from "bun:test";
-import { resolveSourceMode, videoEmbedUrl } from "../server/plugins/sources";
+import { resolveSourceMode, videoEmbedUrl, backfillVideoThumbnails } from "../server/plugins/sources";
 import { htmlToMarkdown } from "../server/reader/service";
 import { adaptBackendEvent } from "../src/lib/agent/events";
 import { useConversationStore, applyReaderOpened } from "../src/lib/agent/conversationStore";
@@ -159,6 +159,29 @@ describe("sources.open modes (no silent fallbacks)", () => {
     // The reader panel only mounts when the agent surface is open.
     expect(useConversationStore.getState().layoutState).not.toBe("closed");
     useConversationStore.getState().closeReader();
+  });
+
+  it("backfills thumbnails for saved videos missing an image", () => {
+    const now = new Date().toISOString();
+    const seed = (id: string, kind: string, url: string, image: string | null) => {
+      db.query(
+        "INSERT INTO sources (id, city_id, kind, url, title, image, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run(id, CITY, kind, url, "T", image, now);
+    };
+    seed("v_youtube", "video", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null);
+    seed("v_vimeo", "video", "https://vimeo.com/76979871", null);
+    seed("v_kept", "video", "https://youtu.be/9bZkp7q19f0", "https://cdn.example.com/kept.jpg");
+    seed("a_plain", "article", "https://example.com/a", null);
+    seed("v_broken", "video", "https://example.com/not-a-video", null);
+    const { filledCount } = backfillVideoThumbnails();
+    expect(filledCount).toBe(2);
+    const get = (id: string) =>
+      (db.query("SELECT image FROM sources WHERE id = ?").get(id) as any)?.image ?? null;
+    expect(get("v_youtube")).toBe("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+    expect(get("v_vimeo")).toBe("https://vumbnail.com/76979871.jpg");
+    expect(get("v_kept")).toBe("https://cdn.example.com/kept.jpg");
+    expect(get("a_plain")).toBeNull();
+    expect(get("v_broken")).toBeNull();
   });
 
   it("sources.open returns the mode per type through the agent surface", async () => {

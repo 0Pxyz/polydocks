@@ -569,10 +569,36 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
   return { migratedCount: count };
 }
 
+/**
+ * Backfills thumbnails for saved video rows that predate server-side
+ * enrichment (legacy `src_mig_*` rows carry image NULL): derives the
+ * thumbnail from the URL id alone, never touching rows that already
+ * have an image or non-video rows.
+ */
+export function backfillVideoThumbnails(): { filledCount: number } {
+  ensureSourcesSchema();
+  let filled = 0;
+  try {
+    const rows = db
+      .query("SELECT id, url FROM sources WHERE kind = 'video' AND (image IS NULL OR image = '')")
+      .all() as Array<{ id: string; url: string }>;
+    for (const row of rows) {
+      const thumb = thumbnailForUrl(row.url);
+      if (!thumb) continue;
+      db.query("UPDATE sources SET image = ? WHERE id = ?").run(thumb, row.id);
+      filled++;
+    }
+  } catch {
+    // Non-fatal: feed renders a derived thumbnail anyway.
+  }
+  return { filledCount: filled };
+}
+
 export function registerSourcesPlugin(): void {
   ensureSourcesSchema();
   // Perform background migration on registration
   void migrateLegacyCitySources().catch(() => {});
+  backfillVideoThumbnails();
 
   // 1. sources.add capability
   defineCapability({
