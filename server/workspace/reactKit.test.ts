@@ -97,4 +97,12 @@ describe("React allowlist + vendored kit bundling", () => {
     expect(back.code).toContain("useState");
     db.query("DELETE FROM plugin_files WHERE workspace_id = ?").run(ws);
   }, 30000);
+
+  it("ships a production React build without development warnings", () => {
+    const kit = getKitJs();
+    expect(kit).toContain("globalThis.__polymaxKit");
+    expect(kit).not.toContain("Internal React error");
+    expect(kit).not.toContain("Download the React DevTools");
+    expect(kit).not.toContain("__DEV__");
+  });
 });
