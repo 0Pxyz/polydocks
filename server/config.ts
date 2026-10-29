@@ -7,7 +7,6 @@ const envSchema = z.object({
   MODEL_REALTIME_URL: z.string().url().default("wss://api.meta.ai/v1/asr/realtime"),
   MODEL_VOICE_MODEL: z.string().default("muse-voice-transcribe-1.0"),
   TINYFISH_API_KEY: z.string().optional().default(""),
-  MAX_STEPS: z.coerce.number().int().positive().default(20),
   PORT: z.coerce.number().int().positive().default(3000),
   DATA_DIR: z.string().default("./data"),
   AGENT_HOME_DIR: z.string().optional(),

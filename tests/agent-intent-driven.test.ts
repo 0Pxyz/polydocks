@@ -154,7 +154,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
     });
 
     expect(result.status).toBe("completed");
-    expect(capturedSystemPrompt).toContain("Specialized Skill: Knowledge Territories & World Map Planning");
+    expect(capturedSystemPrompt).toContain("Specialized Skill: world-and-cities");
 
     const toolStarts = emittedEvents.filter((ev) => ev.type === "tool.start");
     expect(toolStarts.length).toBe(1);

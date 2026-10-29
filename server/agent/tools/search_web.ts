@@ -9,7 +9,7 @@ export const search_web: AgentTool<{
 }> = {
   name: "search_web",
   description:
-    "Performs live web research via TinyFish Search API across web, news, or academic research papers (1-3s latency).",
+    "Finds candidate URLs across web, news, or research papers. Use to discover sources; it reads nothing (use fetch_page) and never builds cities (use build_city).",
   schema: z.object({
     query: z.string().min(1).describe("Search query string (e.g. 'Raft consensus algorithm visual tutorial')"),
     domain_type: z

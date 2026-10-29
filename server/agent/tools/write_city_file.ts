@@ -8,7 +8,7 @@ export const write_city_file: AgentTool<{
   cityId?: string;
 }> = {
   name: "write_city_file",
-  description: "Writes or creates a markdown note or document within the active city workspace.",
+  description: "Creates or overwrites one file in the city workspace. Use for city notes, feeds, and sources; do not use for agent-home files (use write_file).",
   schema: z.object({
     path: z.string().describe("Relative destination path inside the city folder (e.g. 'notes/summary.md')"),
     content: z.string().describe("Text or markdown content to write"),

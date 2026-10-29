@@ -13,7 +13,7 @@ export interface OperatePluginArgs {
 export const operate_plugin: AgentTool<OperatePluginArgs> = {
   name: "operate_plugin",
   description:
-    "Operates an installed plugin by invoking an exposed capability or programmatic action on behalf of the user.",
+    "Runs a plugin's declared action. Use for operating installed plugins; undeclared actions fail listing what exists, so check first.",
   schema: z.object({
     pluginId: z.string().describe("ID of the installed plugin to operate"),
     action: z.string().describe("Action or capability to execute (e.g. 'start', 'reset', 'export')"),

@@ -81,9 +81,9 @@ One agent, one loop. No multi-agent graph, no verifier agent, no planner. Keep i
 - Tool arguments are not guaranteed to match the schema. Validate every call with zod; on failure return the error text as the tool result so the model can retry (max 2 retries per call).
 - Use `response_format: { type: "json_schema" }` when we need guaranteed JSON (for example `MapSpec`). Recursive schemas return 400; keep depth flat.
 
-**Loop** (`server/agent/loop.ts`): call the model with the tools, run the tool calls (parallel when independent), append results, repeat until the model answers without tool calls or `MAX_STEPS` (default 8). Every step is emitted over SSE so the front shows the agent working: `tool.start`, `tool.done`, `tray.open`, `tab.created`, `done`, `error`.
+**Loop** (`server/agent/loop.ts`): call the model with the tools, run the tool calls (parallel when independent), append results, repeat until the model answers without tool calls (no env-imposed step cap; callers may still pass an explicit per-turn `maxSteps`). Every step is emitted over SSE so the front shows the agent working: `tool.start`, `tool.done`, `tray.open`, `tab.created`, `done`, `error`.
 
-**Config (env only, no hardcoded model ids):** `MODEL_BASE_URL`, `MODEL_ID`, `MODEL_API_KEY`, `MAX_STEPS`, `TINYFISH_API_KEY`. Swapping to an open-weight Muse Spark served by a hosted provider (or our own vLLM/SGLang) must need only these variables.
+**Config (env only, no hardcoded model ids):** `MODEL_BASE_URL`, `MODEL_ID`, `MODEL_API_KEY`, `TINYFISH_API_KEY`. Swapping to an open-weight Muse Spark served by a hosted provider (or our own vLLM/SGLang) must need only these variables.
 
 **Tools** live in `server/agent/tools/<name>.ts`, one per file, registered in `server/agent/tools/index.ts` (`defaultTools`, the set `runAgentLoop` uses). Each exports `{ name, description, schema (zod), execute }`. The filename is the tool name (`[a-zA-Z0-9_.-]`).
 

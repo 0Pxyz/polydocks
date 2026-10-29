@@ -10,7 +10,7 @@ export const fetch_page: AgentTool<{
 }> = {
   name: "fetch_page",
   description:
-    "Fetches clean Chromium-rendered Markdown for up to 10 URLs via TinyFish Fetch API (1-20s latency, capped at 16KB).",
+    "Reads up to 10 URLs as capped markdown and saves to sources with a city scope. Use to read found sources; do not use to discover URLs (use search_web) or to display them (use open_source).",
   schema: z.object({
     urls: z.array(z.string().url()).min(1).max(10).describe("Array of HTTP/HTTPS URLs to fetch"),
     cityId: z.string().optional().describe("Optional city workspace to persist source files into"),
