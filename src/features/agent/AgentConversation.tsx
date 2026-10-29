@@ -381,9 +381,6 @@ export function AgentConversation({
                           : "bg-white/25"
                   )}
                 />
-                <span className="text-xs font-semibold text-white/90 tracking-tight font-sans">
-                  Polymax Agent
-                </span>
                 {isStreaming && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />

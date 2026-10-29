@@ -23,7 +23,7 @@ describe("chat capsule sheet (voice-first, footer picker)", () => {
   const sheet = sheetBlock();
 
   test("capsule header shows agent status with thinking indicator", () => {
-    expect(sheet).toContain("Polymax Agent");
+    expect(sheet).not.toContain("Polymax Agent");
     expect(sheet).toContain("Thinking…");
   });
 
