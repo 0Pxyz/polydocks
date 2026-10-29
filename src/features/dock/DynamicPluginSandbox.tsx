@@ -74,9 +74,13 @@ export function DynamicPluginSandbox({
   // Connect host postMessage bridge scoped to workspace + plugin.
   // openContent opens the native in-app Reader (articles render as app
   // components, video as embeds — no iframe, no cross-plugin messaging).
+  //
+  // The target window is resolved at MESSAGE time from the iframe element
+  // (not captured once at mount: the iframe only renders after the srcdoc
+  // fetch resolves, so a mount-time capture is null forever and every reply
+  // is dropped). Rebinding on srcdoc change keeps exactly one listener.
   useEffect(() => {
-    const targetWin = iframeRef.current?.contentWindow || null;
-    const bridge = createHostBridge(targetWin, {
+    const bridge = createHostBridge(() => iframeRef.current?.contentWindow ?? null, {
       cityId: workspaceId,
       tabId: pluginId,
       workspaceId,
@@ -99,7 +103,7 @@ export function DynamicPluginSandbox({
     return () => {
       bridge.destroy();
     };
-  }, [workspaceId, pluginId, onDismiss]);
+  }, [workspaceId, pluginId, onDismiss, srcdoc]);
 
   // 3-second ready handshake timeout once srcdoc is mounted.
   // Strict for new builds (ready marker present): no ready signal means the

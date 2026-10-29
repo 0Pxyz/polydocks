@@ -1,10 +1,35 @@
 import type { HostBridgeOptions, HostBridgeRequest, HostBridgeResponse } from "../types";
 
 /**
+ * Source for the guest iframe window. A getter is preferred: the iframe only
+ * renders after the srcdoc fetch resolves, so a window captured once at
+ * bridge creation time is null forever. The getter resolves the live window
+ * at message time from the iframe element instead.
+ */
+export type HostBridgeWindowSource = Window | null | (() => Window | null);
+
+function resolveWindowSource(source: HostBridgeWindowSource): Window | null {
+  if (typeof source === "function") {
+    try {
+      return source() ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return source;
+}
+
+/**
  * Creates a host-side postMessage bridge listener for a sandboxed dynamic tab iframe.
+ *
+ * Security model: the sandbox runs with `sandbox="allow-scripts"` and no
+ * `allow-same-origin`, so the guest has an opaque origin — `event.origin`
+ * cannot be checked. Source identity IS the check: only messages whose
+ * `event.source` is the live iframe `contentWindow` are handled; everything
+ * else (including messages arriving before the iframe exists) is ignored.
  */
 export function createHostBridge(
-  targetWindow: Window | null,
+  targetWindowOrGetter: HostBridgeWindowSource,
   options: HostBridgeOptions
 ) {
   const cityId = options.cityId || options.workspaceId || "global";
@@ -18,18 +43,32 @@ export function createHostBridge(
   };
 
   const respond = (requestId: number, result?: unknown, error?: string) => {
-    if (!targetWindow) return;
+    const target = resolveWindowSource(targetWindowOrGetter);
+    if (!target) {
+      // The iframe navigated away or unmounted between request and reply
+      // (e.g. an async getContext/onInvoke crossing a srcdoc reload). Log at
+      // debug level — this used to fail silently and strand guest promises.
+      console.debug(
+        `[polymax bridge] reply ${String(requestId)} dropped: guest window is gone`
+      );
+      return;
+    }
     const response: HostBridgeResponse = {
       polymaxResponseId: requestId,
       result,
       error,
     };
-    targetWindow.postMessage(response, "*");
+    // targetOrigin "*" is required: the sandbox has an opaque origin, so no
+    // narrower origin can be named. The payload stays limited to this
+    // request's result — never host state, capabilities, or keys.
+    target.postMessage(response, "*");
   };
 
   const handleMessage = async (event: MessageEvent): Promise<boolean> => {
-    // Ensure the message originated from our target iframe window if specified
-    if (targetWindow && event.source !== targetWindow) {
+    const target = resolveWindowSource(targetWindowOrGetter);
+    // Opaque origin: source identity is the only check. With no live guest
+    // window there is nothing to verify against, so ignore the message.
+    if (!target || event.source !== target) {
       return false;
     }
 
@@ -200,6 +239,8 @@ export function createHostBridge(
         case "runtime.ready":
         case "ui.ready": {
           options.onReady?.();
+          // The guest awaits this reply as its handshake ack: it proves the
+          // host is listening. A missing ack surfaces "bridge not responding".
           respond(requestId, true);
           return true;
         }
