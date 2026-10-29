@@ -99,6 +99,7 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
       });
       if (res.ok) {
         await fetchWorkspacePlugins(activeWorkspaceId);
+        await fetchRegistry();
         if (onOpenPlugin) {
           onOpenPlugin(pluginId);
         }

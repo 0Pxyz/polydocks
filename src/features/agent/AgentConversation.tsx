@@ -146,8 +146,8 @@ export function AgentConversation({
 
   // Handle auto-scroll during streaming
   useEffect(() => {
-    if (layoutState !== "side" && layoutState !== "full") return;
-    const el = transcriptRef.current;
+    if (layoutState === "closed") return;
+    const el = layoutState === "sheet" ? sheetTranscriptRef.current : transcriptRef.current;
     if (!el) return;
 
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
