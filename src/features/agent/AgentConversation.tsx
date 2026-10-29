@@ -364,8 +364,6 @@ export function AgentConversation({
               ) : null}
             </div>
 
-            {/* Staged attachments stay visible while the orb is shown */}
-            {!isKeyboardInSheet && hasStaged && (
             {/* Scrollable Transcript Box */}
             <ScrollArea
               viewportRef={sheetTranscriptRef}
@@ -464,6 +462,8 @@ export function AgentConversation({
               </div>
             </ScrollArea>
 
+            {/* Staged attachments stay visible while the orb is shown */}
+            {!isKeyboardInSheet && hasStaged && (
               <AttachmentStagingBar
                 attachments={stagedAttachments}
                 onRemove={removeAttachment}
