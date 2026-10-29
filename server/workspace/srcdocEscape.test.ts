@@ -74,8 +74,12 @@ function App() {
 createRoot(document.getElementById("app")).render(<App />);`;
 
   it("mounts and renders without leaking bundle source into body text", async () => {
+    const { MessageChannel } = await import("node:worker_threads");
     const guestJs = bundleFeatureCode(REACT_MOUNT_FIXTURE);
     const win = new Window({ url: "https://sandbox.local/" });
+    // The kit bundle references MessageChannel at module scope (scheduler);
+    // browsers provide it natively, happy-dom needs the Node shim.
+    (win as any).MessageChannel = MessageChannel;
     try {
       win.document.write(`<!DOCTYPE html><html><body><div id="app"></div></body></html>`);
       const run = (win as any).eval.bind(win) as (src: string) => unknown;
