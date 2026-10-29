@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
+import { pluginRegistry } from "../../plugins/registry";
 
 export interface CreatePluginArgs {
   id: string;
@@ -67,6 +68,15 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
   }),
   execute: async (args, ctx) => {
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
+
+    // Update-instead-of-recreate guard: an existing id means the user (or a
+    // previous turn) wants modify_plugin, not a silent overwrite.
+    if (pluginRegistry.has(args.id)) {
+      return {
+        success: false,
+        error: `Plugin "${args.id}" already exists. Use modify_plugin to update the existing plugin instead of recreating it.`,
+      };
+    }
 
     return await PluginService.synthesizePlugin({
       id: args.id,

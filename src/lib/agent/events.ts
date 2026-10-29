@@ -23,6 +23,10 @@ export type UIEvent =
       step: number;
       prompt: string;
       cityId?: string;
+      /** Effective model handling this turn (may differ from the selected one). */
+      model?: string;
+      /** Deterministic intent the turn was routed under. */
+      intent?: string;
     }
   | {
       type: "tool.started";
@@ -95,6 +99,12 @@ export type UIEvent =
       action?: string;
     }
   | {
+      type: "theme.applied";
+      step: number;
+      applied: Record<string, unknown>;
+      attachmentId?: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -104,6 +114,8 @@ export type UIEvent =
       step: number;
       text: string;
       steps: number;
+      model?: string;
+      intent?: string;
     }
   | {
       type: "agent.error";
@@ -138,6 +150,8 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       const action = typeof args?.action === "string" ? args.action : "";
       return action ? `Running "${action}"…` : "Running the tool…";
     }
+    case "apply_theme":
+      return "Applying theme…";
     case "publish_plugin":
     case "promote_to_plugin":
       return "Publishing the tool…";
@@ -209,6 +223,8 @@ export function adaptBackendEvent(raw: {
         step,
         prompt: String(payload.prompt || ""),
         cityId: payload.cityId ? String(payload.cityId) : undefined,
+        model: payload.model ? String(payload.model) : undefined,
+        intent: payload.intent ? String(payload.intent) : undefined,
       };
 
     case "tool.start": {
@@ -319,6 +335,19 @@ export function adaptBackendEvent(raw: {
         action: payload.action ? String(payload.action) : undefined,
       };
 
+    case "theme.apply": {
+      const applied =
+        payload.applied && typeof payload.applied === "object"
+          ? (payload.applied as Record<string, unknown>)
+          : {};
+      return {
+        type: "theme.applied",
+        step,
+        applied,
+        attachmentId: payload.attachmentId ? String(payload.attachmentId) : undefined,
+      };
+    }
+
     case "map.changed":
       return {
         type: "map.changed",
@@ -344,6 +373,8 @@ export function adaptBackendEvent(raw: {
         step,
         text: String(payload.text || ""),
         steps: Number(payload.steps || step),
+        model: payload.model ? String(payload.model) : undefined,
+        intent: payload.intent ? String(payload.intent) : undefined,
       };
 
     case "error":

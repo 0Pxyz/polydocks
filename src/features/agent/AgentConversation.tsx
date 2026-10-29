@@ -39,6 +39,15 @@ interface AgentConversationProps {
 }
 
 /**
+ * Short display name for the model that produced a reply (visibility into
+ * which model handled the task, including automatic vision routing).
+ */
+function modelShortName(modelId: string): string {
+  const short = modelId.split("/").pop() || modelId;
+  return short.length > 28 ? `${short.slice(0, 28)}…` : short;
+}
+
+/**
  * One-line summary for the collapsed sheet: streaming status, otherwise the
  * latest assistant reply (markdown stripped), otherwise the last user prompt.
  */
@@ -81,6 +90,7 @@ export function AgentConversation({
     isStreaming,
     statusText,
     activeApproval,
+    activeModel,
     soundEnabled,
     audioLevel,
     orbState,
@@ -485,7 +495,9 @@ export function AgentConversation({
                   {shortSummary(messages, isHydratingThread, isStreaming, statusText)}
                 </p>
                 <p className="text-[10px] font-mono text-muted-foreground/70 group-hover/summary:text-muted-foreground transition-colors">
-                  {messages.length > 0 ? `${messages.length} messages · tap to expand` : "Tap to expand"}
+                  {messages.length > 0
+                    ? `${messages.length} messages${activeModel ? ` · ${modelShortName(activeModel)}` : ""} · tap to expand`
+                    : "Tap to expand"}
                 </p>
               </button>
 
@@ -806,6 +818,11 @@ export function AgentConversation({
 
                 {/* Hover actions: Copy & Retry on last message */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
+                  {msg.model && (
+                    <span className="text-[10px] text-muted-foreground/60" title={`Answered by ${msg.model}`}>
+                      {modelShortName(msg.model)}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleCopyMessage(msg.id, msg.content)}

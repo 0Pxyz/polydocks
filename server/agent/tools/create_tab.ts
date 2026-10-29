@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { writeCityFile } from "../../workspace/cityWorkspace";
-import { writeFeature } from "../../workspace/features";
+import { writeFeature, readFeature } from "../../workspace/features";
 
 export interface CreateTabArgs {
   id: string;
@@ -52,6 +52,18 @@ export const create_tab: AgentTool<CreateTabArgs> = {
     }),
   execute: async (args, ctx) => {
     const targetCity = args.cityId || ctx.cityId || (args.scope === "global" ? "global" : args.id);
+
+    // Update-instead-of-recreate guard: an existing id means the caller
+    // wants update_tab, not a silent overwrite of the mounted experience.
+    try {
+      await readFeature(targetCity, args.id);
+      return {
+        success: false,
+        error: `Tab "${args.id}" already exists in "${targetCity}". Use update_tab to modify the existing experience instead of recreating it.`,
+      };
+    } catch {
+      // Not found — safe to create.
+    }
 
     const manifest = {
       id: args.id,

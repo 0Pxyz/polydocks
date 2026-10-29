@@ -29,6 +29,7 @@ import { connect_cities } from "./connect_cities";
 import { modify_plugin } from "./modify_plugin";
 import { operate_plugin } from "./operate_plugin";
 import { publish_plugin } from "./publish_plugin";
+import { apply_theme } from "./apply_theme";
 import { list_files } from "./list_files";
 import { read_file } from "./read_file";
 import { write_file } from "./write_file";
@@ -45,6 +46,7 @@ export {
   open_intent,
   inspect_tab,
   close_tray,
+  apply_theme,
   create_tab,
   update_tab,
   delete_tab,
@@ -89,6 +91,7 @@ export const defaultTools: AgentTool[] = [
   open_intent,
   inspect_tab,
   close_tray,
+  apply_theme,
   create_tab,
   update_tab,
   delete_tab,
