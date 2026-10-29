@@ -1,6 +1,8 @@
 import { PluginRegistry, type InstalledPluginRecord } from "../plugins/registry";
 import type { PluginManifest } from "../plugins/manifest";
 import { writeFeature, readFeature } from "../workspace/features";
+import { getPluginFile } from "../workspace/pluginFiles";
+import { saveVersion, rollbackPlugin } from "../plugins/versions";
 import { addPluginToWorkspace } from "../workspace/workspaces";
 import { publishToRegistry, type RegistryPluginRecord } from "../plugins/communityRegistry";
 import { db } from "../workspace/db";
@@ -220,12 +222,38 @@ export class PluginService {
         };
 
         const registry = PluginRegistry.getInstance();
-        const installResult = registry.install(pluginManifest);
+        // Draft -> validate -> activate: transpile first (throws on invalid
+        // code, leaving the live version untouched), then register.
+        let installResult;
+        try {
+          installResult = registry.install(pluginManifest);
+        } catch (err: any) {
+          return {
+            success: false,
+            error: err?.message || "Failed to register plugin manifest",
+          };
+        }
         if (!installResult.success) {
           return {
             success: false,
             error: installResult.error || "Failed to register plugin manifest",
           };
+        }
+
+        // Record the activated version with code snapshot (history kept).
+        try {
+          const stored = getPluginFile(pluginId, workspaceId);
+          saveVersion({
+            pluginId,
+            version: "1.0.0",
+            workspaceId,
+            manifestJson: JSON.stringify(pluginManifest),
+            sourceCode: stored?.code ?? input.code,
+            srcdoc: stored?.srcdoc ?? "",
+            status: "active",
+          });
+        } catch {
+          // Non-fatal: registry row is already live.
         }
 
         // 3. Mount into workspace dock
@@ -293,13 +321,15 @@ export class PluginService {
       updatedAt: new Date().toISOString(),
     };
 
-    // 1. Write updated feature module
+    // 1. Write updated feature module (transpile validates; throws before
+    // touching the registry so the live version stays intact on bad code).
     await writeFeature(workspaceId, pluginId, {
       manifest: updatedFeatureManifest,
       code: input.code,
     });
 
-    // 2. Update PluginManifest
+    // 2. Update PluginManifest (transactional versioned write inside install;
+    // on failure the previous live version stays active).
     const updatedPluginManifest: PluginManifest = {
       ...(existingPlugin?.manifest || {
         apiVersion: 1,
@@ -325,12 +355,39 @@ export class PluginService {
       ],
     };
 
-    const installResult = registry.install(updatedPluginManifest);
+    let installResult;
+    try {
+      installResult = registry.install(updatedPluginManifest);
+    } catch (err: any) {
+      // Keep the previous version live; roll back the registry pointer.
+      rollbackPlugin(pluginId, currentVersion);
+      return {
+        success: false,
+        error: err?.message || "Failed to update plugin manifest in registry",
+      };
+    }
     if (!installResult.success) {
+      rollbackPlugin(pluginId, currentVersion);
       return {
         success: false,
         error: installResult.error || "Failed to update plugin manifest in registry",
       };
+    }
+
+    try {
+      const stored = getPluginFile(pluginId, workspaceId);
+      saveVersion({
+        pluginId,
+        version: nextVersion,
+        workspaceId,
+        manifestJson: JSON.stringify(updatedPluginManifest),
+        sourceCode: stored?.code ?? input.code,
+        srcdoc: stored?.srcdoc ?? "",
+        status: "active",
+      });
+    } catch {
+      // Non-fatal
+    }
     }
 
     recordAudit({
