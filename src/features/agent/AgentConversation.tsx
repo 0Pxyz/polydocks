@@ -82,6 +82,7 @@ export function AgentConversation({
   const [isKeyboardInSheet, setIsKeyboardInSheet] = useState<boolean>(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const sheetTranscriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sheetInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
