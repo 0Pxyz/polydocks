@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Compass,
   Globe,
@@ -300,13 +300,17 @@ export function AgenticDock({
   const isBottom = dockPosition === "bottom";
   // Running background tasks (registered via polymax.task) surface as a
   // quiet dot on the owning tool: work continues with the tab hidden.
-  const runningTaskTabIds = useTabHostStore((s) => {
+  // NOTE: select the stable tasks object (never build a fresh Set/Array in
+  // the selector): an unstable selector identity retriggers subscribers on
+  // every store notification and React bails out with maximum-update-depth.
+  const tasks = useTabHostStore((s) => s.tasks);
+  const runningTaskTabIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const t of Object.values(s.tasks)) {
+    for (const t of Object.values(tasks)) {
       if (t.status === "running") ids.add(t.tabId);
     }
     return ids;
-  });
+  }, [tasks]);
   // When the reduced chat sits beside the content, the fixed dock recenters
   // in the remaining space instead of the full width (otherwise icons spill
   // out of the capsule and the dock reads as cut off).
