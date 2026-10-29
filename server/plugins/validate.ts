@@ -55,6 +55,48 @@ export function findSlopPatterns(code: string): string[] {
 }
 
 /**
+ * Hard lifecycle-contract violations (docs/plugins/lifecycle.md). The host
+ * owns mount/hide/hibernate; plugins must never control their own
+ * lifecycle. Unlike style hints, these REJECT the plugin with a clear
+ * error pointing at the fix.
+ */
+const LIFECYCLE_PATTERNS: Array<{ re: RegExp; error: string }> = [
+  {
+    re: /location\s*\.\s*reload\s*\(/,
+    error:
+      'Lifecycle contract: location.reload() is forbidden — the host keeps tabs mounted, so reload destroys guest state and interrupts tasks. Remove the call; state restores from polymax.storage on hibernate/restore.',
+  },
+  {
+    re: /if\s*\(\s*!?\s*(isActive|activeTab|isVisible|isCurrentTab)\b/,
+    error:
+      'Lifecycle contract: conditional render on the active tab (isActive/activeTab/isVisible) is forbidden — the host mounts every tab once and hides inactive ones. Render unconditionally; use polymax.storage for state that must survive.',
+  },
+  {
+    re: /\b(isActive|activeTab|isVisible|isCurrentTab)\b\s*\?\s*[^:]+:\s*null/,
+    error:
+      'Lifecycle contract: rendering null when the tab is inactive is forbidden — hidden tabs keep running (streams, uploads, players continue). Render unconditionally.',
+  },
+  {
+    re: /\b(isActive|activeTab|isVisible|isCurrentTab)\b\s*&&\s*\(?\s*</,
+    error:
+      'Lifecycle contract: gating JSX on the active tab (X && <.../>) is forbidden — the host hides inactive tabs with CSS while they keep running. Render unconditionally.',
+  },
+  {
+    re: /key\s*=\s*\{[^}]*(activeTab|isActive|isVisible|activeToolId)[^}]*\}/,
+    error:
+      'Lifecycle contract: a key derived from the active tab forces a remount on every switch — forbidden. Use a stable id; the host owns mount/unmount.',
+  },
+];
+
+export function findLifecycleViolations(code: string): string[] {
+  const hits: string[] = [];
+  for (const { re, error } of LIFECYCLE_PATTERNS) {
+    if (re.test(code)) hits.push(error);
+  }
+  return hits;
+}
+
+/**
  * Mounts the bundled guest JS in a server-side DOM (happy-dom) with the real
  * vendored kit: createRoot is stubbed to capture the root element, which is
  * then rendered with react-dom/server. Asserts it renders without throwing.
@@ -188,6 +230,11 @@ export async function validatePluginCode(input: {
 
   for (const slop of findSlopPatterns(input.code)) {
     warnings.push(`Design slop (docs/design-slop.md): ${slop} Warning only for now.`);
+  }
+
+  const lifecycle = findLifecycleViolations(input.code);
+  if (lifecycle.length > 0) {
+    return { ok: false, error: lifecycle.join(" "), warnings };
   }
 
   const render = await validatePluginRender(guestJs);
