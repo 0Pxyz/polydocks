@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem, STORE_DOCK_TOOL } from "@/features/dock/AgenticDock";
-import { CommandPalette } from "@/features/dock/CommandPalette";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
@@ -19,14 +18,12 @@ import { resolveIcon } from "@/components/icons";
 import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
-import type { DockItem } from "@/lib/dock/dockModel";
 import { cn } from "@/lib/cn";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string | undefined>(undefined);
-  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
   const { setActiveTool: setDockActiveTool } = useDockStore();
@@ -317,7 +314,34 @@ export default function App() {
             isAgentWorking={isStreaming}
             extraTools={activeExtraTools}
             onSelectTool={handleSelectTool}
-            onOpenSearch={() => setPaletteOpen(true)}
+            onCloseItem={(toolId) => {
+              if (toolId === "agent") {
+                setLayoutState("closed");
+                return;
+              }
+              if (activeToolId === toolId) {
+                setActiveToolId("");
+                setDockActiveTool("");
+              }
+            }}
+            onSubmitToolPrompt={(prompt) => handleToolPromptSubmit(prompt)}
+            onFixWithAgent={(prompt) => {
+              handleToolPromptSubmit(prompt, { origin: "dock-fix" });
+              const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+              setLayoutState(isWide ? "side" : "sheet");
+            }}
+            onOpenAgent={() => {
+              setActiveToolId("agent");
+              setDockActiveTool("agent");
+            }}
+            onOpenInstallUrl={() => {
+              setActiveToolId("plugins");
+              setDockActiveTool("plugins");
+            }}
+            onOpenMcpConnect={() => {
+              setActiveToolId("plugins");
+              setDockActiveTool("plugins");
+            }}
             isBuilding={isBuildingTool}
             buildingName={buildingToolName}
             statusText={statusText}
@@ -350,52 +374,6 @@ export default function App() {
 
           {/* First-launch Guided Onboarding */}
           <OnboardingModal />
-
-          {/* Dock search (⌘⇧P): find, open, pin and control tools */}
-          <CommandPalette
-            open={paletteOpen}
-            onOpenChange={setPaletteOpen}
-            cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
-            extraItems={extraTools.map((tool) => ({
-              id: tool.id,
-              label: tool.label,
-              description: "Created with the agent",
-              icon: tool.iconKey || "cards",
-              kind: "tab",
-            } satisfies DockItem))}
-            onOpenAgent={() => {
-              setActiveToolId("agent");
-              setDockActiveTool("agent");
-            }}
-            onOpenInstallUrl={() => {
-              setActiveToolId("plugins");
-              setDockActiveTool("plugins");
-            }}
-            onOpenMcpConnect={() => {
-              setActiveToolId("plugins");
-              setDockActiveTool("plugins");
-            }}
-            onOpenItem={(toolId) => {
-              useDockStore.getState().openTool(toolId);
-              handleSelectTool(toolId);
-            }}
-            onCloseItem={(toolId) => {
-              if (toolId === "agent") {
-                setLayoutState("closed");
-                return;
-              }
-              if (activeToolId === toolId) {
-                setActiveToolId("");
-                setDockActiveTool("");
-              }
-            }}
-            onSubmitToolPrompt={(prompt) => handleToolPromptSubmit(prompt)}
-            onFixWithAgent={(prompt) => {
-              handleToolPromptSubmit(prompt, { origin: "dock-fix" });
-              const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
-              setLayoutState(isWide ? "side" : "sheet");
-            }}
-          />
 
           {/* Single Agent Conversation Instance */}
           <AgentConversation

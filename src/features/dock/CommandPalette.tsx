@@ -13,7 +13,7 @@ import {
   Wrench,
 } from "@phosphor-icons/react";
 import {
-  CommandDialog,
+  Command,
   CommandInput,
   CommandList,
   CommandEmpty,
@@ -45,8 +45,6 @@ export interface CapabilityItem {
 }
 
 interface CommandPaletteProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
   cityId?: string;
   /** Session-created experiences (dynamic tabs) that are not in any store. */
   extraItems?: DockItem[];
@@ -61,6 +59,8 @@ interface CommandPaletteProps {
   onSubmitToolPrompt?: (prompt: string) => void;
   /** Send a fix prompt to the agent for a failed plugin. */
   onFixWithAgent?: (prompt: string) => void;
+  /** Close the panel (the dock X button owns this too). */
+  onClose?: () => void;
 }
 
 interface RegistryEntry {
@@ -79,8 +79,6 @@ const KIND_BADGE: Record<DockItemKind, string> = {
 };
 
 export function CommandPalette({
-  open: controlledOpen,
-  onOpenChange: controlledOnOpenChange,
   cityId,
   extraItems = [],
   onOpenAgent,
@@ -90,19 +88,9 @@ export function CommandPalette({
   onCloseItem,
   onSubmitToolPrompt,
   onFixWithAgent,
+  onClose,
 }: CommandPaletteProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
-  const setOpen = useCallback(
-    (val: boolean) => {
-      if (controlledOnOpenChange) {
-        controlledOnOpenChange(val);
-      } else {
-        setInternalOpen(val);
-      }
-    },
-    [controlledOnOpenChange]
-  );
+  const closePalette = useCallback(() => onClose?.(), [onClose]);
 
   const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -129,17 +117,8 @@ export function CommandPalette({
   const closeTool = useDockStore((s) => s.closeTool);
   const workspacePlugins = useWorkspaceStore((s) => s.workspacePlugins);
 
-  // Global ⌘⇧P / Ctrl+Shift+P shortcut (⌘K is reserved for Agent conversation)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        setOpen(!isOpen);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, setOpen]);
+  // The panel mounts only while open, so the ⌘⇧P shortcut lives in the
+  // always-mounted dock. Fetch once per mount.
 
   // Fetch capabilities when palette opens
   const fetchCapabilities = useCallback(async () => {
@@ -258,13 +237,11 @@ export function CommandPalette({
   }, [fetchCapabilities, fetchDockData]);
 
   useEffect(() => {
-    if (isOpen) {
-      setLastResult(null);
-      setConfirmingCap(null);
-      setQuery("");
-      reload();
-    }
-  }, [isOpen, reload]);
+    setLastResult(null);
+    setConfirmingCap(null);
+    setQuery("");
+    reload();
+  }, [reload]);
 
   const catalog = useMemo<DockItem[]>(() => {
     const seen = new Set<string>();
@@ -313,7 +290,6 @@ export function CommandPalette({
 
   const visibleRowCount = sections.reduce((count, section) => count + section.items.length, 0);
 
-  const closePalette = useCallback(() => setOpen(false), [setOpen]);
 
   const handlePrimaryAction = useCallback(
     (item: DockItem) => {
@@ -570,13 +546,7 @@ export function CommandPalette({
   };
 
   return (
-    <CommandDialog
-      open={isOpen}
-      onOpenChange={setOpen}
-      title="Dock search"
-      description="Find, open, pin and manage dock tools"
-      className="bg-[#0b0d13] border border-white/10 text-white max-w-2xl shadow-2xl"
-    >
+    <Command label="Dock search">
       <div
         onKeyDownCapture={(e) => {
           modifierHeld.current = e.metaKey || e.ctrlKey;
@@ -586,6 +556,7 @@ export function CommandPalette({
         }}
       >
       <CommandInput
+        autoFocus
         placeholder="Search tools, tabs and plugins…"
         onInput={(e) => setQuery(e.currentTarget.value)}
       />
@@ -761,7 +732,7 @@ export function CommandPalette({
               {onOpenAgent && (
                 <CommandItem
                   onSelect={() => {
-                    setOpen(false);
+                    closePalette();
                     onOpenAgent();
                   }}
                   className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -777,7 +748,7 @@ export function CommandPalette({
               {onOpenInstallUrl && (
                 <CommandItem
                   onSelect={() => {
-                    setOpen(false);
+                    closePalette();
                     onOpenInstallUrl();
                   }}
                   className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -793,7 +764,7 @@ export function CommandPalette({
               {onOpenMcpConnect && (
                 <CommandItem
                   onSelect={() => {
-                    setOpen(false);
+                    closePalette();
                     onOpenMcpConnect();
                   }}
                   className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -815,6 +786,6 @@ export function CommandPalette({
         {installingId && <span>Installing…</span>}
       </div>
       </div>
-    </CommandDialog>
+    </Command>
   );
 }
