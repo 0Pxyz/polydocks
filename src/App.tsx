@@ -53,7 +53,42 @@ export default function App() {
     wallpaperBlur,
   } = useThemeStore();
 
-  const { workspacePlugins } = useWorkspaceStore();
+  const { workspacePlugins, fetchWorkspaces } = useWorkspaceStore();
+
+  // Home must reflect installed plugins dynamically: fetch once on boot so
+  // the workspace registry (not a hardcoded list) drives the home dock
+  // section. Polymax ships as one entry below until #153 extracts it.
+  useEffect(() => {
+    void fetchWorkspaces();
+  }, [fetchWorkspaces]);
+
+  // Polymax as one installed plugin, not the app: the knowledge-worlds map
+  // surface listed alongside dynamically installed workspace plugins.
+  // Migration shim — the full extraction (map/cities/quests as real plugins)
+  // is tracked in #153; until then this entry opens the maps view.
+  const homePlugins = useMemo(
+    () => [
+      { id: "maps", label: "Polymax", detail: "Knowledge worlds" },
+      ...workspacePlugins
+        .filter((wp) => wp.enabled && wp.plugin && wp.pluginId !== "maps")
+        .map((wp) => ({
+          id: wp.pluginId,
+          label: wp.plugin?.name || wp.pluginId,
+          detail: wp.plugin?.description,
+        })),
+    ],
+    [workspacePlugins]
+  );
+
+  // Recent work from real session state only — never placeholder cities.
+  const citySummaries = useCitySummaryStore((s) => s.summaries);
+  const recentHomeCities = useMemo(
+    () =>
+      Object.keys(citySummaries)
+        .slice(0, 2)
+        .map((id) => ({ id, title: id })),
+    [citySummaries]
+  );
 
   const workspaceDockTools: DockToolItem[] = workspacePlugins
     .filter((wp) => wp.enabled && wp.plugin)
@@ -493,6 +528,13 @@ export default function App() {
                     enterCity(cityName);
                     setActiveToolId("");
                     setDockActiveTool("");
+                  }}
+                  installedPlugins={homePlugins}
+                  recentCities={recentHomeCities}
+                  onOpenPlugin={(pluginId) => handleSelectTool(pluginId)}
+                  onOpenStore={() => {
+                    setActiveToolId("plugins");
+                    setDockActiveTool("plugins");
                   }}
                 />
               </DockSurface>

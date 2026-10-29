@@ -5,28 +5,44 @@ import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 
 export const PRODUCT_HEADLINE =
-  "Tell your agent what to master. It builds the map, the tools and the path.";
+  "Your agentic workspace. Ask the agent to do real work — it uses the tools in your dock, and installs new ones when needed.";
 
 const ROTATING_EXAMPLES = [
-  "Teach me Stoicism",
-  "Compare two papers on transformers",
-  "Make flashcards for entanglement",
+  "Research the latest on small modular reactors",
+  "Build a tracker for my reading list",
+  "Organize my sources on urbanism",
+  "Summarize this workspace",
 ];
+
+export interface HomePluginEntry {
+  id: string;
+  label: string;
+  detail?: string;
+}
 
 export interface HomeScreenProps {
   onSendMessage: (prompt: string, meta?: { origin?: string }) => void;
   onEnterCity?: (cityName: string) => void;
+  onOpenPlugin?: (pluginId: string) => void;
+  onOpenStore?: () => void;
+  installedPlugins?: HomePluginEntry[];
   recentCities?: { id: string; title: string }[];
   className?: string;
 }
 
+const FIRST_RUN_HINTS = [
+  "Ask anything — research, building, writing, automation.",
+  "Your dock holds your tools — click one to open it.",
+  "Polymax lives here too — knowledge worlds, one plugin among many.",
+];
+
 export function HomeScreen({
   onSendMessage,
   onEnterCity,
-  recentCities = [
-    { id: "athens", title: "Athens" },
-    { id: "florence", title: "Florence" },
-  ],
+  onOpenPlugin,
+  onOpenStore,
+  installedPlugins = [],
+  recentCities = [],
   className = "",
 }: HomeScreenProps) {
   const [value, setValue] = useState("");
@@ -65,7 +81,9 @@ export function HomeScreen({
     setValue("");
   };
 
+  const visiblePlugins = (installedPlugins || []).slice(0, 6);
   const visibleCities = (recentCities || []).slice(0, 2);
+  const isFirstRun = visiblePlugins.length === 0 && visibleCities.length === 0;
 
   return (
     <div
@@ -81,9 +99,9 @@ export function HomeScreen({
         transition={{ duration: 0.35, ease: "easeOut" }}
         className="flex flex-col items-center w-full"
       >
-        {/* Wordmark: Polymax ~48px, weight 600 */}
+        {/* Wordmark: Polydocks ~48px, weight 600 */}
         <h1 className="text-4xl sm:text-5xl font-semibold text-white tracking-normal mb-3">
-          Polymax
+          Polydocks
         </h1>
 
         {/* Product line: Constant headline, no italics, quiet text */}
@@ -103,7 +121,7 @@ export function HomeScreen({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               className="w-full bg-transparent text-[15px] text-white outline-none placeholder-transparent z-10"
-              aria-label="What would you like to master?"
+              aria-label="Ask your agent what to do"
             />
 
             {/* Cross-fading rotating placeholder */}
@@ -136,7 +154,36 @@ export function HomeScreen({
           </button>
         </form>
 
-        {/* Plain action rows under input (max 3) */}
+        {/* Installed plugins: dynamic, from the workspace plugin registry */}
+        {visiblePlugins.length > 0 && (
+          <div className="mt-6 flex flex-col items-center gap-2 w-full">
+            <span className="text-[11px] uppercase tracking-widest text-[#545f75]">
+              In your dock
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-[560px]">
+              {visiblePlugins.map((plugin) => (
+                <button
+                  key={plugin.id}
+                  type="button"
+                  onClick={() => onOpenPlugin?.(plugin.id)}
+                  title={plugin.detail || plugin.label}
+                  className="px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/10 text-xs text-[#9aa5b8] hover:text-white hover:border-white/25 transition-colors cursor-pointer"
+                >
+                  {plugin.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => onOpenStore?.()}
+                className="px-3 py-1.5 rounded-full text-xs text-[var(--accent-lime)] hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                + Discover
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Minimal recent work: real context only, never a metrics dashboard */}
         {visibleCities.length > 0 && (
           <div className="mt-5 flex flex-col items-center gap-1.5 w-full">
             {visibleCities.map((city) => (
@@ -149,6 +196,24 @@ export function HomeScreen({
                 Continue {city.title}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* First-launch: the interface itself explains agent + dock + plugins */}
+        {isFirstRun && (
+          <div className="mt-6 flex flex-col items-center gap-1.5 w-full">
+            {FIRST_RUN_HINTS.map((hint) => (
+              <p key={hint} className="text-xs text-[#545f75]">
+                {hint}
+              </p>
+            ))}
+            <button
+              type="button"
+              onClick={() => onOpenStore?.()}
+              className="mt-1 text-xs text-[var(--accent-lime)] hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              Browse plugins
+            </button>
           </div>
         )}
       </motion.div>
