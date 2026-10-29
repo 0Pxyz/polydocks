@@ -207,7 +207,16 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
           remove: (key) => sendHostRequest('storage.remove', { key }),
         },
         invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
+        useCapability: async (capabilityId, input) => {
+          if (!capabilityId) throw new Error('useCapability requires a capabilityId');
+          try {
+            return await sendHostRequest('capability.invoke', { capabilityId, input });
+          } catch (err) {
+            throw err instanceof Error ? err : new Error(String(err));
+          }
+        },
         openUrl: (url) => sendHostRequest('openUrl', { url }),
+        openContent: (url) => sendHostRequest('openContent', { url }),
         getContext: () => sendHostRequest('getContext', {}),
         submit: (command) => sendHostRequest('submit', { command }),
         ui: {

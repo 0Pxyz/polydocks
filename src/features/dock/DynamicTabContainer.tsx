@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createHostBridge } from "./bridge/host-bridge";
+import { ReaderView } from "./ReaderView";
 import { cn } from "@/lib/cn";
 
 export interface DynamicTabContainerProps {
@@ -38,6 +39,7 @@ export function DynamicTabContainer({
   const [fetching, setFetching] = useState<boolean>(!controlledSrcdoc);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [readerUrl, setReaderUrl] = useState<string | null>(null);
   const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch compiled srcdoc from backend if not provided directly
@@ -72,7 +74,7 @@ export function DynamicTabContainer({
     fetchSrcdoc();
   }, [fetchSrcdoc]);
 
-  // Connect host postMessage bridge
+  // Connect host postMessage bridge (openContent -> native Reader)
   useEffect(() => {
     const targetWin = iframeRef.current?.contentWindow || null;
     const bridge = createHostBridge(targetWin, {
@@ -81,6 +83,7 @@ export function DynamicTabContainer({
       onExpand,
       onCollapse,
       onSubmitCommand,
+      onOpenContent: (url) => setReaderUrl(url),
       onReady: () => {
         if (handshakeTimerRef.current) {
           clearTimeout(handshakeTimerRef.current);
@@ -142,6 +145,10 @@ export function DynamicTabContainer({
         className
       )}
     >
+      {readerUrl ? (
+        <ReaderView url={readerUrl} onBack={() => setReaderUrl(null)} />
+      ) : (
+        <>
       {/* Quiet Status Row on Failure or Timeout */}
       {error && (
         <div className="w-full flex items-center justify-center gap-2 py-3 text-xs text-[#9aa5b8] bg-transparent">
@@ -191,6 +198,8 @@ export function DynamicTabContainer({
             !isReady || error ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto"
           )}
         />
+      )}
+        </>
       )}
     </div>
   );

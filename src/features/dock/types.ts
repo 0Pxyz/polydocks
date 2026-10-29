@@ -14,6 +14,7 @@ export type BridgeAction =
   | "storage.remove"
   | "getContext"
   | "openUrl"
+  | "openContent"
   | "submit"
   | "ui.expand"
   | "ui.collapse"
@@ -55,5 +56,6 @@ export interface HostBridgeOptions {
   onCollapse?: () => void;
   onSubmitCommand?: (command: string) => void;
   onOpenUrl?: (url: string) => void;
+  onOpenContent?: (url: string) => void;
   getContext?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
 }

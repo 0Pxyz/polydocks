@@ -15,6 +15,7 @@ import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
 import { threadRouter } from "./routes/thread";
+import { readerRouter } from "./reader/route";
 import { resolveUserId } from "./identity";
 import { sessionsRouter } from "./routes/sessions";
 import { tasksRouter } from "./routes/tasks";
@@ -123,6 +124,9 @@ app.route("/api/agent/memory", memoryRouter);
 
 // Mount the single persistent agent thread (transcript + bounded context)
 app.route("/api/agent/thread", threadRouter);
+
+// Native Reader backend (SSRF-guarded article/video loader)
+app.route("/api/reader", readerRouter);
 
 // Mount Persistent Work Sessions & Background Task Engine (Issue #76)
 app.route("/api/sessions", sessionsRouter);
