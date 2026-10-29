@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { readFeature, writeFeature, writeLegacyFeature } from "../../workspace/features";
+import { normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
 
 export interface UpdateTabArgs {
   id: string;
@@ -31,8 +32,9 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
     if (!targetCity) {
       throw new Error("Cannot update a tab without an active city workspace scope.");
     }
+    const normalized = normalizePluginId(args.id);
 
-    const current = await readFeature(targetCity, args.id);
+    const current = await readFeature(targetCity, normalized);
     const manifest = { ...current.manifest };
 
     if (args.title) manifest.title = args.title;
@@ -40,34 +42,58 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
     manifest.updatedAt = new Date().toISOString();
 
     if (args.code) {
-      await writeFeature(targetCity, args.id, {
+      await writeFeature(targetCity, normalized, {
         manifest,
         code: args.code,
       });
 
+      ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+      const verification = await verifyPluginStateAsync(normalized, targetCity);
+      if (!verification.ok) {
+        return {
+          success: false,
+          error: verification.error || "Tab verification failed after update",
+          verification,
+          tab: manifest,
+          cityId: targetCity,
+        };
+      }
       return {
         success: true,
         tab: manifest,
         cityId: targetCity,
         action: "tab.updated",
         format: "feature-ts",
+        verification,
       };
     }
 
     // Legacy HTML blob path (SQLite single source of truth)
     if (args.html) {
-      await writeLegacyFeature(targetCity, args.id, manifest, args.html);
+      await writeLegacyFeature(targetCity, normalized, manifest, args.html);
     } else {
       // Metadata-only update: persist manifest with existing srcdoc.
-      await writeLegacyFeature(targetCity, args.id, manifest, current.srcdoc);
+      await writeLegacyFeature(targetCity, normalized, manifest, current.srcdoc);
     }
 
+    ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+    const verification = await verifyPluginStateAsync(normalized, targetCity);
+    if (!verification.ok) {
+      return {
+        success: false,
+        error: verification.error || "Tab verification failed after update",
+        verification,
+        tab: manifest,
+        cityId: targetCity,
+      };
+    }
     return {
       success: true,
       tab: manifest,
       cityId: targetCity,
       action: "tab.updated",
       format: current.format,
+      verification,
     };
   },
 };

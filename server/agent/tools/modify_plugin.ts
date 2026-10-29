@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
+import { normalizePluginId, verifyPluginStateAsync } from "../../plugins/verify";
 
 export interface ModifyPluginArgs {
   id: string;
@@ -38,9 +39,10 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
   }),
   execute: async (args, ctx) => {
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
+    const normalized = normalizePluginId(args.id);
 
-    return await PluginService.modifyPlugin({
-      id: args.id,
+    const updated = await PluginService.modifyPlugin({
+      id: normalized,
       code: args.code,
       changeSummary: args.changeSummary,
       name: args.name,
@@ -49,5 +51,17 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       workspaceId,
       actor: "agent",
     });
+    if (!updated.success) return updated;
+
+    const verification = await verifyPluginStateAsync(normalized, workspaceId);
+    if (!verification.ok) {
+      return {
+        success: false,
+        error: verification.error || "Plugin verification failed after modify",
+        verification,
+        pluginId: normalized,
+      };
+    }
+    return { ...updated, verification };
   },
 };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { writeLegacyFeature, writeFeature, readFeature } from "../../workspace/features";
+import { writeLegacyFeature, writeFeature } from "../../workspace/features";
+import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
 
 export interface CreateTabArgs {
   id: string;
@@ -52,20 +53,19 @@ export const create_tab: AgentTool<CreateTabArgs> = {
   execute: async (args, ctx) => {
     const targetCity = args.cityId || ctx.cityId || (args.scope === "global" ? "global" : args.id);
 
-    // Update-instead-of-recreate guard: an existing id means the caller
-    // wants update_tab, not a silent overwrite of the mounted experience.
-    try {
-      await readFeature(targetCity, args.id);
+    // Update-instead-of-recreate guard: normalized id checked across
+    // registry + tab/plugin namespaces in every scope, not just this city.
+    const normalized = normalizePluginId(args.id);
+    const taken = isPluginIdTaken(normalized);
+    if (taken.taken) {
       return {
         success: false,
-        error: `Tab "${args.id}" already exists in "${targetCity}". Use update_tab to modify the existing experience instead of recreating it.`,
+        error: `Tab "${normalized}" already exists (${taken.namespaces.join(", ")}). Use update_tab to modify the existing experience instead of recreating it.`,
       };
-    } catch {
-      // Not found — safe to create.
     }
 
     const manifest = {
-      id: args.id,
+      id: normalized,
       title: args.title,
       icon: args.icon || "Layers",
       scope: args.scope || "city",
@@ -76,30 +76,54 @@ export const create_tab: AgentTool<CreateTabArgs> = {
 
     if (args.code) {
       // Modern feature module path
-      await writeFeature(targetCity, args.id, {
+      await writeFeature(targetCity, normalized, {
         manifest,
         code: args.code,
       });
 
+      ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+      const verification = await verifyPluginStateAsync(normalized, targetCity);
+      if (!verification.ok) {
+        return {
+          success: false,
+          error: verification.error || "Tab verification failed after create",
+          verification,
+          tab: manifest,
+          cityId: targetCity,
+        };
+      }
       return {
         success: true,
         tab: manifest,
         cityId: targetCity,
         action: "tab.created",
         format: "feature-ts",
+        verification,
       };
     }
 
     // Legacy HTML blob path (SQLite single source of truth, no FS mirroring)
     const rawHtml = args.html || "";
-    await writeLegacyFeature(targetCity, args.id, manifest, rawHtml);
+    await writeLegacyFeature(targetCity, normalized, manifest, rawHtml);
 
+    ensurePluginRegisteredAndMounted(normalized, targetCity, manifest);
+    const verification = await verifyPluginStateAsync(normalized, targetCity);
+    if (!verification.ok) {
+      return {
+        success: false,
+        error: verification.error || "Tab verification failed after create",
+        verification,
+        tab: manifest,
+        cityId: targetCity,
+      };
+    }
     return {
       success: true,
       tab: manifest,
       cityId: targetCity,
       action: "tab.created",
       format: "legacy-html",
+      verification,
     };
   },
 };

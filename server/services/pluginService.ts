@@ -388,7 +388,6 @@ export class PluginService {
     } catch {
       // Non-fatal
     }
-    }
 
     recordAudit({
       actor: input.actor || "user",
