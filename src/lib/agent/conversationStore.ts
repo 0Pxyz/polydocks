@@ -38,6 +38,14 @@ export interface ConversationMessage {
   };
 }
 
+export interface ActivityRow {
+  id: string;
+  label: string;
+  state: "running" | "done" | "error";
+  startedAt: number;
+  finishedAt?: number;
+}
+
 interface ConversationStoreState {
   layoutState: LayoutState;
   sideWidth: number;
@@ -48,6 +56,12 @@ interface ConversationStoreState {
   isBuildingTool: boolean;
   buildingToolName: string;
   statusText: string;
+  /** Compact per-step progress rows for the active turn (cleared on finish). */
+  activity: ActivityRow[];
+  /** Client timestamp of the last SSE event (drives the stuck message). */
+  lastEventAt: number;
+  /** What the loop last reported waiting on. */
+  currentPhase: string;
   activeApproval: ApprovalRequest | null;
   soundEnabled: boolean;
   audioLevel: number;
@@ -186,6 +200,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   isBuildingTool: false,
   buildingToolName: "",
   statusText: "",
+  activity: [],
+  lastEventAt: 0,
+  currentPhase: "",
   activeApproval: null,
   soundEnabled: getInitialSound(),
   audioLevel: 0,
@@ -356,6 +373,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       isBuildingTool: false,
       orbState: "idle",
       statusText: "Canceled request.",
+      activity: [],
+      currentPhase: "",
     });
   },
 
@@ -423,13 +442,26 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       signal: abortCtrl.signal,
       onEvent: async (event: UIEvent) => {
         const { soundEnabled } = get();
+        // Every event proves the turn is alive (drives the stuck message).
+        set({ lastEventAt: Date.now() });
 
         switch (event.type) {
+          case "agent.heartbeat":
+            set({
+              currentPhase:
+                event.phase === "running_tool" && event.tool
+                  ? `Running ${event.tool}`
+                  : "Thinking",
+            });
+            break;
+
           case "agent.started":
             set({
               orbState: "thinking",
               activeModel: event.model || null,
               activeIntent: event.intent || null,
+              activity: [],
+              currentPhase: "Thinking",
             });
             break;
 
@@ -437,10 +469,26 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             set({ orbState: "thinking" });
             if (event.statusLabel) {
               set({ statusText: event.statusLabel });
+              set((state) => ({
+                activity: [
+                  ...state.activity,
+                  {
+                    id: event.id || `${event.name}-${Date.now()}`,
+                    label: event.statusLabel as string,
+                    state: "running" as const,
+                    startedAt: Date.now(),
+                  },
+                ],
+              }));
             }
             break;
 
           case "tool.completed":
+            set((state) => ({
+              activity: state.activity.map((row) =>
+                row.id === event.id ? { ...row, state: "done" as const, finishedAt: Date.now() } : row
+              ),
+            }));
             break;
 
           case "experience.created":
@@ -563,6 +611,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               isBuildingTool: false,
               orbState: isDockAdd ? "idle" : "speaking",
               statusText: "",
+              activity: [],
+              currentPhase: "",
               activeModel: null,
               activeIntent: null,
               messages: [
@@ -610,6 +660,10 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                 isBuildingTool: false,
                 orbState: "error",
                 statusText: errorObj.message,
+                activity: state.activity.map((row) =>
+                  row.state === "running" ? { ...row, state: "error" as const, finishedAt: Date.now() } : row
+                ),
+                currentPhase: "",
                 activeModel: null,
                 activeIntent: null,
                 messages: updatedMessages,
@@ -726,6 +780,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
           isBuildingTool: false,
           orbState: "error",
           statusText: errorObj.message,
+          activity: [],
+          currentPhase: "",
           activeModel: null,
           activeIntent: null,
           messages: updatedMessages,

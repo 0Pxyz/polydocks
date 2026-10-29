@@ -60,3 +60,4 @@
 | 2026-10-29 | Agent skills: app map, domain skills with backend contracts, and drift tests | [#126](https://github.com/0Pxyz/polymax/pull/126) |
 | 2026-10-29 | Intent routing fix (plugin_update outranks theme; melhor/refaz/bonito stems) unblocks artifact restyle prompts that mention tema/fundo; Bitcoin Pricing View rebuilt on shadcn kit + theme tokens (v1.0.1); test DB hygiene for plugin_files |
 | 2026-10-29 | Design enforcement for generated UI: plugins skill Design section (600-token budget kept), slop warnings in pre-publish validation, native-UI sentence in create/update tools; Bitcoin Pricing View v1.0.2 rebuilt slop-free (borderless, sentence case, tokens only) |
+| 2026-10-29 | Agent progress UX (recon-driven): 2s heartbeat with phase/elapsed (never content), durationMs on tool.done, server-side cancel via request abort signal, compact activity list + "Still working (Ns)" with Cancel in chat (sheet + expanded), no-leak/cancel/cadence tests |

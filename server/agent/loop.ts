@@ -33,6 +33,7 @@ export interface AgentStepEvent {
   step: number;
   type:
     | "agent.start"
+    | "agent.heartbeat"
     | "tool.start"
     | "tool.done"
     | "tab.created"
@@ -277,7 +278,28 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     }
   };
 
+  // Progress heartbeat: the model can take 6-15s per call with zero
+  // events in between (recon: theme 6s, plugin codegen 15s). A 2s tick
+  // carries only elapsed time + phase — never prompt, code, or args —
+  // so the UI can show "still working" instead of silence. Cleared in
+  // the finally below on every exit path.
+  const turnStart = Date.now();
+  let currentPhase: "thinking" | "running_tool" = "thinking";
+  let currentTool: string | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+
   try {
+    heartbeat = setInterval(() => {
+      void emit({
+        step: currentStep,
+        type: "agent.heartbeat",
+        payload: {
+          elapsedMs: Date.now() - turnStart,
+          phase: currentPhase,
+          ...(currentTool ? { tool: currentTool } : {}),
+        },
+      });
+    }, 2000);
 
     if (taskId) {
       try {
@@ -547,6 +569,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         completionParams.reasoning_effort = effectiveEffort;
       }
 
+      currentPhase = "thinking";
+      currentTool = undefined;
       const response = await llmClient.chat.completions.create(completionParams, { signal } as any);
       noteUsage(response);
       const choice = response.choices?.[0];
@@ -601,9 +625,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       messages.push(assistantMessage);
 
       // Execute each tool call
+      currentPhase = "running_tool";
       for (const call of toolCalls) {
         const toolName = call.function.name;
         const toolId = call.id;
+        currentTool = toolName;
+        const toolStart = Date.now();
         let rawArgs: Record<string, unknown> = {};
 
         try {
@@ -683,6 +710,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             id: toolId,
             name: toolName,
             result: toolOutput,
+            durationMs: Date.now() - toolStart,
           },
         });
 
@@ -956,5 +984,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       error: errorMessage,
       steps: currentStep,
     };
+  } finally {
+    if (heartbeat !== undefined) clearInterval(heartbeat);
   }
 }
