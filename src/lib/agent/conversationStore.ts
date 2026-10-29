@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { streamAgentLoop } from "./client";
 import { type UIEvent, type ApprovalRequest } from "./events";
 import { speakReply, cancelSpeech } from "./speech";
-import { DEFAULT_MODEL_ID, getMetaModel } from "./models";
+import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
 import {
   clearAgentThread,
@@ -12,6 +12,7 @@ import {
   type ThreadMessageRecord,
 } from "./thread";
 import { platformStorage } from "@/lib/platform/storage";
+import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import type { OrbState } from "@/features/agent/Orb";
 
 export type LayoutState = "closed" | "sheet" | "full" | "side";
@@ -67,6 +68,8 @@ interface ConversationStoreState {
   setOrbState: (state: OrbState) => void;
   setStatusText: (text: string) => void;
   setSelectedModel: (modelId: string) => void;
+  selectedEffort: ReasoningEffort;
+  setSelectedEffort: (effort: ReasoningEffort) => void;
   toggleAgent: (currentActiveToolId?: string) => void;
   sendMessage: (
     prompt?: string,
@@ -101,6 +104,13 @@ interface ConversationStoreState {
 const SIDE_WIDTH_KEY = "polymax-agent-side-width";
 const SOUND_KEY = "polymax-agent-sound";
 const MODEL_KEY = "polymax-agent-model";
+const EFFORT_KEY = "polymax-agent-effort";
+
+function getInitialEffort(): ReasoningEffort {
+  const stored = platformStorage.getItem<string>(EFFORT_KEY);
+  if (isValidReasoningEffort(stored)) return stored;
+  return DEFAULT_REASONING_EFFORT;
+}
 
 function getInitialModel(): string {
   const stored = platformStorage.getItem<string>(MODEL_KEY);
@@ -170,6 +180,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   audioLevel: 0,
   orbState: "idle",
   selectedModel: getInitialModel(),
+  selectedEffort: getInitialEffort(),
   isHydratingThread: false,
   isLoadingOlder: false,
   hasOlderMessages: false,
@@ -256,6 +267,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   setSelectedModel: (selectedModel) => {
     platformStorage.setItem(MODEL_KEY, selectedModel);
     set({ selectedModel });
+  },
+
+  setSelectedEffort: (selectedEffort) => {
+    platformStorage.setItem(EFFORT_KEY, selectedEffort);
+    set({ selectedEffort });
   },
 
   addAttachments: async (files: File[]) => {
@@ -376,11 +392,12 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       cityId,
       userId: getAgentUserId(),
       modelId: get().selectedModel,
+      reasoningEffort: get().selectedEffort,
       attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       origin,
       retry: options?.retry === true,
       signal: abortCtrl.signal,
-      onEvent: (event: UIEvent) => {
+      onEvent: async (event: UIEvent) => {
         const { soundEnabled } = get();
 
         switch (event.type) {
@@ -403,6 +420,57 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             set({
               isBuildingTool: false,
               statusText: `Mounted "${event.experience.title}" in the dock.`,
+            });
+            break;
+
+          case "plugin.created":
+          case "plugin.updated": {
+            const isNew = event.type === "plugin.created";
+            // Refresh the workspace registry so the dock picks up the tool,
+            // then mount + open it through the same path as tab experiences.
+            try {
+              const targetWorkspace =
+                event.workspaceId ||
+                useWorkspaceStore.getState().activeWorkspaceId ||
+                "default";
+              await useWorkspaceStore.getState().fetchWorkspacePlugins(targetWorkspace);
+            } catch {
+              // Non-fatal: dock mount below still shows the tool
+            }
+            callbacks?.onExperienceCreated?.({
+              id: event.plugin.id,
+              title: event.plugin.title,
+              icon: event.plugin.icon,
+            });
+            set({
+              isBuildingTool: false,
+              statusText: isNew
+                ? `Mounted "${event.plugin.title}" in the dock.`
+                : `Updated "${event.plugin.title}".`,
+            });
+            callbacks?.onOpenExperience?.(event.plugin.id);
+            if (!isDockAdd) {
+              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+                set({ layoutState: "side" });
+              } else {
+                set({ layoutState: "closed" });
+              }
+            }
+            break;
+          }
+
+          case "plugin.published":
+            set({
+              isBuildingTool: false,
+              statusText: `Published "${event.plugin.title}" to the store.`,
+            });
+            break;
+
+          case "plugin.operated":
+            set({
+              statusText: event.action
+                ? `Ran "${event.action}".`
+                : "Done.",
             });
             break;
 

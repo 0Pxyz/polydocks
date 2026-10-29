@@ -85,11 +85,13 @@ One agent, one loop. No multi-agent graph, no verifier agent, no planner. Keep i
 
 **Config (env only, no hardcoded model ids):** `MODEL_BASE_URL`, `MODEL_ID`, `MODEL_API_KEY`, `MAX_STEPS`, `TINYFISH_API_KEY`. Swapping to an open-weight Muse Spark served by a hosted provider (or our own vLLM/SGLang) must need only these variables.
 
-**Tools** live in `server/agent/tools/<name>.ts`, one per file, loaded by glob. Each exports `{ description, schema (zod), execute }`. The filename is the tool name (`[a-zA-Z0-9_.-]`).
+**Tools** live in `server/agent/tools/<name>.ts`, one per file, registered in `server/agent/tools/index.ts` (`defaultTools`, the set `runAgentLoop` uses). Each exports `{ name, description, schema (zod), execute }`. The filename is the tool name (`[a-zA-Z0-9_.-]`).
 
-Phase 1 tools: `list_tabs`, `open_tab`, `close_tray`, `create_tab`, `update_tab`, `delete_tab` (needs user approval), `get_city_context`, `read_city_file`, `open_source`.
+Tool families: dock tabs (`list_tabs`, `open_tab`, `open_intent`, `inspect_tab`, `close_tray`, `create_tab`, `update_tab`, `delete_tab` — delete needs user approval), city files (`get_city_context`, `read_city_file`, `write_city_file`, `open_source`), maps (`plan_map`, `plan_ascii_world`, `list_maps`, `set_map`, `place_city`, `build_city`), workspace files (`list_files`, `read_file`, `write_file`, `edit_file`, `search_files`), plugins (`create_plugin`, `modify_plugin`, `operate_plugin`, `publish_plugin`, `promote_to_plugin`, `inspect_experience`, plus `find_capabilities` / `invoke_capability` over the capability bus), introspection (`inspect_execution`, `list_recent_executions`), memory (`recall_memory`, `record_memory`).
 
-Discovery tools (TinyFish, section 4b): `search_web`, `fetch_page`, `add_source`.
+Discovery tools (TinyFish, section 4b): `search_web`, `fetch_page`.
+
+Plugin tools emit reactive SSE events (`plugin.created`, `plugin.updated`, `plugin.published`, `plugin.operated`) so the UI mounts, opens, and refreshes tools in the dock the same way `create_tab` emits `tab.created`.
 
 **Tabs created by the agent** are single self-contained HTML files with a manifest `{ id, title, icon, scope }`, rendered in `<iframe sandbox="allow-scripts" srcdoc>`. They talk to the app only through the `postMessage` bridge: `polymax.storage.get/set`, `polymax.openUrl`, `polymax.getContext`. No external scripts, no direct DOM access to the host. Skill prompt: `server/agent/skills/create-tab.md`.
 

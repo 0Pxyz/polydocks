@@ -6,6 +6,8 @@ export interface SendAgentMessageOptions {
   cityId?: string;
   userId?: string;
   modelId?: string;
+  /** Reasoning effort level ("auto" omits the parameter server-side). */
+  reasoningEffort?: string;
   attachments?: ChatAttachment[];
   origin?: "dock-add" | "chat";
   history?: Array<{ role: "user" | "assistant"; content: string }>;
@@ -21,7 +23,7 @@ export interface SendAgentMessageOptions {
 export async function streamAgentLoop(
   options: SendAgentMessageOptions
 ): Promise<void> {
-  const { prompt, cityId, userId, modelId, attachments, origin, history = [], retry = false, onEvent, signal } = options;
+  const { prompt, cityId, userId, modelId, reasoningEffort, attachments, origin, history = [], retry = false, onEvent, signal } = options;
 
   let response: Response;
   try {
@@ -37,6 +39,7 @@ export async function streamAgentLoop(
         cityId,
         userId,
         modelId,
+        reasoningEffort,
         attachments,
         origin,
         retry,

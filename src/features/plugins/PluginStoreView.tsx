@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   MagnifyingGlass,
-  DownloadSimple,
+  ArrowUpRight,
   Check,
+  X,
+  CircleNotch,
   Storefront,
-  Sparkle,
 } from "@phosphor-icons/react";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { cn } from "@/lib/cn";
@@ -28,19 +29,23 @@ interface PluginStoreViewProps {
 
 /**
  * Plugin Store: Native Workspace Experience
- * Replaces floating window boxes with a full-content application view
- * consistent with Settings and City Workspaces.
+ * Minimal catalog surface. Each card shows only what identifies the plugin:
+ * icon, name, a one-line purpose, and a single quiet action. Version, author,
+ * tags and download count stay behind the catalog data for a details view.
  */
-export function PluginStoreView({ onOpenPlugin }: PluginStoreViewProps) {
-  const { activeWorkspaceId, workspacePlugins, fetchWorkspacePlugins } = useWorkspaceStore();
+export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProps) {
+  const { activeWorkspaceId, workspacePlugins, fetchWorkspaces, fetchWorkspacePlugins } = useWorkspaceStore();
   const [plugins, setPlugins] = useState<RegistryPluginCard[]>([]);
   const [search, setSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("All");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [failedId, setFailedId] = useState<string | null>(null);
 
   const fetchRegistry = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const query = new URLSearchParams();
       if (search.trim()) query.set("search", search.trim());
@@ -53,7 +58,7 @@ export function PluginStoreView({ onOpenPlugin }: PluginStoreViewProps) {
         setPlugins(json.data);
       }
     } catch {
-      // ignore
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -61,10 +66,31 @@ export function PluginStoreView({ onOpenPlugin }: PluginStoreViewProps) {
 
   useEffect(() => {
     fetchRegistry();
-  }, [fetchRegistry]);
+    // Hydrate the workspace list and its installed plugins; without this the
+    // viewed workspace state stayed empty and installed plugins looked fresh.
+    fetchWorkspaces();
+  }, [fetchRegistry, fetchWorkspaces]);
+
+  // Derive categories from the catalog itself. The user's current selection is
+  // always kept in the list so an empty result set can never trap them.
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const plugin of plugins) {
+      for (const tag of plugin.tags) {
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      }
+    }
+    const rest = [...counts.keys()]
+      .sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0));
+    if (selectedTag !== "All" && !rest.includes(selectedTag)) {
+      rest.unshift(selectedTag);
+    }
+    return ["All", ...rest];
+  }, [plugins, selectedTag]);
 
   const handleInstall = async (pluginId: string) => {
     setInstallingId(pluginId);
+    setFailedId(null);
     try {
       const res = await fetch(`/api/registry/${encodeURIComponent(pluginId)}/install`, {
         method: "POST",
@@ -77,153 +103,187 @@ export function PluginStoreView({ onOpenPlugin }: PluginStoreViewProps) {
         if (onOpenPlugin) {
           onOpenPlugin(pluginId);
         }
+      } else {
+        setFailedId(pluginId);
       }
     } catch {
-      // ignore
+      setFailedId(pluginId);
     } finally {
       setInstallingId(null);
     }
   };
 
   const installedSet = new Set(workspacePlugins.map((wp) => wp.pluginId));
-  const allTags = ["All", "Productivity", "Timer", "Focus", "Micro-app"];
 
   return (
-    <div className="w-full max-w-5xl px-4 py-8 flex flex-col items-center gap-8 select-none">
+    <div className="w-full max-w-5xl px-4 py-8 flex flex-col gap-6 select-none">
       {/* Header */}
-      <div className="flex flex-col items-center text-center">
-        <h1 className="text-3xl sm:text-4xl font-semibold text-white tracking-normal mb-2">
-          Plugin Store
-        </h1>
-        <p className="text-sm text-[#9aa5b8] max-w-md font-sans">
-          Discover, install, and share agent-synthesized tools across your workspaces
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight text-white/95">
+            Plugin Store
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] font-sans mt-0.5">
+            Install community tools into this workspace.
+          </p>
+        </div>
+
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
-      {/* Filter and Search controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 w-full">
-        <div className="relative flex-1 min-w-[260px] max-w-md">
+      {/* Search and category segmented control */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
           <MagnifyingGlass
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9aa5b8]"
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
           />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search plugins by name, tag, or description..."
-            className="w-full bg-white/[0.04] border border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-[#9aa5b8] focus:outline-none focus:border-[var(--accent-lime)]/50 transition-colors font-sans"
+            placeholder="Search plugins…"
+            className="w-full bg-white/[0.04] border border-[var(--border-subtle)] rounded-full pl-9 pr-4 py-1.5 text-xs text-white placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--border-hover)] transition-colors font-sans"
           />
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {allTags.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => setSelectedTag(tag)}
-              className={cn(
-                "px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer whitespace-nowrap",
-                selectedTag === tag
-                  ? "bg-[var(--accent-lime)] text-black font-semibold"
-                  : "bg-white/[0.04] text-[#9aa5b8] hover:text-white hover:bg-white/[0.08]"
-              )}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
+        {categories.length > 0 && (
+          <div className="flex items-center gap-1 rounded-full bg-white/[0.04] border border-[var(--border-subtle)] p-0.5">
+            {categories.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setSelectedTag(tag)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap",
+                  selectedTag === tag
+                    ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] font-medium"
+                    : "text-[var(--text-muted)] hover:text-white"
+                )}
+              >
+                {tag === "All" ? "All" : tag.charAt(0).toUpperCase() + tag.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Plugin Cards Grid */}
+      {/* Catalog */}
       <div className="w-full">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-xs text-[#9aa5b8] gap-2">
-            <Sparkle size={20} className="text-[var(--accent-lime)] animate-spin" />
-            <span>Browsing community catalog…</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[76px] rounded-2xl bg-white/[0.02] animate-pulse"
+              />
+            ))}
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+            <Storefront size={28} className="text-[var(--text-dim)]" />
+            <p className="text-xs text-[var(--text-muted)]">Couldn&apos;t load the catalog.</p>
+            <button
+              type="button"
+              onClick={fetchRegistry}
+              className="text-xs text-[var(--accent-lime)] hover:underline cursor-pointer"
+            >
+              Try again
+            </button>
           </div>
         ) : plugins.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Storefront size={32} className="text-[#9aa5b8] mb-2 opacity-50" />
-            <h3 className="text-sm font-semibold text-white mb-1">No plugins found</h3>
-            <p className="text-xs text-[#9aa5b8] max-w-sm">
-              Try adjusting your search or ask the Agent: "Build a Pomodoro timer and publish it".
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Storefront size={28} className="text-[var(--text-dim)]" />
+            <p className="text-xs text-[var(--text-muted)] max-w-xs mt-2">
+              No plugins here yet. Ask the agent to build one, then publish it.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
             {plugins.map((plugin) => {
               const isInstalled = installedSet.has(plugin.id);
               const isInstalling = installingId === plugin.id;
+              const isFailed = failedId === plugin.id;
               const IconComp = resolveIcon(plugin.icon);
 
               return (
                 <div
                   key={plugin.id}
-                  className="flex flex-col justify-between p-4 rounded-xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/5 transition-all duration-150 group"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (isInstalling) return;
+                    if (isInstalled) {
+                      onOpenPlugin?.(plugin.id);
+                    } else {
+                      handleInstall(plugin.id);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      (e.currentTarget as HTMLElement).click();
+                    }
+                  }}
+                  className="group flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.04] focus-visible:bg-white/[0.04] outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-lime)]/40 cursor-pointer transition-colors duration-150"
                 >
-                  <div>
-                    <div className="flex items-start justify-between gap-3 mb-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-white/[0.06] flex items-center justify-center text-[var(--accent-lime)] shrink-0">
-                          <IconComp size={18} />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-white group-hover:text-[var(--accent-lime)] transition-colors">
-                            {plugin.name}
-                          </h3>
-                          <span className="text-[10px] text-[#9aa5b8] font-mono">
-                            v{plugin.version} · by {plugin.author}
-                          </span>
-                        </div>
-                      </div>
-
-                      <span className="text-[10px] text-[#9aa5b8] font-mono flex items-center gap-1 shrink-0 bg-white/[0.04] px-2 py-0.5 rounded-full">
-                        <DownloadSimple size={11} />
-                        {plugin.downloads}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-[#9aa5b8] line-clamp-2 mb-3 leading-relaxed font-sans">
-                      {plugin.description}
-                    </p>
-
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {plugin.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="text-[10px] font-mono text-[#9aa5b8] bg-white/[0.04] px-2 py-0.5 rounded"
-                        >
-                          #{t}
-                        </span>
-                      ))}
-                    </div>
+                  {/* Icon */}
+                  <div className="w-11 h-11 rounded-[14px] bg-white/[0.06] flex items-center justify-center text-[var(--text-main)] shrink-0">
+                    <IconComp size={22} />
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-white/[0.04]">
-                    <span className="text-[11px] text-[#9aa5b8] truncate font-sans">
-                      {isInstalled ? "Mounted in dock" : "Available to install"}
-                    </span>
+                  {/* Name and purpose */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="text-sm font-medium text-white/95 truncate">
+                        {plugin.name}
+                      </h3>
+                      <ArrowUpRight
+                        size={13}
+                        weight="bold"
+                        className="text-[var(--text-dim)] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity shrink-0"
+                      />
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] truncate mt-0.5 font-sans">
+                      {plugin.description}
+                    </p>
+                  </div>
 
-                    {isInstalled ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPlugin?.(plugin.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.08] hover:bg-white/[0.12] text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                      >
-                        <Check size={13} className="text-[var(--accent-lime)]" weight="bold" />
-                        <span>Open</span>
-                      </button>
+                  {/* Single quiet action */}
+                  <div
+                    className={cn(
+                      "flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium shrink-0 transition-colors",
+                      isFailed
+                        ? "bg-red-500/10 text-red-300"
+                        : isInstalling
+                          ? "bg-white/[0.04] text-[var(--text-muted)]"
+                          : isInstalled
+                            ? "bg-[var(--accent-lime)]/10 text-[var(--accent-lime)]"
+                            : "bg-white/[0.04] text-[var(--text-muted)] group-hover:bg-[var(--accent-lime)]/10 group-hover:text-[var(--accent-lime)]"
+                    )}
+                  >
+                    {isFailed ? (
+                      <>Retry</>
+                    ) : isInstalling ? (
+                      <>
+                        <CircleNotch size={11} className="animate-spin" />
+                        Installing
+                      </>
+                    ) : isInstalled ? (
+                      <>
+                        <Check size={11} weight="bold" />
+                        Open
+                      </>
                     ) : (
-                      <button
-                        type="button"
-                        disabled={isInstalling}
-                        onClick={() => handleInstall(plugin.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent-lime)] text-black hover:opacity-90 rounded-lg text-xs font-semibold transition-opacity cursor-pointer disabled:opacity-50"
-                      >
-                        <DownloadSimple size={13} weight="bold" />
-                        <span>{isInstalling ? "Installing…" : "Install"}</span>
-                      </button>
+                      <>Install</>
                     )}
                   </div>
                 </div>
