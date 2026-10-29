@@ -798,7 +798,7 @@ export function AgentConversation({
                 key={msg.id}
                 data-msg-role="assistant"
                 data-msg-id={msg.id}
-                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
+                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}

@@ -25,9 +25,25 @@ const DEFAULT_CAMERA: CameraState = {
   zoom: 1,
 };
 
-export const useNavigationStore = create<NavigationState>((set) => ({
-  viewMode: "world",
-  activeCityId: null,
+/**
+ * Deep link: ?city=<id> boots straight into a city (shareable links,
+ * smoke tests). Invalid/empty values fall back to the world view.
+ */
+function initialCityFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const id = new URLSearchParams(window.location.search).get("city");
+    return id && id.trim().length > 0 ? id.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export const useNavigationStore = create<NavigationState>((set) => {
+  const bootCityId = initialCityFromUrl();
+  return {
+    viewMode: bootCityId ? "city" : "world",
+    activeCityId: bootCityId,
   camera: DEFAULT_CAMERA,
 
   enterCity: (cityId: string) =>
@@ -54,4 +70,5 @@ export const useNavigationStore = create<NavigationState>((set) => ({
     set({
       camera: DEFAULT_CAMERA,
     }),
-}));
+  };
+});
