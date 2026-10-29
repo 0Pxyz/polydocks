@@ -6,15 +6,18 @@ import {
   Sparkle,
   Plus,
   Storefront,
-  Sliders,
   Folder,
+  Gear,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
 import { DockIcon } from "@/components/icons/DockIcon";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 import type { IconComponent } from "@/components/icons/adapter";
+import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
+import { useDockStore } from "@/lib/store/useDockStore";
+import { computeVisibleCap } from "@/lib/dock/dockModel";
 import { DOCK_STYLES } from "./styles";
 import { DockStatusLine } from "@/features/profile/DockStatusLine";
 
@@ -26,6 +29,8 @@ export interface DockToolItem {
   label: string;
   type: "icon" | "text" | "terminal";
   icon?: IconComponent | React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  /** Icon key for search rows and uniqueness checks (kept when icon is resolved). */
+  iconKey?: string;
   text?: string;
   isAgent?: boolean;
 }
@@ -85,7 +90,7 @@ export const HOME_DOCK_TOOLS: DockToolItem[] = [
     id: "settings",
     label: "Settings",
     type: "icon",
-    icon: Sliders,
+    icon: Gear,
   },
 ];
 
@@ -125,7 +130,7 @@ export const CITY_DOCK_TOOLS: DockToolItem[] = [
     id: "settings",
     label: "Settings",
     type: "icon",
-    icon: Sliders,
+    icon: Gear,
   },
 ];
 
@@ -141,7 +146,7 @@ interface AgenticDockProps {
   isAgentSheetOpen?: boolean;
   extraTools?: DockToolItem[];
   tools?: DockToolItem[];
-  onSubmitToolPrompt?: (prompt: string) => void;
+  onOpenSearch?: () => void;
   isBuilding?: boolean;
   buildingName?: string;
   statusText?: string;
@@ -158,7 +163,7 @@ export function AgenticDock({
   isAgentSheetOpen = false,
   extraTools = [],
   tools: explicitTools,
-  onSubmitToolPrompt,
+  onOpenSearch,
   isBuilding = false,
   buildingName,
   statusText,
@@ -168,50 +173,18 @@ export function AgenticDock({
   const headerRef = useRef<HTMLElement>(null);
   const baseHudRef = useRef<HTMLDivElement>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
-  const plusButtonRef = useRef<HTMLButtonElement>(null);
-  const creatorDrawerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const [internalActiveToolId, setInternalActiveToolId] = useState<string>("");
-  const [showCreator, setShowCreator] = useState<boolean>(false);
-  const [creatorPrompt, setCreatorPrompt] = useState<string>("");
-  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [transientMessage, setTransientMessage] = useState<string | null>(null);
+  const [barWidth, setBarWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1280
+  );
   const activeToolId = controlledActiveToolId ?? internalActiveToolId;
 
-  const suggestions = cityName?.trim()
-    ? [
-        `Flashcards for ${cityName}`,
-        `Compare two sources on ${cityName}`,
-        `A timeline of ${cityName}`,
-      ]
-    : ["Flashcards", "A reading list", "A timeline"];
-
-  const closeCreator = () => {
-    setShowCreator(false);
-    setCreatorPrompt("");
-    setSelectedIndex(-1);
-    plusButtonRef.current?.focus();
-  };
-
-  const handleSelectSuggestion = (text: string) => {
-    const query = text.trim();
-    if (!query) return;
-    closeCreator();
-    if (isBuilding) {
-      setTransientMessage(`Still building ${buildingName || "tool"}`);
-      setTimeout(() => setTransientMessage(null), 3000);
-      return;
-    }
-    onSubmitToolPrompt?.(query);
-  };
-
-  // Focus input when creator opens
-  useEffect(() => {
-    if (showCreator) {
-      inputRef.current?.focus();
-    }
-  }, [showCreator]);
+  // Single action layer: pinned order and open tabs live in the dock store,
+  // shared with the search palette and the agent.
+  const pinnedToolIds = useDockStore((s) => s.pinnedToolIds);
+  const openIds = useDockStore((s) => s.openIds);
 
   // Global ⌘K shortcut for agent conversation
   useEffect(() => {
@@ -220,33 +193,22 @@ export function AgenticDock({
         e.preventDefault();
         onSelectTool?.("agent");
       }
-      if (e.key === "Escape" && showCreator) {
-        closeCreator();
-      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onSelectTool, showCreator]);
+  }, [onSelectTool]);
 
-  // Click outside to close creator drawer
+  // Measure the full-width bar so the visible cap derives from available
+  // width instead of a magic item count.
   useEffect(() => {
-    if (!showCreator) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        creatorDrawerRef.current &&
-        !creatorDrawerRef.current.contains(target) &&
-        plusButtonRef.current &&
-        !plusButtonRef.current.contains(target)
-      ) {
-        closeCreator();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showCreator]);
-
-  // Measure dock offset dynamically from the capsule and publish --dock-bottom and --dock-offset to :root
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => setBarWidth(el.getBoundingClientRect().width);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const { dockStyle, dockPosition } = useThemeStore();
   const isBottom = dockPosition === "bottom";
   const currentStyle = DOCK_STYLES[dockStyle] || DOCK_STYLES.glass;
@@ -290,32 +252,11 @@ export function AgenticDock({
   }, [isBottom]);
 
   const handleToolClick = (toolId: string) => {
-    if (showCreator) closeCreator();
     const nextToolId = activeToolId === toolId ? "" : toolId;
     if (controlledActiveToolId === undefined) {
       setInternalActiveToolId(nextToolId);
     }
     onSelectTool?.(nextToolId);
-  };
-
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % suggestions.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setSelectedIndex((prev) => (prev <= 0 ? suggestions.length - 1 : prev - 1));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-        handleSelectSuggestion(suggestions[selectedIndex]);
-      } else if (creatorPrompt.trim()) {
-        handleSelectSuggestion(creatorPrompt.trim());
-      }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      closeCreator();
-    }
   };
 
   const activeStatus =
@@ -330,80 +271,34 @@ export function AgenticDock({
   const baseTools = explicitTools ?? defaultTools;
   const allTools = [...baseTools, ...extraTools];
 
-  const drawerElement = (
-    <AnimatePresence>
-      {showCreator && (
-        <motion.div
-          ref={creatorDrawerRef}
-          layout
-          initial={{ opacity: 0, y: isBottom ? 6 : -6, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: isBottom ? 6 : -6, scale: 0.98 }}
-          transition={{ duration: 0.15 }}
-          className={cn(
-            "pointer-events-auto w-[calc(100vw-32px)] max-w-[460px] min-w-[340px] bg-[#0c0e14]/95 backdrop-blur-xl rounded-2xl p-2 shadow-2xl flex flex-col gap-1 z-50",
-            isBottom ? "mb-2" : "mt-2"
-          )}
-        >
-          <div className="w-full flex items-center">
-            <input
-              ref={inputRef}
-              type="text"
-              value={creatorPrompt}
-              onChange={(e) => {
-                setCreatorPrompt(e.target.value);
-                setSelectedIndex(-1);
-              }}
-              onKeyDown={handleInputKeyDown}
-              placeholder="Add a tool"
-              className="w-full px-3 py-2 text-[15px] text-white placeholder:text-[#9aa5b8] bg-transparent outline-none rounded-xl"
-              aria-label="Tool to add"
-              role="combobox"
-              aria-expanded={showCreator}
-              aria-autocomplete="list"
-              aria-controls="creator-suggestions"
-              aria-activedescendant={
-                selectedIndex >= 0 ? `creator-suggestion-${selectedIndex}` : undefined
-              }
-            />
-          </div>
+  // The bar stays small and curated: pinned items first (in pinned order),
+  // then open unpinned items. Everything else is reachable through search.
+  // The visible slice derives from measured bar width, never a magic count.
+  const visibleCap = computeVisibleCap(barWidth);
+  const byId = new Map(allTools.map((tool) => [tool.id, tool]));
+  const orderedIds = [
+    ...pinnedToolIds,
+    ...openIds.filter((id) => !pinnedToolIds.includes(id)),
+  ];
+  const visibleTools = orderedIds
+    .map((id) => byId.get(id))
+    .filter((tool): tool is DockToolItem => tool !== undefined)
+    .slice(0, visibleCap);
 
-          <div
-            id="creator-suggestions"
-            role="listbox"
-            className="flex flex-col gap-0.5 pt-0.5"
-          >
-            {suggestions.map((suggestion, idx) => {
-              const isSelected = selectedIndex === idx;
-              return (
-                <button
-                  key={suggestion}
-                  id={`creator-suggestion-${idx}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  type="button"
-                  onClick={() => handleSelectSuggestion(suggestion)}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                  className={cn(
-                    "w-full text-left px-3 py-2 text-[15px] rounded-xl transition-colors cursor-pointer outline-none",
-                    isSelected
-                      ? "bg-white/[0.08] text-white"
-                      : "text-[#d1d6e2] hover:bg-white/[0.05] hover:text-white"
-                  )}
-                >
-                  {suggestion}
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  // Every visible item gets a unique icon: the first tool keeps its icon,
+  // later duplicates fall back to deterministic distinct glyphs.
+  const usedIcons = new Set<IconComponent>();
+  const barIcons = new Map<string, IconComponent>();
+  for (const tool of visibleTools) {
+    const key = tool.iconKey || tool.id;
+    const resolved = resolveUniqueIcon(key, usedIcons);
+    usedIcons.add(resolved);
+    barIcons.set(tool.id, resolved);
+  }
 
   const statusElement = (
     <AnimatePresence>
-      {activeStatus && !showCreator && (
+      {activeStatus && (
         <motion.div
           initial={{ opacity: 0, y: isBottom ? 2 : -2 }}
           animate={{ opacity: 1, y: 0 }}
@@ -439,8 +334,7 @@ export function AgenticDock({
         className
       )}
     >
-      {/* If bottom dock, show drawer and transient status above the capsule */}
-      {isBottom && drawerElement}
+      {/* If bottom dock, show transient status above the capsule */}
       {isBottom && statusElement}
 
       {/* Stable Base HUD (Status Line + Dock Capsule) */}
@@ -459,7 +353,7 @@ export function AgenticDock({
         )}
       >
         <AnimatePresence mode="popLayout" initial={false}>
-          {allTools.map((tool) => {
+          {visibleTools.map((tool) => {
             const isAgent = tool.isAgent;
             const isActive = isAgent
               ? activeToolId === tool.id || isAgentSheetOpen
@@ -488,7 +382,7 @@ export function AgenticDock({
                 aria-label={tool.label}
               >
                 <DockIcon
-                  icon={tool.icon}
+                  icon={barIcons.get(tool.id) ?? tool.icon}
                   name={tool.id}
                   isActive={isActive}
                   isAgent={isAgent}
@@ -551,47 +445,31 @@ export function AgenticDock({
           )}
         </AnimatePresence>
 
-        {/* Dynamic Tool Creator Button */}
+        {/* Search Button: opens dock search (⌘⇧P) */}
         <button
-          ref={plusButtonRef}
           type="button"
-          onClick={() => {
-            if (showCreator) {
-              closeCreator();
-            } else {
-              setShowCreator(true);
-            }
-          }}
-          aria-expanded={showCreator}
-          aria-label="Add a tool"
+          onClick={() => onOpenSearch?.()}
+          aria-label="Search tools"
           className={cn(
             "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus:outline-none",
-            !showCreator && currentStyle.inactiveItemClass,
-            showCreator && "text-white bg-white/[0.08]",
+            currentStyle.inactiveItemClass,
             currentStyle.enableLift && !isReducedMotion && "hover:scale-115"
           )}
         >
-          <Plus
-            size={20}
-            className={cn(
-              "transition-transform duration-150 origin-center",
-              showCreator && "rotate-45"
-            )}
-          />
+          <Plus size={20} className="transition-transform duration-150 origin-center" />
           <span
             className={cn(
               "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
               isBottom ? "-top-8" : "-bottom-8"
             )}
           >
-            Add
+            Search tools
           </span>
         </button>
       </motion.div>
     </div>
 
-      {/* If top dock, show drawer and transient status below the capsule */}
-      {!isBottom && drawerElement}
+      {/* If top dock, show transient status below the capsule */}
       {!isBottom && statusElement}
     </header>
   );
