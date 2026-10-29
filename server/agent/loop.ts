@@ -3,7 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, stripSkillMetadata, isTabSynthesisIntent, isPluginSynthesisIntent, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { loadSkill, stripSkillMetadata, selectDomainSkills, isResearchIntent, isWorldPlanningIntent } from "./skills";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
@@ -339,23 +339,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Non-fatal if memory retrieval encounters an issue
     }
 
-    if (origin === "dock-add" || isTabSynthesisIntent(prompt)) {
-      try {
-        const tabSkillPrompt = await loadSkill("create-tab");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Dynamic Tab Synthesis\n${tabSkillPrompt}`;
-        loadedSkills.push("create-tab");
-      } catch {
-        // Non-fatal
-      }
+    // Domain skills: at most two per turn, chosen by intent. Missing files
+    // are skipped (a skill may not exist yet); the tools stay available.
+    const domainSkills = selectDomainSkills(prompt);
+    if (origin === "dock-add" && !domainSkills.includes("plugins") && !domainSkills.includes("dock-and-tabs")) {
+      domainSkills.unshift("dock-and-tabs");
     }
-
-    if (isPluginSynthesisIntent(prompt)) {
+    for (const name of domainSkills.slice(0, 2)) {
       try {
-        const pluginSkillPrompt = await loadSkill("synthesize-plugin");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Synthesize & Modify PolyDocks Plugins\n${pluginSkillPrompt}`;
-        loadedSkills.push("synthesize-plugin");
+        const content = stripSkillMetadata(await loadSkill(name));
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: ${name}\n${content}`;
+        loadedSkills.push(name);
       } catch {
-        // Non-fatal
+        // Non-fatal: skill file not present yet.
       }
     }
 

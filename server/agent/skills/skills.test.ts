@@ -17,16 +17,81 @@ import {
 } from "./index";
 import { runAgentLoop } from "../loop";
 
-describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
-  it("loadSkill loads create-tab.md with strict design tokens and bridge contract", async () => {
-    const content = await loadSkill("create-tab");
-    expect(content).toBeDefined();
-    expect(content).toContain("#0A0A0C");
-    expect(content).toContain("#C8FF57");
+describe("Domain skills: plugins and dock-and-tabs (backend contracts)", () => {
+  it("plugins skill states the fix-first lifecycle and backend contract", async () => {
+    const content = stripSkillMetadata(await loadSkill("plugins"));
+    expect(content).toContain("inspect_experience");
+    expect(content).toContain("modify_plugin");
+    expect(content).toContain("Never recreate to fix");
+    expect(content).toContain("changeSummary");
+    expect(content).toContain("plugin.created");
+    expect(content).toContain("plugin.updated");
+    expect(content).toContain("experience_errors");
+    expect(content).not.toContain("openContent");
+    expect(content).not.toContain("useCapability");
+  });
+
+  it("dock-and-tabs skill states tab scope, approval flow, and bridge", async () => {
+    const content = stripSkillMetadata(await loadSkill("dock-and-tabs"));
+    expect(content).toContain("workspace/<city>/features/<id>/");
+    expect(content).toContain("approval_required");
     expect(content).toContain("window.polymax");
-    expect(content).toContain("window.polymax.storage");
-    expect(content).toContain("Canonical Example 1: Interactive Flashcards");
-    expect(content).toContain("Canonical Example 2: Research Paper Comparison Matrix");
+    expect(content).toContain("allow-scripts");
+    expect(content).not.toContain("Content-Security-Policy");
+    expect(content).toContain("No `openContent` or `useCapability` on this backend");
+  });
+
+  it("both replacement skills stay within the 600-token budget", async () => {
+    for (const name of ["plugins", "dock-and-tabs"]) {
+      expect(skillTokens(await loadSkill(name))).toBeLessThanOrEqual(600);
+    }
+  });
+
+  it("isTabSynthesisIntent detects tab creation prompts across languages", () => {
+    expect(isTabSynthesisIntent("create a tab for flashcards")).toBe(true);
+    expect(isTabSynthesisIntent("cria uma tab de resumo")).toBe(true);
+    expect(isTabSynthesisIntent("build a tool for papers comparator")).toBe(true);
+    expect(isTabSynthesisIntent("make a flashcard quiz")).toBe(true);
+    expect(isTabSynthesisIntent("crie uma nova experiência na dock com um mapa do tema")).toBe(true);
+    expect(isTabSynthesisIntent("create an interactive concept map")).toBe(true);
+
+    expect(isTabSynthesisIntent("what is the weather today?")).toBe(false);
+    expect(isTabSynthesisIntent("hello world")).toBe(false);
+  });
+
+  it("runAgentLoop injects the plugins skill for a fix request", async () => {
+    let capturedSystemMessage = "";
+
+    const mockLlmClient: any = {
+      chat: {
+        completions: {
+          create: async (params: any) => {
+            const sys = params.messages.find((m: any) => m.role === "system");
+            capturedSystemMessage = sys?.content || "";
+            return {
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: "Inspecting the reader before patching...",
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    await runAgentLoop({
+      prompt: "fix the reader",
+      cityId: "quantum-computing",
+      llmClient: mockLlmClient,
+    });
+
+    expect(capturedSystemMessage).toContain("Specialized Skill: plugins");
+    expect(capturedSystemMessage).toContain("inspect_experience");
+    expect(capturedSystemMessage).toContain("modify_plugin");
   });
 
   it("loadSkill loads web-research.md skill", async () => {
@@ -49,21 +114,7 @@ describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
     expect(isTabSynthesisIntent("hello world")).toBe(false);
   });
 
-  it("both canonical examples contain valid executable structures", async () => {
-    const content = await loadSkill("create-tab");
-
-    // Check Example 1: Flashcards
-    expect(content).toContain("<div class=\"card-inner\" id=\"card\">");
-    expect(content).toContain("function flipCard()");
-    expect(content).toContain("window.polymax.storage.set('flashcard_score'");
-
-    // Check Example 2: Paper Comparator
-    expect(content).toContain("Research Paper Comparator");
-    expect(content).toContain("function setFilter(filter)");
-    expect(content).toContain("function openPaper(url)");
-  });
-
-  it("runAgentLoop dynamically injects create-tab skill into system messages on tab synthesis intent", async () => {
+  it("runAgentLoop injects the dock-and-tabs skill for a list request", async () => {
     let capturedSystemMessage = "";
 
     const mockLlmClient: any = {
@@ -73,14 +124,7 @@ describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
             const sys = params.messages.find((m: any) => m.role === "system");
             capturedSystemMessage = sys?.content || "";
             return {
-              choices: [
-                {
-                  message: {
-                    role: "assistant",
-                    content: "Synthesizing flashcards tab now...",
-                  },
-                },
-              ],
+              choices: [{ message: { role: "assistant", content: "Listing tabs..." } }],
             };
           },
         },
@@ -88,14 +132,12 @@ describe("Agent Skills System & UI Synthesis Skill (create-tab)", () => {
     };
 
     await runAgentLoop({
-      prompt: "create a tab of flashcards for quantum computing",
-      cityId: "quantum-computing",
+      prompt: "what tabs do I have",
       llmClient: mockLlmClient,
     });
 
-    expect(capturedSystemMessage).toContain("Specialized Skill: Dynamic Tab Synthesis");
-    expect(capturedSystemMessage).toContain("#0A0A0C");
-    expect(capturedSystemMessage).toContain("#C8FF57");
+    expect(capturedSystemMessage).toContain("Specialized Skill: dock-and-tabs");
+    expect(capturedSystemMessage).toContain("list_tabs");
   });
 
   it("isResearchIntent detects research queries; creation/update requests stay out", () => {
