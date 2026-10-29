@@ -30,7 +30,7 @@ import {
   buildDockSections,
   createItemsForQuery,
   getStaticCreateRows,
-  sliceEmptyQueryRows,
+  visibleEmptyQuery,
   DOCK_CORE_CATALOG,
   type DockItem,
   type DockItemKind,
@@ -306,12 +306,8 @@ export function CommandPalette({
   // static create rows. Pinned non-open items are hidden here (already in
   // the dock above) and appear once the user types.
   const emptySliced = useMemo(
-    () =>
-      sliceEmptyQueryRows({
-        open: dockedItems.filter((item) => openSet.has(item.id)),
-        yours: yoursItems,
-      }),
-    [dockedItems, yoursItems, openSet]
+    () => visibleEmptyQuery({ docked: dockedItems, yours: yoursItems, openIds }),
+    [dockedItems, yoursItems, openIds]
   );
   const staticCreateRows = useMemo(() => getStaticCreateRows(cityId), [cityId]);
 

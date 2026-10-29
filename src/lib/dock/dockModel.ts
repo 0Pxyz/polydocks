@@ -317,6 +317,24 @@ export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "flashcards", label: "Flashcards", description: "Interactive flashcards", icon: "flashcards", kind: "builtin" },
   { id: "terminal", label: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
   { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
-  { id: "store", label: "Plugin Store", description: "Community plugin store", icon: "store", kind: "builtin" },
+  // No store entry: the Plugin Store is not a dock item. Store plugins are
+  // reachable only through dock search, which installs and opens them.
   { id: "plugins", label: "Plugins", description: "Installed plugins", icon: "plugins", kind: "builtin" },
 ];
+
+/**
+ * Empty-query panel composition: open items, then unpinned tools (sliced to
+ * the panel cap), hiding pinned non-open items that already sit in the dock
+ * above. Pinned items reappear once the user types.
+ */
+export function visibleEmptyQuery(args: {
+  docked: DockItem[];
+  yours: DockItem[];
+  openIds: string[];
+}): { open: DockItem[]; yours: DockItem[] } {
+  const openSet = new Set(args.openIds);
+  return sliceEmptyQueryRows({
+    open: args.docked.filter((item) => openSet.has(item.id)),
+    yours: args.yours,
+  });
+}

@@ -6,10 +6,12 @@ import {
   createItemsForQuery,
   getStaticCreateRows,
   migratePinnedIds,
+  visibleEmptyQuery,
   scoreDockItem,
   sliceEmptyQueryRows,
   DEFAULT_PINNED_IDS,
   SYSTEM_TOOL_IDS,
+  DOCK_CORE_CATALOG,
   type DockItem,
   type DockLayoutState,
 } from "../src/lib/dock/dockModel";
@@ -181,6 +183,41 @@ describe("computeVisibleCap", () => {
     const cap = computeVisibleCap(500);
     expect(30).toBeGreaterThan(cap);
     expect(cap).toBeLessThan(12);
+  });
+});
+
+describe("visibleEmptyQuery", () => {
+  const row = (id: string): DockItem => ({
+    id,
+    label: id,
+    description: "",
+    icon: "cards",
+    kind: "tab",
+  });
+
+  test("hides pinned non-open items when the query is empty", () => {
+    const docked = [row("agent"), row("maps"), row("browser")];
+    const yours = [row("notes")];
+    const { open, yours: rest } = visibleEmptyQuery({ docked, yours, openIds: ["browser"] });
+    expect(open.map((r) => r.id)).toEqual(["browser"]);
+    expect(rest.map((r) => r.id)).toEqual(["notes"]);
+  });
+
+  test("shows pinned items again in the query path (no hiding there)", () => {
+    const sections = buildDockSections({
+      catalog: [row("agent"), row("maps")],
+      store: [],
+      layout: { pinnedIds: ["agent", "maps"], openIds: [] },
+      query: "map",
+      createForQuery: () => [],
+    });
+    expect(sections[0].items.map((i) => i.id)).toContain("maps");
+  });
+});
+
+describe("dock catalog", () => {
+  test("the Plugin Store is not a dock item", () => {
+    expect(DOCK_CORE_CATALOG.some((item) => item.id === "store")).toBe(false);
   });
 });
 
