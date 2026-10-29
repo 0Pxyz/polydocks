@@ -256,6 +256,10 @@ async function main() {
       }
     }
     console.log("[smoke] ALL GREEN");
+    // Explicit exit: the spawned server/browser child handles can keep the
+    // event loop alive after a green run, hanging CI until timeout.
+    // (SMOKE_KEEP still leaves the server up for local debugging.)
+    if (!process.env.SMOKE_KEEP) process.exit(0);
   } catch (err) {
     stopServer();
     throw err;

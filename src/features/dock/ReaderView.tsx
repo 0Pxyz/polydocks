@@ -8,6 +8,9 @@ export interface ReaderViewProps {
   onBack?: () => void;
   onOpenExternal?: (url: string) => void;
   className?: string;
+  /** Prefetched content (e.g. from a saved source): skips the live fetch. */
+  initialMarkdown?: string;
+  initialTitle?: string;
 }
 
 interface ReaderPayload {
@@ -24,13 +27,20 @@ interface ReaderPayload {
  * Native in-app Reader: articles render as app components (Markdown, no
  * iframe, so frame-blocking sites still open); videos use embeds.
  */
-export function ReaderView({ url, onBack, onOpenExternal, className = "" }: ReaderViewProps) {
+export function ReaderView({ url, onBack, onOpenExternal, className = "", initialMarkdown, initialTitle }: ReaderViewProps) {
   const [payload, setPayload] = useState<ReaderPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Saved sources already carry verified markdown: render it directly
+    // instead of re-fetching (works offline, never blank on blocked hosts).
+    if (typeof initialMarkdown === "string" && initialMarkdown.trim().length > 0) {
+      setPayload({ success: true, kind: "article", url, title: initialTitle || url, markdown: initialMarkdown });
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     setPayload(null);
@@ -53,7 +63,7 @@ export function ReaderView({ url, onBack, onOpenExternal, className = "" }: Read
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, initialMarkdown, initialTitle]);
 
   return (
     <div className={cn("w-full h-full flex-1 flex flex-col min-h-0 bg-transparent", className)}>
@@ -103,6 +113,8 @@ export function ReaderView({ url, onBack, onOpenExternal, className = "" }: Read
             <iframe
               src={payload.embedUrl}
               title={payload.title || "Video"}
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              referrerPolicy="no-referrer"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               className="w-full flex-1 min-h-[320px] border-0 rounded-xl"

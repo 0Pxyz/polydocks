@@ -113,6 +113,23 @@ export type UIEvent =
       attachmentId?: string;
     }
   | {
+      type: "reader.open";
+      step: number;
+      /** Source id (for quest promotion). */
+      id?: string;
+      /** URL (external fallback only; in-UI modes never auto-open tabs). */
+      url: string;
+      title?: string;
+      cityId?: string;
+      site?: string;
+      image?: string | null;
+      /** Open mode decided server-side. */
+      mode?: "video" | "reader" | "embed" | "external";
+      markdown?: string;
+      embedUrl?: string;
+      reason?: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -452,6 +469,27 @@ export function adaptBackendEvent(raw: {
         step,
         cityId: String(payload.cityId || ""),
       };
+
+    case "reader.open": {
+      const url = typeof payload.url === "string" ? payload.url : "";
+      if (!url) return null;
+      const pick = (k: string) => (typeof payload[k] === "string" ? (payload[k] as string) : undefined);
+      const mode = payload.mode;
+      return {
+        type: "reader.open",
+        step,
+        url,
+        id: pick("id"),
+        title: pick("title"),
+        cityId: pick("cityId"),
+        site: pick("site"),
+        image: (payload.image as string | null) ?? undefined,
+        mode: mode === "video" || mode === "reader" || mode === "embed" || mode === "external" ? mode : undefined,
+        markdown: pick("markdown"),
+        embedUrl: pick("embedUrl"),
+        reason: pick("reason"),
+      };
+    }
 
     case "error":
       return {

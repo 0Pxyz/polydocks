@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
+import { ReaderView } from "../dock/ReaderView";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
@@ -95,6 +96,9 @@ export function AgentConversation({
     lastEventAt,
     currentPhase,
     streamingText,
+    readerView,
+    closeReader,
+    promoteReaderToQuest,
     activeApproval,
     activeModel,
     soundEnabled,
@@ -183,6 +187,99 @@ export function AgentConversation({
     },
     [addAttachments]
   );
+
+  // In-chat reader panel: opened by sources.open, survives tab
+  // navigation (store-level), closes back to the feed. Video embeds use
+  // official players in a sandboxed iframe; articles render saved
+  // markdown (no iframe, never blank on frame-blocking hosts); PDFs
+  // embed only when the host permits; otherwise an explicit open link.
+  function ReaderPanel() {
+    if (!readerView) return null;
+    return (
+      <div className="fixed right-4 top-24 bottom-28 z-50 w-[min(400px,calc(100vw-2rem))] flex flex-col overflow-hidden rounded-2xl bg-[#0c1017]/95 backdrop-blur-2xl border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85)]">
+        <div className="flex items-start gap-2 px-4 pt-3 pb-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white leading-snug truncate">{readerView.title}</p>
+            {readerView.site && (
+              <p className="text-[11px] font-mono text-muted-foreground mt-0.5">{readerView.site}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={closeReader}
+            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-muted-foreground hover:text-white transition-colors cursor-pointer shrink-0"
+            title="Close reader"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-2">
+          {readerView.mode === "video" && readerView.embedUrl && (
+            <iframe
+              src={readerView.embedUrl}
+              title={readerView.title}
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              referrerPolicy="no-referrer"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full aspect-video border-0 rounded-xl bg-black/40"
+            />
+          )}
+          {readerView.mode === "reader" && (
+            <>
+              {readerView.image && (
+                <img src={readerView.image} alt="" loading="lazy" className="w-full aspect-video object-cover rounded-xl mb-3" />
+              )}
+              <ReaderView url={readerView.url} initialMarkdown={readerView.markdown} initialTitle={readerView.title} />
+            </>
+          )}
+          {readerView.mode === "embed" && readerView.embedUrl && (
+            <iframe
+              src={readerView.embedUrl}
+              title={readerView.title}
+              sandbox="allow-scripts allow-same-origin"
+              referrerPolicy="no-referrer"
+              className="w-full h-full min-h-[420px] border-0 rounded-xl bg-white"
+            />
+          )}
+          {readerView.mode === "external" && (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <p className="text-xs text-muted-foreground max-w-[240px] leading-relaxed">
+                {readerView.reason || "This source can't be shown here."}
+              </p>
+              <a
+                href={readerView.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-[var(--accent-lime)] hover:underline cursor-pointer"
+              >
+                Open the original ↗
+              </a>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2.5 border-t border-white/5">
+          {readerView.sourceId && readerView.cityId && (
+            <button
+              type="button"
+              onClick={() => void promoteReaderToQuest()}
+              className="text-xs text-[var(--accent-lime)] hover:underline cursor-pointer"
+            >
+              Save as quest
+            </button>
+          )}
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={closeReader}
+            className="text-xs text-muted-foreground hover:text-white transition-colors cursor-pointer"
+          >
+            Back to feed
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Cleanup realtime voice session on unmount
   useEffect(() => {
@@ -613,6 +710,7 @@ export function AgentConversation({
             </form>
           </div>
         </motion.div>
+        {readerView && <ReaderPanel />}
       </AnimatePresence>
     );
   }
@@ -1099,6 +1197,7 @@ export function AgentConversation({
           e.target.value = "";
         }}
       />
+      {readerView && <ReaderPanel />}
     </motion.div>
   );
 }

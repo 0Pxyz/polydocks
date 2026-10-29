@@ -70,26 +70,13 @@ export class TinyFishClient implements TinyFishAdapter {
       // Fall through on cache read error
     }
 
-    // 2. Fetch from TinyFish Search API
+    // 2. Fetch from TinyFish Search API.
+    // Always attempt the network call so hermetic fetch stubs stay
+    // effective even when no API key is configured; fall back to
+    // deterministic results only on network / API error.
     let results: SearchHit[] = [];
 
-    if (!this.apiKey) {
-      // Fallback deterministic results when API key is unconfigured in demo/test
-      results = [
-        {
-          title: `${trimmed} - Overview & Key Concepts`,
-          url: `https://example.com/learn/${encodeURIComponent(trimmed)}`,
-          snippet: `Authoritative guide covering foundational principles of ${trimmed}.`,
-          domainType,
-        },
-        {
-          title: `Visualized Introduction to ${trimmed}`,
-          url: `https://example.com/visual/${encodeURIComponent(trimmed)}`,
-          snippet: `Interactive visual explanations and drills for ${trimmed}.`,
-          domainType,
-        },
-      ];
-    } else {
+    {
       const url = new URL(this.searchBaseUrl);
       url.searchParams.set("query", trimmed);
       if (domainType) {
@@ -184,17 +171,13 @@ export class TinyFishClient implements TinyFishAdapter {
       return results;
     }
 
-    // 2. Fetch missing URLs
+    // 2. Fetch missing URLs.
+    // Always attempt the network call so hermetic fetch stubs stay
+    // effective even when no API key is configured; fall back to mock
+    // markdown only on network / API error.
     let fetchedBatch: FetchResult[] = [];
 
-    if (!this.apiKey) {
-      // Mock markdown response when unconfigured
-      fetchedBatch = missingUrls.map((u) => ({
-        url: u,
-        status: 200,
-        markdown: `# ${u}\n\nClean markdown extracted by TinyFish adapter.\n\nKey takeaways and authoritative technical review.`,
-      }));
-    } else {
+    {
       try {
         const res = await fetch(this.fetchBaseUrl, {
           method: "POST",

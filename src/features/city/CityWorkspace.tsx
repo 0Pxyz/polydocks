@@ -27,7 +27,7 @@ export function CityWorkspace({
   const activeTool = controlledActiveToolId ?? internalActiveTool;
   const isReduced = prefersReducedMotion();
 
-  const { data, loading, saveNote, toggleQuest } = useCityWorkspace(cityId);
+  const { data, loading, saveNote, toggleQuest, openSource } = useCityWorkspace(cityId);
 
   // Publish live counts for the dock badges once the workspace loads.
   useEffect(() => {
@@ -91,6 +91,8 @@ export function CityWorkspace({
             <SourcesView
               sources={data.sources}
               cityName={data.title}
+              loading={loading}
+              onOpen={(id) => void openSource(id)}
             />
           ) : activeTool === "quests" ? (
             <QuestsView

@@ -101,15 +101,35 @@ export function useCityWorkspace(cityId: string) {
           });
         }
 
-        const sourcesList: CitySourceItem[] = Array.isArray(cityData?.sources)
-          ? cityData.sources.map((s: any) => ({
-              title: s.title || s.name || "Primary Source",
-              url: s.url || "#",
-              kind: s.kind || "article",
-              why: s.why || s.description,
-              domain: s.domain || (s.url ? new URL(s.url).hostname : "web"),
-            }))
-          : [];
+        // Enriched feed is the source of truth: one validated row per URL,
+        // saved via sources.add. Legacy shapes (sources/* filenames, raw
+        // feed.json items) are never mapped into cards.
+        let sourcesList: CitySourceItem[] = [];
+        try {
+          const feedRes = await fetch(`/api/cities/${encodeURIComponent(cityId)}/sources`);
+          if (feedRes.ok) {
+            const feedJson = await feedRes.json();
+            if (Array.isArray(feedJson.data)) {
+              sourcesList = feedJson.data
+                .filter((item: any) => item && typeof item.url === "string" && typeof item.title === "string")
+                .map((item: any) => ({
+                  id: item.id,
+                  title: item.title,
+                  url: item.url,
+                  kind: item.kind,
+                  why: item.why,
+                  domain: item.site,
+                  image: item.image,
+                  hook: item.hook,
+                  publishedAt: item.publishedAt,
+                  readMinutes: item.readMinutes,
+                  fullText: item.fullText,
+                }));
+            }
+          }
+        } catch {
+          // Feed optional; the empty state explains itself.
+        }
 
         // Fetch dynamic tabs
         let dynamicTabs: CityDynamicTab[] = [];
@@ -131,13 +151,15 @@ export function useCityWorkspace(cityId: string) {
               const feedJson = await feedRes.json();
               if (Array.isArray(feedJson.data?.items)) {
                 sourcesList.push(
-                  ...feedJson.data.items.map((item: any) => ({
-                    title: item.title,
-                    url: item.url,
-                    kind: item.kind || "article",
-                    why: item.why,
-                    domain: item.domain || (item.url ? new URL(item.url).hostname : "web"),
-                  }))
+                  ...feedJson.data.items
+                    .filter((item: any) => item && typeof item.url === "string" && typeof item.title === "string")
+                    .map((item: any) => ({
+                      title: item.title,
+                      url: item.url,
+                      kind: item.kind,
+                      why: item.why,
+                      domain: item.domain || (item.url ? new URL(item.url).hostname : "web"),
+                    }))
                 );
               }
             }
@@ -194,6 +216,43 @@ export function useCityWorkspace(cityId: string) {
     return completedQuest;
   }, []);
 
+  // Open a saved source in the in-chat reader (same path as the agent's
+  // sources.open: mode decided server-side, never a new tab by default).
+  const openSource = useCallback(
+    async (sourceId: string) => {
+      if (!cityId || !sourceId) return;
+      try {
+        const { useConversationStore } = await import("@/lib/agent/conversationStore");
+        const res = await fetch("/api/plugins/sources/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: { id: sourceId, cityId } }),
+        });
+        const json = (await res.json().catch(() => null)) as any;
+        const data = json?.ok ? json.data ?? json : null;
+        const mode = data?.mode;
+        if (!data || (mode !== "video" && mode !== "reader" && mode !== "embed" && mode !== "external")) {
+          return;
+        }
+        useConversationStore.getState().openReader({
+          sourceId: data.id,
+          mode,
+          title: data.title,
+          url: data.url,
+          cityId,
+          site: data.site,
+          image: data.image,
+          markdown: data.markdown,
+          embedUrl: data.embedUrl,
+          reason: data.reason,
+        });
+      } catch {
+        // Feed stays put; the reader simply does not open.
+      }
+    },
+    [cityId]
+  );
+
   return {
     data,
     loading,
@@ -201,5 +260,6 @@ export function useCityWorkspace(cityId: string) {
     refetch: fetchCityData,
     saveNote,
     toggleQuest,
+    openSource,
   };
 }
