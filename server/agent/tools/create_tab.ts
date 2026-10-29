@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { writeCityFile } from "../../workspace/cityWorkspace";
-import { writeFeature, readFeature } from "../../workspace/features";
+import { writeLegacyFeature, writeFeature, readFeature } from "../../workspace/features";
 
 export interface CreateTabArgs {
   id: string;
@@ -91,12 +90,9 @@ export const create_tab: AgentTool<CreateTabArgs> = {
       };
     }
 
-    // Legacy HTML blob path
+    // Legacy HTML blob path (SQLite single source of truth, no FS mirroring)
     const rawHtml = args.html || "";
-    await writeCityFile(targetCity, `tabs/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-    await writeCityFile(targetCity, `tabs/${args.id}/index.html`, rawHtml);
-    await writeCityFile(targetCity, `features/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-    await writeCityFile(targetCity, `features/${args.id}/index.html`, rawHtml);
+    await writeLegacyFeature(targetCity, args.id, manifest, rawHtml);
 
     return {
       success: true,

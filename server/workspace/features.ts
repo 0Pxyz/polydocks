@@ -3,10 +3,14 @@ import path from "node:path";
 import {
   resolveSafeCityPath,
   readCityFile,
-  writeCityFile,
   deleteCityFile,
   appendAuditLog,
 } from "./cityWorkspace";
+import {
+  upsertPluginFile,
+  getPluginFile,
+  listPluginFiles,
+} from "./pluginFiles";
 
 export interface FeatureManifest {
   id: string;
@@ -251,7 +255,10 @@ function escapeHtml(str: string): string {
 }
 
 /**
- * Writes and transpiles a TypeScript feature module into the city workspace.
+ * Writes and transpiles a TypeScript feature module into SQLite (single source
+ * of truth). Filesystem mirroring to workspace/<city>/{features,tabs}/ was
+ * removed: in production only ./data is a volume, so workspace/ files vanish
+ * on redeploy while registry rows survive. DB rows survive with the volume.
  */
 export async function writeFeature(
   cityId: string,
@@ -276,14 +283,15 @@ export async function writeFeature(
     updatedAt: new Date().toISOString(),
   };
 
-  // Write primary feature files under workspace/<city>/features/<featureId>/
-  await writeCityFile(cityId, `features/${featureId}/feature.ts`, options.code);
-  await writeCityFile(cityId, `features/${featureId}/manifest.json`, JSON.stringify(manifestData, null, 2));
-  await writeCityFile(cityId, `features/${featureId}/index.html`, srcdoc);
-
-  // Backward compatibility: mirror to tabs/<featureId>/
-  await writeCityFile(cityId, `tabs/${featureId}/manifest.json`, JSON.stringify(manifestData, null, 2));
-  await writeCityFile(cityId, `tabs/${featureId}/index.html`, srcdoc);
+  // Single source of truth: SQLite plugin_files. No filesystem mirroring.
+  upsertPluginFile({
+    workspaceId: cityId,
+    pluginId: featureId,
+    version: (manifestData as { version?: string }).version || "1.0.0",
+    manifest: manifestData,
+    sourceCode: options.code,
+    srcdoc,
+  });
 
   await appendAuditLog(cityId, "create_feature", {
     featureId,
@@ -298,11 +306,55 @@ export async function writeFeature(
 }
 
 /**
- * Reads a feature from the city workspace, supporting both modern .ts features
- * and legacy HTML blob tabs.
+ * Writes a legacy HTML blob tab into SQLite (single source of truth).
+ * Used by create_tab/update_tab legacy paths.
+ */
+export async function writeLegacyFeature(
+  cityId: string,
+  featureId: string,
+  manifest: FeatureManifest,
+  html: string
+): Promise<void> {
+  const manifestData: FeatureManifest = {
+    ...manifest,
+    id: featureId,
+    updatedAt: new Date().toISOString(),
+  };
+  upsertPluginFile({
+    workspaceId: cityId,
+    pluginId: featureId,
+    version: (manifestData as { version?: string }).version || "1.0.0",
+    manifest: manifestData,
+    srcdoc: html,
+  });
+  await appendAuditLog(cityId, "create_feature", {
+    featureId,
+    title: manifestData.title,
+    scope: manifestData.scope,
+  });
+}
+
+/**
+ * Reads a feature from SQLite first, falling back to the filesystem only
+ * during the migration window (workspaces not yet imported into the DB).
  */
 export async function readFeature(cityId: string, featureId: string): Promise<FeatureData> {
-  // 1. Try reading modern feature module
+  // 1. SQLite single source of truth (exact workspace, then any workspace).
+  try {
+    const row = getPluginFile(featureId, cityId);
+    if (row) {
+      return {
+        manifest: row.manifest,
+        code: row.code,
+        srcdoc: row.srcdoc,
+        format: row.code ? "feature-ts" : "legacy-html",
+      };
+    }
+  } catch {
+    // Fall through to filesystem migration fallback.
+  }
+
+  // 2. Filesystem fallback during migration only.
   try {
     const manifestRaw = await readCityFile(cityId, `features/${featureId}/manifest.json`);
     const manifest = JSON.parse(manifestRaw) as FeatureManifest;
@@ -347,13 +399,29 @@ export async function readFeature(cityId: string, featureId: string): Promise<Fe
 }
 
 /**
- * Lists all registered features and tabs across the city workspace.
+ * Lists all registered features and tabs: SQLite first, filesystem fallback
+ * merged in during the migration window.
  */
 export async function listFeatures(
   cityId: string
 ): Promise<Array<FeatureManifest & { format: "feature-ts" | "legacy-html" }>> {
-  const cityRoot = await resolveSafeCityPath(cityId, ".");
   const resultsMap = new Map<string, FeatureManifest & { format: "feature-ts" | "legacy-html" }>();
+
+  // SQLite single source of truth first.
+  try {
+    for (const entry of listPluginFiles(cityId)) {
+      try {
+        const feat = await readFeature(cityId, entry.pluginId);
+        resultsMap.set(entry.pluginId, { ...feat.manifest, format: feat.format });
+      } catch {
+        // Skip invalid row
+      }
+    }
+  } catch {
+    // Table may not exist yet in very old flows; fall through to FS.
+  }
+
+  const cityRoot = await resolveSafeCityPath(cityId, ".");
 
   // Scan modern features/ directory
   try {
@@ -393,9 +461,18 @@ export async function listFeatures(
 }
 
 /**
- * Deletes a feature from the city workspace (both features/ and tabs/).
+ * Deletes a feature from SQLite and the legacy filesystem mirror.
  */
 export async function deleteFeature(cityId: string, featureId: string): Promise<void> {
+  try {
+    const { ensurePluginFilesTable } = await import("./pluginFiles");
+    ensurePluginFilesTable();
+    const { db } = await import("./db");
+    db.query("DELETE FROM plugin_files WHERE workspace_id = ? AND plugin_id = ?").run(cityId, featureId);
+  } catch {
+    // Non-fatal: filesystem cleanup below still runs.
+  }
+
   const errors: any[] = [];
 
   try {

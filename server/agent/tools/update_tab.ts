@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { writeCityFile } from "../../workspace/cityWorkspace";
-import { readFeature, writeFeature } from "../../workspace/features";
+import { readFeature, writeFeature, writeLegacyFeature } from "../../workspace/features";
 
 export interface UpdateTabArgs {
   id: string;
@@ -55,13 +54,12 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
       };
     }
 
-    // Mirror to both features/ and tabs/
-    await writeCityFile(targetCity, `features/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-    await writeCityFile(targetCity, `tabs/${args.id}/manifest.json`, JSON.stringify(manifest, null, 2));
-
+    // Legacy HTML blob path (SQLite single source of truth)
     if (args.html) {
-      await writeCityFile(targetCity, `features/${args.id}/index.html`, args.html);
-      await writeCityFile(targetCity, `tabs/${args.id}/index.html`, args.html);
+      await writeLegacyFeature(targetCity, args.id, manifest, args.html);
+    } else {
+      // Metadata-only update: persist manifest with existing srcdoc.
+      await writeLegacyFeature(targetCity, args.id, manifest, current.srcdoc);
     }
 
     return {
