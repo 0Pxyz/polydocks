@@ -32,11 +32,11 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
       expect(isPluginSynthesisIntent("O que é computação quântica?")).toBe(false);
     });
 
-    it("loads synthesize-plugin.md skill successfully", async () => {
-      const skill = await loadSkill("synthesize-plugin");
-      expect(skill).toContain("Synthesize & Modify PolyDocks Plugins");
-      expect(skill).toContain("window.polydocks.storage");
-      expect(skill).toContain("--accent: #C8FF57");
+    it("loads plugins.md skill successfully", async () => {
+      const skill = await loadSkill("plugins");
+      expect(skill).toContain("inspect_experience");
+      expect(skill).toContain("modify_plugin");
+      expect(skill).toContain("Never recreate to fix");
     });
   });
 
