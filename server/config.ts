@@ -26,6 +26,10 @@ const envSchema = z.object({
   // Agent tool surface: full = current catalog. minimal = verb tools only
   // (dock.open/close/pin/unpin/list, plugins.create/edit/install/uninstall/operate).
   AGENT_SURFACE: z.enum(["full", "minimal"]).default("full"),
+  // Install policy for agent-originated plugin lifecycle (create/install/
+  // publish): ask = needs { userApproved: true } (default), auto = proceed,
+  // never = always deny. actor=user|cli means an explicit human action.
+  INSTALL_POLICY: z.enum(["ask", "auto", "never"]).default("ask"),
   // Spending guard for generated images (covers, share cards, city art).
   // Counted per UTC day in SQLite (image_spend); requests beyond the cap
   // fail with budget_exceeded instead of spending.

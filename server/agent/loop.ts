@@ -282,6 +282,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // logs show exactly which skills shape this turn (next to model).
   const loadedSkills: string[] = [];
 
+  // Receipts: every tool result this turn, for the end-of-turn receipt
+  // check (the final answer may only claim what an ok:true envelope shows).
+  const turnReceipts: Array<{ tool: string; args: Record<string, unknown>; output: unknown }> = [];
+
   // Measured cost accounting: every Chat Completions response carries
   // `usage`, accumulated here and reported in `agent.finish`.
   let totalInputTokens = 0;
@@ -370,6 +374,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // carries only elapsed time + phase — never prompt, code, or args —
   // so the UI can show "still working" instead of silence. Cleared in
   // the finally below on every exit path.
+  // Actor for the install policy: the agent acts in chat/task/dock turns;
+  // the CLI is an explicit human action and bypasses ask-gates.
+  const toolActor = origin === "cli" ? "cli" : "agent";
   const turnStart = Date.now();
   let currentPhase: "thinking" | "running_tool" = "thinking";
   let currentTool: string | undefined;
@@ -525,10 +532,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         role: message.role,
         content: message.content,
       }));
-    } else if (cityId && history.length === 0) {
-      // Chat turns share the city conversation (continuity). CLI/task runs
-      // are isolated: they neither read chat history nor write into it,
-      // so parallel runs cannot bleed into each other (audit D9).
+    } else if (cityId && history.length === 0 && origin === "chat") {
+      // Only chat turns share the city conversation (continuity). CLI/task
+      // runs are isolated: they neither read chat history nor write into
+      // it, so parallel runs cannot bleed into each other (audit D9).
       const persisted = getCityConversationMessages(cityId, 20);
       effectiveHistory = persisted.map((m) => ({
         role: m.role,
@@ -546,7 +553,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         attachments: threadAttachments,
       });
       threadUserMessageId = storedUserMessage.id;
-    } else if (cityId) {
+    } else if (cityId && origin === "chat") {
       appendCityMessage(cityId, "user", prompt);
     }
 
@@ -692,7 +699,18 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       // If no tool calls, the model provided its final textual answer
       if (!toolCalls || toolCalls.length === 0) {
-        const finalText = assistantMessage.content || "";
+        let finalText = assistantMessage.content || "";
+        // Receipt check: the answer may only claim installs, approvals or
+        // creations with a matching ok:true envelope from this turn.
+        // Violations are flagged in the finish payload and the text gains
+        // a correction note (R13b regression: invented install/approval).
+        const { collectReceipt, verifyReceipts } = await import("./receipts");
+        const receipts = turnReceipts.map((r) => collectReceipt(r.tool, r.args, r.output));
+        const check = verifyReceipts(finalText, prompt, receipts);
+        if (!check.ok) {
+          const reasons = [...new Set(check.issues.map((i) => i.reason))].join("; ");
+          finalText += `\n\n> Receipt check: ${reasons}. Verify before acting.`;
+        }
         if (threadUserId) {
           appendThreadMessage(threadUserId, "assistant", finalText);
           assistantPersisted = true;
@@ -701,7 +719,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             llmClient,
             modelId: effectiveModel,
           }).catch(() => {});
-        } else if (cityId) {
+        } else if (cityId && origin === "chat") {
           appendCityMessage(cityId, "assistant", finalText);
         }
 
@@ -719,7 +737,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         await emit({
           step: currentStep,
           type: "agent.finish",
-          payload: { ...(await finishPayload(finalText)), intent },
+          payload: { ...(await finishPayload(finalText)), intent, receiptCheck: { ok: check.ok, issues: check.issues } },
         });
 
         return {
@@ -795,6 +813,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
                 sessionId: effectiveSessionId,
                 taskId,
                 step: currentStep,
+                actor: toolActor,
               });
             } catch (execErr: any) {
               toolOutput = {
@@ -821,6 +840,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             durationMs: Date.now() - toolStart,
           },
         });
+        turnReceipts.push({ tool: toolName, args: rawArgs, output: toolOutput });
 
         // Circuit breaker: three consecutive duplicate refusals in one turn
         // means the model is stuck re-reading instead of progressing (the
@@ -838,7 +858,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           if (threadUserId) {
             appendThreadMessage(threadUserId, "assistant", stuckText);
             assistantPersisted = true;
-          } else if (cityId) {
+          } else if (cityId && origin === "chat") {
             appendCityMessage(cityId, "assistant", stuckText);
           }
           if (taskId) {
@@ -1040,7 +1060,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         llmClient,
         modelId: effectiveModel,
       }).catch(() => {});
-    } else if (cityId) {
+    } else if (cityId && origin === "chat") {
       appendCityMessage(cityId, "assistant", fallbackText);
     }
 

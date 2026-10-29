@@ -19,7 +19,7 @@ Product routes delegate to one shared layer (`server/facade/shared.ts`); the HTT
 | Current route | Surface | Notes |
 | :--- | :--- | :--- |
 | `POST /api/plugins/:pluginId/:capability` | plugins | Canonical invoke; CLI `plugins invoke` and `plugins.operate` delegate here |
-| `POST /api/plugins/lifecycle` | plugins | Synthesis lifecycle (`create\|modify\|publish\|install\|uninstall`) |
+| `POST /api/plugins/lifecycle` | plugins | Synthesis lifecycle (`create\|modify\|publish\|install\|uninstall`); agent create/install/publish gated by `INSTALL_POLICY` |
 | `POST /api/dock/action` | dock | Verbs (`tabs.open/close/pin/unpin/list/create/update`, `scope.enter/get`, `appearance.apply`) |
 | `GET /api/dock/tabs` | dock | Tabs mounted in the dock |
 | `GET /api/plugins`, `POST /:id/toggle`, `DELETE /:id`, `GET /:id/executions` | plugins | Lifecycle + introspection |
