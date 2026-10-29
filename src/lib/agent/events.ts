@@ -113,6 +113,35 @@ export type UIEvent =
       attachmentId?: string;
     }
   | {
+      type: "reader.open";
+      step: number;
+      /** URL to open (same behavior as the feed's Open button). */
+      url: string;
+      title?: string;
+    }
+  | {
+      type: "source.added";
+      step: number;
+      source: Record<string, unknown>;
+    }
+  | {
+      type: "agent.heartbeat";
+      step: number;
+      elapsedMs: number;
+      phase: "running_tool" | "thinking";
+      tool?: string;
+    }
+  | {
+      type: "agent.text_delta";
+      step: number;
+      delta: string;
+    }
+  | {
+      type: "city.entered";
+      step: number;
+      cityId: string;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -408,6 +437,46 @@ export function adaptBackendEvent(raw: {
         intent: payload.intent ? String(payload.intent) : undefined,
       };
 
+    case "agent.heartbeat":
+      return {
+        type: "agent.heartbeat",
+        step,
+        elapsedMs: Number(payload.elapsedMs || 0),
+        phase: payload.phase === "running_tool" ? "running_tool" : "thinking",
+        tool: typeof payload.tool === "string" ? payload.tool : undefined,
+      };
+
+    case "agent.text_delta":
+      return {
+        type: "agent.text_delta",
+        step,
+        delta: typeof payload.delta === "string" ? payload.delta : "",
+      };
+
+    case "city.enter":
+      return {
+        type: "city.entered",
+        step,
+        cityId: String(payload.cityId || ""),
+      };
+
+    case "reader.open": {
+      const url = typeof payload.url === "string" ? payload.url : "";
+      if (!url) return null;
+      return {
+        type: "reader.open",
+        step,
+        url,
+        title: typeof payload.title === "string" ? payload.title : undefined,
+      };
+    }
+
+    case "source.added":
+      return {
+        type: "source.added",
+        step,
+        source: payload,
+      };
     case "error":
       return {
         type: "agent.error",

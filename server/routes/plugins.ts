@@ -269,6 +269,48 @@ pluginsRouter.post("/install-url", async (c) => {
 });
 
 /**
+ * POST /api/plugins/:pluginId/:capability - Invoke a contract capability.
+ * Generated surface: every defineCapability() registration is invocable
+ * here with the same envelope the agent and CLI receive.
+ * Registered after specific routes (toggle, mcp/connect, install-url)
+ * so literal segments keep precedence over the :capability parameter.
+ */
+pluginsRouter.post("/:pluginId/:capability", async (c, next) => {
+  const { getContractCapability } = await import("../plugins/contract");
+  const { capabilityBus } = await import("../plugins/bus");
+  const pluginId = c.req.param("pluginId");
+  const capability = c.req.param("capability");
+  const def = getContractCapability(pluginId, capability);
+  if (!def) {
+    return next();
+  }
+  const body = await c.req.json().catch(() => ({}));
+  const input = (body && typeof body === "object" && "input" in (body as any) ? (body as any).input : body) ?? {};
+  const cityId =
+    (body && typeof body === "object" && typeof (body as any).cityId === "string"
+      ? (body as any).cityId
+      : undefined) ?? c.req.query("cityId");
+  const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
+  const result = await capabilityBus.invoke(`${pluginId}.${capability}`, input, {
+    actor: "user",
+    cityId,
+    onEvent: async (e) => {
+      if (e.type !== "tool.start" && e.type !== "tool.done") emitted.push({ type: e.type, payload: e.payload });
+    },
+  });
+  if (!result.success) {
+    return c.json({ ok: false, error: result.error || "Capability failed.", retryable: true }, 400);
+  }
+  const envelope = result.data as any;
+  // Contract handlers always return the envelope as data.
+  if (envelope && typeof envelope === "object" && "ok" in envelope) {
+    const finalEvents = envelope.events !== undefined ? envelope.events : emitted;
+    return c.json({ ...envelope, events: finalEvents });
+  }
+  return c.json({ ok: true, data: envelope, events: emitted });
+});
+
+/**
  * GET /api/capabilities - Unified capability catalog
  */
 capabilitiesRouter.get("/", (c) => {

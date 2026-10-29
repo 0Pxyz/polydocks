@@ -618,8 +618,28 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
-          case "theme.applied": {
-            const applied = event.applied || {};
+          case "reader.open": {
+            const url = typeof event.url === "string" ? event.url : "";
+            if (url) {
+              try {
+                const { openExternalUrl } = await import("@/lib/platform");
+                openExternalUrl(url);
+                set({ statusText: `Opening "${event.title || url}".` });
+              } catch {
+                set({ statusText: `Open this link: ${url}` });
+              }
+            }
+            break;
+          }
+
+          case "source.added": {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("polymax:source.added", { detail: event.source }));
+            }
+            break;
+          }
+
+          case "theme.applied": {            const applied = event.applied || {};
             const failures: string[] = [];
 
             let wallpaperUrl =

@@ -14,6 +14,7 @@
 
 ## Output actions
 
+When adding sources to a city feed, call capability `sources.add({url, cityId})` via `invoke_capability`. The server validates and enriches server-side; report ONLY the returned source IDs.
 Save discoveries with `write_city_file` (`feed.json`, `notes/<topic>.md` with citations); prime the tab with `open_intent`; never run `search_web`/`fetch_page` loops when `build_city` already batches discovery.
 
 ## Invariants

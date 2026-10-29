@@ -1,7 +1,15 @@
 export interface CitySourceItem {
+  id?: string;
   title: string;
   url: string;
   kind?: "article" | "paper" | "video" | "course" | "doc";
+  site?: string;
+  image?: string | null;
+  author?: string | null;
+  readMinutes?: number | null;
+  durationSec?: number | null;
+  hook?: string | null;
+  publishedAt?: string | null;
   why?: string;
   level?: number;
   domain?: string;

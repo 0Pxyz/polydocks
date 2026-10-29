@@ -101,15 +101,36 @@ export function useCityWorkspace(cityId: string) {
           });
         }
 
-        const sourcesList: CitySourceItem[] = Array.isArray(cityData?.sources)
-          ? cityData.sources.map((s: any) => ({
-              title: s.title || s.name || "Primary Source",
-              url: s.url || "#",
-              kind: s.kind || "article",
-              why: s.why || s.description,
-              domain: s.domain || (s.url ? new URL(s.url).hostname : "web"),
-            }))
-          : [];
+        // Enriched sources table is the single source of truth:
+        // populated via sources.add and migration. Never reads raw filenames or "#" links.
+        let sourcesList: CitySourceItem[] = [];
+        try {
+          const sourcesRes = await fetch(`/api/cities/${encodeURIComponent(cityId)}/sources`);
+          if (sourcesRes.ok) {
+            const json = await sourcesRes.json();
+            if (Array.isArray(json.data)) {
+              sourcesList = json.data
+                .filter((item: any) => item && typeof item.url === "string" && item.url !== "#" && typeof item.title === "string")
+                .map((item: any) => ({
+                  id: item.id,
+                  title: item.title,
+                  url: item.url,
+                  kind: item.kind || "article",
+                  site: item.site,
+                  domain: item.site || (item.url ? new URL(item.url).hostname.replace(/^www\./, "") : "web"),
+                  image: item.image || null,
+                  author: item.author || null,
+                  hook: item.hook || null,
+                  why: item.hook || undefined,
+                  publishedAt: item.publishedAt || null,
+                  readMinutes: item.readMinutes || null,
+                  durationSec: item.durationSec || null,
+                }));
+            }
+          }
+        } catch {
+          // Non-fatal
+        }
 
         // Fetch dynamic tabs
         let dynamicTabs: CityDynamicTab[] = [];
@@ -123,35 +144,12 @@ export function useCityWorkspace(cityId: string) {
           // Dynamic tabs optional
         }
 
-        // Fetch feed if sources is empty
-        if (sourcesList.length === 0) {
-          try {
-            const feedRes = await fetch(`/api/cities/${encodeURIComponent(cityId)}/feed`);
-            if (feedRes.ok) {
-              const feedJson = await feedRes.json();
-              if (Array.isArray(feedJson.data?.items)) {
-                sourcesList.push(
-                  ...feedJson.data.items.map((item: any) => ({
-                    title: item.title,
-                    url: item.url,
-                    kind: item.kind || "article",
-                    why: item.why,
-                    domain: item.domain || (item.url ? new URL(item.url).hostname : "web"),
-                  }))
-                );
-              }
-            }
-          } catch {
-            // Feed optional
-          }
-        }
-
         setData((prev) => ({
           ...prev,
           cityId,
           title: formatCityTitle(cityId),
           notes: notesList,
-          sources: sourcesList.length > 0 ? sourcesList : prev.sources,
+          sources: sourcesList,
           dynamicTabs,
           quests: prev.quests.length > 0 ? prev.quests : getDefaultQuests(formatCityTitle(cityId)),
         }));
@@ -167,6 +165,45 @@ export function useCityWorkspace(cityId: string) {
   useEffect(() => {
     fetchCityData();
   }, [fetchCityData]);
+
+  // Live SSE listener: when the agent or user adds a source, update the feed automatically
+  useEffect(() => {
+    const handleSourceAdded = (e: Event) => {
+      const added = (e as CustomEvent).detail;
+      if (!added || !added.url || !added.title || added.url === "#") return;
+      if (added.cityId && added.cityId !== cityId) return;
+
+      setData((prev) => {
+        if (prev.sources.some((s) => s.id === added.id || (s.url && s.url === added.url))) {
+          return prev;
+        }
+        const newSource: CitySourceItem = {
+          id: added.id,
+          title: added.title,
+          url: added.url,
+          kind: added.kind || "article",
+          site: added.site || (added.url ? new URL(added.url).hostname.replace(/^www\./, "") : "web"),
+          domain: added.site || (added.url ? new URL(added.url).hostname.replace(/^www\./, "") : "web"),
+          image: added.image || null,
+          author: added.author || null,
+          hook: added.hook || null,
+          why: added.hook || undefined,
+          publishedAt: added.publishedAt || null,
+          readMinutes: added.readMinutes || null,
+          durationSec: added.durationSec || null,
+        };
+        return {
+          ...prev,
+          sources: [newSource, ...prev.sources],
+        };
+      });
+    };
+
+    window.addEventListener("polymax:source.added", handleSourceAdded);
+    return () => {
+      window.removeEventListener("polymax:source.added", handleSourceAdded);
+    };
+  }, [cityId]);
 
   const saveNote = useCallback((name: string, content: string) => {
     setData((prev) => {

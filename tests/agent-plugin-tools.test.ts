@@ -12,6 +12,8 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
   beforeEach(() => {
     ensureDefaultWorkspace();
     // Clean up test plugins
+    db.query("DELETE FROM plugin_files WHERE plugin_id LIKE 'test-%'").run();
+    db.query("DELETE FROM plugin_versions WHERE plugin_id LIKE 'test-%'").run();
     db.query("DELETE FROM workspace_plugins WHERE plugin_id LIKE 'test-%'").run();
     db.query("DELETE FROM plugins WHERE id LIKE 'test-%'").run();
   });

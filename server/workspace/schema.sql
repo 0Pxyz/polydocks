@@ -37,6 +37,28 @@ CREATE TABLE IF NOT EXISTS city_sources (
   cached_at TEXT NOT NULL
 );
 
+-- Unified enriched source store (contract plugin `sources`). Replaces the
+-- three legacy shapes: workspace/sources/* filenames, hand-written
+-- feed.json items and pipeline feed.json items. The agent passes a URL;
+-- the server enriches and validates.
+CREATE TABLE IF NOT EXISTS sources (
+  id TEXT PRIMARY KEY,
+  city_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'article',
+  url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  site TEXT,
+  image TEXT,
+  author TEXT,
+  published_at TEXT,
+  read_minutes INTEGER,
+  duration_sec INTEGER,
+  hook TEXT,
+  full_text TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(city_id, url)
+);
+
 CREATE TABLE IF NOT EXISTS discovery_cache (
   query_hash TEXT PRIMARY KEY,
   query_type TEXT NOT NULL,
