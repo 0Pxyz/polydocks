@@ -58,22 +58,31 @@ export default function App() {
 
   const { workspacePlugins } = useWorkspaceStore();
 
-  const workspaceDockTools: DockToolItem[] = workspacePlugins
-    .filter((wp) => wp.enabled && wp.plugin)
-    .map((wp) => ({
-      id: wp.pluginId,
-      label: wp.plugin?.name || wp.pluginId,
-      type: "icon",
-      icon: resolveIcon(wp.plugin?.icon || "Cards"),
-      iconKey: wp.plugin?.icon || wp.pluginId,
-    }));
+  // Memoized: fresh arrays every render would retrigger the tab-host
+  // registration effect below and loop openTab -> rerender forever.
+  const workspaceDockTools: DockToolItem[] = useMemo(
+    () =>
+      workspacePlugins
+        .filter((wp) => wp.enabled && wp.plugin)
+        .map((wp) => ({
+          id: wp.pluginId,
+          label: wp.plugin?.name || wp.pluginId,
+          type: "icon",
+          icon: resolveIcon(wp.plugin?.icon || "Cards"),
+          iconKey: wp.plugin?.icon || wp.pluginId,
+        })),
+    [workspacePlugins]
+  );
 
   // The Plugin Store is not a dock item: store plugins are reachable only
   // through dock search, which installs and opens them directly.
-  const activeExtraTools = [
-    ...extraTools.filter((t) => t.id !== "store"),
-    ...workspaceDockTools.filter((wt) => wt.id !== "store" && !extraTools.some((et) => et.id === wt.id)),
-  ];
+  const activeExtraTools = useMemo(
+    () => [
+      ...extraTools.filter((t) => t.id !== "store"),
+      ...workspaceDockTools.filter((wt) => wt.id !== "store" && !extraTools.some((et) => et.id === wt.id)),
+    ],
+    [extraTools, workspaceDockTools]
+  );
 
   const handleDismissTool = (toolIdToDismiss?: string) => {
     const targetTool = toolIdToDismiss ?? activeToolId;
@@ -235,10 +244,16 @@ export default function App() {
     // Host-owned lifecycle: selecting a dynamic plugin tab mounts it once.
     // The TabHost below keeps it mounted but hidden afterwards, so
     // returning to it is 0 remounts; hibernated tabs restore on reopen.
-    if (activeToolId && activeExtraTools.some((t) => t.id === activeToolId)) {
+    // The live-status guard plus the memoized list above keep this from
+    // retriggering on every render (which would loop openTab forever).
+    if (
+      activeToolId &&
+      activeExtraTools.some((t) => t.id === activeToolId) &&
+      hostTabs[activeToolId]?.status !== "live"
+    ) {
       useTabHostStore.getState().openTab(activeToolId, "plugin");
     }
-  }, [activeToolId, activeExtraTools]);
+  }, [activeToolId, activeExtraTools, hostTabs]);
 
   const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
   const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
