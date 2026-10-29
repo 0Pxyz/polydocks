@@ -14,16 +14,12 @@ import { FlashcardsView } from "./FlashcardsView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import type { CityWorkspaceProps } from "./types";
 
-interface ExtendedCityWorkspaceProps extends CityWorkspaceProps {
-  onSynthesizeTool?: (toolId: string) => void;
-}
+type ExtendedCityWorkspaceProps = CityWorkspaceProps;
 
 export function CityWorkspace({
   cityId,
   activeToolId: controlledActiveToolId,
   onSelectTool,
-  onBackToWorld,
-  onSynthesizeTool,
   className = "",
 }: ExtendedCityWorkspaceProps) {
   const [internalActiveTool, setInternalActiveTool] = useState<string>("overview");

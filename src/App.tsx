@@ -156,25 +156,6 @@ export default function App() {
     setDockActiveTool(nextTool);
   };
 
-  // Compelling demonstration of the dock dynamically expanding itself
-  const handleSynthesizeTool = (topic = selectedCity || "General") => {
-    setExtraTools((prev) => {
-      if (prev.some((t) => t.id === "flashcards")) return prev;
-      return [
-        ...prev,
-        {
-          id: "flashcards",
-          label: `${topic} Flashcards`,
-          type: "icon",
-          icon: resolveIcon("cards"),
-          iconKey: "cards",
-        },
-      ];
-    });
-    setActiveToolId("flashcards");
-    setDockActiveTool("flashcards");
-  };
-
   const handleToolPromptSubmit = (prompt: string, meta?: Record<string, unknown>) => {
     const isFlashcards = prompt.toLowerCase().includes("flashcard");
     const targetCity = viewMode === "city" ? (activeCityId || selectedCity) : undefined;
@@ -467,15 +448,8 @@ export default function App() {
                 <div className="w-full">
                   <CityView
                     cityName={activeCityId || selectedCity || "workspace"}
-                    activeToolId={activeToolId === "city" || !activeToolId ? "overview" : activeToolId}
+                    activeToolId={!activeToolId ? "" : activeToolId}
                     onSelectTool={handleSelectTool}
-                    onSynthesizeTool={handleSynthesizeTool}
-                    onBackToWorld={() => {
-                      exitToWorld();
-                      setSelectedCity(undefined);
-                      setActiveToolId("maps");
-                      setDockActiveTool("maps");
-                    }}
                   />
                 </div>
               </DockSurface>
