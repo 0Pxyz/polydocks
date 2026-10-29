@@ -50,7 +50,9 @@ export interface CityContext {
 }
 
 /**
- * Retrieves the filesystem-based context of a city workspace.
+ * Retrieves the filesystem-based context of a city workspace, merged with
+ * the SQLite plugin store so DB-only plugins (the source of truth after the
+ * plugin_files migration) are visible even when workspace/ is ephemeral.
  */
 export async function getCityContext(cityId: string): Promise<CityContext> {
   const cityRoot = await resolveSafeCityPath(cityId, ".");
@@ -89,7 +91,17 @@ export async function getCityContext(cityId: string): Promise<CityContext> {
     listDirFiles("features"),
   ]);
 
-  const allTabs = Array.from(new Set([...featureDirs, ...legacyTabs]));
+  // SQLite plugin store first: plugin code lives in DATA_DIR, which survives
+  // redeploys, while workspace/ files do not.
+  let dbPluginIds: string[] = [];
+  try {
+    const { listPluginFiles } = await import("./pluginFiles");
+    dbPluginIds = listPluginFiles(cityId).map((e) => e.pluginId);
+  } catch {
+    // Table may not exist yet in very old flows; filesystem wins.
+  }
+
+  const allTabs = Array.from(new Set([...featureDirs, ...legacyTabs, ...dbPluginIds]));
 
   return {
     cityId,
@@ -98,7 +110,7 @@ export async function getCityContext(cityId: string): Promise<CityContext> {
     notes,
     sources,
     tabs: allTabs,
-    features: featureDirs,
+    features: Array.from(new Set([...featureDirs, ...dbPluginIds])),
   };
 }
 
