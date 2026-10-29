@@ -9,28 +9,82 @@ export const GUEST_BRIDGE_SCRIPT = `
 (function() {
   const pendingRequests = new Map();
   let requestId = 0;
+  // Default 10s per-request timeout (override with
+  // window.__POLYMAX_BRIDGE_TIMEOUT_MS). Without this, a host that never
+  // replies (e.g. a stale bridge window) strands guest promises forever.
+  const REQUEST_TIMEOUT_MS = window.__POLYMAX_BRIDGE_TIMEOUT_MS || 10000;
+  // Ready-handshake ack window (override with
+  // window.__POLYMAX_BRIDGE_ACK_TIMEOUT_MS). Shorter than the request
+  // timeout so a dead bridge is reported while the host error row is live.
+  const READY_ACK_TIMEOUT_MS = window.__POLYMAX_BRIDGE_ACK_TIMEOUT_MS || 4000;
 
   window.addEventListener('message', function(event) {
     if (!event.data || typeof event.data !== 'object') return;
     const { polymaxResponseId, result, error } = event.data;
     if (polymaxResponseId && pendingRequests.has(polymaxResponseId)) {
-      const { resolve, reject } = pendingRequests.get(polymaxResponseId);
+      const { resolve, reject, timer } = pendingRequests.get(polymaxResponseId);
+      if (timer) clearTimeout(timer);
       pendingRequests.delete(polymaxResponseId);
       if (error) reject(new Error(error));
       else resolve(result);
     }
   });
 
-  function sendHostRequest(action, payload) {
+  function bridgeTimeoutError(action, ms) {
+    return new Error(
+      "Bridge request '" + action + "' timed out after " + ms + "ms: " +
+      "the host did not reply. Reload the tool; if this persists, ask the agent to fix it."
+    );
+  }
+
+  function sendHostRequest(action, payload, timeoutMs) {
+    const ms = timeoutMs || REQUEST_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
       const id = ++requestId;
-      pendingRequests.set(id, { resolve, reject });
+      const timer = setTimeout(function() {
+        if (pendingRequests.has(id)) {
+          pendingRequests.delete(id);
+          reject(bridgeTimeoutError(action, ms));
+        }
+      }, ms);
+      pendingRequests.set(id, { resolve, reject, timer });
       window.parent.postMessage({
         polymaxAction: action,
         polymaxRequestId: id,
         ...payload
       }, '*');
     });
+  }
+
+  function reportBridgeError(message) {
+    window.parent.postMessage({
+      polymaxAction: 'runtime.error',
+      error: {
+        message: message,
+        timestamp: new Date().toISOString()
+      }
+    }, '*');
+  }
+
+  // Startup handshake. The guest is ready AND learns whether the host is
+  // listening: the host replies to the ready message (see host-bridge
+  // runtime.ready/ui.ready). The ready post below carries
+  // polymaxAction: "ui.ready" so host new-build detection keeps matching.
+  // No ack within a few seconds means the bridge is dead: report
+  // "bridge not responding" so the host shows its failed-to-load error row
+  // ("Ask the agent to fix it") and records the experience error.
+  function signalReady() {
+    return sendHostRequest('ui.ready', {}, READY_ACK_TIMEOUT_MS).then(
+      function() { return true; },
+      function(err) {
+        reportBridgeError(
+          "Bridge not responding: the tool mounted but the host did not " +
+          "acknowledge the ready handshake (" + (err && err.message ? err.message : err) + "). " +
+          "Reload the tool; if this persists, ask the agent to fix it."
+        );
+        return false;
+      }
+    );
   }
 
   // Error capture & reporting to host runtime
@@ -89,6 +143,10 @@ export const GUEST_BRIDGE_SCRIPT = `
       expand: () => sendHostRequest('ui.expand', {}),
       collapse: () => sendHostRequest('ui.collapse', {}),
     },
+    // __signalReady is called by the srcdoc mount script after guest code
+    // runs (see buildFeatureSrcdoc/buildReactSrcdoc). Resolves true on host
+    // ack, false + runtime.error report when the bridge is not responding.
+    __signalReady: signalReady,
     theme: {
       accent: '#C8FF57',
       bg: '#0A0A0C',

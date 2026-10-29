@@ -74,10 +74,13 @@ export function DynamicTabContainer({
     fetchSrcdoc();
   }, [fetchSrcdoc]);
 
-  // Connect host postMessage bridge (openContent -> native Reader)
+  // Connect host postMessage bridge (openContent -> native Reader).
+  // The target window is resolved at MESSAGE time from the iframe element
+  // (not captured once at mount: the iframe only renders after the srcdoc
+  // fetch resolves, so a mount-time capture is null forever and every reply
+  // is dropped). Rebinding on srcdoc change keeps exactly one listener.
   useEffect(() => {
-    const targetWin = iframeRef.current?.contentWindow || null;
-    const bridge = createHostBridge(targetWin, {
+    const bridge = createHostBridge(() => iframeRef.current?.contentWindow ?? null, {
       cityId,
       tabId,
       onExpand,
@@ -99,7 +102,7 @@ export function DynamicTabContainer({
     return () => {
       bridge.destroy();
     };
-  }, [cityId, tabId, onExpand, onCollapse, onSubmitCommand]);
+  }, [cityId, tabId, onExpand, onCollapse, onSubmitCommand, srcdoc]);
 
   // 3-second ready handshake timeout once srcdoc is mounted
   useEffect(() => {

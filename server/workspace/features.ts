@@ -12,6 +12,9 @@ import {
   listPluginFiles,
 } from "./pluginFiles";
 import { UI_KIT_FILES, codeHasImports } from "./reactKit";
+// Single source of truth for the guest bridge: both srcdoc builders inline
+// this script so the timeout + ready-handshake behavior ships identically.
+import { GUEST_BRIDGE_SCRIPT } from "../../src/features/dock/bridge/guest-bridge.js";
 
 export interface FeatureManifest {
   id: string;
@@ -167,88 +170,10 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
     }
   </style>
   <script>
-    // Polymax Host-Guest Sandboxed Bridge Protocol
-    (function() {
-      const pendingRequests = new Map();
-      let requestId = 0;
-
-      window.addEventListener('message', function(event) {
-        if (!event.data || typeof event.data !== 'object') return;
-        const { polymaxResponseId, result, error } = event.data;
-        if (polymaxResponseId && pendingRequests.has(polymaxResponseId)) {
-          const { resolve, reject } = pendingRequests.get(polymaxResponseId);
-          pendingRequests.delete(polymaxResponseId);
-          if (error) reject(new Error(error));
-          else resolve(result);
-        }
-      });
-
-      function sendHostRequest(action, payload) {
-        return new Promise((resolve, reject) => {
-          const id = ++requestId;
-          pendingRequests.set(id, { resolve, reject });
-          window.parent.postMessage({
-            polymaxAction: action,
-            polymaxRequestId: id,
-            ...payload
-          }, '*');
-        });
-      }
-
-      // Error capture & reporting to host runtime
-      window.addEventListener('error', function(event) {
-        window.parent.postMessage({
-          polymaxAction: 'runtime.error',
-          error: {
-            message: event.message || 'Unknown error',
-            filename: event.filename || '',
-            lineno: event.lineno || 0,
-            colno: event.colno || 0,
-            stack: event.error ? event.error.stack : '',
-            timestamp: new Date().toISOString()
-          }
-        }, '*');
-      });
-
-      window.addEventListener('unhandledrejection', function(event) {
-        const reason = event.reason;
-        window.parent.postMessage({
-          polymaxAction: 'runtime.error',
-          error: {
-            message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
-            stack: reason && reason.stack ? reason.stack : '',
-            timestamp: new Date().toISOString()
-          }
-        }, '*');
-      });
-
-      window.polymax = {
-        storage: {
-          get: (key) => sendHostRequest('storage.get', { key }),
-          set: (key, value) => sendHostRequest('storage.set', { key, value }),
-          remove: (key) => sendHostRequest('storage.remove', { key }),
-        },
-        invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
-        useCapability: async (capabilityId, input) => {
-          if (!capabilityId) throw new Error('useCapability requires a capabilityId');
-          try {
-            return await sendHostRequest('capability.invoke', { capabilityId, input });
-          } catch (err) {
-            throw err instanceof Error ? err : new Error(String(err));
-          }
-        },
-        openUrl: (url) => sendHostRequest('openUrl', { url }),
-        openContent: (url) => sendHostRequest('openContent', { url }),
-        getContext: () => sendHostRequest('getContext', {}),
-        submit: (command) => sendHostRequest('submit', { command }),
-        ui: {
-          expand: () => sendHostRequest('ui.expand', {}),
-          collapse: () => sendHostRequest('ui.collapse', {}),
-        }
-      };
-      // PolyDocks V2 alias
-      window.polydocks = window.polymax;
-    })();
+    // Polymax Host-Guest Sandboxed Bridge Protocol (single source of truth:
+    // src/features/dock/bridge/guest-bridge.js, inlined so the sandbox runs
+    // it with no external fetch).
+${GUEST_BRIDGE_SCRIPT}
   </script>
 </head>
 <body>
@@ -256,9 +181,15 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
   <script>
     try {
 ${escapeInlineScript(jsCode)}
-      // Mounted without throwing: tell the host the UI is live. The host
-      // shows its error row (never raw text) if this never arrives.
-      window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
+      // Mounted without throwing: run the bridge ready handshake so the host
+      // reveals the UI AND the guest learns the host is listening (the host
+      // replies to polymaxAction: "ui.ready"; with no ack the guest reports
+      // "bridge not responding" instead of hanging silently).
+      if (window.polymax && window.polymax.__signalReady) {
+        window.polymax.__signalReady();
+      } else {
+        window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
+      }
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
       window.parent.postMessage({
@@ -312,87 +243,10 @@ ${guestCss}
 ${escapeInlineScript(kit.js)}
   </script>
   <script>
-    // Polymax Host-Guest Sandboxed Bridge Protocol (React kit build).
-    // Keep in sync with buildFeatureSrcdoc bridge and guest-bridge.js.
-    (function() {
-      const pendingRequests = new Map();
-      let requestId = 0;
-
-      window.addEventListener('message', function(event) {
-        if (!event.data || typeof event.data !== 'object') return;
-        const { polymaxResponseId, result, error } = event.data;
-        if (polymaxResponseId && pendingRequests.has(polymaxResponseId)) {
-          const { resolve, reject } = pendingRequests.get(polymaxResponseId);
-          pendingRequests.delete(polymaxResponseId);
-          if (error) reject(new Error(error));
-          else resolve(result);
-        }
-      });
-
-      function sendHostRequest(action, payload) {
-        return new Promise((resolve, reject) => {
-          const id = ++requestId;
-          pendingRequests.set(id, { resolve, reject });
-          window.parent.postMessage({
-            polymaxAction: action,
-            polymaxRequestId: id,
-            ...payload
-          }, '*');
-        });
-      }
-
-      window.addEventListener('error', function(event) {
-        window.parent.postMessage({
-          polymaxAction: 'runtime.error',
-          error: {
-            message: event.message || 'Unknown error',
-            filename: event.filename || '',
-            lineno: event.lineno || 0,
-            colno: event.colno || 0,
-            stack: event.error ? event.error.stack : '',
-            timestamp: new Date().toISOString()
-          }
-        }, '*');
-      });
-
-      window.addEventListener('unhandledrejection', function(event) {
-        const reason = event.reason;
-        window.parent.postMessage({
-          polymaxAction: 'runtime.error',
-          error: {
-            message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
-            stack: reason && reason.stack ? reason.stack : '',
-            timestamp: new Date().toISOString()
-          }
-        }, '*');
-      });
-
-      window.polymax = {
-        storage: {
-          get: (key) => sendHostRequest('storage.get', { key }),
-          set: (key, value) => sendHostRequest('storage.set', { key, value }),
-          remove: (key) => sendHostRequest('storage.remove', { key }),
-        },
-        invoke: (capabilityId, input) => sendHostRequest('capability.invoke', { capabilityId, input }),
-        useCapability: async (capabilityId, input) => {
-          if (!capabilityId) throw new Error('useCapability requires a capabilityId');
-          try {
-            return await sendHostRequest('capability.invoke', { capabilityId, input });
-          } catch (err) {
-            throw err instanceof Error ? err : new Error(String(err));
-          }
-        },
-        openUrl: (url) => sendHostRequest('openUrl', { url }),
-        openContent: (url) => sendHostRequest('openContent', { url }),
-        getContext: () => sendHostRequest('getContext', {}),
-        submit: (command) => sendHostRequest('submit', { command }),
-        ui: {
-          expand: () => sendHostRequest('ui.expand', {}),
-          collapse: () => sendHostRequest('ui.collapse', {}),
-        }
-      };
-      window.polydocks = window.polymax;
-    })();
+    // Polymax Host-Guest Sandboxed Bridge Protocol (single source of truth:
+    // src/features/dock/bridge/guest-bridge.js, inlined so the sandbox runs
+    // it with no external fetch).
+${GUEST_BRIDGE_SCRIPT}
   </script>
 </head>
 <body>
@@ -400,9 +254,15 @@ ${escapeInlineScript(kit.js)}
   <script>
     try {
 ${escapeInlineScript(guestJs)}
-      // Mounted without throwing: tell the host the UI is live. The host
-      // shows its error row (never raw text) if this never arrives.
-      window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
+      // Mounted without throwing: run the bridge ready handshake so the host
+      // reveals the UI AND the guest learns the host is listening (the host
+      // replies to polymaxAction: "ui.ready"; with no ack the guest reports
+      // "bridge not responding" instead of hanging silently).
+      if (window.polymax && window.polymax.__signalReady) {
+        window.polymax.__signalReady();
+      } else {
+        window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
+      }
     } catch (err) {
       console.error('[Polymax Guest Error]', err);
       window.parent.postMessage({
