@@ -3,6 +3,8 @@ import type { PluginManifest } from "../plugins/manifest";
 import { writeFeature, readFeature } from "../workspace/features";
 import { getPluginFile } from "../workspace/pluginFiles";
 import { saveVersion, rollbackPlugin } from "../plugins/versions";
+import { validatePluginCode } from "../plugins/validate";
+import { bundleFeatureCode, codeHasImports } from "../workspace/reactKit";
 import { addPluginToWorkspace } from "../workspace/workspaces";
 import { publishToRegistry, type RegistryPluginRecord } from "../plugins/communityRegistry";
 import { db } from "../workspace/db";
@@ -185,6 +187,22 @@ export class PluginService {
           createdAt: new Date().toISOString(),
         };
 
+        // 0. Pre-publish validation for React (TSX) code: bundle + mount in a
+        // server-side render test. Failure blocks activation and the error is
+        // returned to the agent. Hex colors are warnings only.
+        let preWarnings: string[] = [];
+        if (codeHasImports(input.code)) {
+          const pre = await validatePluginCode({ code: input.code, bundle: bundleFeatureCode });
+          preWarnings = pre.warnings;
+          if (!pre.ok) {
+            return {
+              success: false,
+              error: pre.error || "Pre-publish validation failed",
+              warnings: preWarnings,
+            };
+          }
+        }
+
         // 1. Transpile and write feature module
         await writeFeature(workspaceId, pluginId, {
           manifest: featureManifest,
@@ -275,6 +293,7 @@ export class PluginService {
           action: "dock.tool_mounted",
           message: `Plugin "${input.name}" successfully synthesized and mounted to workspace "${workspaceId}".`,
           mounted,
+          ...(preWarnings.length > 0 ? { warnings: preWarnings } : {}),
         };
       }
     );
@@ -320,6 +339,18 @@ export class PluginService {
       version: nextVersion,
       updatedAt: new Date().toISOString(),
     };
+
+    // 0. Pre-publish validation for React (TSX) code: blocks activation.
+    if (codeHasImports(input.code)) {
+      const pre = await validatePluginCode({ code: input.code, bundle: bundleFeatureCode });
+      if (!pre.ok) {
+        return {
+          success: false,
+          error: pre.error || "Pre-publish validation failed",
+          warnings: pre.warnings,
+        };
+      }
+    }
 
     // 1. Write updated feature module (transpile validates; throws before
     // touching the registry so the live version stays intact on bad code).

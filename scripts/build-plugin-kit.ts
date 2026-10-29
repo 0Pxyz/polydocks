@@ -37,12 +37,11 @@ function extractCandidates(sources: string[]): string[] {
   return [...found];
 }
 
-async function buildJs(): Promise<{ bytes: number; exports: string[] }> {
+async function buildJs(): Promise<{ bytes: number }> {
   const result = await Bun.build({
     entrypoints: [path.join(OUT_DIR, "entry.ts")],
     target: "browser",
     format: "iife",
-    globalName: "__polymaxKit",
     minify: true,
     sourcemap: "none",
     loader: { ".tsx": "tsx" },
@@ -52,10 +51,11 @@ async function buildJs(): Promise<{ bytes: number; exports: string[] }> {
     throw new Error(`Kit JS bundling failed:\n${details}`);
   }
   const text = await result.outputs[0].text();
-  // Split the React namespaces from the flattened UI exports.
-  const wrapped = `${text}\n;window.__polymaxKit = Object.assign(window.__polymaxKit || {}, { React: window.__polymaxKit.React, ReactDOMClient: window.__polymaxKit.ReactDOMClient, jsx: window.__polymaxKit.jsx, jsxs: window.__polymaxKit.jsxs, jsxDEV: window.__polymaxKit.jsxDEV, Fragment: window.__polymaxKit.Fragment, UI: window.__polymaxKit });\n`;
-  await fs.writeFile(path.join(OUT_DIR, "kit.bundle.js"), wrapped, "utf-8");
-  return { bytes: Buffer.byteLength(wrapped, "utf-8"), exports: [] };
+  if (!text.includes("__polymaxKit")) {
+    throw new Error("Kit bundle does not assign __polymaxKit");
+  }
+  await fs.writeFile(path.join(OUT_DIR, "kit.bundle.js"), text, "utf-8");
+  return { bytes: Buffer.byteLength(text, "utf-8") };
 }
 
 async function loadStylesheet(id: string, base: string): Promise<{ content: string; base: string }> {
