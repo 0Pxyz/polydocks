@@ -120,6 +120,16 @@ pluginsRouter.post("/mcp/connect", async (c) => {
   }
 
   // Install policy: connecting an external MCP server registers a new
+  // trust:external plugin. It requires explicit confirmation in the body
+  // (the UI sends confirmed:true after the user approves the dialog);
+  // policy=never always denies.
+  const { config } = await import("../config");
+  if (config.INSTALL_POLICY === "never") {
+    return c.json({ ok: false, error: "Install policy is 'never': MCP connect is disabled.", retryable: false, code: "install_denied" }, 400);
+  }
+  if (config.INSTALL_POLICY !== "auto" && (body as any)?.confirmed !== true) {
+    return c.json({ ok: false, error: "MCP connect needs explicit user confirmation: retry with { confirmed: true }.", retryable: false, code: "approval_required" }, 400);
+  }
 
   let parsedUrl: URL;
   try {

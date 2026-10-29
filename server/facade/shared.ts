@@ -229,6 +229,27 @@ export async function pluginLifecycle(
       code: "unknown_op",
     };
   }
+  // Install policy (config INSTALL_POLICY, default ask): agent-originated
+  // create/modify/install/publish need an explicit user yes (userApproved, same
+  // pattern as delete_tab). actor=user|cli means an explicit human action.
+  if ((op === "create" || op === "modify" || op === "install" || op === "publish") && ctx.actor === "agent") {
+    if (config.INSTALL_POLICY === "never") {
+      return {
+        ok: false,
+        error: "Install policy is 'never': the agent may not create, install or publish plugins.",
+        retryable: false,
+        code: "install_denied",
+      };
+    }
+    if (config.INSTALL_POLICY !== "auto" && (params as any).userApproved !== true) {
+      return {
+        ok: false,
+        error: "Install policy is 'ask': confirm with the user first, then retry with { userApproved: true }.",
+        retryable: false,
+        code: "approval_required",
+      };
+    }
+  }
   try {
     const eventName =
       op === "create" ? "plugin.created" : op === "modify" ? "plugin.updated" : op === "publish" ? "plugin.published" : op === "install" ? "plugin.installed" : "plugin.uninstalled";

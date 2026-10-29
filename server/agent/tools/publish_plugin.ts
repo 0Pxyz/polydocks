@@ -33,6 +33,11 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
       .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
   }),
   execute: async (input, ctx) => {
+
+    // Install policy: agent writes need an explicit user yes.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (input as any).userApproved);
+    if (denied) return denied;
     const workspaceId = input.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
 
     return await PluginService.publishPlugin({

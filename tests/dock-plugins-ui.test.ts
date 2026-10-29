@@ -116,6 +116,7 @@ describe("Plugins Dock Tool & Lifecycle UI (Issue #48)", () => {
             name: "Postgres Remote",
             url: "https://mcp.postgres.internal/sse",
             token: "secret_remote_token",
+            confirmed: true,
           }),
         })
       );
@@ -131,6 +132,21 @@ describe("Plugins Dock Tool & Lifecycle UI (Issue #48)", () => {
       const installed = pluginRegistry.get("mcp_postgres_remote");
       expect(installed).not.toBeNull();
       expect(installed?.name).toBe("Postgres Remote");
+    });
+
+    it("rejects unconfirmed MCP connect with approval_required (install policy)", async () => {
+      const deniedRes = await app.fetch(
+        new Request("http://localhost:3000/api/plugins/mcp/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "No Consent", url: "https://mcp.example.com/sse" }),
+        })
+      );
+      expect(deniedRes.status).toBe(400);
+      const denied = (await deniedRes.json()) as any;
+      expect(denied.ok).toBe(false);
+      expect(denied.code).toBe("approval_required");
+      expect(pluginRegistry.get("mcp_no_consent")).toBeNull();
     });
 
     it("returns recent execution status dots via GET /api/plugins/:id/executions", async () => {

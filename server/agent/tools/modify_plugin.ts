@@ -70,6 +70,11 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       }
     }),
   execute: async (args, ctx) => {
+
+    // Install policy: agent writes need an explicit user yes.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
     const normalized = normalizePluginId(args.id);
 

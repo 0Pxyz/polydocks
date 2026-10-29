@@ -72,6 +72,11 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .describe("Optional programmatic capabilities exposed to the agent or other tools"),
   }),
   execute: async (args, ctx) => {
+
+    // Install policy: agent writes need an explicit user yes.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
 
     // Retry safety: an idempotency key that already executed returns the

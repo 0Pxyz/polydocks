@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from "bun:test
 import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "../server/workspace/db";
+import { config } from "../server/config";
 import {
   dockOpen,
   dockClose,
@@ -25,7 +26,7 @@ const PLUGIN = "verb-test-plugin";
 const PLUGIN_CODE = `const app = document.getElementById('app'); app.innerHTML = '<div>verb test</div>';`;
 
 describe("verb tools: dock.open/close/pin/unpin/list", () => {
-  it("dock.list shows builtin tabs with pinned flags", async () => {
+  it("dock.list shows builtin tabs", async () => {
     const out: any = await dockList.execute({ cityId: CITY } as any, { step: 1, cityId: CITY });
     expect(out.ok).toBe(true);
     expect(Array.isArray(out.data.builtin)).toBe(true);
@@ -88,7 +89,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
       { step: 1, cityId: CITY, workspaceId: WS }
     );
     const edited: any = await pluginsEdit.execute(
-      { id: PLUGIN, code: `${PLUGIN_CODE}\n// v2`, workspaceId: WS } as any,
+      { id: PLUGIN, code: `${PLUGIN_CODE}\n// v2`, workspaceId: WS, userApproved: true } as any,
       { step: 1, cityId: CITY, workspaceId: WS }
     );
     expect(edited.ok).toBe(true);
@@ -147,5 +148,41 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
       { step: 1, cityId: CITY }
     );
     expect(out.ok).toBe(true);
+  });
+
+  it("install policy ask blocks agent verbs without approval (no side effects)", async () => {
+    const out: any = await pluginsCreate.execute(
+      { id: `${PLUGIN}-ask`, name: "x", description: "x", code: PLUGIN_CODE, workspaceId: WS } as any,
+      { step: 1, cityId: CITY, workspaceId: WS, actor: "agent" }
+    );
+    expect(out.ok).toBe(false);
+    expect(out.code).toBe("approval_required");
+    expect(getPluginFile(`${PLUGIN}-ask`, WS)).toBeNull();
+  });
+
+  it("direct create_plugin with actor=agent and no approval is denied without creating", async () => {
+    const { create_plugin } = await import("../server/agent/tools/create_plugin");
+    const out: any = await create_plugin.execute(
+      { id: `${PLUGIN}-direct`, name: "Direct", description: "t", code: PLUGIN_CODE, workspaceId: WS } as any,
+      { step: 1, cityId: CITY, workspaceId: WS, actor: "agent" }
+    );
+    expect(out.ok).toBe(false);
+    expect(out.code).toBe("approval_required");
+    expect(getPluginFile(`${PLUGIN}-direct`, WS)).toBeNull();
+  });
+
+  it("install policy never blocks even approved agents", async () => {
+    const saved = config.INSTALL_POLICY;
+    (config as any).INSTALL_POLICY = "never";
+    try {
+      const out: any = await pluginsCreate.execute(
+        { id: `${PLUGIN}-never`, name: "x", description: "x", code: PLUGIN_CODE, workspaceId: WS, userApproved: true } as any,
+        { step: 1, cityId: CITY, workspaceId: WS }
+      );
+      expect(out.ok).toBe(false);
+      expect(out.code).toBe("install_denied");
+    } finally {
+      (config as any).INSTALL_POLICY = saved;
+    }
   });
 });
