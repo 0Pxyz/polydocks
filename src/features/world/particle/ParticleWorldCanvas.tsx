@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import type { ParticleWorld, TerritoryCluster, ParticleRegion } from "./types";
 import { getCubicBezierPoint } from "./generator";
+import { layoutLabels, territoryPriority } from "./labelLayout";
 import { prefersReducedMotion } from "@/lib/motion";
 
 export interface ParticleWorldCanvasProps {
@@ -284,6 +285,18 @@ export function ParticleWorldCanvas({
       ctx.globalAlpha = 1.0;
 
       // 4. Draw Landmarks & Typography
+      const labelCandidates: Array<{
+        id: string;
+        x: number;
+        y: number;
+        text: string;
+        priority: number;
+        concepts?: number;
+      }> = [];
+      const labelMeta = new Map<
+        string,
+        { selected: boolean; hovered: boolean; accentColor: string; alpha: number }
+      >();
       world.territories.forEach((t) => {
         const isSelected = t.id === activeSelectedId;
         const isHovered = t.id === activeHoveredId;
@@ -316,26 +329,76 @@ export function ParticleWorldCanvas({
         }
         ctx.fillText(t.landmark, t.center.x, t.center.y);
 
-        // Territory label: plain type with soft shadow (no boxes or tags).
-        // Fades out at low zoom so labels never stack into noise.
-        const labelY = t.center.y + (isSelected ? 20 : 18);
+        // Territory label: placed without collisions, with a quiet backing
+        // pill for contrast over any background. Hidden labels reappear on
+        // hover or selection because those states sort first.
         const labelAlpha =
           isSelected || isHovered ? 1 : Math.max(0, Math.min(1, (camera.zoom - 0.55) / 0.3));
         if (labelAlpha > 0.02) {
-          ctx.save();
-          ctx.globalAlpha = labelAlpha;
-          ctx.font = `${
-            isSelected ? "600 12px" : "11px"
-          } "Geist Mono", "JetBrains Mono", ui-monospace, monospace`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-          ctx.shadowBlur = 6;
-          ctx.fillStyle = isSelected ? t.accentColor : isHovered ? "#FFFFFF" : "#C9CFD9";
-          ctx.fillText(t.label, t.center.x, labelY + 1);
-          ctx.restore();
+          labelCandidates.push({
+            id: t.id,
+            x: t.center.x,
+            y: t.center.y,
+            text: t.label,
+            priority: territoryPriority({
+              selected: isSelected,
+              hovered: isHovered,
+              radius: t.radius,
+              concepts: t.region.concepts.length,
+            }),
+            concepts: t.region.concepts.length,
+          });
+          labelMeta.set(t.id, {
+            selected: isSelected,
+            hovered: isHovered,
+            accentColor: t.accentColor,
+            alpha: labelAlpha,
+          });
         }
       });
+
+      if (labelCandidates.length > 0) {
+        const placed = layoutLabels(labelCandidates, {
+          left: -camera.x / camera.zoom,
+          top: -camera.y / camera.zoom,
+          right: (width - camera.x) / camera.zoom,
+          bottom: (height - camera.y) / camera.zoom,
+          zoom: camera.zoom,
+        });
+        for (const label of placed) {
+          const placedMeta = labelMeta.get(label.id);
+          if (!placedMeta) continue;
+          const font = `${placedMeta.selected ? "600 12px" : "11px"} "Geist Mono", "JetBrains Mono", ui-monospace, monospace`;
+          ctx.save();
+          ctx.globalAlpha = placedMeta.alpha;
+          ctx.font = font;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          const textWidth = ctx.measureText(label.text).width;
+          const pillWidth = textWidth + 12;
+          const pillHeight = 17;
+          const pillX = label.x - pillWidth / 2;
+          const pillY = label.y + 18;
+          ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = "rgba(6, 8, 14, 0.72)";
+          if (typeof ctx.roundRect === "function") {
+            ctx.beginPath();
+            ctx.roundRect(pillX, pillY, pillWidth, pillHeight, 7);
+            ctx.fill();
+          } else {
+            ctx.fillRect(pillX, pillY, pillWidth, pillHeight);
+          }
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = placedMeta.selected
+            ? placedMeta.accentColor
+            : placedMeta.hovered
+              ? "#FFFFFF"
+              : "#C9CFD9";
+          ctx.fillText(label.text, label.x, pillY + 2);
+          ctx.restore();
+        }
+      }
 
       ctx.restore();
       ctx.restore();
