@@ -3,7 +3,7 @@ import { config } from "../config";
 import { llm, MODEL_ID } from "./llm";
 import { defaultTools } from "./tools";
 import type { AgentTool } from "./tools/types";
-import { loadSkill, stripSkillMetadata, selectDomainSkills, isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
 import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
@@ -24,7 +24,6 @@ import {
   TaskExecutionEngine,
 } from "./taskRunner";
 import { readFileSafe } from "../system/filesystem";
-import path from "node:path";
 
 // Auto-register first party plugins
 initializeFirstPartyPlugins();
@@ -359,52 +358,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request Instructions (origin: dock-add)\n1. Build exactly one tool for this request using create_tab.\n2. If sources or information are needed (such as flashcards, reading list, or timeline), research first using search_web or city context.\n3. Choose a fitting catalog icon name for the tool.\n4. Call open_tab to mount and open the created tool in the workspace.\n5. In your final text response, reply with at most one sentence confirming the tool was mounted.`;
     }
 
-    // Manifest-driven skills & fallback
-    const lowerPrompt = prompt.toLowerCase();
-    let researchSkillInjected = false;
-
-    for (const plugin of installedPlugins) {
-      if (plugin.manifest.skill) {
-        const { file, triggers } = plugin.manifest.skill;
-        const matchesTrigger = triggers.some((t) => lowerPrompt.includes(t.toLowerCase()));
-        if (matchesTrigger) {
-          try {
-            const skillName = path.basename(file, ".md");
-            const skillPrompt = await loadSkill(skillName);
-            const skillHeading =
-              plugin.id === "search"
-                ? "Web Research & Primary Source Discovery (TinyFish)"
-                : plugin.name;
-            activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: ${skillHeading}\n${skillPrompt}`;
-            loadedSkills.push(skillName);
-            if (plugin.id === "search") researchSkillInjected = true;
-          } catch {
-            // Non-fatal
-          }
-        }
-      }
-    }
-
-    if (!researchSkillInjected && isResearchIntent(prompt)) {
-      try {
-        const researchSkillPrompt = await loadSkill("web-research");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Web Research & Primary Source Discovery (TinyFish)\n${researchSkillPrompt}`;
-        loadedSkills.push("web-research");
-      } catch {
-        // Non-fatal
-      }
-    }
-
-    if (isWorldPlanningIntent(prompt)) {
-      try {
-        const worldSkillPrompt = await loadSkill("world-planning");
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Specialized Skill: Knowledge Territories & World Map Planning\n${worldSkillPrompt}`;
-        loadedSkills.push("world-planning");
-      } catch {
-        // Non-fatal
-      }
-    }
-
+    // Intent-selected domain skills replaced the manifest-driven loader:
+    // selection is capped at two and every file is verified by drift tests.
     await emit({
       step: 0,
       type: "agent.start",
@@ -494,6 +449,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     ];
 
     const retryCounts = new Map<string, number>();
+    // Same tool with identical arguments already ran this turn: refuse the
+    // duplicate so the model changes approach instead of looping.
+    const seenCalls = new Set<string>();
 
     while (currentStep < maxSteps) {
       if (signal?.aborted) {
@@ -626,7 +584,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         const registeredTool = toolMap.get(toolName);
         let toolOutput: unknown;
 
-        if (!registeredTool) {
+        const callKey = `${toolName}:${JSON.stringify(rawArgs)}`;
+        if (seenCalls.has(callKey)) {
+          toolOutput = {
+            error: `Duplicate tool call: "${toolName}" already ran this turn with the same arguments. Stop and change approach instead of retrying it.`,
+            duplicate: true,
+          };
+        } else if (!registeredTool) {
           toolOutput = { error: `Tool "${toolName}" is not registered in catalog.` };
         } else {
           // Validate arguments against strict Zod schema with auto-retry protocol
@@ -647,6 +611,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               };
             }
           } else {
+            seenCalls.add(callKey);
             try {
               toolOutput = await registeredTool.execute(parsed.data, {
                 cityId,

@@ -94,12 +94,14 @@ describe("Domain skills: plugins and dock-and-tabs (backend contracts)", () => {
     expect(capturedSystemMessage).toContain("modify_plugin");
   });
 
-  it("loadSkill loads web-research.md skill", async () => {
-    const content = await loadSkill("web-research");
-    expect(content).toBeDefined();
-    expect(content).toContain("TinyFish");
-    expect(content).toContain("search_web");
-    expect(content).toContain("fetch_page");
+  it("unknown skill names throw (fail loudly, never silently skip)", async () => {
+    let threw = false;
+    try {
+      await loadSkill("web-research");
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
   });
 
   it("isTabSynthesisIntent detects tab creation prompts across languages", () => {
@@ -159,7 +161,7 @@ describe("Domain skills: plugins and dock-and-tabs (backend contracts)", () => {
     expect(isResearchIntent("update the feed plugin")).toBe(false);
   });
 
-  it("runAgentLoop dynamically injects web-research skill into system prompt on research intent or city workspace", async () => {
+  it("runAgentLoop injects the content-and-reader skill on research intent", async () => {
     let capturedSystemMessage = "";
 
     const mockLlmClient: any = {
@@ -189,18 +191,26 @@ describe("Domain skills: plugins and dock-and-tabs (backend contracts)", () => {
       llmClient: mockLlmClient,
     });
 
-    expect(capturedSystemMessage).toContain("Specialized Skill: Web Research & Primary Source Discovery (TinyFish)");
+    expect(capturedSystemMessage).toContain("Specialized Skill: content-and-reader");
     expect(capturedSystemMessage).toContain("search_web");
     expect(capturedSystemMessage).toContain("fetch_page");
-    expect(capturedSystemMessage).toContain("Autonomous Web Research & Discovery");
+    expect(capturedSystemMessage).toContain("untrusted data");
   });
 
-  it("loadSkill loads world-planning.md skill with plan_map and build_city protocol", async () => {
-    const content = await loadSkill("world-planning");
-    expect(content).toBeDefined();
+  it("content-and-reader states the real fetch contract (no format arg)", async () => {
+    const content = stripSkillMetadata(await loadSkill("content-and-reader"));
+    expect(content).toContain("no `format` argument");
+    expect(content).toContain("open_source");
+    expect(content).not.toContain("format: markdown");
+  });
+
+  it("world-and-cities states plan-then-build-then-place with existence check", async () => {
+    const content = stripSkillMetadata(await loadSkill("world-and-cities"));
     expect(content).toContain("plan_map");
     expect(content).toContain("build_city");
-    expect(content).toContain("TinyFish");
+    expect(content).toContain("place_city");
+    expect(content).toContain("notes/overview.md");
+    expect(content).not.toContain("connect_cities");
   });
 
   it("isWorldPlanningIntent detects knowledge domain and world planning queries in English and Portuguese", () => {
@@ -216,7 +226,7 @@ describe("Domain skills: plugins and dock-and-tabs (backend contracts)", () => {
     expect(isWorldPlanningIntent("change accent to lime")).toBe(false);
   });
 
-  it("runAgentLoop dynamically injects world-planning skill into system prompt on world planning intent", async () => {
+  it("runAgentLoop injects the world-and-cities skill on world planning intent", async () => {
     let capturedSystemMessage = "";
 
     const mockLlmClient: any = {
@@ -245,9 +255,29 @@ describe("Domain skills: plugins and dock-and-tabs (backend contracts)", () => {
       llmClient: mockLlmClient,
     });
 
-    expect(capturedSystemMessage).toContain("Specialized Skill: Knowledge Territories & World Map Planning");
+    expect(capturedSystemMessage).toContain("Specialized Skill: world-and-cities");
     expect(capturedSystemMessage).toContain("plan_map");
     expect(capturedSystemMessage).toContain("build_city");
+  });
+
+  it("capabilities, memory, and verify skills state their contracts and budgets", async () => {
+    const caps = stripSkillMetadata(await loadSkill("capabilities-and-mcp"));
+    expect(caps).toContain("find_capabilities");
+    expect(caps).toContain("invoke_capability");
+    expect(caps).toContain("destructive");
+    expect(caps).toContain("30s");
+
+    const mem = stripSkillMetadata(await loadSkill("memory-and-files"));
+    expect(mem).toContain("agent-home");
+    expect(mem).toContain("record_memory");
+    expect(mem).toContain("write_city_file");
+
+    const verify = stripSkillMetadata(await loadSkill("verify-and-report"));
+    expect(verify).toContain("already ran this turn");
+
+    for (const name of ["capabilities-and-mcp", "content-and-reader", "world-and-cities", "memory-and-files", "verify-and-report"]) {
+      expect(skillTokens(await loadSkill(name))).toBeLessThanOrEqual(600);
+    }
   });
 });
 
