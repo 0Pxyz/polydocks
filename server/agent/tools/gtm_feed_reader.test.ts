@@ -2,7 +2,6 @@ import { describe, expect, it, beforeAll } from "bun:test";
 import { readFeature } from "../../workspace/features";
 import { verifyPluginStateAsync } from "../../plugins/verify";
 import { PluginRegistry } from "../../plugins/registry";
-import { PluginService } from "../../services/pluginService";
 import { db } from "../../workspace/db";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -20,24 +19,35 @@ const FEED_SOURCE = await fs.readFile(
  */
 async function ensureAcceptanceState(): Promise<void> {
   const current = await readFeature("default", "gtm-app-feed").catch(() => null);
+  // Go through the agent tools (not the service) so guards, pre-publish
+  // validation, registry+mount ensure, and verification all run.
+  const { create_plugin } = await import("./create_plugin");
+  const { modify_plugin: modifyPluginTool } = await import("./modify_plugin");
+  const ctx = { cityId: "default", workspaceId: "default", step: 1 };
   if (!current) {
-    await PluginService.synthesizePlugin({
-      id: "gtm-app-feed",
-      name: "GTM App Feed",
-      description: "Go-to-market articles and videos with native in-app reader.",
-      icon: "Rocket",
-      code: FEED_SOURCE,
-      workspaceId: "default",
-      actor: "user",
-    });
+    const created = (await create_plugin.execute(
+      {
+        id: "gtm-app-feed",
+        name: "GTM App Feed",
+        description: "Go-to-market articles and videos with native in-app reader.",
+        icon: "Rocket",
+        code: FEED_SOURCE,
+        workspaceId: "default",
+      },
+      ctx
+    )) as any;
+    if (!created.success) throw new Error(`gtm setup synthesize failed: ${created.error}`);
   } else if (current.code !== FEED_SOURCE) {
-    await PluginService.modifyPlugin({
-      id: "gtm-app-feed",
-      code: FEED_SOURCE,
-      changeSummary: "Rebuild on shadcn kit with native Reader",
-      workspaceId: "default",
-      actor: "user",
-    });
+    const patched = (await modifyPluginTool.execute(
+      {
+        id: "gtm-app-feed",
+        code: FEED_SOURCE,
+        changeSummary: "Rebuild on shadcn kit with native Reader",
+        workspaceId: "default",
+      },
+      ctx
+    )) as any;
+    if (!patched.success) throw new Error(`gtm setup patch failed: ${patched.error}`);
   }
 
   const registry = PluginRegistry.getInstance();
@@ -63,7 +73,7 @@ async function ensureAcceptanceState(): Promise<void> {
       ).run(new Date().toISOString());
     } else {
       const { modify_plugin } = await import("./modify_plugin");
-      await modify_plugin.execute(
+      const marked = await modify_plugin.execute(
         {
           id: "gtm-reader",
           description:
@@ -73,6 +83,7 @@ async function ensureAcceptanceState(): Promise<void> {
         },
         { cityId: "default", workspaceId: "default", step: 1 }
       );
+      if (!marked.success) throw new Error(`gtm-reader mark failed: ${(marked as any).error}`);
     }
   }
   registry.disable("gtm-reader");

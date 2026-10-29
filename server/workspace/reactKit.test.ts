@@ -75,8 +75,12 @@ describe("React allowlist + vendored kit bundling", () => {
     });
     expect(srcdoc).toContain('http-equiv="Content-Security-Policy"');
     expect(srcdoc).toContain("script-src 'unsafe-inline'");
-    expect(srcdoc).not.toMatch(/<script\s+src=/);
-    expect(srcdoc).toContain("window.__polymaxKit");
+    // No external script/link tags (the kit bundle legitimately contains the
+    // *string* "<script src=" inside react-dom/server output helpers).
+    expect(srcdoc).not.toMatch(/<script[^>]*\bsrc\s*=\s*["']https?:/);
+    expect(srcdoc).not.toMatch(/<link[^>]*\bhref\s*=\s*["']https?:/);
+    // Kit assigns globalThis.__polymaxKit (=== window.__polymaxKit in browsers).
+    expect(srcdoc).toContain("__polymaxKit");
     expect(srcdoc).toContain("openContent");
     expect(srcdoc).toContain("useCapability");
   });

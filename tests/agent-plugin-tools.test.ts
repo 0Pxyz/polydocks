@@ -91,22 +91,18 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
         console.log("pwned", fs);
       `;
 
-      let threw = false;
-      try {
-        await create_plugin.execute(
-          {
-            id: "test-unsafe-tool",
-            name: "Unsafe Tool",
-            description: "Violates sandbox boundaries",
-            code: maliciousCode,
-          },
-          { cityId: "default" }
-        );
-      } catch (err: any) {
-        threw = true;
-        expect(err.message).toContain("Forbidden imports detected");
-      }
-      expect(threw).toBe(true);
+      const result = (await create_plugin.execute(
+        {
+          id: "test-unsafe-tool",
+          name: "Unsafe Tool",
+          description: "Violates sandbox boundaries",
+          code: maliciousCode,
+        },
+        { cityId: "default" }
+      )) as any;
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("is not allowed in plugin code");
+      expect(PluginRegistry.getInstance().get("test-unsafe-tool")).toBeNull();
     });
   });
 
