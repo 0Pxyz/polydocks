@@ -5,6 +5,7 @@ import {
   FileCode,
   FileSpreadsheet,
   File,
+  Image as ImageIcon,
   X,
   Download,
   Maximize2,
@@ -206,18 +207,34 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
             {images.map((img) => (
               <div
                 key={img.id}
-                onClick={() => setActiveLightboxImage(img)}
-                className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/30 cursor-pointer aspect-video sm:aspect-square flex items-center justify-center"
+                onClick={() => {
+                  if (img.dataUrl) setActiveLightboxImage(img);
+                }}
+                className={cn(
+                  "relative group rounded-xl overflow-hidden border border-white/10 bg-black/30 aspect-video sm:aspect-square flex items-center justify-center",
+                  img.dataUrl ? "cursor-pointer" : "cursor-default"
+                )}
               >
-                <img
-                  src={img.dataUrl}
-                  alt={img.name}
-                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                  <Maximize2 className="w-4 h-4 text-white" />
-                  <span className="text-[10px] font-mono text-white">Preview</span>
-                </div>
+                {img.dataUrl ? (
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name}
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-1.5 p-3 text-center">
+                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground truncate max-w-full">
+                      {img.name}
+                    </span>
+                  </div>
+                )}
+                {img.dataUrl && (
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                    <Maximize2 className="w-4 h-4 text-white" />
+                    <span className="text-[10px] font-mono text-white">Preview</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -244,10 +261,16 @@ export function MessageAttachments({ attachments }: MessageAttachmentsProps) {
                 </div>
 
                 <a
-                  href={doc.dataUrl}
-                  download={doc.name}
-                  className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-white transition-colors flex-shrink-0 cursor-pointer"
-                  title="Download file"
+                  href={doc.dataUrl || undefined}
+                  download={doc.dataUrl ? doc.name : undefined}
+                  aria-disabled={!doc.dataUrl}
+                  className={cn(
+                    "p-1.5 rounded-lg transition-colors flex-shrink-0",
+                    doc.dataUrl
+                      ? "hover:bg-white/10 text-muted-foreground hover:text-white cursor-pointer"
+                      : "text-muted-foreground/40 cursor-default pointer-events-none"
+                  )}
+                  title={doc.dataUrl ? "Download file" : "Original file not stored in the transcript"}
                 >
                   <Download className="w-3.5 h-3.5" />
                 </a>

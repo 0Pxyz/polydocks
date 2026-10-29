@@ -41,6 +41,7 @@ export default function App() {
     sendMessage,
     abortStream,
     retryLast,
+    hydrateThread,
   } = useConversationStore();
 
   const {
@@ -209,6 +210,12 @@ export default function App() {
   };
 
 
+
+  useEffect(() => {
+    // Restore the single persistent thread once per session. Layout changes
+    // never re-fetch it and no conversation list is created.
+    void hydrateThread();
+  }, [hydrateThread]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
