@@ -13,6 +13,8 @@ import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
+import { threadRouter } from "./routes/thread";
+import { resolveUserId } from "./identity";
 import { sessionsRouter } from "./routes/sessions";
 import { tasksRouter } from "./routes/tasks";
 import { artifactsRouter } from "./routes/artifacts";
@@ -42,7 +44,7 @@ app.use(
       "http://127.0.0.1:3000",
     ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Polymax-User"],
   })
 );
 
@@ -117,6 +119,9 @@ app.route("/api/cities", citiesRouter);
 // Mount Agent Durable Memory router
 app.route("/api/agent/memory", memoryRouter);
 
+// Mount the single persistent agent thread (transcript + bounded context)
+app.route("/api/agent/thread", threadRouter);
+
 // Mount Persistent Work Sessions & Background Task Engine (Issue #76)
 app.route("/api/sessions", sessionsRouter);
 app.route("/api/tasks", tasksRouter);
@@ -150,11 +155,16 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Invalid JSON request body" }, 400);
   }
 
-  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model, attachments } = body;
+  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model, attachments, retry } = body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
   }
+
+  const userId = resolveUserId({
+    header: c.req.header("x-polymax-user"),
+    body: body.userId,
+  });
 
   const requestedModel =
     typeof modelId === "string" && modelId.trim().length > 0
@@ -166,6 +176,7 @@ app.post("/api/agent", async (c) => {
   return streamSSE(c, async (stream) => {
     await runAgentLoop({
       prompt: prompt.trim(),
+      userId,
       cityId: typeof cityId === "string" ? cityId : undefined,
       sessionId: typeof sessionId === "string" ? sessionId : undefined,
       workspaceId: typeof workspaceId === "string" ? workspaceId : undefined,
@@ -174,6 +185,7 @@ app.post("/api/agent", async (c) => {
       modelId: requestedModel,
       attachments: Array.isArray(attachments) ? attachments : undefined,
       history: Array.isArray(history) ? history : [],
+      retryLast: retry === true,
       onEvent: async (event: AgentStepEvent) => {
         await stream.writeSSE({
           event: event.type,
