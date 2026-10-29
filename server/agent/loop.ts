@@ -39,6 +39,10 @@ export interface AgentStepEvent {
     | "tab.prime"
     | "map.changed"
     | "map.point.added"
+    | "plugin.created"
+    | "plugin.updated"
+    | "plugin.published"
+    | "plugin.operated"
     | "agent.finish"
     | "error";
   payload?: Record<string, unknown>;
@@ -155,39 +159,50 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   let currentStep = 0;
 
-  // Resolve session and workspace context
+  // Resolve workspace context. Session persistence (SQLite rows, JSONL
+  // transcripts, SSE replay buffers) belongs to the background/task path
+  // only: explicit sessionId or taskId. The interactive single-thread path
+  // (userId, no session/task) keeps the thread store as its only transcript
+  // and never mints ephemeral sessions.
+  const isTaskPath = Boolean(taskId || sessionId);
   const effectiveWorkspaceId =
     workspaceId || (cityId ? `city-${cityId}` : "default");
 
-  let effectiveSessionId = sessionId;
-  if (!effectiveSessionId) {
-    if (cityId) {
-      effectiveSessionId = `city-${cityId}`;
-    } else {
-      effectiveSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  let effectiveSessionId: string | undefined;
+  if (isTaskPath) {
+    effectiveSessionId = sessionId;
+    if (!effectiveSessionId) {
+      if (cityId) {
+        effectiveSessionId = `city-${cityId}`;
+      } else {
+        effectiveSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+    }
+
+    try {
+      const existingSession = getSession(effectiveSessionId);
+      if (!existingSession) {
+        createSession({
+          id: effectiveSessionId,
+          workspaceId: effectiveWorkspaceId,
+          title: prompt.slice(0, 60),
+        });
+      }
+    } catch {
+      // Non-fatal if session creation encounters existing or constraint
     }
   }
 
-  try {
-    const existingSession = getSession(effectiveSessionId);
-    if (!existingSession) {
-      createSession({
-        id: effectiveSessionId,
-        workspaceId: effectiveWorkspaceId,
-        title: prompt.slice(0, 60),
-      });
-    }
-  } catch {
-    // Non-fatal if session creation encounters existing or constraint
-  }
-
-  // Unified event dispatcher that forwards to onEvent and broadcasts/persists via TaskExecutionEngine
+  // Unified event dispatcher that forwards to onEvent and, on the task path
+  // only, broadcasts/persists via TaskExecutionEngine
   const emit: AgentEventCallback = async (event: AgentStepEvent) => {
     try {
       await onEvent(event);
     } catch {
       // Non-fatal if subscriber callback throws
     }
+
+    if (!effectiveSessionId) return;
 
     try {
       await TaskExecutionEngine.getInstance().emitEvent(effectiveSessionId, event);
@@ -644,6 +659,50 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           await emit({
             step: currentStep,
             type: "map.point.added",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        // Plugin lifecycle bridge: workspace-mounted plugins must surface in
+        // the dock UI the same way synthesized tabs do. Without these events
+        // the agent creates plugins that the user never sees.
+        if (
+          (toolName === "create_plugin" || toolName === "modify_plugin") &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).success === true &&
+          typeof (toolOutput as any).pluginId === "string"
+        ) {
+          await emit({
+            step: currentStep,
+            type: toolName === "create_plugin" ? "plugin.created" : "plugin.updated",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        if (
+          (toolName === "publish_plugin" || toolName === "promote_to_plugin") &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).success === true &&
+          typeof (toolOutput as any).pluginId === "string"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "plugin.published",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        if (
+          toolName === "operate_plugin" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).success === true
+        ) {
+          await emit({
+            step: currentStep,
+            type: "plugin.operated",
             payload: toolOutput as Record<string, unknown>,
           });
         }
