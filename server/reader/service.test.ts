@@ -5,7 +5,7 @@ describe("Native Reader backend", () => {
   it("classifies YouTube watch/shorts/embed URLs as video", () => {
     expect(classifyReaderUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ").kind).toBe("video");
     expect(classifyReaderUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ").embedUrl).toContain(
-      "youtube-nocookie.com"
+      "youtube.com/embed/"
     );
     expect(classifyReaderUrl("https://youtu.be/dQw4w9WgXcQ").kind).toBe("video");
     expect(classifyReaderUrl("https://www.youtube.com/shorts/dQw4w9WgXcQ").kind).toBe("video");

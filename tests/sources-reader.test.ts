@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from "bun:test";
-import { resolveSourceMode, videoEmbedUrl } from "../server/plugins/sources";
+import { resolveSourceMode, videoEmbedUrl, backfillVideoThumbnails } from "../server/plugins/sources";
 import { htmlToMarkdown } from "../server/reader/service";
 import { adaptBackendEvent } from "../src/lib/agent/events";
 import { useConversationStore, applyReaderOpened } from "../src/lib/agent/conversationStore";
@@ -44,7 +44,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
 
   it("video opens in the official embed (never an iframe crapshoot)", () => {
     expect(videoEmbedUrl("https://www.youtube.com/watch?v=abc123XYZ-_")).toBe(
-      "https://www.youtube-nocookie.com/embed/abc123XYZ-_"
+      "https://www.youtube.com/embed/abc123XYZ-_?rel=0&modestbranding=1&playsinline=1"
     );
     expect(videoEmbedUrl("https://vimeo.com/123456789")).toBe("https://player.vimeo.com/video/123456789");
   });
@@ -142,6 +142,53 @@ describe("sources.open modes (no silent fallbacks)", () => {
     expect(useConversationStore.getState().readerView).toBeNull();
   });
 
+  it("opening a source never forces the chat open (detail lives in Sources)", () => {
+    // Supersedes the closed-chat auto-surface: the opened source renders
+    // in the Sources plugin area, so openReader must leave the chat
+    // layout alone. The detail is visible without any overlay.
+    useConversationStore.setState({ layoutState: "closed", readerView: null });
+    useConversationStore.getState().openReader({
+      sourceId: "s1",
+      mode: "reader",
+      title: "T",
+      url: "https://example.com/a",
+      cityId: CITY,
+      markdown: "# T",
+    });
+    expect(useConversationStore.getState().readerView?.mode).toBe("reader");
+    expect(useConversationStore.getState().layoutState).toBe("closed");
+    useConversationStore.getState().closeReader();
+  });
+
+  it("backfills thumbnails for saved videos missing an image", () => {
+    const now = new Date().toISOString();
+    const seed = (id: string, kind: string, url: string, image: string | null) => {
+      db.query(
+        "INSERT INTO sources (id, city_id, kind, url, title, image, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run(id, CITY, kind, url, "T", image, now);
+    };
+    seed("v_youtube", "video", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null);
+    seed("v_vimeo", "video", "https://vimeo.com/76979871", null);
+    seed("v_kept", "video", "https://youtu.be/9bZkp7q19f0", "https://cdn.example.com/kept.jpg");
+    seed("a_plain", "article", "https://example.com/a", null);
+    seed("v_broken", "video", "https://example.com/not-a-video", null);
+    const { filledCount } = backfillVideoThumbnails();
+    expect(filledCount).toBe(2);
+    const get = (id: string) =>
+      (db.query("SELECT image FROM sources WHERE id = ?").get(id) as any)?.image ?? null;
+    expect(get("v_youtube")).toBe("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+    expect(get("v_vimeo")).toBe("https://vumbnail.com/76979871.jpg");
+    expect(get("v_kept")).toBe("https://cdn.example.com/kept.jpg");
+    expect(get("a_plain")).toBeNull();
+    expect(get("v_broken")).toBeNull();
+  });
+
+  it("opening a source never renders an overlay over the chat (Sources area only)", async () => {
+    const src = await Bun.file("src/features/agent/AgentConversation.tsx").text();
+    expect(src).not.toContain("ReaderPanel");
+    expect(src).not.toContain("readerView");
+  });
+
   it("sources.open returns the mode per type through the agent surface", async () => {
     const mk = (kind: string, url: string, fullText: string | null) => {
       const id = `t_${Math.random().toString(36).slice(2, 8)}`;
@@ -158,7 +205,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
     const ctx = { step: 1, cityId: CITY } as any;
     const v: any = await invoke_capability.execute({ id: "sources.open", input: { id: vid, cityId: CITY } }, ctx);
     expect(v.data?.data?.mode).toBe("video");
-    expect(String(v.data?.data?.embedUrl || "")).toContain("youtube-nocookie.com");
+    expect(v.data?.data?.embedUrl || "").toContain("youtube.com/embed/");
 
     const a: any = await invoke_capability.execute({ id: "sources.open", input: { id: art, cityId: CITY } }, ctx);
     expect(a.data?.data?.mode).toBe("reader");

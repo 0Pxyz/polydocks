@@ -145,6 +145,9 @@ interface ConversationStoreState {
   ) => Promise<void>;
 }
 
+/** Opened-source view: rendered inside the Sources plugin area, never as an overlay. */
+export type OpenedSourceView = NonNullable<ConversationStoreState["readerView"]>;
+
 const SIDE_WIDTH_KEY = "polymax-agent-side-width";
 const SOUND_KEY = "polymax-agent-sound";
 const MODEL_KEY = "polymax-agent-model";

@@ -4,6 +4,17 @@ import path from "node:path";
 import { db } from "../workspace/db";
 import { defineCapability } from "./contract";
 import { validateUrlForSsrf } from "./ssrf";
+import {
+  thumbnailForUrl,
+  videoEmbedUrl,
+  vimeoId,
+  vimeoThumbnail,
+  youtubeId,
+  youtubeThumbnail,
+} from "../video/ids";
+
+// Public surface kept for existing consumers (tests, reader contract).
+export { videoEmbedUrl } from "../video/ids";
 
 /**
  * Sources first-party plugin (contract-based).
@@ -79,40 +90,6 @@ export function siteFromUrl(raw: string): string {
     return new URL(raw).hostname.toLowerCase().replace(/^www\./, "");
   } catch {
     return "web";
-  }
-}
-
-export function youtubeId(raw: string): string | null {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    if (host === "youtu.be") {
-      const id = u.pathname.slice(1).split("/")[0];
-      return id || null;
-    }
-    if (host.endsWith("youtube.com")) {
-      const v = u.searchParams.get("v");
-      if (v) return v;
-      const m = u.pathname.match(/^\/(embed|shorts|live)\/([\w-]{6,})/);
-      if (m) return m[2];
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function vimeoId(raw: string): string | null {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
-      const m = u.pathname.match(/^\/(?:video\/)?(\d+)/);
-      return m ? m[1] : null;
-    }
-    return null;
-  } catch {
-    return null;
   }
 }
 
@@ -217,7 +194,7 @@ export async function enrichSource(
           url,
           title: opts.title || meta.title || null,
           site: "youtube.com",
-          image: meta.thumbnail_url || `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
+          image: meta.thumbnail_url || youtubeThumbnail(yt),
           author: meta.author_name || null,
           publishedAt: null,
           kind: "video",
@@ -232,7 +209,7 @@ export async function enrichSource(
       url,
       title: opts.title || null,
       site: "youtube.com",
-      image: `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
+      image: youtubeThumbnail(yt),
       author: null,
       publishedAt: null,
       kind: "video",
@@ -254,7 +231,7 @@ export async function enrichSource(
           url,
           title: opts.title || meta.title || null,
           site: "vimeo.com",
-          image: meta.thumbnail_url || `https://vumbnail.com/${vm}.jpg`,
+          image: meta.thumbnail_url || vimeoThumbnail(vm),
           author: meta.author_name || null,
           publishedAt: null,
           kind: "video",
@@ -269,7 +246,7 @@ export async function enrichSource(
       url,
       title: opts.title || null,
       site: "vimeo.com",
-      image: `https://vumbnail.com/${vm}.jpg`,
+      image: vimeoThumbnail(vm),
       author: null,
       publishedAt: null,
       kind: "video",
@@ -341,20 +318,6 @@ export interface ResolvedOpen {
   markdown?: string;
   /** Human-readable reason for external mode. */
   reason?: string;
-}
-
-export function youtubeEmbedUrl(raw: string): string | null {
-  const id = youtubeId(raw);
-  return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
-}
-
-export function vimeoEmbedUrl(raw: string): string | null {
-  const id = vimeoId(raw);
-  return id ? `https://player.vimeo.com/video/${id}` : null;
-}
-
-export function videoEmbedUrl(url: string): string | null {
-  return youtubeEmbedUrl(url) ?? vimeoEmbedUrl(url);
 }
 
 /**
@@ -606,10 +569,36 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
   return { migratedCount: count };
 }
 
+/**
+ * Backfills thumbnails for saved video rows that predate server-side
+ * enrichment (legacy `src_mig_*` rows carry image NULL): derives the
+ * thumbnail from the URL id alone, never touching rows that already
+ * have an image or non-video rows.
+ */
+export function backfillVideoThumbnails(): { filledCount: number } {
+  ensureSourcesSchema();
+  let filled = 0;
+  try {
+    const rows = db
+      .query("SELECT id, url FROM sources WHERE kind = 'video' AND (image IS NULL OR image = '')")
+      .all() as Array<{ id: string; url: string }>;
+    for (const row of rows) {
+      const thumb = thumbnailForUrl(row.url);
+      if (!thumb) continue;
+      db.query("UPDATE sources SET image = ? WHERE id = ?").run(thumb, row.id);
+      filled++;
+    }
+  } catch {
+    // Non-fatal: feed renders a derived thumbnail anyway.
+  }
+  return { filledCount: filled };
+}
+
 export function registerSourcesPlugin(): void {
   ensureSourcesSchema();
   // Perform background migration on registration
   void migrateLegacyCitySources().catch(() => {});
+  backfillVideoThumbnails();
 
   // 1. sources.add capability
   defineCapability({

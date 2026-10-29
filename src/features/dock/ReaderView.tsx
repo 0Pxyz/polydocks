@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
+import { VideoEmbed } from "@/features/video/VideoEmbed";
 
 export interface ReaderViewProps {
   url: string;
@@ -109,16 +110,9 @@ export function ReaderView({ url, onBack, onOpenExternal, className = "", initia
 
       {!loading && !error && payload?.kind === "video" && payload.embedUrl && (
         <div className="flex-1 min-h-0 flex flex-col">
-          {payload.embedUrl.includes("youtube-nocookie.com") || payload.embedUrl.includes("player.vimeo.com") ? (
-            <iframe
-              src={payload.embedUrl}
-              title={payload.title || "Video"}
-              sandbox="allow-scripts allow-same-origin allow-presentation"
-              referrerPolicy="no-referrer"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full flex-1 min-h-[320px] border-0 rounded-xl"
-            />
+          {payload.embedUrl.includes("youtube.com/embed/") ||
+          payload.embedUrl.includes("player.vimeo.com") ? (
+            <VideoEmbed url={payload.url || url} title={payload.title || "Video"} className="flex-1 min-h-[320px]" />
           ) : (
             <video src={payload.embedUrl} controls className="w-full max-h-full rounded-xl">
               Your browser does not support this video.

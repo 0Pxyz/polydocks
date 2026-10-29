@@ -20,6 +20,7 @@ import { spring, prefersReducedMotion } from "@/lib/motion";
 import type { IconComponent } from "@/components/icons/adapter";
 import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
+import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { computeVisibleCap, orderVisibleIds, DOCK_CORE_CATALOG, type DockItem } from "@/lib/dock/dockModel";
 import { CommandPalette } from "./CommandPalette";
@@ -296,6 +297,10 @@ export function AgenticDock({
   }, []);
   const { dockStyle, dockPosition } = useThemeStore();
   const isBottom = dockPosition === "bottom";
+  // When the reduced chat sits beside the content, the fixed dock recenters
+  // in the remaining space instead of the full width (otherwise icons spill
+  // out of the capsule and the dock reads as cut off).
+  const sideOffset = useConversationStore((s) => (s.layoutState === "side" ? s.sideWidth : 0));
   const currentStyle = DOCK_STYLES[dockStyle] || DOCK_STYLES.glass;
   const isReducedMotion = prefersReducedMotion();
 
@@ -470,6 +475,7 @@ export function AgenticDock({
   return (
     <header
       ref={headerRef}
+      style={sideOffset > 0 ? { left: sideOffset } : undefined}
       className={cn(
         "fixed left-0 right-0 z-50 flex flex-col items-center select-none pointer-events-none",
         isBottom ? "bottom-0 pb-3" : "top-0 pt-3",
