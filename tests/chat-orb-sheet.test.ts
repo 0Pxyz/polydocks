@@ -38,11 +38,14 @@ describe("chat capsule sheet (voice-first, footer picker)", () => {
     expect(switcher).not.toContain("Backend still receives modelId only");
   });
 
-  test("transcript is a native overflow viewport with thread restore", () => {
-    expect(sheet).toContain("overflow-y-auto");
-    expect(sheet).toContain("sheetTranscriptRef");
-    expect(sheet).toContain("Restoring your conversation");
+  test("sheet shows compact Orb + summary instead of a transcript", () => {
+    expect(sheet).toContain("shortSummary");
+    expect(sheet).toContain("tap to expand");
+    // Restore copy lives in the shared shortSummary helper (used by the sheet).
+    expect(source).toContain("Restoring your conversation");
     expect(sheet).not.toContain("ScrollArea");
+    expect(sheet).not.toContain("sheetTranscriptRef");
+    expect(sheet).not.toContain("overflow-y-auto");
   });
 
   test("single orb toggles realtime voice", () => {

@@ -38,6 +38,35 @@ interface AgentConversationProps {
   onOpenExperience?: (expId: string) => void;
 }
 
+/**
+ * One-line summary for the collapsed sheet: streaming status, otherwise the
+ * latest assistant reply (markdown stripped), otherwise the last user prompt.
+ */
+function shortSummary(
+  messages: Array<{ role: string; content: string }>,
+  isHydrating: boolean,
+  isStreaming: boolean,
+  statusText: string
+): string {
+  if (isStreaming && statusText) return statusText;
+  if (isStreaming) return "Thinking…";
+  if (isHydrating && messages.length === 0) return "Restoring your conversation…";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "assistant" && m.content.trim()) {
+      const line = m.content.split("\n").map((s) => s.trim()).find((s) => s.length > 0) || "";
+      const clean = line.replace(/[`*_#[\]()!>-]/g, "").trim();
+      if (!clean) return "Done.";
+      return clean.length > 140 ? `${clean.slice(0, 140)}…` : clean;
+    }
+  }
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  if (lastUser?.content.trim()) {
+    return lastUser.content.length > 140 ? `${lastUser.content.slice(0, 140)}…` : lastUser.content;
+  }
+  return "Speak or type to research topics, build tools, or explore your workspace.";
+}
+
 export function AgentConversation({
   cityId,
   onExperienceCreated,
@@ -84,12 +113,14 @@ export function AgentConversation({
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const sheetTranscriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sheetInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const realtimeRef = useRef<{ close: () => void; stopMic: () => void } | null>(null);
+  // One-shot anchor: expanding to full/side lands on the last user message,
+  // never at the top after a reload. Reset when leaving the expanded views.
+  const anchoredRef = useRef(false);
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -145,10 +176,11 @@ export function AgentConversation({
     adjustTextareaHeight();
   }, [draft, adjustTextareaHeight]);
 
-  // Handle auto-scroll during streaming
+  // Handle auto-scroll during streaming (expanded views only; the sheet
+  // shows a compact Orb + summary instead of a transcript)
   useEffect(() => {
-    if (layoutState === "closed") return;
-    const el = layoutState === "sheet" ? sheetTranscriptRef.current : transcriptRef.current;
+    if (layoutState === "closed" || layoutState === "sheet") return;
+    const el = transcriptRef.current;
     if (!el) return;
 
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
@@ -157,6 +189,29 @@ export function AgentConversation({
       setShowScrollBottom(false);
     }
   }, [messages, isStreaming, statusText, layoutState]);
+
+  // Anchor expanded views on the last user message (once per open, after
+  // hydration). Reloads never start at the top of the history.
+  useEffect(() => {
+    if (layoutState !== "full" && layoutState !== "side") {
+      anchoredRef.current = false;
+      return;
+    }
+    if (isHydratingThread || messages.length === 0 || isStreaming) return;
+    if (anchoredRef.current) return;
+    const container = transcriptRef.current;
+    if (!container) return;
+    anchoredRef.current = true;
+    const users = container.querySelectorAll('[data-msg-role="user"]');
+    const last = users[users.length - 1] as HTMLElement | undefined;
+    if (!last) {
+      container.scrollTo({ top: container.scrollHeight });
+      return;
+    }
+    const cRect = container.getBoundingClientRect();
+    const lRect = last.getBoundingClientRect();
+    container.scrollTo({ top: container.scrollTop + (lRect.top - cRect.top) - 72 });
+  }, [layoutState, isHydratingThread, messages, isStreaming]);
 
   // Track scroll position on the native transcript viewport
   useEffect(() => {
@@ -402,103 +457,44 @@ export function AgentConversation({
               </div>
             )}
 
-            {/* Scrollable Transcript Box: native overflow viewport (flex-1 shrinks;
-                generous bottom pad so rows never slide behind the composer) */}
-            <div
-              ref={sheetTranscriptRef}
-              className="relative z-0 my-3 min-h-0 flex-1 max-h-64 overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]"
-            >
-              <div className="px-1 pt-1 pb-24 space-y-2.5 select-text">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
-                  <p className="text-xs text-[#9aa5b8]">
-                    {isHydratingThread
-                      ? "Restoring your conversation…"
-                      : "Speak or type to research topics, build tools, or explore your workspace."}
-                  </p>
-                </div>
-              ) : (
-                messages.map((msg) => {
-                  const isUser = msg.role === "user";
-                  const isTool = msg.role === "tool";
+            {/* Compact status: single Orb (voice toggle) + short summary.
+                The collapsed sheet never renders the transcript, so a reload
+                can't start at the top — tap to expand the full conversation. */}
+            <div className="my-3 flex items-center gap-3 rounded-2xl bg-black/30 border border-white/[0.07] pl-1.5 pr-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isStreaming) abortStream();
+                  else void toggleVoice();
+                }}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0",
+                  orbState === "listening"
+                    ? "bg-red-500/20 text-red-400"
+                    : "hover:bg-white/10 text-muted-foreground hover:text-white"
+                )}
+                title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
+              >
+                <Orb state={orbState} size="sm" audioLevel={audioLevel} />
+              </button>
 
-                  if (isTool) {
-                    return (
-                      <div
-                        key={msg.id}
-                        className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/70 py-0.5"
-                      >
-                        <span className="text-[var(--accent-lime)] text-[9px]">✦</span>
-                        <span className="truncate">{msg.content}</span>
-                      </div>
-                    );
-                  }
+              <button
+                type="button"
+                onClick={() => setLayoutState("full")}
+                className="flex-1 min-w-0 text-left cursor-pointer group/summary"
+                title="Expand full conversation"
+              >
+                <p className="text-xs text-white/85 leading-snug truncate font-sans">
+                  {shortSummary(messages, isHydratingThread, isStreaming, statusText)}
+                </p>
+                <p className="text-[10px] font-mono text-muted-foreground/70 group-hover/summary:text-muted-foreground transition-colors">
+                  {messages.length > 0 ? `${messages.length} messages · tap to expand` : "Tap to expand"}
+                </p>
+              </button>
 
-                  if (isUser) {
-                    return (
-                      <div key={msg.id} className="flex flex-col items-end gap-1">
-                        <div className="max-w-[85%] rounded-2xl px-3.5 pt-1.5 pb-2 bg-white/[0.08] text-white text-xs leading-relaxed text-pretty">
-                          {msg.content}
-                        </div>
-                        <MessageAttachments attachments={msg.attachments} />
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className="prose prose-invert prose-sm max-w-none pr-2 pb-1 leading-relaxed prose-h1:text-sm prose-h2:text-sm prose-h3:text-xs"
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ href, children }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[var(--accent-lime)] hover:underline"
-                            >
-                              {children}
-                            </a>
-                          ),
-                          code({ className, children, ...props }) {
-                            const match = /language-(\w+)/.exec(className || "");
-                            const isInline = !match && !String(children).includes("\n");
-                            if (isInline) {
-                              return (
-                                <code
-                                  className="px-1 py-0.5 rounded bg-white/10 font-mono text-[11px] text-[var(--accent-lime)]"
-                                  {...props}
-                                >
-                                  {children}
-                                </code>
-                              );
-                            }
-                            return (
-                              <pre className="my-1.5 p-2 rounded-lg bg-black/60 border border-white/5 font-mono text-[11px] overflow-x-auto text-[#e2e8f0]">
-                                <code>{children}</code>
-                              </pre>
-                            );
-                          },
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  );
-                })
+              {isStreaming && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping shrink-0" />
               )}
-
-              {/* Status indicator during streaming */}
-              {isStreaming && statusText && (
-                <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)] py-1">
-                  <span className="animate-spin text-xs">✦</span>
-                  <span className="truncate">{statusText}</span>
-                </div>
-              )}
-              </div>
             </div>
 
             {/* Staging bar for attachments */}
@@ -533,24 +529,7 @@ export function AgentConversation({
                   <Paperclip className="w-3.5 h-3.5" />
                 </button>
 
-                {/* Single Orb: realtime voice toggle with pulsing active state */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isStreaming) abortStream();
-                    else void toggleVoice();
-                  }}
-                  className={cn(
-                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0",
-                    orbState === "listening"
-                      ? "bg-red-500/20 text-red-400"
-                      : "hover:bg-white/10 text-muted-foreground hover:text-white"
-                  )}
-                  title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
-                >
-                  <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-65" />
-                </button>
-
+                {/* Single Orb lives in the summary row above — composer keeps attach + input + send */}
                 <input
                   ref={sheetInputRef}
                   type="text"
@@ -736,7 +715,12 @@ export function AgentConversation({
 
             if (isUser) {
               return (
-                <div key={msg.id} className="flex flex-col items-end gap-1.5 w-full">
+                <div
+                  key={msg.id}
+                  data-msg-role="user"
+                  data-msg-id={msg.id}
+                  className="flex flex-col items-end gap-1.5 w-full"
+                >
                   <div className="max-w-[75%] rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
                     {msg.content}
                   </div>
@@ -767,6 +751,8 @@ export function AgentConversation({
             return (
               <div
                 key={msg.id}
+                data-msg-role="assistant"
+                data-msg-id={msg.id}
                 className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
               >
                 <ReactMarkdown
