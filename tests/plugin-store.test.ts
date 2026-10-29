@@ -15,7 +15,10 @@ describe("PolyDocks V2 Community Plugin Registry & Store", () => {
   beforeEach(() => {
     ensureDefaultWorkspace();
     ensureRegistrySchema();
-    // Clean up test records
+    // Clean up test records (workspaces too: createWorkspace has no
+    // upsert, so leftovers from a previous run collide on PRIMARY KEY).
+    db.query("DELETE FROM workspace_plugins WHERE workspace_id LIKE 'test-%'").run();
+    db.query("DELETE FROM workspaces WHERE id LIKE 'test-%'").run();
     db.query("DELETE FROM registry_plugins WHERE id LIKE 'test-%'").run();
     db.query("DELETE FROM workspace_plugins WHERE plugin_id LIKE 'test-%'").run();
     db.query("DELETE FROM plugins WHERE id LIKE 'test-%'").run();

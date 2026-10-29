@@ -25,13 +25,28 @@ The Meta Model API provides OpenAI-compatible endpoints with Meta-specific opera
 
 ---
 
-## 2. Models & Selection Strategy
+## 2. Models, Roles & Selection Strategy
+
+One model per job. Plugins declare a `modelRole`; `server/agent/modelRegistry.ts` resolves the provider from env. No plugin knows the provider, so flipping `AGENT_PROVIDER` never changes the tool catalog.
+
+| Role | Model | Status | Where it runs |
+| :--- | :--- | :--- | :--- |
+| `agent` | `muse-spark-1.3` (default; `MODEL_AGENT_ID` or `MODEL_ID` override, selector can pick `muse-wonder-1.0`) | Running | `runAgentLoop` in `server/agent/loop.ts`, SSE `POST /api/agent` |
+| `fast` | `MODEL_FAST_ID` (default `muse-spark-1.3`) | Resolved, no dedicated caller yet | `getClientForRole("fast")` |
+| `vision` | agent model by default; `MODEL_VISION_ID` pins one | Running as fallback | `loop.ts` keeps Spark/Wonder for image attachments (both take image input natively), `MODEL_VISION_ID` overrides |
+| `voice` | `muse-voice-transcribe-1.0` (`MODEL_VOICE_MODEL`, `MODEL_REALTIME_URL`) | Running | `server/voice/proxy.ts` (`wss` realtime), key stays server-side |
+| `image` | `muse-image-1.0` (`MODEL_IMAGE_ID`) | Running (chat requests) | `generate_image` tool → `POST /v1/images/generations`, cache `DATA_DIR/image-cache`, saved to user artifacts, served at `/api/media/image-cache/:file` |
+| `agent@openweight` | `meta-models/muse-spark-open-1026` via Baseten/Modal/self-host | Toggle, needs `AGENT_PROVIDER=openweight` + `OPENWEIGHT_*` | `getClientForRole("agent")` routes to the OpenAI-compatible adapter |
+| `segmentation` | `sam-3.1` (`MODEL_SEGMENTATION_ID`, Responses API) | Service present, agent tool NOT wired | `server/media/segmentation.ts` only; stays out of the demo path until voice+image+openweight are stable |
 
 | Model Identifier | Mode | Role & Usage |
 | :--- | :--- | :--- |
 | `muse-spark-1.3` | **Standard** | **Default.** Fast, high-throughput, optimized for tool-calling, agent loops, and UI generation. |
 | `muse-wonder-1.0` | **Standard** | Preview model, deeper reasoning, slower latency. Reserved for complex multi-paper comparisons. |
 | `muse-spark-open-1026` | **Open Weight** | Open weights variant served via vLLM, Modal, or Baseten for open-weight bonus eligibility. |
+| `muse-image-1.0` | **Standard** | Image generation/editing. `POST /v1/images/generations`, `POST /v1/images/edits`, or Responses API. |
+| `muse-voice-transcribe-1.0` | **Standard** | Speech-to-text. `wss://api.meta.ai/v1/asr/realtime` live or `POST /v1/asr/transcribe` for files. |
+| `sam-3.1` | **Standard** | Segmentation. `POST /v1/responses` with text+image, returns boxes and masks. |
 
 > [!IMPORTANT]
 > **Strict Mode Rule:** Always use standard models. **Never** use `-contributor` model variants (e.g., `muse-spark-1.3-contributor`), as user notes and files must remain private and cannot be used for upstream training.

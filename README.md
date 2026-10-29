@@ -46,9 +46,19 @@ The agent actively controls the dock. It is not limited to a static set of inter
 
 ## Powered by Meta AI
 
-Polymax runs on Meta's `muse-spark-1.3` through the Meta Model API.
+One model per job. Plugins declare a `modelRole`; `server/agent/modelRegistry.ts` resolves the provider from env only.
 
-The model serves as the core agent runtime. It parses user intent, determines when to query primary sources, and executes typed tool calls to create and update tools in the dock. It uses Socratic interaction to challenge understanding rather than supplying pre-packaged answers. The system also supports self-hosted open-weight endpoints by setting `MODEL_BASE_URL` in `.env`.
+| Role | Model | Status |
+| :--- | :--- | :--- |
+| Agent | `muse-spark-1.3` default, `muse-wonder-1.0` via the chat selector | Running — tool loop `server/agent/loop.ts`, SSE `POST /api/agent` |
+| Voice input | `muse-voice-transcribe-1.0` | Running — mic orb → `wss /api/voice/realtime` proxy, key stays server-side |
+| Image | `muse-image-1.0` | Running — `generate_image` on chat request (covers, city art, share cards), verified file cache under `DATA_DIR/image-cache`, saved to the user's artifacts |
+| Open-weight agent | `meta-models/muse-spark-open-1026` on Baseten/Modal/self-host | Toggle — `AGENT_PROVIDER=openweight` + `OPENWEIGHT_BASE_URL/_API_KEY/_MODEL_ID` in `.env` |
+| Segmentation | `sam-3.1` | Service present (`server/media/segmentation.ts`), agent tool not wired yet |
+
+Every model failure returns a structured `{ ok: false, error: { code, message, retryable, role } }` — never a fake success. Details in [docs/meta-model-api.md](docs/meta-model-api.md).
+
+The system also supports self-hosted open-weight endpoints for the agent role without touching any plugin.
 
 ---
 

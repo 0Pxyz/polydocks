@@ -6,6 +6,8 @@ export interface ToolExecutionContext {
   sessionId?: string;
   taskId?: string;
   step: number;
+  /** Who is acting: the agent (chat/task/dock turns), the CLI, or a user-confirmed surface. Defaults to "user". */
+  actor?: "agent" | "cli" | "user";
 }
 
 export interface AgentTool<T = any> {
@@ -13,6 +15,8 @@ export interface AgentTool<T = any> {
   description: string;
   schema: ZodType<T>;
   execute: (args: T, ctx: ToolExecutionContext) => Promise<unknown>;
+  /** Model role this tool needs. Plugins declare a role; the registry picks the provider. */
+  modelRole?: import("../modelRegistry").ModelRole;
 }
 
 export interface ToolCallPayload {

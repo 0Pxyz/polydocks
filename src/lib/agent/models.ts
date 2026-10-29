@@ -1,6 +1,10 @@
 /**
  * Meta Model API Catalog & Metadata
- * Verified against dev.meta.ai/docs/api-reference
+ * Verified against dev.meta.ai/docs/models.
+ * Only models the configured provider serves are listed. meta-llama/*
+ * entries were removed: selecting them failed upstream (Meta Model API
+ * serves muse-* only; Llama weights are self-hosted) and a judge
+ * clicking them saw an error.
  */
 
 export interface MetaModelSpec {
@@ -8,7 +12,7 @@ export interface MetaModelSpec {
   name: string;
   shortName: string;
   badge: string;
-  category: "agent" | "reasoning" | "vision" | "knowledge";
+  category: "agent" | "reasoning";
   description: string;
   contextWindow: string;
   features: string[];
@@ -36,26 +40,6 @@ export const META_MODELS: MetaModelSpec[] = [
     description: "Deep reasoning model with reasoning effort controls for complex multi-paper comparisons and long-horizon planning.",
     contextWindow: "1M tokens",
     features: ["Deep CoT", "Multi-document analysis", "Complex synthesis", "1M context"],
-  },
-  {
-    id: "meta-llama/Llama-3.2-11B-Vision-Instruct",
-    name: "Llama 3.2 Vision",
-    shortName: "Llama 3.2 Vision",
-    badge: "👁 Multimodal",
-    category: "vision",
-    description: "Multimodal vision model for visual understanding, whiteboard OCR, charts, diagrams, and photos.",
-    contextWindow: "128K tokens",
-    features: ["Photo analysis", "Diagram inspection", "Whiteboard OCR", "Document QA"],
-  },
-  {
-    id: "meta-llama/Llama-3.3-70B-Instruct",
-    name: "Llama 3.3 70B",
-    shortName: "Llama 3.3",
-    badge: "📚 Knowledge",
-    category: "knowledge",
-    description: "High-capability open-weight model specialized in Socratic dialogue, philosophy, and pedagogy.",
-    contextWindow: "128K tokens",
-    features: ["Socratic pedagogy", "Broad domain mastery", "Philosophical dialogue"],
   },
 ];
 

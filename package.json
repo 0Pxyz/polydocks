@@ -5,7 +5,8 @@
   "private": true,
   "license": "MIT",
   "bin": {
-    "polydocks": "./bin/polydocks"
+    "polydocks": "./bin/polydocks",
+    "polymax": "./bin/polydocks"
   },
   "type": "module",
   "engines": {

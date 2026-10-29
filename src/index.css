@@ -54,3 +54,23 @@ textarea {
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
   transition-duration: 200ms;
 }
+
+/* Imageless source tiles: slow pattern drift. Static under reduced motion. */
+@keyframes tile-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 56px 28px;
+  }
+}
+
+.tile-drift {
+  animation: tile-drift 24s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile-drift {
+    animation: none;
+  }
+}

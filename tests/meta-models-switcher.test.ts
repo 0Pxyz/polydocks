@@ -10,12 +10,15 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
   });
 
   describe("1. Meta Model API Catalog", () => {
-    it("contains the standard Meta Model suite without contributor variants", () => {
+    it("contains only models the provider serves, without contributor variants", () => {
       const ids = META_MODELS.map((m) => m.id);
       expect(ids).toContain("muse-spark-1.3");
       expect(ids).toContain("muse-wonder-1.0");
-      expect(ids).toContain("meta-llama/Llama-3.2-11B-Vision-Instruct");
-      expect(ids).toContain("meta-llama/Llama-3.3-70B-Instruct");
+
+      // meta-llama/* removed: Meta Model API serves muse-* only, so
+      // offering them made the selector fail upstream on click.
+      expect(ids).not.toContain("meta-llama/Llama-3.2-11B-Vision-Instruct");
+      expect(ids).not.toContain("meta-llama/Llama-3.3-70B-Instruct");
 
       // Verify no contributor variants exist
       for (const m of META_MODELS) {
@@ -34,12 +37,11 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
       expect(wonder.name).toBe("Muse Wonder 1.0");
       expect(wonder.category).toBe("reasoning");
 
-      const vision = getMetaModel("meta-llama/Llama-3.2-11B-Vision-Instruct");
-      expect(vision.name).toBe("Llama 3.2 Vision");
-      expect(vision.category).toBe("vision");
-
       const fallback = getMetaModel("non-existent-model");
       expect(fallback.id).toBe(DEFAULT_MODEL_ID);
+
+      // Removed models fall back to the default instead of failing upstream.
+      expect(getMetaModel("meta-llama/Llama-3.2-11B-Vision-Instruct").id).toBe(DEFAULT_MODEL_ID);
     });
   });
 
@@ -51,10 +53,6 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
       useConversationStore.getState().setSelectedModel("muse-wonder-1.0");
       expect(useConversationStore.getState().selectedModel).toBe("muse-wonder-1.0");
       expect(platformStorage.getItem("polymax-agent-model")).toBe("muse-wonder-1.0");
-
-      useConversationStore.getState().setSelectedModel("meta-llama/Llama-3.2-11B-Vision-Instruct");
-      expect(useConversationStore.getState().selectedModel).toBe("meta-llama/Llama-3.2-11B-Vision-Instruct");
-      expect(platformStorage.getItem("polymax-agent-model")).toBe("meta-llama/Llama-3.2-11B-Vision-Instruct");
     });
   });
 

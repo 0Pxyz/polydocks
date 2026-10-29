@@ -328,6 +328,16 @@ export function isDockTabsIntent(prompt: string): boolean {
   return DOCK_OPEN_WORD.test(lower) && DOCK_TAB_WORD.test(lower);
 }
 
+/** Dock experiences: pin/unpin, install/uninstall, rollback/versions, the experience noun. */
+export function isDockExperienceIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  if (isPluginFixIntent(prompt)) return false;
+  if (/\b(pin|pinned|unpin|afixad|desafixad)\b/.test(lower)) return true;
+  if (/\b(uninstall|desinstal|rollback|revert|revert\w*|vers(ion|ão|oes|ions))\b/.test(lower)) return true;
+  if (/\b(install|instala\w+)\b/.test(lower) && /\b(plugin|tool|ferramenta|store|timer|flashcards)\b/.test(lower)) return true;
+  return /\bexperience\b/.test(lower) && /\b(dock|plugin|tab)\b/.test(lower);
+}
+
 /** Plugin capabilities and MCP adapters: discover, then invoke. */
 export function isCapabilitiesIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -405,6 +415,7 @@ export function isVerifyIntent(prompt: string): boolean {
 
 export type DomainSkillName =
   | "dock-and-tabs"
+  | "dock"
   | "plugins"
   | "capabilities-and-mcp"
   | "content-and-reader"
@@ -433,6 +444,7 @@ export function selectDomainSkills(prompt: string): DomainSkillName[] {
     add("content-and-reader");
   if (isWorldPlanningIntent(prompt)) add("world-and-cities");
   if (isDockTabsIntent(prompt)) add("dock-and-tabs");
+  if (isDockExperienceIntent(prompt)) add("dock");
   if (isPluginSynthesisIntent(prompt) && !picked.includes("dock-and-tabs")) add("plugins");
   if (isMemoryFilesIntent(prompt)) add("memory-and-files");
   if (isVerifyIntent(prompt)) add("verify-and-report");

@@ -13,6 +13,7 @@ export interface ModifyPluginArgs {
   description?: string;
   icon?: string;
   workspaceId?: string;
+  userApproved?: boolean;
 }
 
 const patchSchema = z
@@ -49,6 +50,10 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       description: z.string().optional().describe("Optional updated description"),
       icon: z.string().optional().describe("Optional updated Phosphor icon name"),
       workspaceId: z.string().optional().describe("Workspace where plugin is located"),
+      userApproved: z
+        .boolean()
+        .optional()
+        .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
     })
     .superRefine((data, ctx) => {
       if (!data.code && !data.patch && !data.name && !data.description && !data.icon) {

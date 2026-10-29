@@ -11,6 +11,7 @@ export interface CreatePluginArgs {
   code: string;
   workspaceId?: string;
   idempotencyKey?: string;
+  userApproved?: boolean;
   capabilities?: Array<{
     id: string;
     title: string;
@@ -53,6 +54,10 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .string()
       .optional()
       .describe("Optional idempotency key to prevent duplicate creation on retry"),
+    userApproved: z
+      .boolean()
+      .optional()
+      .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
     capabilities: z
       .array(
         z.object({

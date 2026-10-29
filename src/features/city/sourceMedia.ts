@@ -77,6 +77,25 @@ export function faviconUrl(site: string | undefined, size = 128): string | null 
 }
 
 /**
+ * Deterministic tile variant from the source URL: stable per item,
+ * spreads imageless tiles across rotations so the feed never looks cloned.
+ */
+export function tileVariant(url: string): number {
+  let hash = 0;
+  for (let i = 0; i < url.length; i++) {
+    hash = (hash * 31 + url.charCodeAt(i)) >>> 0;
+  }
+  return hash % 3;
+}
+
+/** Pattern motif per source kind for the imageless tile. */
+export function tileMotif(kind?: string | null): "rules" | "diagonal" | "rings" {
+  if (kind === "paper") return "rules";
+  if (kind === "video") return "rings";
+  return "diagonal";
+}
+
+/**
  * Deterministic territory accent derived from the city name: a stable
  * hue the no-image tile renders on. Same city always yields same color.
  */

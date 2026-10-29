@@ -1,5 +1,4 @@
-import { getContractCapability } from "./contract";
-import { capabilityBus } from "./bus";
+import { invokeCapability } from "../facade/shared";
 
 /**
  * CLI surface for contract capabilities: `polydocks <plugin> <capability>
@@ -69,29 +68,12 @@ export async function runContractCommand(
   opts: ContractCliOptions
 ): Promise<{ found: boolean; envelope?: unknown; exitCode?: number }> {
   if (!capability) return { found: false };
-  const def = getContractCapability(pluginId, capability);
-  if (!def) return { found: false };
   const { input, city, workspace } = parseContractFlags(rawArgs);
   const cityId = opts.city || city || opts.workspace || workspace;
   if (!input.cityId && cityId) input.cityId = cityId;
-  const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  const result = await capabilityBus.invoke(`${pluginId}.${capability}`, input, {
-    actor: "user",
-    cityId,
-    onEvent: async (e) => {
-      if (e.type !== "tool.start" && e.type !== "tool.done") emitted.push({ type: e.type, payload: e.payload });
-    },
-  });
-  if (!result.success) {
-    return {
-      found: true,
-      envelope: { ok: false, error: result.error || "Capability failed.", retryable: true },
-      exitCode: 1,
-    };
+  const envelope = await invokeCapability(pluginId, capability, input, { actor: "user", cityId });
+  if (!envelope.ok) {
+    return { found: true, envelope, exitCode: 1 };
   }
-  const envelope = result.data as any;
-  if (envelope && typeof envelope === "object" && "ok" in envelope) {
-    return { found: true, envelope: { ...envelope, events: [...(envelope.events ?? []), ...emitted] }, exitCode: envelope.ok ? 0 : 1 };
-  }
-  return { found: true, envelope: { ok: true, data: envelope, events: emitted }, exitCode: 0 };
+  return { found: true, envelope, exitCode: (envelope as any).ok ? 0 : 1 };
 }

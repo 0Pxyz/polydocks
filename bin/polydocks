@@ -78,7 +78,21 @@ COMMANDS:
   plugins list [--workspace <id>]      List installed plugins
   plugins inspect <pluginId>           Inspect plugin manifest and capabilities
   plugins install <pluginId>           Install plugin into active workspace
+  plugins invoke <plugin> <capability> [--k v] [--city <id>]
+                                       Same handler as POST /api/plugins/:id/:capability
+  plugins lifecycle --op <create|modify|publish|install|uninstall> [--k v]
+                                       Same handler as POST /api/plugins/lifecycle
+  dock tabs [--city <id>]              List dock tabs (same as GET /api/dock/tabs)
+  dock action --op <op> [--k v] [--city <id>]
+                                       Dock verb (same as POST /api/dock/action)
+  dock open <tabId> | close|pin|unpin <id> | list [--city <id>]
+                                       Verb shortcuts (tabs.open/close/pin/unpin/list)
+  dock scope <cityId>                  Enter a city scope (same as POST /api/dock/scope)
+  dock appearance [--theme x ...]      Apply appearance (same as POST /api/dock/appearance)
   agent run "<prompt>"                 Run agent instruction directly in terminal
+  agent status | models                 Runtime status / model roles (same as /api/agent/*)
+  agent memory|task|approve|session --op <op> [--k v]
+                                       Agent surface (same as /api/agent/*)
   <plugin> <capability> [--k v]      Run a contract capability (sources, cities, ...)
                                      e.g. polydocks sources add --url https://... --city biohacking --json
 
@@ -316,19 +330,220 @@ async function handlePlugins(
     }
 
     const workspaceId = options.workspace || "default";
-    const mounted = WorkspaceService.addPluginToWorkspace(workspaceId, pluginId, {}, 0, "cli");
-
+    // Same no-ghost-mount rule as the lifecycle route: unknown ids fail.
+    const { pluginLifecycle } = await import("../server/facade/shared");
+    const out = await pluginLifecycle("install", { pluginId, workspaceId }, { actor: "cli", workspaceId });
     if (options.json) {
-      console.log(JSON.stringify({ success: true, mounted }, null, 2));
+      console.log(JSON.stringify(out.ok ? { success: true, mounted: (out as any).data } : out, null, 2));
+      process.exit(out.ok ? 0 : 1);
+    }
+    if (out.ok) {
+      console.log(`Successfully installed plugin "${pluginId}" into workspace "${workspaceId}".`);
       return;
     }
-
-    console.log(`Successfully installed plugin "${pluginId}" into workspace "${workspaceId}".`);
-    return;
+    console.error(`Error: ${(out as any).error || "Install failed."}`);
+    process.exit(1);
   }
 
-  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", or "install".`);
+  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", "install", "invoke", or "lifecycle".`);
   process.exit(1);
+}
+
+function printEnvelope(envelope: unknown, options: CliOptions): void {
+  if (options.json) {
+    console.log(JSON.stringify(envelope, null, 2));
+    return;
+  }
+  const env = envelope as any;
+  if (env?.ok) {
+    const data = env.data;
+    console.log(typeof data === "string" ? data : JSON.stringify(data, null, 2));
+    for (const e of env.events ?? []) {
+      console.log(`[event ${e.type}]`);
+    }
+  } else {
+    console.error(`Error: ${env?.error || "Failed."}${env?.code ? ` (${env.code})` : ""}`);
+  }
+}
+
+function facadeCtx(options: CliOptions) {
+  return { actor: "cli" as const, cityId: options.city, workspaceId: options.workspace };
+}
+
+/** plugins invoke <plugin> <capability> [--k v] — same handler as the route. */
+async function handlePluginsInvoke(
+  posArgs: string[],
+  rawTail: string[],
+  options: CliOptions
+): Promise<void> {
+  const [pluginId, capability, ...rest] = posArgs;
+  if (!pluginId || !capability) {
+    console.error('Error: Usage: polydocks plugins invoke <plugin> <capability> [--key value] [--city <id>]');
+    process.exit(1);
+  }
+  const { parseContractFlags } = await import("../server/plugins/contractCli");
+  const { input, city } = parseContractFlags([...rest, ...rawTail]);
+  const { invokeCapability } = await import("../server/facade/shared");
+  const out = await invokeCapability(pluginId, capability, input, {
+    ...facadeCtx(options),
+    cityId: options.city || city,
+  });
+  printEnvelope(out, options);
+  process.exit(out.ok ? 0 : 1);
+}
+
+/** plugins lifecycle --op <create|modify|publish|install> — same handler as the route. */
+async function handlePluginsLifecycle(
+  _posArgs: string[],
+  rawTail: string[],
+  options: CliOptions
+): Promise<void> {
+  const { parseContractFlags } = await import("../server/plugins/contractCli");
+  const { input } = parseContractFlags(rawTail);
+  const { pluginLifecycle } = await import("../server/facade/shared");
+  const op = (input as any).op;
+  if (typeof op !== "string") {
+    console.error("Error: Usage: polydocks plugins lifecycle --op <create|modify|publish|install> [--key value]");
+    process.exit(1);
+  }
+  const { op: _op, ...params } = input;
+  const out = await pluginLifecycle(op, params, {
+    ...facadeCtx(options),
+    cityId: options.city || (params as any).cityId,
+    workspaceId: options.workspace || (params as any).workspaceId,
+  });
+  printEnvelope(out, options);
+  process.exit(out.ok ? 0 : 1);
+}
+
+/** dock <tabs|action|scope|appearance> — same handlers as /api/dock. */
+async function handleDock(
+  subcommand: string | undefined,
+  posArgs: string[],
+  rawTail: string[],
+  options: CliOptions
+): Promise<void> {
+  const { dockAction } = await import("../server/facade/shared");
+  const { parseContractFlags } = await import("../server/plugins/contractCli");
+  if (subcommand === "tabs" || !subcommand) {
+    const out = await dockAction("tabs.list", options.city ? { cityId: options.city } : {}, facadeCtx(options));
+    printEnvelope(out, options);
+    process.exit(out.ok ? 0 : 1);
+  }
+  // Verb shortcuts: dock open|close|pin|unpin|list <id> — same as action --op tabs.*.
+  const verbOp: Record<string, string> = {
+    open: "tabs.open",
+    close: "tabs.close",
+    pin: "tabs.pin",
+    unpin: "tabs.unpin",
+    list: "tabs.list",
+  };
+  if (subcommand && verbOp[subcommand]) {
+    const id = posArgs[0];
+    const params: Record<string, unknown> = {};
+    if (subcommand === "open") {
+      if (!id) {
+        console.error("Error: Usage: polydocks dock open <tabId> [--city <id>]");
+        process.exit(1);
+      }
+      params.tabId = id;
+    } else if (subcommand !== "list") {
+      if (!id) {
+        console.error(`Error: Usage: polydocks dock ${subcommand} <id> [--city <id>]`);
+        process.exit(1);
+      }
+      params.id = id;
+    }
+    if (options.city) params.cityId = options.city;
+    if (options.workspace) params.workspaceId = options.workspace;
+    const out = await dockAction(verbOp[subcommand], params, facadeCtx(options));
+    printEnvelope(out, options);
+    process.exit(out.ok ? 0 : 1);
+  }
+  if (subcommand === "action") {
+    const { input } = parseContractFlags(rawTail);
+    const { op, ...params } = input as Record<string, unknown>;
+    if (typeof op !== "string") {
+      console.error('Error: dock action needs --op <tabs.list|tabs.open|tabs.pin|tabs.unpin|tabs.close|scope.enter|scope.get|appearance.apply>');
+      process.exit(1);
+    }
+    if (options.city && !params.cityId) (params as any).cityId = options.city;
+    const out = await dockAction(op, params, facadeCtx(options));
+    printEnvelope(out, options);
+    process.exit(out.ok ? 0 : 1);
+  }
+  if (subcommand === "scope") {
+    const cityId = posArgs[0] || options.city;
+    if (!cityId) {
+      console.error("Error: Usage: polydocks dock scope <cityId>");
+      process.exit(1);
+    }
+    const out = await dockAction("scope.enter", { cityId }, facadeCtx(options));
+    printEnvelope(out, options);
+    process.exit(out.ok ? 0 : 1);
+  }
+  if (subcommand === "appearance") {
+    const { input } = parseContractFlags(rawTail);
+    const out = await dockAction("appearance.apply", { ...input, ...(options.city ? { cityId: options.city } : {}) }, facadeCtx(options));
+    printEnvelope(out, options);
+    process.exit(out.ok ? 0 : 1);
+  }
+  console.error(`Unknown dock subcommand "${subcommand}". Use "tabs", "action", "scope", or "appearance".`);
+  process.exit(1);
+}
+
+/** agent <status|models|memory|task|approve|session> — same handlers as /api/agent. */
+async function handleAgentSurface(
+  subcommand: string | undefined,
+  rawTail: string[],
+  options: CliOptions
+): Promise<void> {
+  const { parseContractFlags } = await import("../server/plugins/contractCli");
+  const shared = await import("../server/facade/shared");
+  const { input } = parseContractFlags(rawTail);
+  const params = { ...input, ...(options.city ? { cityId: options.city } : {}), ...(options.workspace ? { workspaceId: options.workspace } : {}) };
+  let out: unknown;
+  switch (subcommand) {
+    case "status":
+      out = await shared.agentStatus();
+      break;
+    case "models":
+      out = await shared.agentModels();
+      break;
+    case "memory":
+      if (params.op !== "recall" && params.op !== "record") {
+        console.error("Error: agent memory needs --op <recall|record>.");
+        process.exit(1);
+      }
+      out = await shared.agentMemory(params.op, params, facadeCtx(options));
+      break;
+    case "task":
+      if (params.op !== "list" && params.op !== "cancel") {
+        console.error("Error: agent task needs --op <list|cancel>.");
+        process.exit(1);
+      }
+      out = await shared.agentTask(params.op, params);
+      break;
+    case "approve":
+      if (params.op !== "list" && params.op !== "resolve") {
+        console.error("Error: agent approve needs --op <list|resolve>.");
+        process.exit(1);
+      }
+      out = await shared.agentApprovals(params.op, params);
+      break;
+    case "session":
+      if (params.op !== "list" && params.op !== "resume") {
+        console.error("Error: agent session needs --op <list|resume>.");
+        process.exit(1);
+      }
+      out = await shared.agentSession(params.op, params, facadeCtx(options));
+      break;
+    default:
+      console.error(`Unknown agent subcommand "${subcommand}". Use "run", "status", "models", "memory", "task", "approve", or "session".`);
+      process.exit(1);
+  }
+  printEnvelope(out, options);
+  process.exit((out as any)?.ok ? 0 : 1);
 }
 
 async function handleAgentRun(
@@ -419,13 +634,34 @@ async function main(): Promise<void> {
         await handleTasks(subcommand, options);
         break;
       case "plugins":
+        if (subcommand === "invoke") {
+          // Tail after `plugins invoke`: keep flags for the capability input.
+          const tail = rawArgs.slice(rawArgs.indexOf("invoke") + 1);
+          await handlePluginsInvoke(positional, tail, options);
+          break;
+        }
+        if (subcommand === "lifecycle") {
+          const tail = rawArgs.slice(rawArgs.indexOf("lifecycle") + 1);
+          await handlePluginsLifecycle(positional, tail, options);
+          break;
+        }
         await handlePlugins(subcommand, positional, options);
         break;
+      case "dock": {
+        const idx = rawArgs.indexOf(subcommand ?? "");
+        const tail = idx >= 0 ? rawArgs.slice(idx + 1) : [];
+        await handleDock(subcommand, positional, tail, options);
+        break;
+      }
       case "agent":
         if (subcommand === "run") {
           await handleAgentRun(positional, options);
+        } else if (["status", "models", "memory", "task", "approve", "session"].includes(subcommand ?? "")) {
+          const idx = rawArgs.indexOf(subcommand ?? "");
+          const tail = idx >= 0 ? rawArgs.slice(idx + 1) : [];
+          await handleAgentSurface(subcommand, tail, options);
         } else {
-          console.error(`Unknown agent subcommand "${subcommand}". Use "agent run '<prompt>'".`);
+          console.error(`Unknown agent subcommand "${subcommand}". Use "run", "status", "models", "memory", "task", "approve", or "session".`);
           process.exit(1);
         }
         break;

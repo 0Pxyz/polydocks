@@ -24,6 +24,7 @@ import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
 import { useConversationStore } from "@/lib/agent/conversationStore";
+import { cancelSpeech } from "@/lib/agent/speech";
 import { useThemeStore } from "@/lib/theme";
 import {
   connectRealtimeVoice,
@@ -287,16 +288,53 @@ export function AgentConversation({
       return;
     }
 
+    // Stop any spoken reply first: without this the mic transcribes the
+    // agent's own TTS voice into the next user turn (feedback loop).
+    cancelSpeech();
     setOrbState("listening");
     setStatusText("Listening… speak now. Tap the Orb to stop.");
 
+    // Single-shot voice command: the first final transcript stops the mic,
+    // flushes the turn (endStream) and sends itself as a chat message.
+    // Partials only preview into the draft — nothing sends twice.
+    let sent = false;
+    let busyHandoff = false;
+    const stopSession = () => {
+      realtimeRef.current?.stopMic();
+      realtimeRef.current?.close();
+      realtimeRef.current = null;
+    };
+
     try {
       const session = connectRealtimeVoice({
-        onPartial: (text) => setDraft(text),
+        onPartial: (text) => {
+          if (!sent) setDraft(text);
+        },
+        onSpeechStart: () => {
+          if (!sent) setStatusText("Listening…");
+        },
+        onSpeechEnd: () => {
+          if (!sent) setStatusText("Understanding…");
+        },
         onFinal: (text) => {
-          if (!text.trim()) return;
+          const clean = text.trim();
+          if (!clean || sent) return;
+          sent = true;
+          stopSession();
+          const store = useConversationStore.getState();
+          if (store.isStreaming) {
+            // Never drop the user's words: park them in the draft so they
+            // can press send once the running turn finishes.
+            busyHandoff = true;
+            setDraft(clean);
+            setOrbState("idle");
+            setStatusText("Still working — your words are in the box, press send when ready.");
+            return;
+          }
           setDraft("");
-          void sendMessage(text, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
+          setOrbState("idle");
+          setStatusText("");
+          void store.sendMessage(clean, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
         },
         onLevel: (level) => setAudioLevel(level),
         onError: (message) => {
@@ -309,7 +347,9 @@ export function AgentConversation({
         onClose: () => {
           realtimeRef.current = null;
           setOrbState("idle");
-          setStatusText("");
+          // Keep the busy-handoff message: the user's words are parked in
+          // the draft and clearing the status would hide where they went.
+          if (!busyHandoff) setStatusText("");
         },
       });
 

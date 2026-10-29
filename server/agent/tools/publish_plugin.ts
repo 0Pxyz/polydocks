@@ -8,6 +8,7 @@ export interface PublishPluginArgs {
   author?: string;
   tags?: string[];
   idempotencyKey?: string;
+  userApproved?: boolean;
 }
 
 export const publish_plugin: AgentTool<PublishPluginArgs> = {
@@ -26,6 +27,10 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
       .string()
       .optional()
       .describe("Optional idempotency key to prevent duplicate publishing"),
+    userApproved: z
+      .boolean()
+      .optional()
+      .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
   }),
   execute: async (input, ctx) => {
     const workspaceId = input.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
