@@ -118,6 +118,13 @@ The agent works on the user's real files and, later, commands, the way T3 Code a
 - The local server binds to `127.0.0.1` and requires a per-launch token.
 - When you read a reference project (T3 Code, Maestri, Emdash and similar) to learn how they do something, write what you learned into `docs/system-access.md` in the same PR, with the repo, file path and commit you looked at. Mark anything you could not confirm as `TO VERIFY`.
 
+## 4d. Ciclo de vida das tabs (platform rule)
+
+Tabs never reload or get interrupted by navigation. Only the host mounts, hides and hibernates tabs (mount on first open, keep alive hidden, hibernate the oldest above `LIVE_TAB_LIMIT` in `src/lib/tabs/tabHostStore.ts`); plugins never control their own lifecycle.
+- Contract (`docs/plugins/lifecycle.md`): durable state via `useTabState(tabId, key, initial)` (React) or `polymax.storage` (guests, rehydrate on boot); background work via `polymax.task.{start,update,done}` (continues hidden, host notifies on completion; hibernation marks tasks interrupted).
+- FORBIDDEN in plugin code (validation rejects with a clear error): `location.reload()`; conditional render on the active tab; active-derived keys. Render unconditionally — inactive tabs are hidden with CSS and keep running.
+- Generator prompts (`server/agent/skills/plugins.md`, `dock-and-tabs.md`) must require this contract. Contract tests iterate the live registry (`server/plugins/lifecycle.ts`), so every present and future plugin is covered automatically.
+
 ## 5. Workflow for agents
 
 Source of truth for work is **GitHub Issues**. `.internal/backlog.md` is only a draft.
