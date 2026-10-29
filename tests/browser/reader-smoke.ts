@@ -4,7 +4,7 @@
  * Full path, in an actual Chromium iframe: seed a temp DATA_DIR with the
  * GTM App Feed plugin (same fixture + agent-tool path as
  * gtm_feed_reader.test.ts), boot the built app, open the tool through dock
- * search, click "Open in reader" on a video (assert youtube-nocookie embed
+ * search, click "Open in reader" on a video (assert youtube.com embed
  * in the native Reader), then on an article (assert Reader article content),
  * then prove the storage round-trip (Mark read -> reload -> still read,
  * which requires storage.set/get replies through the bridge).
@@ -183,11 +183,15 @@ async function main() {
         await frame().getByRole("tab", { name: "Videos" }).click();
         await frame().getByText("Open in reader").first().click();
         await page.getByRole("button", { name: /back/i }).waitFor({ timeout: 30_000 });
-        const embed = page.locator('iframe[src*="youtube-nocookie.com"], iframe[src*="player.vimeo.com"], video');
+        const embed = page.locator('iframe[src*="youtube.com/embed"], iframe[src*="player.vimeo.com"], video');
         await embed.first().waitFor({ timeout: 30_000 });
         const src = (await embed.first().getAttribute("src")) || "";
-        if (!src.includes("youtube-nocookie.com") && !src.includes("player.vimeo.com")) {
+        if (!src.includes("youtube.com/embed") && !src.includes("player.vimeo.com")) {
           throw new Error(`video did not open the expected embed (src=${src || "(video tag)"})`);
+        }
+        const referrer = await embed.first().getAttribute("referrerpolicy");
+        if (referrer !== "strict-origin-when-cross-origin") {
+          throw new Error(`embed uses wrong referrerpolicy (got ${referrer})`);
         }
         await page.waitForTimeout(3000);
         await shot("02-reader-video.png");
