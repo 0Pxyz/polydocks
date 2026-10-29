@@ -331,6 +331,102 @@ export async function enrichSource(
   };
 }
 
+export type ReaderMode = "video" | "reader" | "embed" | "external";
+
+export interface ResolvedOpen {
+  mode: ReaderMode;
+  /** Official embed URL for video/embed modes. */
+  embedUrl?: string;
+  /** Saved markdown for reader mode. */
+  markdown?: string;
+  /** Human-readable reason for external mode. */
+  reason?: string;
+}
+
+export function youtubeEmbedUrl(raw: string): string | null {
+  const id = youtubeId(raw);
+  return id ? `https://www.youtube-nocookie.com/embed/${id}` : null;
+}
+
+export function vimeoEmbedUrl(raw: string): string | null {
+  const id = vimeoId(raw);
+  return id ? `https://player.vimeo.com/video/${id}` : null;
+}
+
+export function videoEmbedUrl(url: string): string | null {
+  return youtubeEmbedUrl(url) ?? vimeoEmbedUrl(url);
+}
+
+/**
+ * HEAD check for frame embedding: DENY/SAMEORIGIN x-frame-options or a
+ * restrictive frame-ancestors CSP means the host forbids iframes.
+ * Absent headers mean allowed (browser default). Network failure or an
+ * inconclusive response is NOT permission — fall through to reader/external.
+ */
+export async function checkFramingAllowed(rawUrl: string): Promise<boolean> {
+  const ssrf = validateUrlForSsrf(rawUrl);
+  if (!ssrf.safe || !ssrf.url) return false;
+  try {
+    const res = await fetch(ssrf.url.toString(), {
+      method: "HEAD",
+      signal: AbortSignal.timeout(8000),
+      redirect: "follow",
+    });
+    if (!res.ok) return false;
+    const xfo = (res.headers.get("x-frame-options") || "").toLowerCase();
+    if (xfo.includes("deny") || xfo.includes("sameorigin")) return false;
+    const csp = (res.headers.get("content-security-policy") || "").toLowerCase();
+    const fa = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("frame-ancestors"));
+    if (fa && (fa.includes("'none'") || (fa.includes("'self'") && !fa.includes("https:")))) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPdfLike(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.pathname.toLowerCase().endsWith(".pdf")) return true;
+    const host = u.hostname.toLowerCase();
+    if (host === "arxiv.org" || host.endsWith(".arxiv.org")) return u.pathname.includes("/pdf/");
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decides how a saved source opens — pure except for the PDF framing
+ * check. No silent fallbacks: every branch names its mode. Video embeds
+ * always work (official players); articles read from the saved markdown
+ * (never an iframe, so frame-blockers cannot break them); PDFs embed
+ * only when the host permits; otherwise an explicit external state
+ * tells the user to open the original.
+ */
+export async function resolveSourceMode(row: Pick<SourceRow, "url" | "kind" | "fullText">): Promise<ResolvedOpen> {
+  const embed = videoEmbedUrl(row.url);
+  if (row.kind === "video" && embed) {
+    return { mode: "video", embedUrl: embed };
+  }
+  if (isPdfLike(row.url)) {
+    if (await checkFramingAllowed(row.url)) {
+      return { mode: "embed", embedUrl: row.url };
+    }
+    if (row.fullText && row.fullText.trim().length > 0) {
+      return { mode: "reader", markdown: row.fullText };
+    }
+    return { mode: "external", reason: "This PDF blocks embedding and no readable text was saved. Open the original to read it." };
+  }
+  if (row.fullText && row.fullText.trim().length > 0) {
+    return { mode: "reader", markdown: row.fullText };
+  }
+  return {
+    mode: "external",
+    reason: "No readable text was saved for this source. Open the original to read it.",
+  };
+}
+
 function rowFromDb(r: any): SourceRow {
   return {
     id: r.id,
@@ -598,7 +694,7 @@ export function registerSourcesPlugin(): void {
     plugin: "sources",
     name: "open",
     title: "Open Source",
-    description: "Opens a saved source in the reader (articles/papers) or video view. Only works for sources already in the city feed.",
+    description: "Decides how a saved source opens (video embed, in-app reader, framed PDF, or explicit external state) and emits reader.open. Only works for sources already in the city feed. Never opens a new tab by itself.",
     scope: "city",
     input: z.object({
       id: z.string().describe("Source id from the city feed"),
@@ -609,6 +705,11 @@ export function registerSourcesPlugin(): void {
       url: z.string(),
       kind: z.enum(["article", "paper", "video"]),
       title: z.string(),
+      cityId: z.string(),
+      mode: z.enum(["video", "reader", "embed", "external"]),
+      embedUrl: z.string().nullable().optional(),
+      markdown: z.string().nullable().optional(),
+      reason: z.string().nullable().optional(),
     }),
     emits: ["reader.open"],
     risk: "read",
@@ -622,10 +723,21 @@ export function registerSourcesPlugin(): void {
           retryable: false as const,
         };
       }
+      const resolved = await resolveSourceMode(row);
       return {
         ok: true as const,
         id: row.id,
-        data: { id: row.id, url: row.url, kind: row.kind, title: row.title, cityId: row.cityId },
+        data: {
+          id: row.id,
+          url: row.url,
+          kind: row.kind,
+          title: row.title,
+          cityId: row.cityId,
+          image: row.image,
+          site: row.site,
+          publishedAt: row.publishedAt,
+          ...resolved,
+        },
       };
     },
   });

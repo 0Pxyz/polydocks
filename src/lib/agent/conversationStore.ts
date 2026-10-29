@@ -64,6 +64,19 @@ interface ConversationStoreState {
   currentPhase: string;
   /** Provisional reply text assembled from streamed deltas (cleared on finish). */
   streamingText: string;
+  /** In-chat reader panel (video / article / embed / external). Store-level so it survives tab navigation. */
+  readerView: null | {
+    sourceId?: string;
+    mode: "video" | "reader" | "embed" | "external";
+    title: string;
+    url: string;
+    cityId?: string;
+    site?: string;
+    image?: string | null;
+    markdown?: string;
+    embedUrl?: string;
+    reason?: string;
+  };
   activeApproval: ApprovalRequest | null;
   soundEnabled: boolean;
   audioLevel: number;
@@ -117,6 +130,10 @@ interface ConversationStoreState {
     }
   ) => Promise<void>;
   abortStream: () => void;
+  openReader: (view: NonNullable<ConversationStoreState["readerView"]>) => void;
+  closeReader: () => void;
+  /** Promotes the open source to a city quest via the cities contract (no agent round-trip). */
+  promoteReaderToQuest: () => Promise<void>;
   handleApproval: (
     approved: boolean,
     cityId?: string,
@@ -206,6 +223,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   lastEventAt: 0,
   currentPhase: "",
   streamingText: "",
+  readerView: null,
   activeApproval: null,
   soundEnabled: getInitialSound(),
   audioLevel: 0,
@@ -380,6 +398,41 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       currentPhase: "",
       streamingText: "",
     });
+  },
+
+  openReader: (view) => set({ readerView: view, statusText: "" }),
+
+  closeReader: () => set({ readerView: null }),
+
+  promoteReaderToQuest: async () => {
+    const view = get().readerView;
+    if (!view?.sourceId || !view.cityId) {
+      set({ statusText: "Open a saved source first — only feed items become quests." });
+      return;
+    }
+    set({ statusText: `Saving "${view.title}" as a quest…` });
+    try {
+      const res = await fetch("/api/plugins/cities/quest_add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: {
+            cityId: view.cityId,
+            title: `Explore: ${view.title}`,
+            description: `Read and summarize: ${view.title} (${view.url})`,
+            xpReward: 50,
+          },
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as any;
+      if (json?.ok) {
+        set({ statusText: `Saved as quest "${view.title}".` });
+      } else {
+        set({ statusText: `Couldn't save the quest: ${json?.error || `HTTP ${res.status}`}` });
+      }
+    } catch (err: any) {
+      set({ statusText: `Couldn't save the quest: ${err?.message || "connection failed"}` });
+    }
   },
 
   sendMessage: async (promptToSend, cityId, callbacks, options) => {
@@ -627,16 +680,18 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
           }
 
           case "reader.open": {
-            const url = event.url;
-            if (url) {
-              try {
-                const { openExternalUrl } = await import("@/lib/platform");
-                openExternalUrl(url);
-                set({ statusText: `Opening "${event.title || url}".` });
-              } catch {
-                set({ statusText: `Open this link: ${url}` });
-              }
-            }
+            get().openReader({
+              sourceId: event.id,
+              mode: event.mode || "external",
+              title: event.title || event.url,
+              url: event.url,
+              cityId: event.cityId,
+              site: event.site,
+              image: event.image ?? undefined,
+              markdown: event.markdown,
+              embedUrl: event.embedUrl,
+              reason: event.reason,
+            });
             break;
           }
 
