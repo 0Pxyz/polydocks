@@ -187,9 +187,14 @@ const EMPTY_QUERY_CREATE_COUNT = 3;
 export function sliceEmptyQueryRows(args: {
   open: DockItem[];
   yours: DockItem[];
+  /** Extra fixed rows (e.g. the Browse store row) that also take panel space. */
+  reserved?: number;
 }): { open: DockItem[]; yours: DockItem[] } {
   const open = args.open.slice(0, EMPTY_QUERY_OPEN_MAX);
-  const yours = args.yours.slice(0, EMPTY_QUERY_MAX_ROWS - EMPTY_QUERY_CREATE_COUNT - open.length);
+  const yours = args.yours.slice(
+    0,
+    Math.max(0, EMPTY_QUERY_MAX_ROWS - EMPTY_QUERY_CREATE_COUNT - open.length - (args.reserved ?? 0))
+  );
   return { open, yours };
 }
 
@@ -331,10 +336,12 @@ export function visibleEmptyQuery(args: {
   docked: DockItem[];
   yours: DockItem[];
   openIds: string[];
+  reserved?: number;
 }): { open: DockItem[]; yours: DockItem[] } {
   const openSet = new Set(args.openIds);
   return sliceEmptyQueryRows({
     open: args.docked.filter((item) => openSet.has(item.id)),
     yours: args.yours,
+    reserved: args.reserved,
   });
 }

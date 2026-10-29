@@ -215,6 +215,23 @@ describe("visibleEmptyQuery", () => {
   });
 });
 
+describe("sliceEmptyQueryRows reserved", () => {
+  const row = (id: string): DockItem => ({
+    id,
+    label: id,
+    description: "",
+    icon: "cards",
+    kind: "tab",
+  });
+
+  test("reserves space for the browse row inside the six-row cap", () => {
+    const yours = [row("a"), row("b"), row("c")];
+    const sliced = sliceEmptyQueryRows({ open: [], yours, reserved: 1 });
+    // 0 open + 3 create + 1 browse = 4, so 2 yours rows fit.
+    expect(sliced.yours.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
 describe("dock catalog", () => {
   test("the Plugin Store is not a dock item", () => {
     expect(DOCK_CORE_CATALOG.some((item) => item.id === "store")).toBe(false);
