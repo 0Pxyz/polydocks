@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Compass,
   Globe,
@@ -21,7 +21,8 @@ import type { IconComponent } from "@/components/icons/adapter";
 import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
 import { useDockStore } from "@/lib/store/useDockStore";
-import { computeVisibleCap, orderVisibleIds, DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
+import { computeVisibleCap, orderVisibleIds, DOCK_CORE_CATALOG, type DockItem } from "@/lib/dock/dockModel";
+import { CommandPalette } from "./CommandPalette";
 import { DOCK_STYLES } from "./styles";
 import { DockStatusLine } from "@/features/profile/DockStatusLine";
 
@@ -172,13 +173,23 @@ interface AgenticDockProps {
   isAgentWorking?: boolean;
   isAgentSheetOpen?: boolean;
   extraTools?: DockToolItem[];
+  /** Session-created experiences (palette catalog; installed plugins come from the store fetch). */
+  sessionTools?: DockToolItem[];
   tools?: DockToolItem[];
+  /** Close a dock tab (never deletes). */
+  onCloseItem?: (toolId: string) => void;
+  /** Submit a "create with agent" prompt. */
+  onSubmitToolPrompt?: (prompt: string) => void;
+  /** Send a fix prompt to the agent for a failed plugin. */
+  onFixWithAgent?: (prompt: string) => void;
+  onOpenAgent?: () => void;
+  onOpenInstallUrl?: () => void;
+  onOpenMcpConnect?: () => void;
   /**
    * Contextual ids (city tools): shown in the bar while their context is
    * active, without ever becoming global pins.
    */
   contextualIds?: string[];
-  onOpenSearch?: () => void;
   isBuilding?: boolean;
   buildingName?: string;
   statusText?: string;
@@ -194,9 +205,15 @@ export function AgenticDock({
   isAgentWorking = false,
   isAgentSheetOpen = false,
   extraTools = [],
+  sessionTools = [],
   tools: explicitTools,
+  onCloseItem,
+  onSubmitToolPrompt,
+  onFixWithAgent,
+  onOpenAgent,
+  onOpenInstallUrl,
+  onOpenMcpConnect,
   contextualIds = [],
-  onOpenSearch,
   isBuilding = false,
   buildingName,
   statusText,
@@ -206,8 +223,11 @@ export function AgenticDock({
   const headerRef = useRef<HTMLElement>(null);
   const baseHudRef = useRef<HTMLDivElement>(null);
   const capsuleRef = useRef<HTMLDivElement>(null);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
 
   const [internalActiveToolId, setInternalActiveToolId] = useState<string>("");
+  const [showSearch, setShowSearch] = useState<boolean>(false);
   const [barWidth, setBarWidth] = useState<number>(
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
@@ -217,18 +237,51 @@ export function AgenticDock({
   // shared with the search palette and the agent.
   const pinnedToolIds = useDockStore((s) => s.pinnedToolIds);
   const openIds = useDockStore((s) => s.openIds);
+  const openTool = useDockStore((s) => s.openTool);
 
-  // Global ⌘K shortcut for agent conversation
+  const closeSearch = useCallback(() => {
+    setShowSearch(false);
+    plusButtonRef.current?.focus();
+  }, []);
+
+  // Global ⌘K shortcut for agent conversation, ⌘⇧P for dock search
+  // (⌘K is reserved for Agent conversation)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         onSelectTool?.("agent");
       }
+      if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+      }
+      if (e.key === "Escape" && showSearch) {
+        e.preventDefault();
+        closeSearch();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onSelectTool]);
+  }, [onSelectTool, showSearch, closeSearch]);
+
+  // Click outside closes the search panel (the dock X button owns it too)
+  useEffect(() => {
+    if (!showSearch) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        searchPanelRef.current &&
+        !searchPanelRef.current.contains(target) &&
+        plusButtonRef.current &&
+        !plusButtonRef.current.contains(target)
+      ) {
+        setShowSearch(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSearch]);
 
   // Measure the full-width bar so the visible cap derives from available
   // width instead of a magic item count.
@@ -338,6 +391,53 @@ export function AgenticDock({
     barIcons.set(tool.id, resolved);
   }
 
+  const searchElement = (
+    <AnimatePresence>
+      {showSearch && (
+        <motion.div
+          ref={searchPanelRef}
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: "auto", opacity: 1, transition: spring.soft }}
+          exit={{ height: 0, opacity: 0, transition: { duration: 0.15 } }}
+          className="pointer-events-auto w-[calc(100vw-2rem)] max-w-[520px] overflow-hidden"
+          role="region"
+          aria-label="Dock search"
+        >
+          <div
+            className={cn(
+              "rounded-2xl p-2 flex flex-col gap-1 shadow-2xl text-white",
+              currentStyle.capsuleClass
+            )}
+          >
+            <CommandPalette
+              cityId={cityName}
+              extraItems={sessionTools.map(
+                (tool): DockItem => ({
+                  id: tool.id,
+                  label: tool.label,
+                  description: "Created with the agent",
+                  icon: tool.iconKey || "cards",
+                  kind: "tab",
+                })
+              )}
+              onOpenAgent={onOpenAgent}
+              onOpenInstallUrl={onOpenInstallUrl}
+              onOpenMcpConnect={onOpenMcpConnect}
+              onOpenItem={(toolId) => {
+                openTool(toolId);
+                onSelectTool?.(toolId);
+              }}
+              onCloseItem={onCloseItem}
+              onSubmitToolPrompt={onSubmitToolPrompt}
+              onFixWithAgent={onFixWithAgent}
+              onClose={() => setShowSearch(false)}
+            />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   const statusElement = (
     <AnimatePresence>
       {activeStatus && (
@@ -376,7 +476,12 @@ export function AgenticDock({
         className
       )}
     >
-      {/* If bottom dock, show transient status above the capsule */}
+      {/* If bottom dock, show search panel and transient status above the capsule */}
+      {isBottom && showSearch && (
+        <div className="mb-2 pointer-events-none flex flex-col items-center">
+          {searchElement}
+        </div>
+      )}
       {isBottom && statusElement}
 
       {/* Stable Base HUD (Status Line + Dock Capsule) */}
@@ -496,31 +601,45 @@ export function AgenticDock({
           )}
         </AnimatePresence>
 
-        {/* Search Button: opens dock search (⌘⇧P) */}
+        {/* Search Button: opens dock search inline (⌘⇧P) */}
         <button
+          ref={plusButtonRef}
           type="button"
-          onClick={() => onOpenSearch?.()}
-          aria-label="Search tools"
+          onClick={() => setShowSearch((prev) => !prev)}
+          aria-expanded={showSearch}
+          aria-label={showSearch ? "Close search" : "Search tools"}
           className={cn(
             "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus:outline-none",
-            currentStyle.inactiveItemClass,
+            !showSearch && currentStyle.inactiveItemClass,
+            showSearch && "text-white bg-white/[0.08]",
             currentStyle.enableLift && !isReducedMotion && "hover:scale-115"
           )}
         >
-          <Plus size={20} className="transition-transform duration-150 origin-center" />
+          <Plus
+            size={20}
+            className={cn(
+              "transition-transform duration-150 origin-center",
+              showSearch && "rotate-45"
+            )}
+          />
           <span
             className={cn(
               "pointer-events-none absolute opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-[#171b24] text-[#f1f3f9] text-[11px] font-sans px-2 py-0.5 rounded shadow-xl whitespace-nowrap z-50",
               isBottom ? "-top-8" : "-bottom-8"
             )}
           >
-            Search tools
+            Search tools · Enter opens · ⌘↵ pins · Esc closes
           </span>
         </button>
       </motion.div>
     </div>
 
-      {/* If top dock, show transient status below the capsule */}
+      {/* If top dock, show search panel and transient status below the capsule */}
+      {!isBottom && showSearch && (
+        <div className="mt-2 pointer-events-none flex flex-col items-center">
+          {searchElement}
+        </div>
+      )}
       {!isBottom && statusElement}
     </header>
   );

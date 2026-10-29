@@ -4,9 +4,14 @@ import {
   buildDockSections,
   computeVisibleCap,
   createItemsForQuery,
+  getStaticCreateRows,
+  migratePinnedIds,
+  visibleEmptyQuery,
   scoreDockItem,
+  sliceEmptyQueryRows,
   DEFAULT_PINNED_IDS,
   SYSTEM_TOOL_IDS,
+  DOCK_CORE_CATALOG,
   type DockItem,
   type DockLayoutState,
 } from "../src/lib/dock/dockModel";
@@ -127,6 +132,46 @@ describe("createItemsForQuery", () => {
   });
 });
 
+describe("getStaticCreateRows", () => {
+  test("mirrors the original suggestions, city-aware when a city exists", () => {
+    const city = getStaticCreateRows("Stoicism");
+    expect(city.map((i) => i.label)).toEqual([
+      "Flashcards for Stoicism",
+      "Compare two sources on Stoicism",
+      "A timeline of Stoicism",
+    ]);
+    const generic = getStaticCreateRows();
+    expect(generic.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+    const emptyCity = getStaticCreateRows("   ");
+    expect(emptyCity.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+  });
+});
+
+describe("sliceEmptyQueryRows", () => {
+  const row = (id: string): DockItem => ({
+    id,
+    label: id,
+    description: "",
+    icon: "cards",
+    kind: "tab",
+  });
+
+  test("caps the empty panel at six rows: open, yours, then create", () => {
+    const open = [row("a"), row("b"), row("c")];
+    const yours = [row("d"), row("e"), row("f"), row("g"), row("h")];
+    const sliced = sliceEmptyQueryRows({ open, yours });
+    expect(sliced.open.map((r) => r.id)).toEqual(["a", "b"]);
+    // 2 open + 3 create = 5, so 1 yours row fits.
+    expect(sliced.yours.map((r) => r.id)).toEqual(["d"]);
+  });
+
+  test("fills yours up when nothing is open", () => {
+    const yours = [row("d"), row("e"), row("f"), row("g")];
+    const sliced = sliceEmptyQueryRows({ open: [], yours });
+    expect(sliced.yours.map((r) => r.id)).toEqual(["d", "e", "f"]);
+  });
+});
+
 describe("computeVisibleCap", () => {
   test("derives the cap from measured width, not a magic count", () => {
     expect(computeVisibleCap(600)).toBe(Math.floor((600 - 72) / 46));
@@ -138,6 +183,58 @@ describe("computeVisibleCap", () => {
     const cap = computeVisibleCap(500);
     expect(30).toBeGreaterThan(cap);
     expect(cap).toBeLessThan(12);
+  });
+});
+
+describe("visibleEmptyQuery", () => {
+  const row = (id: string): DockItem => ({
+    id,
+    label: id,
+    description: "",
+    icon: "cards",
+    kind: "tab",
+  });
+
+  test("hides pinned non-open items when the query is empty", () => {
+    const docked = [row("agent"), row("maps"), row("browser")];
+    const yours = [row("notes")];
+    const { open, yours: rest } = visibleEmptyQuery({ docked, yours, openIds: ["browser"] });
+    expect(open.map((r) => r.id)).toEqual(["browser"]);
+    expect(rest.map((r) => r.id)).toEqual(["notes"]);
+  });
+
+  test("shows pinned items again in the query path (no hiding there)", () => {
+    const sections = buildDockSections({
+      catalog: [row("agent"), row("maps")],
+      store: [],
+      layout: { pinnedIds: ["agent", "maps"], openIds: [] },
+      query: "map",
+      createForQuery: () => [],
+    });
+    expect(sections[0].items.map((i) => i.id)).toContain("maps");
+  });
+});
+
+describe("sliceEmptyQueryRows reserved", () => {
+  const row = (id: string): DockItem => ({
+    id,
+    label: id,
+    description: "",
+    icon: "cards",
+    kind: "tab",
+  });
+
+  test("reserves space for the browse row inside the six-row cap", () => {
+    const yours = [row("a"), row("b"), row("c")];
+    const sliced = sliceEmptyQueryRows({ open: [], yours, reserved: 1 });
+    // 0 open + 3 create + 1 browse = 4, so 2 yours rows fit.
+    expect(sliced.yours.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("dock catalog", () => {
+  test("the Plugin Store is not a dock item", () => {
+    expect(DOCK_CORE_CATALOG.some((item) => item.id === "store")).toBe(false);
   });
 });
 
@@ -195,8 +292,19 @@ describe("applyDockDirective", () => {
     expect(applyDockDirective(state, { op: "unpin", id: "browser" }, known).ok).toBe(true);
   });
 
-  test("defaults keep the curated core and the map is system", () => {
-    expect(DEFAULT_PINNED_IDS).toContain("maps");
+  test("defaults keep the curated core without the store", () => {
+    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "maps", "settings"]);
+    expect(DEFAULT_PINNED_IDS).not.toContain("store");
     expect(SYSTEM_TOOL_IDS.has("maps")).toBe(true);
+  });
+
+  test("the Plugin Store migrates out of persisted pins without deleting", () => {
+    expect(migratePinnedIds(["agent", "maps", "store", "settings"])).toEqual([
+      "agent",
+      "maps",
+      "settings",
+    ]);
+    expect(migratePinnedIds(["agent", "maps"])).toEqual(["agent", "maps"]);
+    expect(migratePinnedIds(["store"])).toEqual(["agent", "maps", "settings"]);
   });
 });
