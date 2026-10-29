@@ -39,7 +39,7 @@ export interface DockLayoutState {
 export const SYSTEM_TOOL_IDS = new Set(["maps"]);
 
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
-export const DEFAULT_PINNED_IDS = ["agent", "maps", "browser", "notes"];
+export const DEFAULT_PINNED_IDS = ["agent", "maps", "store", "settings"];
 
 export type DockSectionId = "docked" | "yours" | "store" | "create";
 

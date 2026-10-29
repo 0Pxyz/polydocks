@@ -40,6 +40,7 @@ import {
   Eye,
   Sliders,
   Gear,
+  Storefront,
   Shield,
   Lightbulb,
   Plus,
@@ -69,6 +70,7 @@ const ICON_MAP: Record<string, IconComponent> = {
 
   settings: Gear,
   gear: Gear,
+  storefront: Storefront,
   plus: Plus,
 
   files: Folder,
@@ -286,4 +288,5 @@ export {
   NotePencil,
   Files,
   Gear,
+  Storefront,
 };

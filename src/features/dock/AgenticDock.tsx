@@ -17,7 +17,7 @@ import type { IconComponent } from "@/components/icons/adapter";
 import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
 import { useDockStore } from "@/lib/store/useDockStore";
-import { computeVisibleCap } from "@/lib/dock/dockModel";
+import { computeVisibleCap, DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
 import { DOCK_STYLES } from "./styles";
 import { DockStatusLine } from "@/features/profile/DockStatusLine";
 
@@ -68,6 +68,7 @@ export const STORE_DOCK_TOOL: DockToolItem = {
   label: "Plugin Store",
   type: "icon",
   icon: Storefront,
+  iconKey: "storefront",
 };
 
 export const ROOT_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
@@ -267,7 +268,15 @@ export function AgenticDock({
 
   const defaultTools = cityName ? CITY_DOCK_TOOLS : HOME_DOCK_TOOLS;
   const baseTools = explicitTools ?? defaultTools;
-  const allTools = [...baseTools, ...extraTools];
+  // The bar can show any builtin catalog item, not just the mode slice, so a
+  // pinned or open tool never vanishes for missing a local definition.
+  const universe: DockToolItem[] = [...baseTools];
+  for (const item of DOCK_CORE_CATALOG) {
+    if (!universe.some((tool) => tool.id === item.id)) {
+      universe.push({ id: item.id, label: item.label, type: "icon", iconKey: item.icon });
+    }
+  }
+  const allTools = [...universe, ...extraTools];
 
   // The bar stays small and curated: pinned items first (in pinned order),
   // then open unpinned items. Everything else is reachable through search.
