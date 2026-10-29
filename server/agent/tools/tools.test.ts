@@ -6,6 +6,8 @@ import {
   create_tab,
   defaultTools,
   delete_tab,
+  fullTools,
+  minimalTools,
   get_city_context,
   list_tabs,
   open_source,
@@ -29,7 +31,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(44);
+    expect(defaultTools.length).toBe(45);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -75,6 +77,29 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("record_memory");
     expect(names).toContain("connect_cities");
     expect(names).toContain("apply_theme");
+    expect(names).toContain("generate_image");
+  });
+
+  it("minimal surface is the ten verb tools", () => {
+    const names = minimalTools.map((t) => t.name).sort();
+    expect(names).toEqual(
+      [
+        "dock.close",
+        "dock.list",
+        "dock.open",
+        "dock.pin",
+        "dock.unpin",
+        "plugins.create",
+        "plugins.edit",
+        "plugins.install",
+        "plugins.operate",
+        "plugins.uninstall",
+      ].sort()
+    );
+    // Full catalog is exactly the current 45 (default mode unchanged);
+    // verb tools live only in the minimal surface.
+    expect(fullTools.length).toBe(45);
+    expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
   it("list_tabs returns builtins and dynamic tabs", async () => {

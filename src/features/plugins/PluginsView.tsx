@@ -155,6 +155,9 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
           name: mcpName.trim(),
           url: mcpUrl.trim(),
           token: mcpToken.trim() || undefined,
+          // Submitting this form IS the explicit user confirmation
+          // required by the install policy (ask-by-default).
+          confirmed: true,
         }),
       });
 

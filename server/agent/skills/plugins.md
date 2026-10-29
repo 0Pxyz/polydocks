@@ -1,6 +1,8 @@
 # Skill: Plugins (persistent tools: create, patch, run, share)
 
-> A plugin is a workspace-persistent tool. Any fix or change to an existing one goes `inspect_experience` first, then `modify_plugin`. Never recreate to fix. For city tabs see `dock-and-tabs`.
+> A plugin is a workspace-persistent tool. Fixes go `inspect_experience` first, then `modify_plugin`. Never recreate to fix. For city tabs see `dock-and-tabs`.
+
+> Prefer plugins.discover → plugins.invoke over creating; open in the dock.
 
 ## Lifecycle
 

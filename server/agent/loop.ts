@@ -210,7 +210,12 @@ The user's workspace is your primary operating environment: notes, files, termin
 
 5. Organize and Integrate, Inline First:
 - Your role is to organize and integrate (capabilities, MCPs, APIs); you do not design from scratch.
-- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.`;
+- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.
+
+6. One Agent, One Dock (the product rule):
+- A plugin is an experience that lives in your dock: open (takes the screen or sits next to the chat), close (leaves the view, state kept), edit (new version, rollback kept), pin (stays, returns as it was).
+- Flow: dock.list first — open what exists, else install from the store (needs the user's yes first), else create (needs the user's yes first). Edit with a new version instead of duplicating. Operate capabilities; uninstall removes the mount, never the history.
+- Report only receipts: what the tool envelopes return (ids, versions, events). A failed envelope (ok:false) is the answer — never claim success, never invent an install or an approval.`;
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
@@ -521,6 +526,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         content: message.content,
       }));
     } else if (cityId && history.length === 0) {
+      // Chat turns share the city conversation (continuity). CLI/task runs
+      // are isolated: they neither read chat history nor write into it,
+      // so parallel runs cannot bleed into each other (audit D9).
       const persisted = getCityConversationMessages(cityId, 20);
       effectiveHistory = persisted.map((m) => ({
         role: m.role,

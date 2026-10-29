@@ -119,6 +119,8 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     return c.json({ error: "Both name and url are required." }, 400);
   }
 
+  // Install policy: connecting an external MCP server registers a new
+
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -269,6 +271,24 @@ pluginsRouter.post("/install-url", async (c) => {
 });
 
 /**
+ * POST /api/plugins/lifecycle - Plugin synthesis lifecycle
+ * { op: create|modify|publish|install, ...params }.
+ * Registered BEFORE the two-parameter route below so the literal wins.
+ */
+pluginsRouter.post("/lifecycle", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { op, ...params } = body ?? {};
+  const { pluginLifecycle } = await import("../facade/shared");
+  const out = await pluginLifecycle(typeof op === "string" ? op : "", params ?? {}, {
+    actor: "user",
+    cityId: (body as any)?.cityId || c.req.query("cityId"),
+    workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
+  });
+  if (!out.ok) return c.json(out, 400);
+  return c.json(out);
+});
+
+/**
  * POST /api/plugins/:pluginId/:capability - Invoke a contract capability.
  * Generated surface: every defineCapability registration is invocable
  * here with the same envelope the agent and CLI receive.
@@ -277,14 +297,8 @@ pluginsRouter.post("/install-url", async (c) => {
  * literals like /mcp/connect or /install-url.
  */
 pluginsRouter.post("/:pluginId/:capability", async (c) => {
-  const { getContractCapability } = await import("../plugins/contract");
-  const { capabilityBus } = await import("../plugins/bus");
   const pluginId = c.req.param("pluginId");
   const capability = c.req.param("capability");
-  const def = getContractCapability(pluginId, capability);
-  if (!def) {
-    return c.json({ ok: false, error: `Unknown capability "${pluginId}.${capability}".`, retryable: false }, 404);
-  }
   const body = await c.req.json().catch(() => ({}));
   const input = (body && typeof body === "object" && "input" in (body as any) ? (body as any).input : body) ?? {};
   const cityId =
@@ -295,22 +309,13 @@ pluginsRouter.post("/:pluginId/:capability", async (c) => {
       ? (input as any).cityId
       : undefined) ??
     c.req.query("cityId");
-  const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  const result = await capabilityBus.invoke(`${pluginId}.${capability}`, input, {
-    actor: "user",
-    cityId,
-    onEvent: async (e) => {
-      if (e.type !== "tool.start" && e.type !== "tool.done") emitted.push({ type: e.type, payload: e.payload });
-    },
-  });
-  if (!result.success) {
-    return c.json({ ok: false, error: result.error || "Capability failed.", retryable: true }, 400);
+  const { invokeCapability } = await import("../facade/shared");
+  const out = await invokeCapability(pluginId, capability, input, { actor: "user", cityId });
+  if (!out.ok) {
+    const status = (out as any).code === "unknown_capability" ? 404 : 400;
+    return c.json(out, status as any);
   }
-  const envelope = result.data as any;
-  if (envelope && typeof envelope === "object" && "ok" in envelope) {
-    return c.json({ ...envelope, events: [...(envelope.events ?? []), ...emitted] });
-  }
-  return c.json({ ok: true, data: envelope, events: emitted });
+  return c.json(out);
 });
 
 /**

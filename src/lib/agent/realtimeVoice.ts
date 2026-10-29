@@ -17,6 +17,8 @@ export const REALTIME_FRAME_SAMPLES = (REALTIME_SAMPLE_RATE * REALTIME_FRAME_MS)
 export interface RealtimeVoiceCallbacks {
   onPartial?: (text: string) => void;
   onFinal?: (text: string, turnId?: number) => void;
+  onSpeechStart?: (turnId?: number) => void;
+  onSpeechEnd?: (turnId?: number) => void;
   onLevel?: (level: number) => void;
   onEvent?: (event: Record<string, any>) => void;
   onError?: (message: string) => void;
@@ -99,6 +101,14 @@ export function connectRealtimeVoice(callbacks: RealtimeVoiceCallbacks = {}): { 
       else if (obj.transcript.trim()) callbacks.onPartial?.(obj.transcript);
       return;
     }
+    if (obj.type === "speechStart") {
+      callbacks.onSpeechStart?.(typeof obj.turnId === "number" ? obj.turnId : undefined);
+      return;
+    }
+    if (obj.type === "speechEnd") {
+      callbacks.onSpeechEnd?.(typeof obj.turnId === "number" ? obj.turnId : undefined);
+      return;
+    }
     if (obj.type === "speechComplete" && typeof obj.transcript === "string") {
       if (obj.transcript.trim()) callbacks.onFinal?.(obj.transcript, typeof obj.turnId === "number" ? obj.turnId : undefined);
       return;
@@ -139,12 +149,26 @@ export interface MicPcmStreamer {
  * Capture microphone audio, resample to 24kHz mono PCM, report mic level,
  * and invoke `onFrame` with ~80ms PCM ArrayBuffers paced by the audio clock.
  * Uses ScriptProcessorNode for broad compatibility (no worklet build step).
+ *
+ * The processor runs through a zero-gain node into the destination: the
+ * ScriptProcessor only fires while connected, but routing raw mic audio to
+ * the speakers would play the user's voice back (and feed the agent's own
+ * TTS reply into the recognizer). Echo cancellation + suppression on the
+ * track constraints further keep the agent's spoken replies out of the
+ * transcript.
  */
 export async function createMicPcmStreamer(
   onFrame: (pcm: ArrayBuffer) => void,
   onLevel?: (level: number) => void
 ): Promise<MicPcmStreamer> {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    } as MediaTrackConstraints,
+    video: false,
+  });
   const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
   const ctx: AudioContext = new AudioCtx();
   const source = ctx.createMediaStreamSource(stream);
@@ -153,6 +177,8 @@ export async function createMicPcmStreamer(
   source.connect(analyser);
 
   const processor = ctx.createScriptProcessor(4096, 1, 1);
+  const silentGain = ctx.createGain();
+  silentGain.gain.value = 0;
   const freq = new Uint8Array(analyser.frequencyBinCount);
   let carry = new Float32Array(0);
 
@@ -179,12 +205,18 @@ export async function createMicPcmStreamer(
   };
 
   source.connect(processor);
-  processor.connect(ctx.destination);
+  processor.connect(silentGain);
+  silentGain.connect(ctx.destination);
 
   return {
     stop: () => {
       try {
         processor.disconnect();
+      } catch {
+        // Ignore
+      }
+      try {
+        silentGain.disconnect();
       } catch {
         // Ignore
       }

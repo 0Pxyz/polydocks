@@ -43,6 +43,13 @@ import { dock_search } from "./dock_search";
 import { dock_pin } from "./dock_pin";
 import { dock_unpin } from "./dock_unpin";
 import { dock_close } from "./dock_close";
+import { generate_image } from "./generate_image";
+// Verb tools (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/list and
+// plugins.create/edit/install/uninstall/operate — thin aliases over the
+// current executors via the shared facade layer.
+import { dockOpen, dockClose, dockPin, dockUnpin, dockList } from "./verbs/dock";
+import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate } from "./verbs/plugins";
+import { config } from "../../config";
 
 export * from "./types";
 export {
@@ -90,12 +97,24 @@ export {
   recall_memory,
   record_memory,
   plan_ascii_world,
+  generate_image,
+  // Verb family (aliases stay importable; registry below decides).
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  pluginsCreate,
+  pluginsEdit,
+  pluginsInstall,
+  pluginsUninstall,
+  pluginsOperate,
 };
 
 /**
- * The canonical catalog of default Agent tools.
+ * The canonical catalog of default Agent tools (AGENT_SURFACE=full).
  */
-export const defaultTools: AgentTool[] = [
+const fullToolsList: AgentTool[] = [
   list_tabs,
   open_tab,
   open_intent,
@@ -140,4 +159,26 @@ export const defaultTools: AgentTool[] = [
   recall_memory,
   record_memory,
   plan_ascii_world,
+  generate_image,
 ];
+
+/**
+ * Minimal verb catalog (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/
+ * list + plugins.create/edit/install/uninstall/operate.
+ */
+export const minimalTools: AgentTool[] = [
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  pluginsCreate,
+  pluginsEdit,
+  pluginsInstall,
+  pluginsUninstall,
+  pluginsOperate,
+];
+
+export const fullTools: AgentTool[] = fullToolsList;
+export const defaultTools: AgentTool[] =
+  config.AGENT_SURFACE === "minimal" ? minimalTools : fullToolsList;

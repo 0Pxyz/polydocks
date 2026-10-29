@@ -130,6 +130,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
         set({ workspacePlugins: json.data });
+        // Merge the server pin record so pins survive reloads and
+        // reinstalls even if local storage was cleared.
+        if (Array.isArray((json as any).pinned) && (json as any).pinned.length > 0) {
+          const { useDockStore } = await import("@/lib/store/useDockStore");
+          useDockStore.getState().mergeServerPins((json as any).pinned);
+        }
       }
     } catch {
       // ignore

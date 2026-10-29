@@ -4,7 +4,7 @@ import { openExternalUrl } from "@/lib/platform";
 import { cn } from "@/lib/cn";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTabState } from "@/lib/tabs/useTabState";
-import { faviconUrl, territoryAccent, videoThumbnailCandidates } from "../sourceMedia";
+import { faviconUrl, territoryAccent, videoThumbnailCandidates, tileMotif, tileVariant } from "../sourceMedia";
 import type { CitySourceItem } from "../types";
 
 interface SourcesViewProps {
@@ -43,8 +43,9 @@ function timeLine(item: CitySourceItem): string | null {
 }
 
 function SourceImage({ item, large, accentKey }: { item: CitySourceItem; large?: boolean; accentKey: string }) {
-  // Saved image wins; otherwise derive from the video id (maxres first,
-  // hq on 404). No image: big favicon on the territory accent color.
+  // Saved image wins, then the video thumb. Imageless items get a
+  // deterministic themed tile: same city accent, motif per kind, rotation
+  // per URL — no network, no spend, no waiting.
   const candidates = useMemo(
     () => videoThumbnailCandidates(item.url, item.image),
     [item.url, item.image]
@@ -81,12 +82,32 @@ function SourceImage({ item, large, accentKey }: { item: CitySourceItem; large?:
   }
   const fav = item.domain ? faviconUrl(item.domain) : null;
   const letter = (item.domain || item.title || "?").trim().charAt(0).toUpperCase();
+  const motif = tileMotif(item.kind);
+  const variant = tileVariant(item.url);
+  const patternStyle =
+    motif === "rules"
+      ? {
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent 0 10px, rgba(255,255,255,0.08) 10px 11px)",
+        }
+      : motif === "rings"
+        ? {
+            backgroundImage:
+              "radial-gradient(circle at center, transparent 0 9px, rgba(255,255,255,0.08) 9px 10px)",
+            backgroundSize: "30px 30px",
+          }
+        : {
+            backgroundImage:
+              "repeating-linear-gradient(45deg, transparent 0 12px, rgba(255,255,255,0.08) 12px 13px)",
+          };
+  const tilt = variant === 0 ? "rotate-0" : variant === 1 ? "rotate-3" : "-rotate-3";
   return (
     <div
       className="relative flex w-full items-center justify-center overflow-hidden"
       style={{ background: territoryAccent(accentKey), aspectRatio: large ? "21 / 9" : "16 / 9" }}
     >
-      <span className="text-5xl font-semibold text-white/90">{letter}</span>
+      <div aria-hidden className={cn("tile-drift absolute -inset-[20%]", tilt)} style={patternStyle} />
+      <span className="relative text-5xl font-semibold text-white/90">{letter}</span>
       {fav && !faviconGone && (
         <img
           src={fav}
