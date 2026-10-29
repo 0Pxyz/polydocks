@@ -10,7 +10,7 @@ import { isResearchIntent, isWorldPlanningIntent } from "./skills";
  * not by suppressing progress messages in the UI.
  */
 
-export type AgentIntent = "theme" | "plugin_update" | "research" | "city" | "general";
+export type AgentIntent = "theme" | "plugin_update" | "plugin_fix" | "research" | "city" | "general";
 
 export interface IntentHints {
   hasImageAttachments?: boolean;
@@ -20,8 +20,11 @@ const THEME_CORE = /\b(wallpaper|fundo|papel de parede|theme|tema)\b/;
 const BACKGROUND_WORD = /\b(background)\b/;
 const THEME_ACTION = /\b(my|this|app|change|set|add|use|apply|meu|minha|este|esta|esse|essa|mudar|colocar|usar|aplicar|trocar)\b/;
 
-const UPDATE_WORD = /\b(update|updates|modify|fix|change|group by|atualiz|modific|corrig|alter|agrup)/;
-const ARTIFACT_WORD = /\b(plugin|tab|tool|feed|experience|experi[eê]ncia|ferramenta|aba|widget|timer|dashboard)\b/;
+const UPDATE_WORD = /\b(update\w*|modify|modif\w*|fix|change\w*|group by|add\w*|adiciona\w*|acrescenta\w*|atualiz\w*|modific\w*|corrig\w*|alter\w*|agrup\w*|muda\w*|mude\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|not working|não funciona|nao funciona|bug)\b/;
+const ARTIFACT_WORD = /\b(plugin|tab|tool|feed|experience|experi[eê]ncia|ferramenta|aba|widget|timer|dashboard|reader|leitor)\b/;
+// Broken-behavior reports: the artifact exists and must be repaired in place,
+// never recreated.
+const FIX_WORD = /\b(fix\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|doesnt work|not working|não funciona|nao funciona|bug)\b/;
 
 export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIntent {
   const lower = (prompt || "").toLowerCase();
@@ -33,6 +36,10 @@ export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIn
   if (BACKGROUND_WORD.test(lower) && (THEME_ACTION.test(lower) || hints.hasImageAttachments)) {
     return "theme";
   }
+
+  // Broken artifact reports (fix in place, never recreate) outrank generic
+  // updates: "fix the reader" / "arruma o reader" / "open in reader doesn't work".
+  if (FIX_WORD.test(lower) && ARTIFACT_WORD.test(lower)) return "plugin_fix";
 
   // Update an existing artifact (never recreate it).
   if (UPDATE_WORD.test(lower) && ARTIFACT_WORD.test(lower)) return "plugin_update";
@@ -81,6 +88,8 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
   ],
   // Updates must reuse the existing artifact, never synthesize a duplicate.
   plugin_update: ["create_tab", "create_plugin"],
+  // Fixes must patch the existing artifact in place: no recreate, no delete.
+  plugin_fix: ["create_tab", "create_plugin", "delete_tab"],
   research: [],
   city: [],
   general: [],

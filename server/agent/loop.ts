@@ -121,7 +121,11 @@ The user's workspace is your primary operating environment: notes, files, termin
 
 4. Separate Internal State from User Responses:
 - Never dump mounted tool lists, dock experience IDs, internal inspection logs, resource sizes, or empty quest/feed scaffolding into your response unless specifically asked.
-- Provide direct, elegant, and useful answers reflecting the actual outcome.`;
+- Provide direct, elegant, and useful answers reflecting the actual outcome.
+
+5. Organize and Integrate, Inline First:
+- Your role is to organize and integrate (capabilities, MCPs, APIs); you do not design from scratch.
+- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.`;
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
@@ -300,6 +304,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         (p) => `- ${p.name} (${p.id}): ${p.manifest.description} [${(p.manifest.capabilities || []).map((c) => c.id).join(", ")}]`
       );
       activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):\n${summaryLines.join("\n")}`;
+    }
+
+    // Per-turn workspace mount state: id, version, enabled. The agent
+    // organizes and integrates mounted tools; it does not redesign them.
+    try {
+      const { listWorkspacePlugins } = await import("../workspace/workspaces");
+      const mounted = listWorkspacePlugins(effectiveWorkspaceId).slice(0, 30);
+      if (mounted.length > 0) {
+        const mountLines = mounted.map(
+          (m) => `- ${m.pluginId} v${m.plugin?.version || "?"} ${m.enabled ? "enabled" : "disabled"}`
+        );
+        activeSystemPrompt = `${activeSystemPrompt}\n\n## Mounted Plugins in workspace "${effectiveWorkspaceId}" (id, version, state — fix in place with inspect_experience/modify_plugin, never recreate):\n${mountLines.join("\n")}`;
+      }
+    } catch {
+      // Non-fatal if workspace lookup encounters an issue
     }
 
     // Reflective Execution & Failure Retry Guidelines
