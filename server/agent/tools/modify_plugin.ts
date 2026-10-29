@@ -133,6 +133,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       const manifest = { ...current.manifest };
       if (args.name) manifest.title = args.name;
       if (args.icon) manifest.icon = args.icon;
+      if (args.description) (manifest as Record<string, unknown>).description = args.description;
       manifest.updatedAt = new Date().toISOString();
       // Preserve the existing source so future patches keep working.
       const { upsertPluginFile } = await import("../../workspace/pluginFiles");
@@ -144,6 +145,24 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
         sourceCode: current.code,
         srcdoc: current.srcdoc,
       });
+      // Keep the registry manifest in sync (description/name/icon live there).
+      try {
+        const { PluginRegistry } = await import("../../plugins/registry");
+        const registry = PluginRegistry.getInstance();
+        const existing = registry.get(normalized);
+        if (existing) {
+          registry.install({
+            ...existing.manifest,
+            name: (manifest.title as string) || existing.name,
+            description:
+              ((manifest as Record<string, unknown>).description as string) ||
+              existing.manifest.description,
+            icon: (manifest.icon as string) || existing.manifest.icon,
+          });
+        }
+      } catch {
+        // Non-fatal: verification below reports registry state.
+      }
       const { ensurePluginRegisteredAndMounted } = await import("../../plugins/verify");
       ensurePluginRegisteredAndMounted(normalized, workspaceId, manifest);
       const verification = await verifyPluginStateAsync(normalized, workspaceId);
