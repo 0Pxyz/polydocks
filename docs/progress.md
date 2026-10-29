@@ -50,3 +50,4 @@
 | 2026-10-28 | End-to-end agentic runtime integration benchmark (5 stages) and operational guide | [#94](https://github.com/0Pxyz/polymax/pull/94) |
 | 2026-10-28 | Procedural ASCII world engine, interactive Canvas map renderer, and plan_ascii_world tool | [#98](https://github.com/0Pxyz/polymax/pull/98) |
 | 2026-10-28 | Multimodal chat attachments (images + documents, vision-model routing) integrated end-to-end; chat panel rebuilt on shadcn ScrollArea with prose typography over the attachments composer (carried-over WIP committed and finished)
+| 2026-10-29 | Installable PWA: web manifest, generated service worker with offline fallback, install entry point in appearance settings, maskable and Apple touch icons |

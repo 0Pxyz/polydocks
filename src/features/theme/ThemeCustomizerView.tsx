@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
-import { RotateCcw, Plus, Check, Ban, Upload, Clipboard } from "lucide-react";
+import { RotateCcw, Plus, Check, Ban, Upload, Clipboard, Download } from "lucide-react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
 import { THEMES, useThemeStore } from "@/lib/theme";
 import { DOCK_STYLES, type DockStyleId } from "@/features/dock/styles";
@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/popover";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
+import {
+  promptInstall,
+  subscribeInstallStatus,
+  type PwaInstallStatus,
+} from "@/lib/platform/pwa";
 
 export const PRESET_ACCENTS = [
   { label: "Lime", color: "#C8FF57" },
@@ -84,6 +89,8 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
   const [isWallpaperPopoverOpen, setIsWallpaperPopoverOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
 
+  const [installStatus, setInstallStatus] = useState<PwaInstallStatus>("unavailable");
+  useEffect(() => subscribeInstallStatus(setInstallStatus), []);
   const isReduced = prefersReducedMotion();
 
   // Show transient name label that fades out after 1.2s of inactivity
@@ -862,6 +869,41 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
             Replay
           </button>
         </motion.div>
+
+        {/* Row: App Install (only when the browser offers installation) */}
+        <AnimatePresence>
+          {(installStatus === "prompt-ready" || installStatus === "ios-hint") && (
+            <motion.div
+              variants={rowVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="w-full"
+            >
+              {installStatus === "prompt-ready" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void promptInstall().then((outcome) => {
+                      if (outcome) {
+                        showTransientLabel(outcome === "accepted" ? "Installing" : "Dismissed");
+                      }
+                    });
+                  }}
+                  onMouseEnter={() => showTransientLabel("Install app")}
+                  className="w-full h-9 flex items-center justify-center gap-2 rounded-full bg-white/[0.05] hover:bg-white/[0.09] text-[13px] font-sans font-medium text-foreground/85 hover:text-foreground backdrop-blur-md transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Install app</span>
+                </button>
+              ) : (
+                <p className="text-center text-[13px] font-sans text-foreground/80">
+                  In Safari, open the Share menu and choose Add to Home Screen.
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Row 5: Fixed Non-Overlapping Transient Name Label (13px, sans, fades after 1.2s) */}
         <div className="h-6 flex items-center justify-center text-[13px] font-sans font-medium text-foreground/80 tracking-normal text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] transition-opacity duration-300">
