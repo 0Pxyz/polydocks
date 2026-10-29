@@ -68,26 +68,17 @@ export default function App() {
   // is tracked in #153; until then this entry opens the maps view.
   const homePlugins = useMemo(
     () => [
-      { id: "maps", label: "Polymax", detail: "Knowledge worlds" },
+      { id: "maps", label: "Polymax", detail: "Knowledge worlds", iconKey: "Compass" },
       ...workspacePlugins
         .filter((wp) => wp.enabled && wp.plugin && wp.pluginId !== "maps")
         .map((wp) => ({
           id: wp.pluginId,
           label: wp.plugin?.name || wp.pluginId,
           detail: wp.plugin?.description,
+          iconKey: wp.plugin?.icon,
         })),
     ],
     [workspacePlugins]
-  );
-
-  // Recent work from real session state only — never placeholder cities.
-  const citySummaries = useCitySummaryStore((s) => s.summaries);
-  const recentHomeCities = useMemo(
-    () =>
-      Object.keys(citySummaries)
-        .slice(0, 2)
-        .map((id) => ({ id, title: id })),
-    [citySummaries]
   );
 
   const workspaceDockTools: DockToolItem[] = workspacePlugins
@@ -523,14 +514,7 @@ export default function App() {
                     const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
                     setLayoutState(isWide ? "side" : "sheet");
                   }}
-                  onEnterCity={(cityName) => {
-                    setSelectedCity(cityName);
-                    enterCity(cityName);
-                    setActiveToolId("");
-                    setDockActiveTool("");
-                  }}
                   installedPlugins={homePlugins}
-                  recentCities={recentHomeCities}
                   onOpenPlugin={(pluginId) => handleSelectTool(pluginId)}
                   onOpenStore={() => {
                     setActiveToolId("plugins");
