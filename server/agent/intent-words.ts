@@ -13,4 +13,4 @@ export const FIX_WORD =
   /\b(fix\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|doesnt work|not working|não funciona|nao funciona|bug)\b/;
 
 export const UPDATE_WORD =
-  /\b(update\w*|modify|modif\w*|fix|change\w*|group by|add\w*|adiciona\w*|acrescenta\w*|atualiz\w*|modific\w*|corrig\w*|alter\w*|agrup\w*|muda\w*|mude\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|not working|não funciona|nao funciona|bug)\b/;
+  /\b(update\w*|modify|modif\w*|fix|change\w*|group by|add\w*|adiciona\w*|acrescenta\w*|atualiz\w*|modific\w*|corrig\w*|alter\w*|agrup\w*|muda\w*|mude\w*|arrum\w*|consert\w*|resolv\w*|quebrad\w*|broken|doesn'?t work|does not work|not working|não funciona|nao funciona|bug|melhor\w*|improv\w*|refaz\w*|refator\w*|refact\w*|reescrev\w*|rewrit\w*|redesign|restyl\w*|reestiliz\w*|estiliz\w*|bonit\w*|beautif\w*|moderniz\w*|polish\w*)\b/;

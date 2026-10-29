@@ -25,19 +25,22 @@ export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIn
   const lower = (prompt || "").toLowerCase();
   if (!lower.trim()) return "general";
 
+  // Broken artifact reports (fix in place, never recreate) outrank theme
+  // and research: "fix the reader background" is a repair, not a theme change.
+  if (FIX_WORD.test(lower) && ARTIFACT_WORD.test(lower)) return "plugin_fix";
+
+  // Update an existing artifact (never recreate it). Checked before theme:
+  // "melhora o plugin ... não se adapta ao tema ... fundo" restyles the
+  // artifact itself, it does not change the app theme. Theme words alone
+  // (without an artifact target) still fall through to the theme intent.
+  if (UPDATE_WORD.test(lower) && ARTIFACT_WORD.test(lower)) return "plugin_update";
+
   // Theme customization (e.g. "Add this background to my theme" + image).
-  // Checked first: it must never fall through to research or city planning.
+  // Reached only when no artifact update/fix matched above.
   if (THEME_CORE.test(lower)) return "theme";
   if (BACKGROUND_WORD.test(lower) && (THEME_ACTION.test(lower) || hints.hasImageAttachments)) {
     return "theme";
   }
-
-  // Broken artifact reports (fix in place, never recreate) outrank generic
-  // updates: "fix the reader" / "arruma o reader" / "open in reader doesn't work".
-  if (FIX_WORD.test(lower) && ARTIFACT_WORD.test(lower)) return "plugin_fix";
-
-  // Update an existing artifact (never recreate it).
-  if (UPDATE_WORD.test(lower) && ARTIFACT_WORD.test(lower)) return "plugin_update";
 
   // Research and city planning reuse the existing skill matchers so there
   // is exactly one definition of those intents.
