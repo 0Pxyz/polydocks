@@ -38,6 +38,10 @@ import { search_files } from "./search_files";
 import { recall_memory } from "./recall_memory";
 import { record_memory } from "./record_memory";
 import { plan_ascii_world } from "./plan_ascii_world";
+import { dock_search } from "./dock_search";
+import { dock_pin } from "./dock_pin";
+import { dock_unpin } from "./dock_unpin";
+import { dock_close } from "./dock_close";
 
 export * from "./types";
 export {
@@ -46,6 +50,10 @@ export {
   open_intent,
   inspect_tab,
   close_tray,
+  dock_search,
+  dock_pin,
+  dock_unpin,
+  dock_close,
   apply_theme,
   create_tab,
   update_tab,
@@ -91,6 +99,10 @@ export const defaultTools: AgentTool[] = [
   open_intent,
   inspect_tab,
   close_tray,
+  dock_search,
+  dock_pin,
+  dock_unpin,
+  dock_close,
   apply_theme,
   create_tab,
   update_tab,

@@ -54,3 +54,4 @@
 | 2026-10-29 | Installable PWA: web manifest, generated service worker with offline fallback, install entry point in appearance settings, maskable and Apple touch icons |
 | 2026-10-29 | Particle world as primary Maps: unified city-territory spec from backend cities + persisted links, connect_cities agent tool, calm labels, camera persistence |
 | 2026-10-29 | Chat overflow fix (flex-1 transcript, pb-10, z-10 composer), single-Orb realtime STT via backend WS proxy (Meta wss ASR, key server-side) |
+| 2026-10-29 | Dock search: find, open, pin and control tools without growing the dock | [#123](https://github.com/0Pxyz/polymax/pull/123) |
