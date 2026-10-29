@@ -593,6 +593,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Same tool with identical arguments already ran this turn: refuse the
     // duplicate so the model changes approach instead of looping.
     const seenCalls = new Set<string>();
+    // Progress-based circuit breaker (not a step cap): consecutive duplicate
+    // refusals mean the model is stuck re-reading instead of progressing.
+    // Three in a row ends the turn gracefully instead of looping forever.
+    let duplicateStreak = 0;
 
     while (currentStep < maxSteps) {
       if (signal?.aborted) {
@@ -809,6 +813,47 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             durationMs: Date.now() - toolStart,
           },
         });
+
+        // Circuit breaker: three consecutive duplicate refusals in one turn
+        // means the model is stuck re-reading instead of progressing (the
+        // "Reading your notes" stall). End the turn with a graceful message
+        // instead of looping forever. This is progress-based, not a step cap.
+        if (toolOutput && typeof toolOutput === "object" && (toolOutput as any).duplicate === true) {
+          duplicateStreak++;
+        } else {
+          duplicateStreak = 0;
+        }
+        if (duplicateStreak >= 3) {
+          const stuckText =
+            "I got stuck re-reading the same thing, so I'm stopping here instead of looping. " +
+            "Tell me which file or note to open and I'll pick it up from there.";
+          if (threadUserId) {
+            appendThreadMessage(threadUserId, "assistant", stuckText);
+            assistantPersisted = true;
+          } else if (cityId) {
+            appendCityMessage(cityId, "assistant", stuckText);
+          }
+          if (taskId) {
+            try {
+              updateTaskState(taskId, "completed", {
+                progress: 1.0,
+                output: { text: stuckText, steps: currentStep, stuck: true },
+              });
+            } catch {
+              // Non-fatal
+            }
+          }
+          await emit({
+            step: currentStep,
+            type: "agent.finish",
+            payload: { ...(await finishPayload(stuckText)), intent, stuck: true },
+          });
+          return {
+            status: "completed",
+            text: stuckText,
+            steps: currentStep,
+          };
+        }
 
         // Trigger reactive UI events when applicable
         if (toolName === "create_tab" && toolOutput && typeof toolOutput === "object") {

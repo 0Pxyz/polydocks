@@ -606,6 +606,22 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
+          case "map.changed":
+          case "map.point.added": {
+            // The world view refreshes on this DOM signal (poll/focus
+            // alone left new cities invisible for 30s or more).
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("polymax:cities-changed"));
+            }
+            set({
+              statusText:
+                event.type === "map.point.added" && event.title
+                  ? `Mapped "${event.title}".`
+                  : "Map updated.",
+            });
+            break;
+          }
+
           case "approval.required":
             set({
               orbState: "idle",

@@ -127,8 +127,7 @@ describe("Agent progress: heartbeat, ordering, no-leak, cancel", () => {
     }
   }, 15000);
 
-  it("honors an aborted signal mid-model-call", async () => {
-    const events: AgentStepEvent[] = [];
+  it("honors an aborted signal mid-model-call", async () => {    const events: AgentStepEvent[] = [];
     const ctrl = new AbortController();
     const llm: any = {
       chat: {
@@ -161,5 +160,45 @@ describe("Agent progress: heartbeat, ordering, no-leak, cancel", () => {
     expect(result.status).toBe("error");
     expect(result.error).toBe("Execution cancelled");
     expect(events.some((e) => e.type === "agent.finish")).toBe(false);
+  });
+
+  it("ends the turn gracefully after repeated identical tool calls (stuck reads)", async () => {
+    const events: AgentStepEvent[] = [];
+    // Model stuck re-reading: same list_files call every step.
+    const llm: any = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [
+              {
+                message: {
+                  role: "assistant",
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call_dup",
+                      type: "function",
+                      function: { name: "list_files", arguments: "{}" },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { prompt_tokens: 5, completion_tokens: 2 },
+          }),
+        },
+      },
+    };
+    const result = await runAgentLoop({
+      prompt: "Read everything repeatedly",
+      llmClient: llm,
+      onEvent: (e) => void events.push(e),
+    });
+    // Breaker fires instead of looping forever (no max-steps cap involved).
+    expect(result.status).toBe("completed");
+    expect(result.steps).toBeLessThanOrEqual(5);
+    expect(result.text).toContain("stuck");
+    const finish = events.find((e) => e.type === "agent.finish");
+    expect((finish?.payload as any)?.stuck).toBe(true);
   });
 });
