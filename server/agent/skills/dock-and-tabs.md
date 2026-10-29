@@ -17,7 +17,7 @@ Write: `create_tab`, then `open_tab` to show it. `update_tab({id, ...})` needs a
 
 ## Sandbox, bridge, code rules
 
-Sandbox is `allow-scripts` with no CSP header; keep documents self-contained. Host API is `window.polymax` (`window.polydocks` is the same object): `storage.get/set/remove`, `invoke`, `invokeAction`, `openUrl`, `getContext`, `submit`, `ui.expand/collapse`, read-only `theme`. No `openContent` or `useCapability` on this backend. TSX is one file, no `export`, mount `#app`; imports allowlisted to `react`, `react-dom/client`, `@/components/ui/*` (17 modules). Shadcn-first, dark tokens, one accent `#C8FF57`, no gradients, no emoji, no dividers.
+Sandbox is `allow-scripts` with no CSP header; keep documents self-contained. Host API is `window.polymax` (`window.polydocks` is the same object): `storage.get/set/remove`, `invoke`, `openUrl`, `getContext`, `submit`, `ui.expand/collapse`. No `openContent` or `useCapability` on this backend. TSX must be import-free (any `import` throws a Security Violation) and under 512KB; mount into `#app`. Shadcn-first, dark tokens, one accent `#C8FF57`, no gradients, no emoji, no dividers.
 
 ## Common mistakes
 
@@ -33,6 +33,6 @@ server/agent/tools/create_tab.ts, server/agent/tools/update_tab.ts,
 server/agent/tools/delete_tab.ts, server/agent/tools/list_tabs.ts,
 server/agent/tools/open_tab.ts, server/agent/tools/open_intent.ts,
 server/agent/tools/inspect_tab.ts, server/agent/tools/close_tray.ts,
-server/workspace/features.ts, server/workspace/reactKit.ts,
+server/workspace/features.ts,
 src/features/dock/bridge/guest-bridge.js, docs/design-slop.md
 -->

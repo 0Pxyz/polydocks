@@ -15,11 +15,11 @@
 
 ## Verified vs not
 
-The registry validates the manifest and the TSX import allowlist (`react`, `react-dom/client`, `@/components/ui/*`); idempotency keys dedupe retries. It never runs the code: runtime failures land in `experience_errors`, read back with `inspect_experience`. Re-creating an existing id upserts over it and resets the version, so fixes belong in `modify_plugin`.
+The registry validates the manifest and the feature writer rejects any import (import-free TSX, 512KB cap); idempotency keys dedupe retries. It never runs the code: runtime failures land in `experience_errors`, read back with `inspect_experience`. Re-creating an existing id upserts over it and resets the version, so fixes belong in `modify_plugin`.
 
 ## Code rules
 
-Same sandbox as tabs (`allow-scripts`, `window.polymax` bridge, mount `#app`, no `export`, no external imports, no `alert`). Shadcn-first, dark tokens, one accent, plain copy, every card links its real source.
+Same sandbox as tabs (`allow-scripts`, `window.polymax` bridge, mount `#app`, no imports at all, no `alert`). Shadcn-first, dark tokens, one accent, plain copy, every card links its real source.
 
 ## Common mistakes
 
@@ -35,6 +35,5 @@ server/agent/tools/create_plugin.ts, server/agent/tools/modify_plugin.ts,
 server/agent/tools/inspect_experience.ts, server/agent/tools/operate_plugin.ts,
 server/agent/tools/publish_plugin.ts, server/agent/tools/promote_to_plugin.ts,
 server/services/pluginService.ts, server/plugins/registry.ts,
-server/plugins/bus.ts, server/workspace/experienceErrors.ts,
-server/workspace/reactKit.ts, docs/design-slop.md
+server/plugins/bus.ts, server/workspace/experienceErrors.ts, docs/design-slop.md
 -->
