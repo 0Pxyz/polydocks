@@ -356,7 +356,7 @@ export default function App() {
             open={paletteOpen}
             onOpenChange={setPaletteOpen}
             cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
-            extraItems={activeExtraTools.map((tool) => ({
+            extraItems={extraTools.map((tool) => ({
               id: tool.id,
               label: tool.label,
               description: "Created with the agent",
@@ -390,7 +390,11 @@ export default function App() {
               }
             }}
             onSubmitToolPrompt={(prompt) => handleToolPromptSubmit(prompt)}
-            onFixWithAgent={(prompt) => handleToolPromptSubmit(prompt, { origin: "dock-fix" })}
+            onFixWithAgent={(prompt) => {
+              handleToolPromptSubmit(prompt, { origin: "dock-fix" });
+              const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+              setLayoutState(isWide ? "side" : "sheet");
+            }}
           />
 
           {/* Single Agent Conversation Instance */}
