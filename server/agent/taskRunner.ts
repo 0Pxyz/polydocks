@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "../workspace/db";
+import { ensureSessionTaskTables, mirrorTranscriptEntry } from "../workspace/sessions";
 import { getSessionsPath } from "../system/agentHome";
 import { runAgentLoop, type AgentStepEvent } from "./loop";
 
@@ -58,43 +59,14 @@ export type TaskExecutor = (
   emitEvent: (event: AgentStepEvent) => Promise<void>
 ) => Promise<Record<string, unknown> | void>;
 
-// Ensure SQLite table schemas exist if db was previously created without them
-db.exec(`
-  CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    title TEXT,
-    status TEXT NOT NULL DEFAULT 'active',
-    metadata_json TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_sessions_workspace_id ON sessions(workspace_id);
-  CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
-
-  CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'queued',
-    progress REAL DEFAULT 0.0,
-    input_json TEXT,
-    output_json TEXT,
-    error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);
-  CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
-  CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-`);
+// Canonical DDL lives in server/workspace/sessions.ts (single definition;
+// schema.sql carries the same statements for fresh databases).
+ensureSessionTaskTables();
 
 /**
- * Appends a JSON-line record to agent-home/sessions/<sessionId>.jsonl
+ * Appends a JSON-line record to agent-home/sessions/<sessionId>.jsonl and
+ * mirrors it into SQLite session_transcripts (backfill; reads stay on JSONL
+ * until the verification window completes).
  */
 export async function appendSessionTranscript(
   sessionId: string,
@@ -114,6 +86,7 @@ export async function appendSessionTranscript(
   };
 
   await fs.appendFile(filePath, JSON.stringify(record) + "\n", "utf-8");
+  mirrorTranscriptEntry(sessionId, record);
 }
 
 /**

@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { db } from "./db";
 
 /**
  * Resolves a target path safely inside the specified city workspace.
@@ -213,32 +212,16 @@ export async function updateWorkspaceState(
 }
 
 /**
- * Appends an entry to both the SQLite audit trail and the file-based audit log.
+ * Single audit writer is `recordAudit` (services/audit.ts, SQLite audit_log).
+ * This wrapper is kept for compat and writes SQLite only — the legacy
+ * workspace/.audit.log file mirror is removed (see #165).
  */
 export async function appendAuditLog(
   cityId: string,
   action: string,
   details: Record<string, unknown>
 ): Promise<void> {
-  const timestamp = new Date().toISOString();
-  const serialized = JSON.stringify(details);
-
-  try {
-    const stmt = db.prepare(
-      "INSERT INTO audit_log (city_id, action, details, created_at) VALUES (?, ?, ?, ?)"
-    );
-    stmt.run(cityId, action, serialized, timestamp);
-  } catch {
-    // Non-fatal if DB write encounters issues
-  }
-
-  try {
-    const workspaceRoot = path.resolve(process.cwd(), "workspace");
-    await fs.mkdir(workspaceRoot, { recursive: true });
-    const logLine = `[${timestamp}] [city:${cityId}] [${action}] ${serialized}\n`;
-    await fs.appendFile(path.join(workspaceRoot, ".audit.log"), logLine, "utf-8");
-  } catch {
-    // Non-fatal
-  }
+  const { recordAudit } = await import("../services/audit");
+  recordAudit({ action, cityId, details });
 }
 

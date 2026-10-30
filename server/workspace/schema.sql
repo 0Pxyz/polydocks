@@ -204,6 +204,15 @@ CREATE TABLE IF NOT EXISTS agent_thread_messages (
 CREATE INDEX IF NOT EXISTS idx_agent_thread_messages_thread_seq
   ON agent_thread_messages(thread_id, seq);
 
+CREATE TABLE IF NOT EXISTS session_transcripts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  entry_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_transcripts_session_id ON session_transcripts(session_id);
+
 -- PolyDocks V2 Multi-Workspace Architecture
 
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -211,6 +220,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   name TEXT NOT NULL,
   description TEXT,
   icon TEXT DEFAULT 'Briefcase',
+  kind TEXT NOT NULL DEFAULT 'workspace',
   is_default INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL

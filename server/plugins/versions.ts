@@ -1,4 +1,5 @@
 import { db } from "../workspace/db";
+import { ensurePluginFilesTable } from "../workspace/pluginFiles";
 
 export interface PluginVersionRecord {
   pluginId: string;
@@ -62,6 +63,42 @@ export function saveVersion(input: {
     input.status || "active",
     now
   );
+}
+
+/**
+ * Backfills plugin_versions rows into plugin_files (the canonical version
+ * store keyed by workspace). Idempotent and reversible: INSERT OR IGNORE
+ * never overwrites existing plugin_files rows; plugin_versions is untouched
+ * so the migration can be re-run or rolled back by row comparison.
+ */
+export function backfillPluginVersionsToFiles(): { copied: number } {
+  ensurePluginVersionsTable();
+  ensurePluginFilesTable();
+  const rows = db
+    .query<any, []>(
+      `SELECT workspace_id, plugin_id, version, manifest_json, source_code, srcdoc, created_at
+       FROM plugin_versions`
+    )
+    .all();
+  let copied = 0;
+  for (const r of rows) {
+    const res = db
+      .query(
+        `INSERT OR IGNORE INTO plugin_files (workspace_id, plugin_id, version, manifest_json, source_code, srcdoc, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        r.workspace_id || "default",
+        r.plugin_id,
+        r.version,
+        r.manifest_json,
+        r.source_code ?? null,
+        r.srcdoc ?? "",
+        r.created_at
+      );
+    copied += Number(res.changes ?? 0);
+  }
+  return { copied };
 }
 
 /**
