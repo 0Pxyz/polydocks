@@ -17,6 +17,7 @@ import {
   ShieldWarning,
 } from "@phosphor-icons/react";
 import { resolveSurfaceIcon } from "../dock/surfaceResolver";
+import { PluginStoreView } from "./PluginStoreView";
 
 export interface PluginItem {
   id: string;
@@ -45,11 +46,14 @@ export interface ExecutionRecord {
 interface PluginsViewProps {
   onDismiss?: () => void;
   className?: string;
+  initialTab?: "installed" | "discover";
+  onOpenPlugin?: (pluginId: string) => void;
 }
 
-export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
+export function PluginsView({ onDismiss, className = "", initialTab = "installed", onOpenPlugin }: PluginsViewProps) {
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"installed" | "discover">(initialTab);
   const [selectedPlugin, setSelectedPlugin] = useState<PluginItem | null>(null);
   const [executions, setExecutions] = useState<Record<string, ExecutionRecord[]>>({});
   const [showMcpModal, setShowMcpModal] = useState(false);
@@ -58,6 +62,7 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
   const [mcpToken, setMcpToken] = useState("");
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [connectingMcp, setConnectingMcp] = useState(false);
+  const [mcpWarning, setMcpWarning] = useState<string | null>(null);
 
   // Install from Manifest URL state
   const [showInstallUrlModal, setShowInstallUrlModal] = useState(false);
@@ -102,6 +107,10 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
   useEffect(() => {
     fetchPlugins();
   }, []);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const handleToggle = async (pluginId: string) => {
     try {
@@ -171,6 +180,9 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
       setMcpName("");
       setMcpUrl("");
       setMcpToken("");
+      // Honest degradation: discovery may have failed server-side while the
+      // generic adapter still installed. Say so instead of looking complete.
+      setMcpWarning(typeof data.discoveryWarning === "string" ? data.discoveryWarning : null);
       await fetchPlugins();
     } catch (err: any) {
       setMcpError(err.message || "Network error connecting to MCP server.");
@@ -301,6 +313,22 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
     <div
       className={`w-full max-w-5xl px-4 py-8 flex flex-col gap-6 text-white select-none ${className}`}
     >
+      {mcpWarning && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+          <ShieldWarning className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />
+          <div className="flex-1 text-xs text-amber-200/90">
+            {mcpWarning}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMcpWarning(null)}
+            className="text-amber-200/60 hover:text-amber-100 cursor-pointer"
+            aria-label="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       {/* Top Header */}
       <div className="flex items-center justify-between pb-4 border-b border-white/10">
         <div>
@@ -347,6 +375,28 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
         </div>
       </div>
 
+      {/* Tabs: Installed + Discover */}
+      <div className="flex items-center gap-1 rounded-full bg-white/[0.04] border border-[var(--border-subtle)] p-0.5 self-start">
+        {(["installed", "discover"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
+              activeTab === tab
+                ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] font-medium"
+                : "text-[var(--text-muted)] hover:text-white"
+            }`}
+          >
+            {tab === "installed" ? "Installed" : "Discover"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "discover" ? (
+        <PluginStoreView onOpenPlugin={onOpenPlugin} />
+      ) : (
+      <>
       {/* Grid of Installed Plugins */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -437,6 +487,8 @@ export function PluginsView({ onDismiss, className = "" }: PluginsViewProps) {
             );
           })}
         </div>
+      )}
+      </>
       )}
 
       {/* Floating Detail Sheet */}

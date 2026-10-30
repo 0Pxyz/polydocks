@@ -35,6 +35,8 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
   const [newFilePath, setNewFilePath] = useState<string>("");
   const [newFileContent, setNewFileContent] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  // Honest load failure: never render fabricated content as if it were the file.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadFiles = async () => {
     setIsLoading(true);
@@ -60,6 +62,7 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
   const loadFileContent = async (path: string) => {
     setSelectedFile(path);
     setIsEditing(false);
+    setLoadError(null);
     try {
       const res = await fetch(
         `/api/cities/${encodeURIComponent(cityId)}/files?path=${encodeURIComponent(path)}`
@@ -68,11 +71,12 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
         const data = await res.json();
         setFileContent(data.content || "");
       } else {
-        // Fallback placeholder
-        setFileContent(`// Content of ${path}`);
+        setFileContent("");
+        setLoadError(`Couldn't load "${path}" (server responded ${res.status}).`);
       }
     } catch {
-      setFileContent(`// Content of ${path}`);
+      setFileContent("");
+      setLoadError(`Couldn't load "${path}". Check your connection and try again.`);
     }
   };
 
@@ -253,7 +257,18 @@ export function FilesView({ cityId, cityName, onOpenFile: _onOpenFile }: FilesVi
             </div>
 
             {/* Content Field */}
-            {isEditing ? (
+            {loadError ? (
+              <div className="w-full h-[380px] p-3 rounded-lg bg-black/40 border border-red-400/20 font-mono text-xs flex flex-col items-center justify-center gap-2 text-center">
+                <span className="text-red-300/90">{loadError}</span>
+                <button
+                  type="button"
+                  onClick={() => selectedFile && loadFileContent(selectedFile)}
+                  className="text-[var(--accent-lime)] hover:opacity-80 cursor-pointer"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : isEditing ? (
               <textarea
                 value={fileContent}
                 onChange={(e) => setFileContent(e.target.value)}

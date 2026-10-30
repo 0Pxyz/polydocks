@@ -47,9 +47,13 @@ describe("dock store directive layer", () => {
     expect(unknown.ok).toBe(false);
     expect(unknown.message.length).toBeGreaterThan(0);
 
-    const system = useDockStore.getState().applyDirective({ op: "unpin", id: "maps" }, known);
+    const system = useDockStore.getState().applyDirective({ op: "unpin", id: "agent" }, known);
     expect(system.ok).toBe(false);
-    expect(useDockStore.getState().pinnedToolIds).toContain("maps");
+    expect(system.message.length).toBeGreaterThan(0);
+
+    // Maps is an optional plugin now: unpinning it succeeds.
+    const maps = useDockStore.getState().applyDirective({ op: "unpin", id: "maps" }, known);
+    expect(maps.ok).toBe(true);
   });
 
   test("legacy pin/unpin helpers still work and persist order", () => {

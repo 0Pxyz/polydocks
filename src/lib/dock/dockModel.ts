@@ -40,10 +40,10 @@ export interface DockLayoutState {
 }
 
 /** Items that are part of the dock itself and can never be unpinned or closed. */
-export const SYSTEM_TOOL_IDS = new Set(["maps"]);
+export const SYSTEM_TOOL_IDS = new Set(["agent"]);
 
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
-export const DEFAULT_PINNED_IDS = ["agent", "maps", "settings"];
+export const DEFAULT_PINNED_IDS = ["agent", "plugins", "settings"];
 
 /**
  * One-way migration for persisted layouts: the Plugin Store is not a dock
@@ -238,8 +238,8 @@ export function buildCityDockTools(summary?: CityToolCounts): DockItem[] {
         : `${summary.doneQuests} of ${summary.quests} quests`
       : undefined;
   return [
-    { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
-    { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin", system: true },
+    { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin", system: true },
+    { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
     {
       id: "sources",
       label: "Sources",
@@ -351,7 +351,7 @@ export function applyDockDirective(
     return { ok: false, message: `No dock item "${id}" found.`, layout };
   }
   if ((op === "unpin" || op === "close") && SYSTEM_TOOL_IDS.has(id)) {
-    return { ok: false, message: `The map is always in the dock and cannot be removed.`, layout };
+    return { ok: false, message: `The agent is always in the dock and cannot be removed.`, layout };
   }
 
   if (op === "pin") {
@@ -419,8 +419,8 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
  * Mirrors the server builtin list (server/agent/tools/dockCatalog.ts).
  */
 export const DOCK_CORE_CATALOG: DockItem[] = [
-  { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
-  { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin", system: true },
+  { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin", system: true },
+  { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
   { id: "browser", label: "Research & Sources", description: "Research and sources", icon: "browser", kind: "builtin" },
   { id: "notes", label: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
   { id: "files", label: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },

@@ -277,25 +277,31 @@ describe("applyDockDirective", () => {
     }
   });
 
-  test("the map cannot be unpinned or closed", () => {
-    const layoutWithMap: DockLayoutState = { pinnedIds: ["maps"], openIds: ["maps"] };
-    expect(applyDockDirective(layoutWithMap, { op: "unpin", id: "maps" }, known).ok).toBe(false);
-    expect(applyDockDirective(layoutWithMap, { op: "close", id: "maps" }, known).ok).toBe(false);
-    // ...but pinning and opening it are harmless no-ops that succeed.
-    expect(applyDockDirective(layoutWithMap, { op: "pin", id: "maps" }, known).ok).toBe(true);
+  test("the agent cannot be unpinned or closed, maps can", () => {
+    const layout: DockLayoutState = { pinnedIds: ["agent", "maps"], openIds: ["agent", "maps"] };
+    expect(applyDockDirective(layout, { op: "unpin", id: "agent" }, known).ok).toBe(false);
+    expect(applyDockDirective(layout, { op: "close", id: "agent" }, known).ok).toBe(false);
+    // Polymax is an optional plugin now: unpinning/closing maps succeeds.
+    expect(applyDockDirective(layout, { op: "unpin", id: "maps" }, known).ok).toBe(true);
+    expect(applyDockDirective(layout, { op: "close", id: "maps" }, known).ok).toBe(true);
+    // ...and pinning and opening it are harmless no-ops that succeed.
+    expect(applyDockDirective(layout, { op: "pin", id: "maps" }, known).ok).toBe(true);
   });
 
   test("repeat directives are idempotent successes", () => {
     const state: DockLayoutState = { pinnedIds: ["agent"], openIds: [] };
     expect(applyDockDirective(state, { op: "pin", id: "agent" }, known).ok).toBe(true);
-    expect(applyDockDirective(state, { op: "close", id: "agent" }, known).ok).toBe(true);
+    // Agent is the system entry: closing it fails, closing maps succeeds.
+    expect(applyDockDirective(state, { op: "close", id: "agent" }, known).ok).toBe(false);
+    expect(applyDockDirective(state, { op: "close", id: "maps" }, known).ok).toBe(true);
     expect(applyDockDirective(state, { op: "unpin", id: "browser" }, known).ok).toBe(true);
   });
 
   test("defaults keep the curated core without the store", () => {
-    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "maps", "settings"]);
+    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "plugins", "settings"]);
     expect(DEFAULT_PINNED_IDS).not.toContain("store");
-    expect(SYSTEM_TOOL_IDS.has("maps")).toBe(true);
+    expect(DEFAULT_PINNED_IDS).not.toContain("maps");
+    expect(SYSTEM_TOOL_IDS.has("agent")).toBe(true);
   });
 
   test("the Plugin Store migrates out of persisted pins without deleting", () => {
@@ -305,6 +311,6 @@ describe("applyDockDirective", () => {
       "settings",
     ]);
     expect(migratePinnedIds(["agent", "maps"])).toEqual(["agent", "maps"]);
-    expect(migratePinnedIds(["store"])).toEqual(["agent", "maps", "settings"]);
+    expect(migratePinnedIds(["store"])).toEqual(["agent", "plugins", "settings"]);
   });
 });

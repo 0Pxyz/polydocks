@@ -31,9 +31,9 @@ describe("Polymax UX Polish & Native Experiences", () => {
   });
 
   describe("2. Dock Tools Adaptation (Home vs City Workspace)", () => {
-    it("presents minimal clean dock on home screen (agent, maps, settings)", () => {
+    it("presents minimal clean dock on home screen (agent, plugins, settings)", () => {
       const ids = HOME_DOCK_TOOLS.map((t) => t.id);
-      expect(ids).toEqual(["agent", "maps", "settings"]);
+      expect(ids).toEqual(["agent", "plugins", "settings"]);
     });
 
     it("presents the city tools in the dock inside a city (agent, maps, sources, notes, files, quests, flashcards, terminal, settings)", () => {
