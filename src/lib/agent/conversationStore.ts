@@ -44,6 +44,8 @@ export interface ActivityRow {
   state: "running" | "done" | "error";
   startedAt: number;
   finishedAt?: number;
+  /** Machine tool name (used for provider branding, e.g. TinyFish). */
+  tool?: string;
 }
 
 interface ConversationStoreState {
@@ -544,6 +546,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                     label: event.statusLabel as string,
                     state: "running" as const,
                     startedAt: Date.now(),
+                    tool: event.name,
                   },
                 ],
               }));
