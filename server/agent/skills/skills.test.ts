@@ -314,6 +314,7 @@ describe("Domain skill selection (max two, PT+EN)", () => {
     { prompt: "update the feed plugin to group by topic", expected: ["plugins"] },
     { prompt: "atualiza meu plugin pomodoro", expected: ["plugins"] },
     { prompt: "build a pomodoro timer", expected: ["plugins"] },
+    { prompt: "build a tracker for my reading list", expected: ["plugins"] },
     { prompt: "find articles about go to market", expected: ["content-and-reader"] },
     { prompt: "pesquise artigos sobre estoicismo", expected: ["content-and-reader"] },
     { prompt: "open this article about raft", expected: ["content-and-reader"] },

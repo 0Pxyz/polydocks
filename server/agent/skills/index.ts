@@ -89,6 +89,8 @@ export function isPluginSynthesisIntent(prompt: string): boolean {
     "kanban board",
     "todo list",
     "task manager",
+    "tracker",
+    "reading list",
     "calculator",
     "calculadora",
     "flashcard",
