@@ -69,11 +69,10 @@ describe("dock agent tools", () => {
     expect(result.message).toMatch(/install/i);
   });
 
-  test("dock_unpin refuses to remove the map", async () => {
-    const result = (await dock_unpin.execute({ id: "maps" }, ctx)) as any;
-    expect(result.success).toBe(false);
-    expect(result.action).toBe("dock.unpin");
-    expect(result.message).toMatch(/always in the dock/i);
+  test("dock_unpin removes optional tools like maps (unpin never deletes)", async () => {
+    const mapsRes = (await dock_unpin.execute({ id: "maps" }, ctx)) as any;
+    expect(mapsRes.success).toBe(true);
+    expect(mapsRes.action).toBe("dock.unpin");
   });
 
   test("dock_close succeeds for a builtin tab without deleting", async () => {

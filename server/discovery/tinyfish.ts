@@ -12,6 +12,15 @@ export interface SearchHit {
   score?: number;
 }
 
+export class TinyFishError extends Error {
+  readonly retryable: boolean;
+  constructor(message: string, retryable = true) {
+    super(message);
+    this.name = "TinyFishError";
+    this.retryable = retryable;
+  }
+}
+
 export interface FetchResult {
   url: string;
   markdown: string;
@@ -70,10 +79,9 @@ export class TinyFishClient implements TinyFishAdapter {
       // Fall through on cache read error
     }
 
-    // 2. Fetch from TinyFish Search API.
-    // Always attempt the network call so hermetic fetch stubs stay
-    // effective even when no API key is configured; fall back to
-    // deterministic results only on network / API error.
+    // 2. Fetch from TinyFish Search API. No mock fallback: on network or
+    // API error the call throws a typed TinyFishError and nothing is
+    // cached, so fake results can never be served or persisted as real.
     let results: SearchHit[] = [];
 
     {
@@ -83,46 +91,38 @@ export class TinyFishClient implements TinyFishAdapter {
         url.searchParams.set("domain_type", domainType);
       }
 
+      let res: Response;
       try {
-        const res = await fetch(url.toString(), {
+        res = await fetch(url.toString(), {
           headers: {
             "X-API-Key": this.apiKey,
           },
         });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error(`[TinyFish Search Error] HTTP ${res.status}: ${errText}`);
-          throw new Error(`TinyFish Search API error ${res.status}: ${errText}`);
-        }
-
-        const data = (await res.json()) as any;
-        const rawHits = Array.isArray(data) ? data : data.results || data.hits || [];
-
-        results = rawHits.slice(0, limit).map((h: any) => ({
-          title: h.title || h.name || "Untitled Resource",
-          url: h.url || h.link,
-          snippet: h.snippet || h.summary || "",
-          domainType,
-        }));
       } catch (err: any) {
-        console.warn(`[TinyFish Search Fallback] using mock hits for "${trimmed}":`, err?.message || err);
-        // Fallback to deterministic results on network / API error
-        results = [
-          {
-            title: `${trimmed} - Overview & Key Concepts`,
-            url: `https://example.com/learn/${encodeURIComponent(trimmed)}`,
-            snippet: `Authoritative guide covering foundational principles of ${trimmed}.`,
-            domainType,
-          },
-          {
-            title: `Visualized Introduction to ${trimmed}`,
-            url: `https://example.com/visual/${encodeURIComponent(trimmed)}`,
-            snippet: `Interactive visual explanations and drills for ${trimmed}.`,
-            domainType,
-          },
-        ];
+        throw new TinyFishError(
+          `Search is unavailable (network error: ${err?.message || err}). Check your connection and try again.`,
+          true
+        );
       }
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error(`[TinyFish Search Error] HTTP ${res.status}: ${errText}`);
+        throw new TinyFishError(
+          `Search is unavailable (TinyFish API error ${res.status}). Check TINYFISH_API_KEY and try again.`,
+          res.status >= 500
+        );
+      }
+
+      const data = (await res.json()) as any;
+      const rawHits = Array.isArray(data) ? data : data.results || data.hits || [];
+
+      results = rawHits.slice(0, limit).map((h: any) => ({
+        title: h.title || h.name || "Untitled Resource",
+        url: h.url || h.link,
+        snippet: h.snippet || h.summary || "",
+        domainType,
+      }));
     }
 
     // 3. Write to SQLite cache (TTL: 24h for news, 7 days for papers/web)
@@ -171,15 +171,15 @@ export class TinyFishClient implements TinyFishAdapter {
       return results;
     }
 
-    // 2. Fetch missing URLs.
-    // Always attempt the network call so hermetic fetch stubs stay
-    // effective even when no API key is configured; fall back to mock
-    // markdown only on network / API error.
+    // 2. Fetch missing URLs. No mock fallback: failures are reported
+    // honestly per URL (status 0, error text) or throw when the API itself
+    // is unreachable, so nothing fabricated is ever cached or rendered.
     let fetchedBatch: FetchResult[] = [];
 
     {
+      let res: Response;
       try {
-        const res = await fetch(this.fetchBaseUrl, {
+        res = await fetch(this.fetchBaseUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -190,47 +190,48 @@ export class TinyFishClient implements TinyFishAdapter {
             format: "markdown",
           }),
         });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error(`[TinyFish Fetch Error] HTTP ${res.status}: ${errText}`);
-          throw new Error(`TinyFish Fetch API error ${res.status}: ${errText}`);
-        }
-
-        const data = (await res.json()) as any;
-        const rawList = Array.isArray(data) ? data : data.results || [];
-
-        fetchedBatch = rawList.map((item: any) => {
-          let md = item.text || item.markdown || item.content || "";
-          if (md.length > MAX_PAGE_BYTES) {
-            md = md.slice(0, MAX_PAGE_BYTES) + "\n\n...[Truncated to 16KB for security]...";
-          }
-          return {
-            url: item.url,
-            status: item.status || 200,
-            markdown: md,
-          };
-        });
-
-        // Ensure errors/missing pages are also returned with status
-        if (data.errors && Array.isArray(data.errors)) {
-          for (const errItem of data.errors) {
-            if (!fetchedBatch.some((f) => f.url === errItem.url)) {
-              fetchedBatch.push({
-                url: errItem.url,
-                status: errItem.status || 404,
-                markdown: `# ${errItem.url}\n\nContent unavailable (${errItem.error || "not found"}).`,
-              });
-            }
-          }
-        }
       } catch (err: any) {
-        console.warn(`[TinyFish Fetch Fallback] for URLs:`, missingUrls, err?.message || err);
-        fetchedBatch = missingUrls.map((u) => ({
-          url: u,
-          status: 200,
-          markdown: `# ${u}\n\nClean markdown extracted by TinyFish adapter.\n\nKey takeaways and authoritative technical review.`,
-        }));
+        throw new TinyFishError(
+          `Fetch is unavailable (network error: ${err?.message || err}). Check your connection and try again.`,
+          true
+        );
+      }
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error(`[TinyFish Fetch Error] HTTP ${res.status}: ${errText}`);
+        throw new TinyFishError(
+          `Fetch is unavailable (TinyFish API error ${res.status}). Check TINYFISH_API_KEY and try again.`,
+          res.status >= 500
+        );
+      }
+
+      const data = (await res.json()) as any;
+      const rawList = Array.isArray(data) ? data : data.results || [];
+
+      fetchedBatch = rawList.map((item: any) => {
+        let md = item.text || item.markdown || item.content || "";
+        if (md.length > MAX_PAGE_BYTES) {
+          md = md.slice(0, MAX_PAGE_BYTES) + "\n\n...[Truncated to 16KB for security]...";
+        }
+        return {
+          url: item.url,
+          status: item.status || 200,
+          markdown: md,
+        };
+      });
+
+      // Ensure errors/missing pages are also returned with status
+      if (data.errors && Array.isArray(data.errors)) {
+        for (const errItem of data.errors) {
+          if (!fetchedBatch.some((f) => f.url === errItem.url)) {
+            fetchedBatch.push({
+              url: errItem.url,
+              status: errItem.status || 404,
+              markdown: `# ${errItem.url}\n\nContent unavailable (${errItem.error || "not found"}).`,
+            });
+          }
+        }
       }
     }
 

@@ -142,13 +142,18 @@ pluginsRouter.post("/mcp/connect", async (c) => {
 
   // Try dynamic tool discovery via MCP adapter
   let discoveredTools: any[] = [];
+  let discoveryWarning: string | null = null;
   try {
     const discovery = await connectMcpServer({ name, url, token });
     if (discovery.success && discovery.tools && discovery.tools.length > 0) {
       discoveredTools = discovery.tools;
+    } else {
+      discoveryWarning = "Live tool discovery returned nothing; installed a generic invoke action instead.";
     }
   } catch {
-    // Server might be offline or mock during connect; fallback gracefully
+    // Server might be offline during connect; fall back to a generic action
+    // but say so explicitly instead of pretending discovery succeeded.
+    discoveryWarning = "Live tool discovery failed (server unreachable); installed a generic invoke action instead.";
   }
 
   if (discoveredTools.length > 0) {
@@ -202,7 +207,11 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     return c.json({ error: installed.error || "Failed to install MCP plugin." }, 400);
   }
 
-  return c.json({ success: true, plugin: installed.plugin }, 201);
+  return c.json({
+    success: true,
+    plugin: installed.plugin,
+    ...(discoveryWarning ? { discoveryWarning } : {}),
+  }, 201);
 });
 
 /**

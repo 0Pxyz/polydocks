@@ -27,6 +27,7 @@ import { cn } from "@/lib/cn";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
+  const [pluginsInitialTab, setPluginsInitialTab] = useState<"installed" | "discover">("installed");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string | undefined>(undefined);
 
@@ -58,29 +59,25 @@ export default function App() {
 
   const { workspacePlugins, fetchWorkspaces } = useWorkspaceStore();
 
-  // Home must reflect installed plugins dynamically: fetch once on boot so
-  // the workspace registry (not a hardcoded list) drives the home dock
-  // section. Polymax ships as one entry below until #153 extracts it.
+  // Home reflects installed plugins dynamically: the workspace registry (not
+  // a hardcoded list) drives the home grid. Fresh workspaces show an honest
+  // empty state with Discover; nothing is auto-installed.
   useEffect(() => {
     void fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Polymax as one installed plugin, not the app: the knowledge-worlds map
-  // surface listed alongside dynamically installed workspace plugins.
-  // Migration shim — the full extraction (map/cities/quests as real plugins)
-  // is tracked in #153; until then this entry opens the maps view.
+  // Installed workspace plugins only. Polymax (maps) is an optional plugin
+  // installed via Discover — it is never injected into the home grid.
   const homePlugins = useMemo(
-    () => [
-      { id: "maps", label: "Polymax", detail: "Knowledge worlds", iconKey: "Compass" },
-      ...workspacePlugins
-        .filter((wp) => wp.enabled && wp.plugin && wp.pluginId !== "maps")
+    () =>
+      workspacePlugins
+        .filter((wp) => wp.enabled && wp.plugin)
         .map((wp) => ({
           id: wp.pluginId,
           label: wp.plugin?.name || wp.pluginId,
           detail: wp.plugin?.description,
           iconKey: wp.plugin?.icon,
         })),
-    ],
     [workspacePlugins]
   );
 
@@ -592,7 +589,12 @@ export default function App() {
               </DockSurface>
             ) : activeToolId === "plugins" ? (
               <DockSurface frameless>
-                <PluginsView onDismiss={() => handleDismissTool("plugins")} />
+                <PluginsView
+                  key={pluginsInitialTab}
+                  initialTab={pluginsInitialTab}
+                  onOpenPlugin={(id) => handleSelectTool(id)}
+                  onDismiss={() => handleDismissTool("plugins")}
+                />
               </DockSurface>
             ) : activeToolId === "store" ? (
               <DockSurface frameless>
@@ -649,6 +651,7 @@ export default function App() {
                   installedPlugins={homePlugins}
                   onOpenPlugin={(pluginId) => handleSelectTool(pluginId)}
                   onOpenStore={() => {
+                    setPluginsInitialTab("discover");
                     setActiveToolId("plugins");
                     setDockActiveTool("plugins");
                   }}

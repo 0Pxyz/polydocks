@@ -12,6 +12,7 @@ import {
   Target,
   Cards,
   TerminalWindow,
+  PlugsConnected,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
@@ -93,10 +94,10 @@ export const HOME_DOCK_TOOLS: DockToolItem[] = [
     isAgent: true,
   },
   {
-    id: "maps",
-    label: "World Map",
+    id: "plugins",
+    label: "Plugins",
     type: "icon",
-    icon: Compass,
+    icon: PlugsConnected,
   },
   {
     id: "settings",

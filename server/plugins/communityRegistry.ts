@@ -289,7 +289,7 @@ export function seedDefaultCommunityPlugins(): void {
     let mode = 'work';
     let sessions = [];
 
-    window.polydocks.storage.get('pomodoro_sessions').then(saved => {
+    window.polymax.storage.get('pomodoro_sessions').then(saved => {
       if (Array.isArray(saved)) {
         sessions = saved;
         renderHistory();
@@ -347,7 +347,7 @@ export function seedDefaultCommunityPlugins(): void {
             clearInterval(timerId);
             isRunning = false;
             sessions.push({ mode, timestamp: Date.now() });
-            window.polydocks.storage.set('pomodoro_sessions', sessions);
+            window.polymax.storage.set('pomodoro_sessions', sessions);
             renderHistory();
           }
         }, 1000);

@@ -177,6 +177,20 @@ export function HomeScreen({
                 </motion.button>
               );
             })}
+            {visiblePlugins.length === 0 && (
+              <div className="col-span-full flex flex-col items-center gap-2 py-6 text-center">
+                <p className="text-xs text-[#9aa5b8]">
+                  No plugins installed yet. Nothing ships by default.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onOpenStore?.()}
+                  className="text-xs text-[var(--accent-lime)] hover:opacity-80 transition-opacity cursor-pointer"
+                >
+                  Discover plugins
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </motion.div>
