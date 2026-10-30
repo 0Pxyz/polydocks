@@ -79,7 +79,6 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
     "write_city_file",
     "write_file",
     "edit_file",
-    "write_file_safe",
     "get_city_context",
     "inspect_tab",
     "list_tabs",
@@ -90,7 +89,18 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
   plugin_update: ["create_tab", "create_plugin"],
   // Fixes must patch the existing artifact in place: no recreate, no delete.
   plugin_fix: ["create_tab", "create_plugin", "delete_tab"],
-  research: [],
-  city: [],
+  // Research reads the web; it never mutates territories, themes, or tabs.
+  research: [
+    "plan_map",
+    "plan_ascii_world",
+    "build_city",
+    "place_city",
+    "set_map",
+    "connect_cities",
+    "apply_theme",
+    "delete_tab",
+  ],
+  // City planning shapes territories; it never changes the theme or deletes.
+  city: ["apply_theme", "delete_tab"],
   general: [],
 };
