@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { writeCityFile } from "../../workspace/cityWorkspace";
+import { capabilityBus } from "../../plugins/bus";
 
 export const write_city_file: AgentTool<{
   path: string;
@@ -15,17 +15,35 @@ export const write_city_file: AgentTool<{
     cityId: z.string().optional(),
   }),
   execute: async (args, ctx) => {
-    const targetCity = args.cityId || ctx.cityId;
+    // Thin alias over writing.write_file: one implementation, one audit trail.
+    const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
+    initializeFirstPartyPlugins();
+    const targetCity = args.cityId || (ctx as any)?.cityId;
     if (!targetCity) {
       throw new Error("No cityId provided or active in context.");
     }
 
-    const writtenPath = await writeCityFile(targetCity, args.path, args.content);
+    const result = await capabilityBus.invoke("writing.write_file", {
+      path: args.path,
+      content: args.content,
+    }, {
+      actor: "agent",
+      cityId: targetCity,
+      step: (ctx as any)?.step,
+    });
+    if (!result.success) {
+      return {
+        success: false,
+        path: args.path,
+        cityId: targetCity,
+        error: result.error,
+      };
+    }
     return {
       success: true,
       path: args.path,
       cityId: targetCity,
-      writtenPath,
+      writtenPath: (result.data as any)?.path || args.path,
     };
   },
 };

@@ -900,6 +900,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
+        // Browser opens must surface in the UI: open_source now runs through
+        // the browser.open capability, so emit the same event the capability
+        // produces on the facade path.
+        if (
+          toolName === "open_source" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).success === true &&
+          typeof (toolOutput as any).url === "string"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "browser.open",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
         // Entering a city switches the UI into its workspace. Without this
         // event the agent opens tabs in the global scope and city content
         // shows nothing (dock marks it open, viewport stays empty).

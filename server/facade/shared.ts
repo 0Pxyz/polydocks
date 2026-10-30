@@ -1,6 +1,5 @@
 import { config } from "../config";
 import { capabilityBus } from "../plugins/bus";
-import { getContractCapability } from "../plugins/contract";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import type { ModelRole } from "../agent/modelRegistry";
 import type { AgentTool } from "../agent/tools/types";
@@ -38,11 +37,12 @@ export async function invokeCapability(
   input: Record<string, unknown>,
   ctx: FacadeContext = {}
 ): Promise<FacadeEnvelope> {
-  const def = getContractCapability(pluginId, capability);
+  const fullId = capability.includes(".") ? capability : `${pluginId}.${capability}`;
+  const def = capabilityBus.getCapability(fullId);
   if (!def) {
     return {
       ok: false,
-      error: `Unknown capability "${pluginId}.${capability}".`,
+      error: `Unknown capability "${fullId}".`,
       retryable: false,
       code: "unknown_capability",
     };
@@ -292,25 +292,13 @@ export async function pluginLifecycle(
       code: "unknown_op",
     };
   }
-  // Install policy (config INSTALL_POLICY, default ask): agent-originated
-  // create/modify/install/publish need an explicit user yes (userApproved, same
-  // pattern as delete_tab). actor=user|cli means an explicit human action.
-  if ((op === "create" || op === "modify" || op === "install" || op === "publish") && ctx.actor === "agent") {
-    if (config.INSTALL_POLICY === "never") {
-      return {
-        ok: false,
-        error: "Install policy is 'never': the agent may not create, install or publish plugins.",
-        retryable: false,
-        code: "install_denied",
-      };
-    }
-    if (config.INSTALL_POLICY !== "auto" && (params as any).userApproved !== true) {
-      return {
-        ok: false,
-        error: "Install policy is 'ask': confirm with the user first, then retry with { userApproved: true }.",
-        retryable: false,
-        code: "approval_required",
-      };
+  // Install policy: one shared gate for every lifecycle write (same function
+  // the agent tools use). actor=user|cli means an explicit human action.
+  if (op === "create" || op === "modify" || op === "install" || op === "publish") {
+    const { enforceInstallPolicy } = await import("../agent/installPolicy");
+    const denied = enforceInstallPolicy(ctx.actor, (params as any).userApproved);
+    if (denied) {
+      return { ok: false, error: denied.error, retryable: denied.retryable, code: denied.code };
     }
   }
   // Visual kit gate: create/edit with code, publish with stored code.

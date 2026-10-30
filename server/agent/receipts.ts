@@ -32,7 +32,14 @@ function slugTokens(text: string): string[] {
 
 export function collectReceipt(tool: string, args: unknown, output: unknown): TurnReceipt {
   const o = output as any;
-  const ok = o?.ok === true || o?.success === true;
+  // Fail closed: approval-gated operations never count as success, even if a
+  // caller wraps them in a success envelope.
+  const gated =
+    o?.code === "approval_required" ||
+    o?.status === "approval_required" ||
+    (typeof o?.error === "string" && o.error.toLowerCase().includes("approval")) ||
+    (typeof o?.message === "string" && o.message.toLowerCase().includes("approval required"));
+  const ok = (o?.ok === true || o?.success === true) && !gated;
   const blob = `${JSON.stringify(args ?? {})}\n${typeof output === "string" ? output : JSON.stringify(output ?? {})}`;
   return { tool, args: (args as Record<string, unknown>) ?? {}, ok, ids: slugTokens(blob) };
 }
