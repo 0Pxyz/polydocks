@@ -359,6 +359,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           id: effectiveSessionId,
           workspaceId: effectiveWorkspaceId,
           title: prompt.slice(0, 60),
+          // Task-path sessions are views over the agent thread: record the
+          // thread link in metadata (queryable, additive, no schema change).
+          metadata: threadUserId ? { threadUserId } : undefined,
         });
       }
     } catch {

@@ -169,6 +169,13 @@ describe("agent discovers and uses icons end-to-end", () => {
 
   afterAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
+    // DB rows outlive workspace/ dirs: remove the e2e tab so the global
+    // id guard (isPluginIdTaken) cannot trip other suites sharing the DB.
+    const { db } = await import("../server/workspace/db");
+    for (const t of ["plugin_files", "plugin_versions", "plugins", "workspace_plugins"]) {
+      const col = t === "plugins" ? "id" : "plugin_id";
+      db.query(`DELETE FROM ${t} WHERE ${col} = 'icon-e2e-tab'`).run();
+    }
   });
 
   it("loop: search_icons then create_tab with the discovered id", async () => {
@@ -218,6 +225,9 @@ describe("agent discovers and uses icons end-to-end", () => {
                               title: "Icon E2E",
                               icon: discovered,
                               code: "export default function App() { return null; }",
+                              // Install policy is ask-by-default: the mock models
+                              // the approved retry (the user said yes first).
+                              userApproved: true,
                             }),
                           },
                         },

@@ -6,6 +6,7 @@ export interface WorkspaceRecord {
   name: string;
   description: string;
   icon: string;
+  kind: string;
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;
@@ -32,6 +33,7 @@ export function ensureDefaultWorkspace(): WorkspaceRecord {
       name TEXT NOT NULL,
       description TEXT,
       icon TEXT DEFAULT 'Briefcase',
+      kind TEXT NOT NULL DEFAULT 'workspace',
       is_default INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -60,6 +62,14 @@ export function ensureDefaultWorkspace(): WorkspaceRecord {
     );
   `);
 
+  // Additive migration for pre-kind databases: default existing rows, then
+  // carry the column going forward. Reversible (DROP COLUMN kind restores).
+  try {
+    db.exec("ALTER TABLE workspaces ADD COLUMN kind TEXT NOT NULL DEFAULT 'workspace';");
+  } catch {
+    // Column already exists.
+  }
+
   const existingDefault = db
     .query<any, []>("SELECT * FROM workspaces WHERE is_default = 1 LIMIT 1")
     .get();
@@ -70,6 +80,7 @@ export function ensureDefaultWorkspace(): WorkspaceRecord {
       name: existingDefault.name,
       description: existingDefault.description || "",
       icon: existingDefault.icon || "Briefcase",
+      kind: existingDefault.kind || "workspace",
       isDefault: Boolean(existingDefault.is_default),
       createdAt: existingDefault.created_at,
       updatedAt: existingDefault.updated_at,
@@ -86,6 +97,7 @@ export function ensureDefaultWorkspace(): WorkspaceRecord {
       name: anyExisting.name,
       description: anyExisting.description || "",
       icon: anyExisting.icon || "Briefcase",
+      kind: anyExisting.kind || "workspace",
       isDefault: Boolean(anyExisting.is_default),
       createdAt: anyExisting.created_at,
       updatedAt: anyExisting.updated_at,
@@ -98,14 +110,15 @@ export function ensureDefaultWorkspace(): WorkspaceRecord {
     name: "Focus Hub",
     description: "Primary workspace for agentic tools and plugins",
     icon: "Briefcase",
+    kind: "workspace",
     isDefault: true,
     createdAt: now,
     updatedAt: now,
   };
 
   db.query(`
-    INSERT INTO workspaces (id, name, description, icon, is_default, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 1, ?, ?)
+    INSERT INTO workspaces (id, name, description, icon, kind, is_default, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'workspace', 1, ?, ?)
   `).run(
     defaultWs.id,
     defaultWs.name,
@@ -129,6 +142,7 @@ export function listWorkspaces(): WorkspaceRecord[] {
     name: r.name,
     description: r.description || "",
     icon: r.icon || "Briefcase",
+    kind: r.kind || "workspace",
     isDefault: Boolean(r.is_default),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -147,6 +161,7 @@ export function getWorkspace(id: string): WorkspaceRecord | null {
     name: r.name,
     description: r.description || "",
     icon: r.icon || "Briefcase",
+    kind: r.kind || "workspace",
     isDefault: Boolean(r.is_default),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -161,6 +176,7 @@ export function createWorkspace(input: {
   name: string;
   description?: string;
   icon?: string;
+  kind?: string;
   isDefault?: boolean;
 }): WorkspaceRecord {
   ensureDefaultWorkspace();
@@ -169,18 +185,20 @@ export function createWorkspace(input: {
   const name = input.name.trim();
   const description = input.description?.trim() || "";
   const icon = input.icon?.trim() || "Briefcase";
+  const kind = input.kind?.trim() || "workspace";
   const isDefault = Boolean(input.isDefault);
 
   db.query(`
-    INSERT INTO workspaces (id, name, description, icon, is_default, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, description, icon, isDefault ? 1 : 0, now, now);
+    INSERT INTO workspaces (id, name, description, icon, kind, is_default, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, description, icon, kind, isDefault ? 1 : 0, now, now);
 
   return {
     id,
     name,
     description,
     icon,
+    kind,
     isDefault,
     createdAt: now,
     updatedAt: now,
@@ -355,4 +373,35 @@ export function isDockPinned(workspaceId: string, itemId: string): boolean {
     `SELECT 1 as one FROM dock_pins WHERE workspace_id = ? AND item_id = ?`
   ).get(workspaceId, itemId) as any;
   return Boolean(row?.one);
+}
+
+/**
+ * City backfill (additive, reversible): every legacy city row gets a
+ * canonical workspace `city-<id>` with kind 'city', so city data can migrate
+ * into canonical workspaces without moving or deleting anything. The loop
+ * already scopes city turns to `city-<id>` workspaces; this makes those rows
+ * explicit. Full city migration (compat paths, dead-table removal) belongs
+ * to #153 — this only guarantees the target rows exist.
+ */
+export function ensureCityWorkspaces(): { ensured: number } {
+  ensureDefaultWorkspace();
+  let ensured = 0;
+  let cities: Array<{ id: string; title: string }> = [];
+  try {
+    cities = db.query<any, []>(`SELECT id, title FROM cities`).all() as Array<{ id: string; title: string }>;
+  } catch {
+    return { ensured: 0 };
+  }
+  for (const city of cities) {
+    const wsId = `city-${city.id}`;
+    const existing = db.query(`SELECT id FROM workspaces WHERE id = ?`).get(wsId) as any;
+    if (existing) continue;
+    const now = new Date().toISOString();
+    db.query(
+      `INSERT INTO workspaces (id, name, description, icon, kind, is_default, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'city', 0, ?, ?)`
+    ).run(wsId, city.title || city.id, `Migrated city workspace for "${city.id}"`, "MapPin", now, now);
+    ensured++;
+  }
+  return { ensured };
 }

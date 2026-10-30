@@ -96,21 +96,53 @@ export async function generateCityFeed(
     items,
   };
 
-  // 2. Persist to city workspace: workspace/<cityId>/feed.json
+  // 2. Persist to city workspace: workspace/<cityId>/feed.json (legacy
+  // compat reader: GET /api/cities/:id/feed. The canonical store is the
+  // `sources` table below).
   await writeCityFile(cityId, "feed.json", JSON.stringify(feed, null, 2));
 
-  // 3. Record in SQLite city_sources
+  // 3. Canonical store: one validated row per URL in the `sources` table
+  // (dedupe on (city_id, url)). Feed UI and sources.* capabilities read this
+  // table — never filenames, never raw feed.json, never city_sources.
+  const { canonicalizeUrl, siteFromUrl, inferKind, ensureSourcesSchema } = await import("../plugins/sources");
+  ensureSourcesSchema();
   const now = new Date().toISOString();
   for (const item of items) {
     try {
+      const url = canonicalizeUrl(item.url);
+      const kind = inferKind(url, item.kind === "guide" || item.kind === "news" ? undefined : item.kind);
+      const id = `src_feed_${Math.abs(hashCode(url + cityId)).toString(36)}`;
       db.query(
-        `INSERT OR REPLACE INTO city_sources (id, city_id, url, title, kind, cached_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(item.id, cityId, item.url, item.title, item.kind, now);
+        `INSERT OR IGNORE INTO sources (id, city_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        id,
+        cityId,
+        kind,
+        url,
+        item.title,
+        siteFromUrl(url),
+        null,
+        item.authorOrSource || null,
+        null,
+        item.readTimeMinutes ?? null,
+        null,
+        item.summary || null,
+        null,
+        now
+      );
     } catch {
-      // Non-fatal
+      // Non-fatal: feed.json above still carries the items.
     }
   }
 
   return feed;
+}
+
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return h;
 }

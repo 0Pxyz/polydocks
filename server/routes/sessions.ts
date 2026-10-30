@@ -86,6 +86,9 @@ sessionsRouter.post("/:id/run", async (c) => {
     return c.json({ error: "Missing required 'prompt' string field" }, 400);
   }
 
+  const { resolveUserId } = await import("../identity");
+  const userId = resolveUserId({ header: c.req.header("x-polymax-user"), body: body.userId });
+
   const task = await TaskService.createTask({
     sessionId,
     workspaceId: session.workspaceId,
@@ -94,6 +97,9 @@ sessionsRouter.post("/:id/run", async (c) => {
       prompt: prompt.trim(),
       cityId: body.cityId,
       origin: body.origin || "chat",
+      // Thread link for the background run (additive attribution; the task
+      // path session carries the same link in its metadata).
+      userId,
     },
     actor: "user",
     idempotencyKey: body.idempotencyKey,

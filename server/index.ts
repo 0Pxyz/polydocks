@@ -50,6 +50,26 @@ if (config.NODE_ENV !== "test") {
   } catch (err) {
     console.error("[Polymax Server] Plugin migration failed (non-fatal):", err);
   }
+  // Reversible backfills (no destructive DDL): plugin version rows mirrored
+  // into plugin_files, city rows ensured as kind='city' workspaces.
+  try {
+    const { backfillPluginVersionsToFiles } = await import("./plugins/versions");
+    const { copied } = backfillPluginVersionsToFiles();
+    if (copied > 0) {
+      console.log(`[Polymax Server] Plugin versions backfill: ${copied} rows mirrored into plugin_files.`);
+    }
+  } catch (err) {
+    console.error("[Polymax Server] Plugin versions backfill failed (non-fatal):", err);
+  }
+  try {
+    const { ensureCityWorkspaces } = await import("./workspace/workspaces");
+    const { ensured } = ensureCityWorkspaces();
+    if (ensured > 0) {
+      console.log(`[Polymax Server] City workspaces backfill: ${ensured} city workspaces ensured.`);
+    }
+  } catch (err) {
+    console.error("[Polymax Server] City workspaces backfill failed (non-fatal):", err);
+  }
 }
 
 // Recover any interrupted background tasks from previous server instance

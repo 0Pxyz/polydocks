@@ -4,8 +4,8 @@ import {
   resolveSafeCityPath,
   readCityFile,
   deleteCityFile,
-  appendAuditLog,
 } from "./cityWorkspace";
+import { recordAudit } from "../services/audit";
 import {
   upsertPluginFile,
   getPluginFile,
@@ -364,11 +364,11 @@ export async function writeFeature(
     srcdoc,
   });
 
-  await appendAuditLog(cityId, "create_feature", {
+  recordAudit({ action: "create_feature", targetId: featureId, cityId, details: {
     featureId,
     title: manifestData.title,
     scope: manifestData.scope,
-  });
+  } });
 
   return {
     manifest: manifestData,
@@ -398,11 +398,11 @@ export async function writeLegacyFeature(
     manifest: manifestData,
     srcdoc: html,
   });
-  await appendAuditLog(cityId, "create_feature", {
+  recordAudit({ action: "create_feature", targetId: featureId, cityId, details: {
     featureId,
     title: manifestData.title,
     scope: manifestData.scope,
-  });
+  } });
 }
 
 /**
@@ -606,5 +606,5 @@ export async function deleteFeature(cityId: string, featureId: string): Promise<
   await fs.rm(path.join(cityRoot, "features", featureId), { recursive: true, force: true }).catch(() => {});
   await fs.rm(path.join(cityRoot, "tabs", featureId), { recursive: true, force: true }).catch(() => {});
 
-  await appendAuditLog(cityId, "delete_feature", { featureId });
+  recordAudit({ action: "delete_feature", targetId: featureId, cityId, details: { featureId } });
 }
