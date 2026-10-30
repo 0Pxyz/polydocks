@@ -17,6 +17,15 @@ export interface IconCatalogItem {
   keywords: string[];
 }
 
+/**
+ * Mirrors `resolveIcon` in `src/components/icons/adapter.ts`: lowercase,
+ * trim, strip separators. Validation must accept exactly what the dock
+ * resolves (e.g. `Map-Pin`, `map_pin` and `mappin` are the same icon).
+ */
+export function normalizeIconId(id: string): string {
+  return id.toLowerCase().trim().replace(/[-_\s]/g, "");
+}
+
 const ICONS: Record<string, Omit<IconCatalogItem, "id">> = {
   "agent": { label: "Sparkle (agent)", category: "art", keywords: ["agent", "sparkle", "aesthetic", "flair", "glow", "artistic"] },
   "ai": { label: "Brain (ai)", category: "learning and school", keywords: ["ai", "brain", "cognition", "memory", "intellect", "neuroscience", "mind", "retention"] },
@@ -140,7 +149,8 @@ export function searchCatalog(
     .toLowerCase()
     .trim()
     .split(/[\s,+]+/)
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((t) => t.replace(/[-_]/g, ""));
   const all: IconCatalogItem[] = Object.entries(ICONS).map(([id, rest]) => ({
     id,
     ...rest,
@@ -176,11 +186,11 @@ export function listCategories(): { category: string; count: number }[] {
 
 export function isValidIconId(id: string): boolean {
   if (!id) return false;
-  return Boolean(ICONS[id.toLowerCase().trim()]);
+  return Boolean(ICONS[normalizeIconId(id)]);
 }
 
 export function findCloseMatches(id: string, limit = 5): string[] {
-  const target = id.toLowerCase().trim();
+  const target = normalizeIconId(id);
   const keys = Object.keys(ICONS);
   const substrings = keys.filter((k) => k.includes(target) || target.includes(k));
   if (substrings.length >= limit) return substrings.slice(0, limit);

@@ -1,4 +1,6 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   searchCatalog,
   listCategories,
@@ -11,6 +13,9 @@ import { create_tab } from "../server/agent/tools/create_tab";
 import { update_tab } from "../server/agent/tools/update_tab";
 import { create_plugin } from "../server/agent/tools/create_plugin";
 import { modify_plugin } from "../server/agent/tools/modify_plugin";
+import { runAgentLoop } from "../server/agent/loop";
+import { defaultTools } from "../server/agent/tools";
+import { readFeature } from "../server/workspace/features";
 
 describe("icon catalog (server/icons/catalog.ts)", () => {
   it("exact id match ranks first", () => {
@@ -40,6 +45,13 @@ describe("icon catalog (server/icons/catalog.ts)", () => {
     const total = cats.reduce((n, c) => n + c.count, 0);
     expect(total).toBe(searchCatalog("", 1000).length);
     expect(total).toBeGreaterThan(100);
+  });
+
+  it("accepts legacy separator variants like the dock adapter does", () => {
+    expect(isValidIconId("Map-Pin")).toBe(true);
+    expect(isValidIconId("map_pin")).toBe(true);
+    expect(isValidIconId("Chart-Line-Up")).toBe(true);
+    expect(searchCatalog("map-pin", 5).map((r) => r.id)).toContain("mappin");
   });
 
   it("validates ids case-insensitively", () => {
@@ -144,5 +156,100 @@ describe("icon validation on create/update", () => {
       changeSummary: "text fix",
     });
     expect(ok.success).toBe(true);
+  });
+});
+
+describe("agent discovers and uses icons end-to-end", () => {
+  const TEST_CITY = "test-city-icon-discovery";
+  const TEST_DIR = path.resolve(process.cwd(), "workspace", TEST_CITY);
+
+  beforeAll(async () => {
+    await fs.mkdir(TEST_DIR, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("loop: search_icons then create_tab with the discovered id", async () => {
+    const discovered = searchCatalog("science lab", 3)[0].id;
+    let step = 0;
+    const started: string[] = [];
+    const mockLlm: any = {
+      chat: {
+        completions: {
+          create: async () => {
+            step += 1;
+            if (step === 1) {
+              return {
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          id: "call_icon_1",
+                          type: "function",
+                          function: {
+                            name: "search_icons",
+                            arguments: JSON.stringify({ query: "science lab", limit: 3 }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              };
+            }
+            if (step === 2) {
+              return {
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      tool_calls: [
+                        {
+                          id: "call_tab_1",
+                          type: "function",
+                          function: {
+                            name: "create_tab",
+                            arguments: JSON.stringify({
+                              id: "icon-e2e-tab",
+                              title: "Icon E2E",
+                              icon: discovered,
+                              code: "export default function App() { return null; }",
+                            }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              };
+            }
+            return { choices: [{ message: { role: "assistant", content: "Tab ready." } }] };
+          },
+        },
+      },
+    };
+
+    const result = await runAgentLoop({
+      prompt: "Build a science lab tool with a fitting icon",
+      cityId: TEST_CITY,
+      origin: "chat",
+      tools: [...defaultTools],
+      llmClient: mockLlm,
+      onEvent: (ev: any) => {
+        if (ev.type === "tool.start") started.push(ev.payload?.name ?? ev.name);
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(started).toContain("search_icons");
+    expect(started).toContain("create_tab");
+
+    const feature = await readFeature(TEST_CITY, "icon-e2e-tab");
+    expect(feature.manifest.icon).toBe(discovered.toLowerCase());
+    expect(isValidIconId(feature.manifest.icon)).toBe(true);
   });
 });

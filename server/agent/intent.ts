@@ -83,6 +83,8 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
     "get_city_context",
     "inspect_tab",
     "list_tabs",
+    "search_icons",
+    "list_icon_categories",
   ],
   // Updates must reuse the existing artifact, never synthesize a duplicate.
   plugin_update: ["create_tab", "create_plugin"],
