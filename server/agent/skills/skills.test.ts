@@ -323,6 +323,8 @@ describe("Domain skill selection (max two, PT+EN)", () => {
     { prompt: "quais abas eu tenho", expected: ["dock-and-tabs"] },
     { prompt: "close the flashcards tab", expected: ["dock-and-tabs"] },
     { prompt: "fechar a aba de flashcards", expected: ["dock-and-tabs"] },
+    { prompt: "open flashcards", expected: ["dock-and-tabs"] },
+    { prompt: "open my pomodoro timer", expected: ["dock-and-tabs"] },
     { prompt: "invoke the search capability", expected: ["capabilities-and-mcp"] },
     { prompt: "remember my goal to master stoicism", expected: ["memory-and-files"] },
     { prompt: "lembre do meu objetivo", expected: ["memory-and-files"] },

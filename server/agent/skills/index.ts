@@ -315,7 +315,7 @@ export function isPluginUpdateIntent(prompt: string): boolean {
 }
 
 const DOCK_OPEN_WORD = /\b(open|abrir|abra|focusing|focus)\b/;
-const DOCK_TAB_WORD = /\b(tab|aba|tabs|abas|tray|dock|browser|notes|papers|files|terminal|lab)\b/;
+const DOCK_TAB_WORD = /\b(tab|aba|tabs|abas|tray|dock|browser|notes|papers|files|terminal|lab|flashcard|flashcards|timer|pomodoro|plugin|tool|experience)\b/;
 
 /** Open/close/list/inspect dock tabs (not web content, not repairs). */
 export function isDockTabsIntent(prompt: string): boolean {
