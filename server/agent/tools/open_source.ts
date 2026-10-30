@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
+import { capabilityBus } from "../../plugins/bus";
 
 export const open_source: AgentTool<{ url: string; title?: string }> = {
   name: "open_source",
@@ -8,11 +9,33 @@ export const open_source: AgentTool<{ url: string; title?: string }> = {
     url: z.string().url().describe("Valid HTTP or HTTPS URL to open"),
     title: z.string().optional().describe("Optional title for tab display"),
   }),
-  execute: async (args) => {
+  execute: async (args, ctx) => {
+    // Thin alias over the canonical browser.open capability so the same
+    // policy, audit and browser.open event fire on every surface.
+    const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
+    initializeFirstPartyPlugins();
+    const targetCity = (ctx as any)?.cityId;
+    const result = await capabilityBus.invoke("browser.open", {
+      url: args.url,
+      title: args.title || args.url,
+    }, {
+      actor: "agent",
+      cityId: targetCity,
+      step: (ctx as any)?.step,
+    });
+    if (!result.success) {
+      return {
+        success: false,
+        url: args.url,
+        title: args.title,
+        error: result.error,
+      };
+    }
+    const data = result.data as any;
     return {
       success: true,
-      url: args.url,
-      title: args.title,
+      url: (data as any)?.url || args.url,
+      title: (data as any)?.title || args.title,
       action: "browser.open",
     };
   },

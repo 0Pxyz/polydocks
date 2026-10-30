@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { tinyfish } from "../../discovery/tinyfish";
+import { capabilityBus } from "../../plugins/bus";
 
 export const search_web: AgentTool<{
   query: string;
@@ -18,13 +18,37 @@ export const search_web: AgentTool<{
       .describe("Category of content to search"),
     limit: z.number().int().min(1).max(20).default(5),
   }),
-  execute: async (args) => {
-    const hits = await tinyfish.search(args.query, args.domain_type, args.limit);
+  execute: async (args, ctx) => {
+    // Thin alias over the canonical search.web capability: one implementation,
+    // one policy check, one audit trail. Public tool contract is preserved.
+    const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
+    initializeFirstPartyPlugins();
+    const targetCity = (ctx as any)?.cityId;
+    const result = await capabilityBus.invoke("search.web", {
+      query: args.query,
+      domainType: args.domain_type || "web",
+      limit: args.limit ?? 5,
+    }, {
+      actor: "agent",
+      cityId: targetCity,
+      step: (ctx as any)?.step,
+    });
+    if (!result.success) {
+      return {
+        query: args.query,
+        domain_type: args.domain_type || "web",
+        count: 0,
+        results: [],
+        error: result.error,
+      };
+    }
+    const hits = (Array.isArray(result.data) ? result.data : (result.data as any)?.results ?? result.data) as any[];
+    const list = Array.isArray(hits) ? hits : [];
     return {
       query: args.query,
       domain_type: args.domain_type || "web",
-      count: hits.length,
-      results: hits,
+      count: list.length,
+      results: list,
     };
   },
 };

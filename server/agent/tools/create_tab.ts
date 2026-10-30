@@ -14,6 +14,7 @@ export interface CreateTabArgs {
   cityId?: string;
   capabilities?: string[];
   permissions?: any[];
+  userApproved?: boolean;
 }
 
 export const create_tab: AgentTool<CreateTabArgs> = {
@@ -64,11 +65,20 @@ export const create_tab: AgentTool<CreateTabArgs> = {
         .optional()
         .describe("Declared bridge capability IDs this experience is permitted to invoke"),
       permissions: z.array(z.any()).optional().describe("Declared granular permissions"),
+      userApproved: z
+        .boolean()
+        .optional()
+        .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
     })
     .refine((data) => Boolean(data.code || data.html), {
       message: "Either 'code' (TypeScript feature module) or 'html' (legacy document) must be provided.",
     }),
   execute: async (args, ctx) => {
+    // Install policy: tab code is executable plugin code — same gate as plugins.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
+
     const targetCity = args.cityId || ctx.cityId || (args.scope === "global" ? "global" : args.id);
 
     // Update-instead-of-recreate guard: normalized id checked across

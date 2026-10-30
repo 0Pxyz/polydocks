@@ -10,6 +10,7 @@ export interface PromoteToPluginArgs {
   name?: string;
   version?: string;
   description?: string;
+  userApproved?: boolean;
 }
 
 export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
@@ -28,8 +29,17 @@ export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
       .optional()
       .default("1.0.0"),
     description: z.string().optional().describe("Brief description of what the plugin provides"),
+    userApproved: z
+      .boolean()
+      .optional()
+      .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
   }),
   execute: async (args, ctx) => {
+    // Install policy: promotion writes executable plugin code to the catalog.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
+
     const targetCity = args.cityId || ctx.cityId || "global";
 
     const feature = await readFeature(targetCity, args.id);

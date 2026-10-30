@@ -509,6 +509,25 @@ export function adaptBackendEvent(raw: {
       };
     }
 
+    case "browser.open": {
+      const url = typeof payload.url === "string" ? payload.url : "";
+      if (!url) return null;
+      return {
+        type: "reader.open",
+        step,
+        url,
+        id: undefined,
+        title: typeof payload.title === "string" ? payload.title : undefined,
+        cityId: typeof payload.cityId === "string" ? payload.cityId : undefined,
+        site: undefined,
+        image: undefined,
+        mode: undefined,
+        markdown: undefined,
+        embedUrl: undefined,
+        reason: undefined,
+      };
+    }
+
     case "source.added":
       return {
         type: "source.added",

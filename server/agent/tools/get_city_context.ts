@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
-import { getCityContext } from "../../workspace/cityWorkspace";
+import { capabilityBus } from "../../plugins/bus";
 
 export const get_city_context: AgentTool<{ cityId?: string }> = {
   name: "get_city_context",
@@ -10,7 +10,10 @@ export const get_city_context: AgentTool<{ cityId?: string }> = {
     cityId: z.string().optional().describe("City identifier; defaults to current active city"),
   }),
   execute: async (args, ctx) => {
-    const targetCity = args.cityId || ctx.cityId;
+    // Thin alias over workspace.get_context: one implementation, one audit trail.
+    const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
+    initializeFirstPartyPlugins();
+    const targetCity = args.cityId || (ctx as any)?.cityId;
     if (!targetCity) {
       return {
         cityId: "global",
@@ -23,7 +26,22 @@ export const get_city_context: AgentTool<{ cityId?: string }> = {
       };
     }
 
-    const context = await getCityContext(targetCity);
-    return context;
+    const result = await capabilityBus.invoke("workspace.get_context", { cityId: targetCity }, {
+      actor: "agent",
+      cityId: targetCity,
+      step: (ctx as any)?.step,
+    });
+    if (!result.success) {
+      return {
+        cityId: targetCity,
+        exists: false,
+        files: [],
+        notes: [],
+        sources: [],
+        dynamicTabs: [],
+        message: result.error || "City context unavailable.",
+      };
+    }
+    return result.data;
   },
 };

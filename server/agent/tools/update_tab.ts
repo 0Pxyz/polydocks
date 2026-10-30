@@ -11,6 +11,7 @@ export interface UpdateTabArgs {
   code?: string;
   html?: string;
   cityId?: string;
+  userApproved?: boolean;
 }
 
 export const update_tab: AgentTool<UpdateTabArgs> = {
@@ -41,8 +42,17 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
       .describe("Updated TypeScript feature module (.ts) code"),
     html: z.string().optional().describe("Updated HTML content (legacy format)"),
     cityId: z.string().optional(),
+    userApproved: z
+      .boolean()
+      .optional()
+      .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
   }),
   execute: async (args, ctx) => {
+    // Install policy: tab code is executable plugin code — same gate as plugins.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
+
     const targetCity = args.cityId || ctx.cityId;
     if (!targetCity) {
       throw new Error("Cannot update a tab without an active city workspace scope.");

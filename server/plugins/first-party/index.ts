@@ -211,7 +211,7 @@ export function initializeFirstPartyPlugins(): void {
     return await tinyfish.search(input.query, input.domainType || "web", input.limit || 5);
   });
   capabilityBus.register("search", searchPluginManifest.capabilities[1], async (input) => {
-    return await tinyfish.fetch(input.url);
+    return await tinyfish.fetch([input.url]);
   });
 
   // 2. Browser Plugin
