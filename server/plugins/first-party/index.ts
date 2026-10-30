@@ -6,6 +6,7 @@ import { readCityFile, writeCityFile, getCityContext } from "../../workspace/cit
 import type { PluginManifest } from "../manifest";
 import { registerSourcesPlugin } from "../sources";
 import { registerCitiesPlugin } from "../cities";
+import { registerSandboxPlugin } from "../sandbox";
 
 /**
  * 1. Search Plugin
@@ -204,6 +205,7 @@ export function initializeFirstPartyPlugins(): void {
   // the bus registration, HTTP route and CLI command.
   registerSourcesPlugin();
   registerCitiesPlugin();
+  registerSandboxPlugin();
 
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);

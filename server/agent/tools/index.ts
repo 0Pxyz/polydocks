@@ -53,6 +53,16 @@ import { inspect_session } from "./inspect_session";
 import { list_tasks } from "./list_tasks";
 import { list_artifacts } from "./list_artifacts";
 import { read_artifact } from "./read_artifact";
+import {
+  sandbox_exec,
+  sandbox_write_file,
+  sandbox_read_file,
+  sandbox_list_files,
+  sandbox_serve,
+  sandbox_logs,
+  sandbox_status,
+  sandbox_terminate,
+} from "./sandbox";
 // Verb tools (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/list and
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
@@ -116,6 +126,14 @@ export {
   list_tasks,
   list_artifacts,
   read_artifact,
+  sandbox_exec,
+  sandbox_write_file,
+  sandbox_read_file,
+  sandbox_list_files,
+  sandbox_serve,
+  sandbox_logs,
+  sandbox_status,
+  sandbox_terminate,
   // Verb family (aliases stay importable; registry below decides).
   dockOpen,
   dockClose,
@@ -193,6 +211,14 @@ const fullToolsList: AgentTool[] = [
   list_tasks,
   list_artifacts,
   read_artifact,
+  sandbox_exec,
+  sandbox_write_file,
+  sandbox_read_file,
+  sandbox_list_files,
+  sandbox_serve,
+  sandbox_logs,
+  sandbox_status,
+  sandbox_terminate,
 ];
 
 /**

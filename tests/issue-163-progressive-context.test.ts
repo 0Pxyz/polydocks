@@ -142,7 +142,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     const theme = await loadSkill("theme");
     expect(skillTokens(theme)).toBeLessThanOrEqual(600);
     // All injected skills stay within per-skill budgets.
-    for (const name of ["plugins", "dock-and-tabs", "dock", "theme", "capabilities-and-mcp", "content-and-reader", "world-and-cities", "memory-and-files", "verify-and-report"]) {
+    for (const name of ["plugins", "dock-and-tabs", "dock", "theme", "capabilities-and-mcp", "content-and-reader", "sandbox", "world-and-cities", "memory-and-files", "verify-and-report"]) {
       expect(skillTokens(await loadSkill(name)), name).toBeLessThanOrEqual(600);
     }
     expect(skillTokens(await loadSkill("app-overview"))).toBeLessThanOrEqual(700);

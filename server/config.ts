@@ -19,6 +19,12 @@ const envSchema = z.object({
   OPENWEIGHT_API_KEY: z.string().optional().default(""),
   OPENWEIGHT_MODEL_ID: z.string().default("meta-models/muse-spark-open-1026"),
   TINYFISH_API_KEY: z.string().optional().default(""),
+  // Modal Sandboxes (agent code execution). The JS SDK reads MODAL_TOKEN_ID /
+  // MODAL_TOKEN_SECRET from env, falling back to ~/.modal.toml (`modal setup`).
+  // Unset means the sandbox provider is disabled and sandbox tools fail
+  // closed with a setup hint; the rest of the app keeps working.
+  MODAL_TOKEN_ID: z.string().optional().default(""),
+  MODAL_TOKEN_SECRET: z.string().optional().default(""),
   // Product surface: three APIs (/api/plugins, /api/dock, /api/agent).
   // facade = also mounts the thin facade routers (old routes stay untouched).
   PRODUCT_SURFACE: z.enum(["legacy", "facade"]).default("facade"),

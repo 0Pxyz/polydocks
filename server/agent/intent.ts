@@ -84,6 +84,14 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
     "list_tabs",
     "search_icons",
     "list_icon_categories",
+    "sandbox_exec",
+    "sandbox_write_file",
+    "sandbox_serve",
+    "sandbox_terminate",
+    "sandbox_status",
+    "sandbox_logs",
+    "sandbox_read_file",
+    "sandbox_list_files",
   ],
   // Updates must reuse the existing artifact, never synthesize a duplicate.
   plugin_update: ["create_tab", "create_plugin"],
@@ -100,7 +108,8 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
     "apply_theme",
     "delete_tab",
   ],
-  // City planning shapes territories; it never changes the theme or deletes.
-  city: ["apply_theme", "delete_tab"],
+  // City planning shapes territories; it never changes the theme, deletes,
+  // or executes code (city building runs through its own pipeline).
+  city: ["apply_theme", "delete_tab", "sandbox_exec", "sandbox_write_file", "sandbox_serve", "sandbox_terminate"],
   general: [],
 };
