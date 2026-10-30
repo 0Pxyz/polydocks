@@ -2,6 +2,7 @@ import type { AgentTool } from "./types";
 import { list_tabs } from "./list_tabs";
 import { open_tab } from "./open_tab";
 import { open_intent } from "./open_intent";
+import { enter_city } from "./enter_city";
 import { inspect_tab } from "./inspect_tab";
 import { close_tray } from "./close_tray";
 import { create_tab } from "./create_tab";
@@ -42,12 +43,20 @@ import { dock_search } from "./dock_search";
 import { dock_pin } from "./dock_pin";
 import { dock_unpin } from "./dock_unpin";
 import { dock_close } from "./dock_close";
+import { generate_image } from "./generate_image";
+// Verb tools (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/list and
+// plugins.create/edit/install/uninstall/operate — thin aliases over the
+// current executors via the shared facade layer.
+import { dockOpen, dockClose, dockPin, dockUnpin, dockList } from "./verbs/dock";
+import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback } from "./verbs/plugins";
+import { config } from "../../config";
 
 export * from "./types";
 export {
   list_tabs,
   open_tab,
   open_intent,
+  enter_city,
   inspect_tab,
   close_tray,
   dock_search,
@@ -88,15 +97,29 @@ export {
   recall_memory,
   record_memory,
   plan_ascii_world,
+  generate_image,
+  // Verb family (aliases stay importable; registry below decides).
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  pluginsCreate,
+  pluginsEdit,
+  pluginsInstall,
+  pluginsUninstall,
+  pluginsOperate,
+  pluginsRollback,
 };
 
 /**
- * The canonical catalog of default Agent tools.
+ * The canonical catalog of default Agent tools (AGENT_SURFACE=full).
  */
-export const defaultTools: AgentTool[] = [
+const fullToolsList: AgentTool[] = [
   list_tabs,
   open_tab,
   open_intent,
+  enter_city,
   inspect_tab,
   close_tray,
   dock_search,
@@ -137,4 +160,27 @@ export const defaultTools: AgentTool[] = [
   recall_memory,
   record_memory,
   plan_ascii_world,
+  generate_image,
 ];
+
+/**
+ * Minimal verb catalog (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/
+ * list + plugins.create/edit/install/uninstall/operate.
+ */
+export const minimalTools: AgentTool[] = [
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  pluginsCreate,
+  pluginsEdit,
+  pluginsInstall,
+  pluginsUninstall,
+  pluginsOperate,
+  pluginsRollback,
+];
+
+export const fullTools: AgentTool[] = fullToolsList;
+export const defaultTools: AgentTool[] =
+  config.AGENT_SURFACE === "minimal" ? minimalTools : fullToolsList;

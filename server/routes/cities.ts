@@ -11,7 +11,6 @@ import {
 import { listFeatures, readFeature } from "../workspace/features";
 import { generateCityFeed } from "../discovery/feedGenerator";
 import { db } from "../workspace/db";
-import { listSources } from "../plugins/sources";
 import { buildCityWorkspace } from "../city-builder/pipeline";
 import { TinyFishClient } from "../discovery/tinyfish";
 import {
@@ -133,20 +132,25 @@ citiesRouter.get("/:id", async (c) => {
 });
 
 /**
- * GET /api/cities/:id/sources - Enriched source feed from the sources table.
- * This is the feed UI's source of truth: one enriched row per URL, saved
- * via sources.add (agent passes the URL, server enriches and validates).
- * Legacy shapes (sources/* filenames, raw feed.json items) are NOT read.
+ * GET /api/cities/:id/sources - Enriched feed from the sources table.
+ * This is the feed UI's source of truth: one validated row per URL,
+ * saved via sources.add. Legacy shapes (sources/* filenames, raw
+ * feed.json items) are NOT read.
  */
 citiesRouter.get("/:id/sources", async (c) => {
   const cityId = c.req.param("id");
   try {
+    const { listSources } = await import("../plugins/sources");
     const items = listSources(cityId);
     return c.json({ success: true, data: items });
   } catch (err: any) {
     return c.json({ success: false, error: err?.message || "Failed to load sources" }, 500);
   }
 });
+
+/**
+ * GET /api/cities/:id/feed - Retrieves the curated research feed
+ */
 citiesRouter.get("/:id/feed", async (c) => {
   const cityId = c.req.param("id");
   try {

@@ -115,31 +115,24 @@ export type UIEvent =
   | {
       type: "reader.open";
       step: number;
-      /** URL to open (same behavior as the feed's Open button). */
+      /** Source id (for quest promotion). */
+      id?: string;
+      /** URL (external fallback only; in-UI modes never auto-open tabs). */
       url: string;
       title?: string;
+      cityId?: string;
+      site?: string;
+      image?: string | null;
+      /** Open mode decided server-side. */
+      mode?: "video" | "reader" | "embed" | "external";
+      markdown?: string;
+      embedUrl?: string;
+      reason?: string;
     }
   | {
       type: "source.added";
       step: number;
       source: Record<string, unknown>;
-    }
-  | {
-      type: "agent.heartbeat";
-      step: number;
-      elapsedMs: number;
-      phase: "running_tool" | "thinking";
-      tool?: string;
-    }
-  | {
-      type: "agent.text_delta";
-      step: number;
-      delta: string;
-    }
-  | {
-      type: "city.entered";
-      step: number;
-      cityId: string;
     }
   | {
       type: "approval.required";
@@ -159,7 +152,42 @@ export type UIEvent =
       step: number;
       code?: string;
       message: string;
+    }
+  | {
+      type: "agent.heartbeat";
+      step: number;
+      /** Ms since the turn started (server clock). */
+      elapsedMs: number;
+      /** What the loop is waiting on. Never carries content. */
+      phase: "thinking" | "running_tool";
+      /** Machine tool name while running_tool, if any. */
+      tool?: string;
+    }
+  | {
+      type: "agent.text_delta";
+      step: number;
+      /** One streamed text fragment (append to the provisional reply). */
+      delta: string;
+    }
+  | {
+      type: "city.entered";
+      step: number;
+      /** City workspace id to switch the view into. */
+      cityId: string;
     };
+
+/**
+ * Tools powered by TinyFish web discovery. Only these show TinyFish branding.
+ */
+export const TINYFISH_TOOLS = ["search_web", "fetch_page"] as const;
+export type TinyFishTool = (typeof TINYFISH_TOOLS)[number];
+
+/** Local copy of the TinyFish mark (public/tinyfish-logo.png). */
+export const TINYFISH_LOGO_SRC = "/tinyfish-logo.png";
+
+export function isTinyFishTool(toolName: string): boolean {
+  return (TINYFISH_TOOLS as readonly string[]).includes(toolName);
+}
 
 /**
  * Human-friendly status line mapping for substantive tools.
@@ -169,10 +197,10 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
   switch (toolName) {
     case "search_web": {
       const q = typeof args?.query === "string" ? args.query : "";
-      return q ? `Searching the web for "${q}"…` : "Searching the web…";
+      return q ? `Searching the web via TinyFish for "${q}"…` : "Searching the web via TinyFish…";
     }
     case "fetch_page":
-      return "Reading primary sources…";
+      return "Reading primary sources via TinyFish…";
     case "create_tab": {
       const title = typeof args?.title === "string" ? args.title : "";
       return title ? `Building "${title}"…` : "Building the interactive experience…";
@@ -463,11 +491,21 @@ export function adaptBackendEvent(raw: {
     case "reader.open": {
       const url = typeof payload.url === "string" ? payload.url : "";
       if (!url) return null;
+      const pick = (k: string) => (typeof payload[k] === "string" ? (payload[k] as string) : undefined);
+      const mode = payload.mode;
       return {
         type: "reader.open",
         step,
         url,
-        title: typeof payload.title === "string" ? payload.title : undefined,
+        id: pick("id"),
+        title: pick("title"),
+        cityId: pick("cityId"),
+        site: pick("site"),
+        image: (payload.image as string | null) ?? undefined,
+        mode: mode === "video" || mode === "reader" || mode === "embed" || mode === "external" ? mode : undefined,
+        markdown: pick("markdown"),
+        embedUrl: pick("embedUrl"),
+        reason: pick("reason"),
       };
     }
 

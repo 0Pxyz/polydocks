@@ -19,9 +19,14 @@ export type BridgeAction =
   | "ui.expand"
   | "ui.collapse"
   | "capability.invoke"
+  | "task.start"
+  | "task.update"
+  | "task.done"
   | "runtime.error"
   | "runtime.ready"
   | "ui.ready";
+
+export type BridgeTaskStatus = "running" | "done" | "error";
 
 export interface HostBridgeRequest {
   polymaxAction: BridgeAction;
@@ -33,6 +38,10 @@ export interface HostBridgeRequest {
   capabilityId?: string;
   input?: unknown;
   error?: unknown;
+  taskId?: string;
+  label?: string;
+  detail?: string;
+  status?: BridgeTaskStatus;
   [key: string]: unknown;
 }
 
@@ -40,6 +49,15 @@ export interface HostBridgeResponse {
   polymaxResponseId: number;
   result?: unknown;
   error?: string;
+}
+
+export interface HostBridgeTaskEvent {
+  type: "start" | "update" | "done";
+  tabId: string;
+  taskId: string;
+  label?: string;
+  detail?: string;
+  status?: BridgeTaskStatus;
 }
 
 export interface HostBridgeOptions {
@@ -57,5 +75,6 @@ export interface HostBridgeOptions {
   onSubmitCommand?: (command: string) => void;
   onOpenUrl?: (url: string) => void;
   onOpenContent?: (url: string) => void;
+  onTaskEvent?: (event: HostBridgeTaskEvent) => void;
   getContext?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
 }

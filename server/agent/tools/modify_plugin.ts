@@ -13,6 +13,7 @@ export interface ModifyPluginArgs {
   description?: string;
   icon?: string;
   workspaceId?: string;
+  userApproved?: boolean;
 }
 
 const patchSchema = z
@@ -26,7 +27,7 @@ const patchSchema = z
 export const modify_plugin: AgentTool<ModifyPluginArgs> = {
   name: "modify_plugin",
   description:
-    "Patches an existing plugin in place (patch {find, replace}, full code, or metadata-only; preserves storage, bumps version). Use for every plugin fix or change; never recreate the plugin id to fix.",
+    "Patches an existing plugin in place (patch {find, replace}, full code, or metadata-only; preserves storage, bumps version). Use for every plugin fix or change; never recreate the plugin id to fix. UI must look native: theme tokens only, no bordered cards, no separators, no decorative pills, sentence case (docs/design-slop.md).",
   schema: z
     .object({
       id: z
@@ -49,6 +50,10 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       description: z.string().optional().describe("Optional updated description"),
       icon: z.string().optional().describe("Optional updated Phosphor icon name"),
       workspaceId: z.string().optional().describe("Workspace where plugin is located"),
+      userApproved: z
+        .boolean()
+        .optional()
+        .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
     })
     .superRefine((data, ctx) => {
       if (!data.code && !data.patch && !data.name && !data.description && !data.icon) {
@@ -65,6 +70,20 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       }
     }),
   execute: async (args, ctx) => {
+
+    // Install policy: agent writes need an explicit user yes.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
+
+    // Visual kit gate on full replacement code (agent-created is strict).
+    if (args.code) {
+      const { validateSlop } = await import("../../plugins/slop");
+      const report = validateSlop(args.code, { strict: ctx?.actor === "agent" });
+      if (!report.ok) {
+        return { success: false, error: `Design kit violation: ${report.errors.join("; ")}`, code: "slop_violation" };
+      }
+    }
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
     const normalized = normalizePluginId(args.id);
 

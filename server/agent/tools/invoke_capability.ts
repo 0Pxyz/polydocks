@@ -18,9 +18,16 @@ export const invoke_capability: AgentTool<typeof InvokeCapabilitySchema> = {
     "Runs one authorized capability by id through policy and audit. Use for actions with existing capabilities; do not use to build tools or fetch the open web.",
   schema: InvokeCapabilitySchema,
   execute: async (input: InvokeCapabilityInput, context) => {
+    // Scope follows the explicitly targeted city: a global-chat turn can
+    // still act inside a city when the capability input names it. Without
+    // this, city-scoped grants never match and every city write from the
+    // general chat stalls in approval.
+    const rawInput = (input.input ?? {}) as Record<string, unknown>;
+    const targetCity =
+      (typeof rawInput.cityId === "string" && rawInput.cityId) || context.cityId;
     const result = await capabilityBus.invoke(input.id, input.input, {
       actor: "agent",
-      cityId: context.cityId,
+      cityId: targetCity,
       step: context.step,
     });
 

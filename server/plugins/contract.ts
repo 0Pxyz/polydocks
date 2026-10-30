@@ -15,11 +15,13 @@ import type { PluginManifest } from "./manifest";
  * Envelope (the ONLY thing the agent may report):
  *   { ok: true, id?, data, events } | { ok: false, error, retryable, events? }
  *
- * Framework emission rule: the handler NEVER emits SSE itself. It returns
- * data (or throws). The wrapper validates output, normalizes the envelope,
- * and emits each declared `emits` event AFTER success. Mid-flight handler
- * emissions are recorded and included in the envelope for observability,
- * but live emission belongs to the framework.
+ * Framework emission rule: after the handler terminates with ok, the
+ * framework emits events — never the handler at its own pleasure. The
+ * handler may return an explicit `events` array (subset of declared
+ * `emits`) describing what actually happened; exactly those go out.
+ * Otherwise every declared event goes out with the result payload.
+ * A handler that changed nothing (e.g. dedupe) returns `events: []`
+ * and stays silent.
  */
 
 export interface ContractEvent {
@@ -150,9 +152,12 @@ export function defineCapability(def: ContractCapabilityDef): string {
     }
 
     // Normalize: handlers may return raw data or a partial envelope.
+    // An explicit `events` array describes what actually happened (a
+    // handler that changed nothing, e.g. dedupe, returns `events: []`
+    // to stay silent); otherwise every declared event goes out.
     let data: unknown = raw;
     let id: string | undefined;
-    let explicitEvents: ContractEvent[] | undefined;
+    let handlerEvents: ContractEvent[] | undefined;
     if (isRecord(raw) && "ok" in raw) {
       if (raw.ok !== true) {
         const fail = raw as { error?: unknown; retryable?: unknown; events?: ContractEvent[] };
@@ -166,7 +171,9 @@ export function defineCapability(def: ContractCapabilityDef): string {
       data = (raw as { data?: unknown }).data;
       if (typeof (raw as { id?: unknown }).id === "string") id = (raw as { id: string }).id;
       if (Array.isArray((raw as { events?: unknown }).events)) {
-        explicitEvents = (raw as { events: ContractEvent[] }).events;
+        handlerEvents = (raw as { events: ContractEvent[] }).events.filter(
+          (e) => e && typeof e.type === "string" && def.emits.includes(e.type)
+        );
       }
     }
 
@@ -185,24 +192,29 @@ export function defineCapability(def: ContractCapabilityDef): string {
     }
 
     // Framework emission: declared events go out AFTER success, with the
-    // result payload. Never the handler's job unless handler explicitly overrode events.
-    const emitted: ContractEvent[] = explicitEvents !== undefined ? [...explicitEvents, ...recorded] : [...recorded];
-    if (explicitEvents === undefined) {
-      const basePayload: Record<string, unknown> = {
-        capability: fullId,
-        plugin: def.plugin,
-        ...(isRecord(data) ? data : { result: data }),
-      };
-      for (const type of def.emits) {
-        if (emitted.some((e) => e.type === type)) continue;
-        const evt = { type, payload: { ...basePayload } };
-        emitted.push(evt);
-        if (ctx.emit) {
-          try {
-            await ctx.emit(evt);
-          } catch {
-            // A broken subscriber must not fail a successful capability.
-          }
+    // result payload. Never the handler's job: when the handler names
+    // explicit events, exactly those go out; otherwise all declared ones.
+    const emitted: ContractEvent[] = [...recorded];
+    // result payload. Never the handler's job: when the handler names
+    // explicit events, exactly those go out; otherwise all declared ones.
+    const emitted: ContractEvent[] = [...recorded];
+    const basePayload: Record<string, unknown> = {
+      capability: fullId,
+      plugin: def.plugin,
+      ...(isRecord(data) ? data : { result: data }),
+    };
+    const toEmit = handlerEvents ?? def.emits.map((type) => ({ type, payload: { ...basePayload } }));
+    for (const evt of toEmit) {
+      const full = { type: evt.type, payload: { ...basePayload, ...(isRecord(evt.payload) ? evt.payload : {}) } };
+      if (emitted.some((e) => e.type === full.type && JSON.stringify(e.payload) === JSON.stringify(full.payload))) {
+        continue;
+      }
+      emitted.push(full);
+      if (ctx.emit) {
+        try {
+          await ctx.emit(full);
+        } catch {
+          // A broken subscriber must not fail a successful capability.
         }
       }
     }

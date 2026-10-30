@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
+import { VideoEmbed } from "@/features/video/VideoEmbed";
 
 export interface ReaderViewProps {
   url: string;
   onBack?: () => void;
   onOpenExternal?: (url: string) => void;
   className?: string;
+  /** Prefetched content (e.g. from a saved source): skips the live fetch. */
+  initialMarkdown?: string;
+  initialTitle?: string;
 }
 
 interface ReaderPayload {
@@ -24,13 +28,20 @@ interface ReaderPayload {
  * Native in-app Reader: articles render as app components (Markdown, no
  * iframe, so frame-blocking sites still open); videos use embeds.
  */
-export function ReaderView({ url, onBack, onOpenExternal, className = "" }: ReaderViewProps) {
+export function ReaderView({ url, onBack, onOpenExternal, className = "", initialMarkdown, initialTitle }: ReaderViewProps) {
   const [payload, setPayload] = useState<ReaderPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Saved sources already carry verified markdown: render it directly
+    // instead of re-fetching (works offline, never blank on blocked hosts).
+    if (typeof initialMarkdown === "string" && initialMarkdown.trim().length > 0) {
+      setPayload({ success: true, kind: "article", url, title: initialTitle || url, markdown: initialMarkdown });
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     setPayload(null);
@@ -53,7 +64,7 @@ export function ReaderView({ url, onBack, onOpenExternal, className = "" }: Read
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, initialMarkdown, initialTitle]);
 
   return (
     <div className={cn("w-full h-full flex-1 flex flex-col min-h-0 bg-transparent", className)}>
@@ -99,14 +110,9 @@ export function ReaderView({ url, onBack, onOpenExternal, className = "" }: Read
 
       {!loading && !error && payload?.kind === "video" && payload.embedUrl && (
         <div className="flex-1 min-h-0 flex flex-col">
-          {payload.embedUrl.includes("youtube-nocookie.com") || payload.embedUrl.includes("player.vimeo.com") ? (
-            <iframe
-              src={payload.embedUrl}
-              title={payload.title || "Video"}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full flex-1 min-h-[320px] border-0 rounded-xl"
-            />
+          {payload.embedUrl.includes("youtube.com/embed/") ||
+          payload.embedUrl.includes("player.vimeo.com") ? (
+            <VideoEmbed url={payload.url || url} title={payload.title || "Video"} className="flex-1 min-h-[320px]" />
           ) : (
             <video src={payload.embedUrl} controls className="w-full max-h-full rounded-xl">
               Your browser does not support this video.

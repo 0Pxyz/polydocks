@@ -119,6 +119,18 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     return c.json({ error: "Both name and url are required." }, 400);
   }
 
+  // Install policy: connecting an external MCP server registers a new
+  // trust:external plugin. It requires explicit confirmation in the body
+  // (the UI sends confirmed:true after the user approves the dialog);
+  // policy=never always denies.
+  const { config } = await import("../config");
+  if (config.INSTALL_POLICY === "never") {
+    return c.json({ ok: false, error: "Install policy is 'never': MCP connect is disabled.", retryable: false, code: "install_denied" }, 400);
+  }
+  if (config.INSTALL_POLICY !== "auto" && (body as any)?.confirmed !== true) {
+    return c.json({ ok: false, error: "MCP connect needs explicit user confirmation: retry with { confirmed: true }.", retryable: false, code: "approval_required" }, 400);
+  }
+
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -269,45 +281,78 @@ pluginsRouter.post("/install-url", async (c) => {
 });
 
 /**
- * POST /api/plugins/:pluginId/:capability - Invoke a contract capability.
- * Generated surface: every defineCapability() registration is invocable
- * here with the same envelope the agent and CLI receive.
- * Registered after specific routes (toggle, mcp/connect, install-url)
- * so literal segments keep precedence over the :capability parameter.
+ * POST /api/plugins/lifecycle - Plugin synthesis lifecycle
+ * { op: create|modify|publish|install, ...params }.
+ * Registered BEFORE the two-parameter route below so the literal wins.
  */
-pluginsRouter.post("/:pluginId/:capability", async (c, next) => {
-  const { getContractCapability } = await import("../plugins/contract");
-  const { capabilityBus } = await import("../plugins/bus");
+pluginsRouter.post("/lifecycle", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { op, ...params } = body ?? {};
+  const { pluginLifecycle } = await import("../facade/shared");
+  const out = await pluginLifecycle(typeof op === "string" ? op : "", params ?? {}, {
+    actor: "user",
+    cityId: (body as any)?.cityId || c.req.query("cityId"),
+    workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
+  });
+  if (!out.ok) return c.json(out, 400);
+  return c.json(out);
+});
+
+/**
+ * GET /api/plugins/:id/versions - Kept versions of a plugin (edit history).
+ */
+pluginsRouter.get("/:id/versions", async (c) => {
+  const { pluginVersions } = await import("../facade/shared");
+  const out = await pluginVersions(c.req.param("id"));
+  if (!out.ok) return c.json(out, 400);
+  return c.json(out);
+});
+
+/**
+ * POST /api/plugins/:id/rollback - Roll back to a kept version { version }.
+ * Workspace plugins append a new version row with the old content;
+ * registry-tracked ones reactivate via the versions table.
+ */
+pluginsRouter.post("/:id/rollback", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { pluginRollback } = await import("../facade/shared");
+  const out = await pluginRollback(c.req.param("id"), (body as any)?.version, (body as any)?.workspaceId || c.req.query("workspaceId"));
+  if (!out.ok) {
+    const status = (out as any).code === "not_found" ? 404 : 400;
+    return c.json(out, status as any);
+  }
+  return c.json(out);
+});
+
+/**
+ * POST /api/plugins/:pluginId/:capability - Invoke a contract capability.
+ * Generated surface: every defineCapability registration is invocable
+ * here with the same envelope the agent and CLI receive.
+ * Registered AFTER all specific POST routes: Hono matches routes in
+ * registration order, so this two-parameter route must not shadow
+ * literals like /mcp/connect or /install-url.
+ */
+pluginsRouter.post("/:pluginId/:capability", async (c) => {
   const pluginId = c.req.param("pluginId");
   const capability = c.req.param("capability");
-  const def = getContractCapability(pluginId, capability);
-  if (!def) {
-    return next();
-  }
   const body = await c.req.json().catch(() => ({}));
   const input = (body && typeof body === "object" && "input" in (body as any) ? (body as any).input : body) ?? {};
   const cityId =
     (body && typeof body === "object" && typeof (body as any).cityId === "string"
       ? (body as any).cityId
-      : undefined) ?? c.req.query("cityId");
-  const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
-  const result = await capabilityBus.invoke(`${pluginId}.${capability}`, input, {
-    actor: "user",
-    cityId,
-    onEvent: async (e) => {
-      if (e.type !== "tool.start" && e.type !== "tool.done") emitted.push({ type: e.type, payload: e.payload });
-    },
-  });
-  if (!result.success) {
-    return c.json({ ok: false, error: result.error || "Capability failed.", retryable: true }, 400);
+
+      : undefined) ??
+    (input && typeof input === "object" && typeof (input as any).cityId === "string"
+      ? (input as any).cityId
+      : undefined) ??
+    c.req.query("cityId");
+  const { invokeCapability } = await import("../facade/shared");
+  const out = await invokeCapability(pluginId, capability, input, { actor: "user", cityId });
+  if (!out.ok) {
+    const status = (out as any).code === "unknown_capability" ? 404 : 400;
+    return c.json(out, status as any);
   }
-  const envelope = result.data as any;
-  // Contract handlers always return the envelope as data.
-  if (envelope && typeof envelope === "object" && "ok" in envelope) {
-    const finalEvents = envelope.events !== undefined ? envelope.events : emitted;
-    return c.json({ ...envelope, events: finalEvents });
-  }
-  return c.json({ ok: true, data: envelope, events: emitted });
+  return c.json(out);
 });
 
 /**

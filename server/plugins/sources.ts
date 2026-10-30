@@ -4,6 +4,17 @@ import path from "node:path";
 import { db } from "../workspace/db";
 import { defineCapability } from "./contract";
 import { validateUrlForSsrf } from "./ssrf";
+import {
+  thumbnailForUrl,
+  videoEmbedUrl,
+  vimeoId,
+  vimeoThumbnail,
+  youtubeId,
+  youtubeThumbnail,
+} from "../video/ids";
+
+// Public surface kept for existing consumers (tests, reader contract).
+export { videoEmbedUrl } from "../video/ids";
 
 /**
  * Sources first-party plugin (contract-based).
@@ -66,8 +77,7 @@ export function canonicalizeUrl(raw: string): string {
   const u = new URL(raw);
   u.hostname = u.hostname.toLowerCase().replace(/^www\./, "");
   u.hash = "";
-  const keys = Array.from(u.searchParams.keys());
-  for (const key of keys) {
+  for (const key of [...u.searchParams.keys()]) {
     if (TRACKING_PARAMS.has(key.toLowerCase())) u.searchParams.delete(key);
   }
   let out = u.toString();
@@ -80,40 +90,6 @@ export function siteFromUrl(raw: string): string {
     return new URL(raw).hostname.toLowerCase().replace(/^www\./, "");
   } catch {
     return "web";
-  }
-}
-
-export function youtubeId(raw: string): string | null {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    if (host === "youtu.be") {
-      const id = u.pathname.slice(1).split("/")[0];
-      return id || null;
-    }
-    if (host.endsWith("youtube.com")) {
-      const v = u.searchParams.get("v");
-      if (v) return v;
-      const m = u.pathname.match(/^\/(embed|shorts|live)\/([\w-]{6,})/);
-      if (m) return m[2];
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function vimeoId(raw: string): string | null {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
-      const m = u.pathname.match(/^\/(?:video\/)?(\d+)/);
-      return m ? m[1] : null;
-    }
-    return null;
-  } catch {
-    return null;
   }
 }
 
@@ -172,7 +148,7 @@ function firstHeading(markdown: string): string | null {
 }
 
 function firstMarkdownImage(markdown: string): string | null {
-  const m = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+  const m = markdown.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/);
   return m?.[1]?.trim() || null;
 }
 
@@ -218,7 +194,7 @@ export async function enrichSource(
           url,
           title: opts.title || meta.title || null,
           site: "youtube.com",
-          image: meta.thumbnail_url || `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
+          image: meta.thumbnail_url || youtubeThumbnail(yt),
           author: meta.author_name || null,
           publishedAt: null,
           kind: "video",
@@ -233,7 +209,7 @@ export async function enrichSource(
       url,
       title: opts.title || null,
       site: "youtube.com",
-      image: `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`,
+      image: youtubeThumbnail(yt),
       author: null,
       publishedAt: null,
       kind: "video",
@@ -255,7 +231,7 @@ export async function enrichSource(
           url,
           title: opts.title || meta.title || null,
           site: "vimeo.com",
-          image: meta.thumbnail_url || `https://vumbnail.com/${vm}.jpg`,
+          image: meta.thumbnail_url || vimeoThumbnail(vm),
           author: meta.author_name || null,
           publishedAt: null,
           kind: "video",
@@ -270,7 +246,7 @@ export async function enrichSource(
       url,
       title: opts.title || null,
       site: "vimeo.com",
-      image: `https://vumbnail.com/${vm}.jpg`,
+      image: vimeoThumbnail(vm),
       author: null,
       publishedAt: null,
       kind: "video",
@@ -329,6 +305,88 @@ export async function enrichSource(
     kind: inferKind(url, opts.kind),
     fullText,
     readMinutes: words > 0 ? Math.max(1, Math.round(words / 200)) : null,
+  };
+}
+
+export type ReaderMode = "video" | "reader" | "embed" | "external";
+
+export interface ResolvedOpen {
+  mode: ReaderMode;
+  /** Official embed URL for video/embed modes. */
+  embedUrl?: string;
+  /** Saved markdown for reader mode. */
+  markdown?: string;
+  /** Human-readable reason for external mode. */
+  reason?: string;
+}
+
+/**
+ * HEAD check for frame embedding: DENY/SAMEORIGIN x-frame-options or a
+ * restrictive frame-ancestors CSP means the host forbids iframes.
+ * Absent headers mean allowed (browser default). Network failure or an
+ * inconclusive response is NOT permission — fall through to reader/external.
+ */
+export async function checkFramingAllowed(rawUrl: string): Promise<boolean> {
+  const ssrf = validateUrlForSsrf(rawUrl);
+  if (!ssrf.safe || !ssrf.url) return false;
+  try {
+    const res = await fetch(ssrf.url.toString(), {
+      method: "HEAD",
+      signal: AbortSignal.timeout(8000),
+      redirect: "follow",
+    });
+    if (!res.ok) return false;
+    const xfo = (res.headers.get("x-frame-options") || "").toLowerCase();
+    if (xfo.includes("deny") || xfo.includes("sameorigin")) return false;
+    const csp = (res.headers.get("content-security-policy") || "").toLowerCase();
+    const fa = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("frame-ancestors"));
+    if (fa && (fa.includes("'none'") || (fa.includes("'self'") && !fa.includes("https:")))) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isPdfLike(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.pathname.toLowerCase().endsWith(".pdf")) return true;
+    const host = u.hostname.toLowerCase();
+    if (host === "arxiv.org" || host.endsWith(".arxiv.org")) return u.pathname.includes("/pdf/");
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decides how a saved source opens — pure except for the PDF framing
+ * check. No silent fallbacks: every branch names its mode. Video embeds
+ * always work (official players); articles read from the saved markdown
+ * (never an iframe, so frame-blockers cannot break them); PDFs embed
+ * only when the host permits; otherwise an explicit external state
+ * tells the user to open the original.
+ */
+export async function resolveSourceMode(row: Pick<SourceRow, "url" | "kind" | "fullText">): Promise<ResolvedOpen> {
+  const embed = videoEmbedUrl(row.url);
+  if (row.kind === "video" && embed) {
+    return { mode: "video", embedUrl: embed };
+  }
+  if (isPdfLike(row.url)) {
+    if (await checkFramingAllowed(row.url)) {
+      return { mode: "embed", embedUrl: row.url };
+    }
+    if (row.fullText && row.fullText.trim().length > 0) {
+      return { mode: "reader", markdown: row.fullText };
+    }
+    return { mode: "external", reason: "This PDF blocks embedding and no readable text was saved. Open the original to read it." };
+  }
+  if (row.fullText && row.fullText.trim().length > 0) {
+    return { mode: "reader", markdown: row.fullText };
+  }
+  return {
+    mode: "external",
+    reason: "No readable text was saved for this source. Open the original to read it.",
   };
 }
 
@@ -511,10 +569,36 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
   return { migratedCount: count };
 }
 
+/**
+ * Backfills thumbnails for saved video rows that predate server-side
+ * enrichment (legacy `src_mig_*` rows carry image NULL): derives the
+ * thumbnail from the URL id alone, never touching rows that already
+ * have an image or non-video rows.
+ */
+export function backfillVideoThumbnails(): { filledCount: number } {
+  ensureSourcesSchema();
+  let filled = 0;
+  try {
+    const rows = db
+      .query("SELECT id, url FROM sources WHERE kind = 'video' AND (image IS NULL OR image = '')")
+      .all() as Array<{ id: string; url: string }>;
+    for (const row of rows) {
+      const thumb = thumbnailForUrl(row.url);
+      if (!thumb) continue;
+      db.query("UPDATE sources SET image = ? WHERE id = ?").run(thumb, row.id);
+      filled++;
+    }
+  } catch {
+    // Non-fatal: feed renders a derived thumbnail anyway.
+  }
+  return { filledCount: filled };
+}
+
 export function registerSourcesPlugin(): void {
   ensureSourcesSchema();
   // Perform background migration on registration
   void migrateLegacyCitySources().catch(() => {});
+  backfillVideoThumbnails();
 
   // 1. sources.add capability
   defineCapability({
@@ -527,7 +611,7 @@ export function registerSourcesPlugin(): void {
     output: AddSourceOutput,
     emits: ["source.added"],
     risk: "external",
-    handler: async (input, _ctx) => {
+    handler: async (input, ctx) => {
       const { tinyfish } = await import("../discovery/tinyfish");
       const enriched = await enrichSource(input.url, {
         title: input.title,
@@ -599,7 +683,7 @@ export function registerSourcesPlugin(): void {
     plugin: "sources",
     name: "open",
     title: "Open Source",
-    description: "Opens a saved source in the reader (articles/papers) or video view. Only works for sources already in the city feed.",
+    description: "Decides how a saved source opens (video embed, in-app reader, framed PDF, or explicit external state) and emits reader.open. Only works for sources already in the city feed. Never opens a new tab by itself.",
     scope: "city",
     input: z.object({
       id: z.string().describe("Source id from the city feed"),
@@ -610,6 +694,11 @@ export function registerSourcesPlugin(): void {
       url: z.string(),
       kind: z.enum(["article", "paper", "video"]),
       title: z.string(),
+      cityId: z.string(),
+      mode: z.enum(["video", "reader", "embed", "external"]),
+      embedUrl: z.string().nullable().optional(),
+      markdown: z.string().nullable().optional(),
+      reason: z.string().nullable().optional(),
     }),
     emits: ["reader.open"],
     risk: "read",
@@ -623,10 +712,21 @@ export function registerSourcesPlugin(): void {
           retryable: false as const,
         };
       }
+      const resolved = await resolveSourceMode(row);
       return {
         ok: true as const,
         id: row.id,
-        data: { id: row.id, url: row.url, kind: row.kind, title: row.title, cityId: row.cityId },
+        data: {
+          id: row.id,
+          url: row.url,
+          kind: row.kind,
+          title: row.title,
+          cityId: row.cityId,
+          image: row.image,
+          site: row.site,
+          publishedAt: row.publishedAt,
+          ...resolved,
+        },
       };
     },
   });

@@ -57,6 +57,9 @@ taskExecutionEngine.recoverInterruptedTasks();
 
 const app = new Hono();
 
+// Exported for facade-equivalence tests (app.request, no server needed).
+export { app };
+
 // CORS middleware for development
 app.use(
   "/api/*",
@@ -154,6 +157,18 @@ app.route("/api/sessions", sessionsRouter);
 app.route("/api/tasks", tasksRouter);
 app.route("/api/artifacts", artifactsRouter);
 
+// Product surface facade (PRODUCT_SURFACE=facade): thin routers over the
+// same handlers. Legacy routes above stay untouched in both modes.
+if (config.PRODUCT_SURFACE === "facade") {
+  const { dockRouter } = await import("./routes/dock");
+  const { agentRouter } = await import("./routes/agent");
+  app.route("/api/dock", dockRouter);
+  app.route("/api/agent", agentRouter);
+  // Same routers, same handlers, product paths.
+  app.route("/api/agent/sessions", sessionsRouter);
+  app.route("/api/agent/tasks", tasksRouter);
+}
+
 // Mount World Maps & Cartography router (Maps v2)
 app.route("/api/maps", mapsRouter);
 
@@ -174,6 +189,50 @@ app.get("/api/experiences/:id/errors", (c) => {
   const cityId = c.req.query("cityId");
   const errors = getExperienceErrors(id, cityId);
   return c.json({ errors });
+});
+
+// Share card: generated milestone backdrop (client renders city/XP/streak
+// text on top so stats stay exact). Daily image budget applies.
+app.post("/api/share-card", async (c) => {
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, error: "Invalid JSON request body" }, 400);
+  }
+  try {
+    const { requestShareCard } = await import("./media/shareCard");
+    const result = await requestShareCard(body ?? {});
+    if (!result.ok) {
+      const status = result.code === "budget_exceeded" ? 429 : 400;
+      return c.json({ success: false, error: result.error, code: result.code }, status as any);
+    }
+    return c.json({ success: true, data: { url: result.url, model: result.model, cached: result.cached ?? false } });
+  } catch (err: any) {
+    return c.json({ success: false, error: err?.message || "Share card failed" }, 500);
+  }
+});
+
+// Generated image cache (Muse Image covers / city art / share cards).
+// Strict filename allowlist: <32-hex>.<ext> only, no traversal.
+app.get("/api/media/image-cache/:filename", async (c) => {
+  const filename = c.req.param("filename");
+  if (!/^[a-f0-9]{32}\.(webp|png|jpeg|jpg)$/.test(filename)) {
+    return c.json({ error: "Unknown media file." }, 404);
+  }
+  try {
+    const absPath = path.resolve(config.DATA_DIR, "image-cache", filename);
+    const root = path.resolve(config.DATA_DIR, "image-cache");
+    if (path.relative(root, absPath).startsWith("..")) {
+      return c.json({ error: "Unknown media file." }, 404);
+    }
+    const file = Bun.file(absPath);
+    if (!(await file.exists())) return c.json({ error: "Unknown media file." }, 404);
+    const type = filename.endsWith(".png") ? "image/png" : filename.endsWith(".jpg") || filename.endsWith(".jpeg") ? "image/jpeg" : "image/webp";
+    return new Response(file as any, { headers: { "Content-Type": type, "Cache-Control": "public, max-age=86400" } });
+  } catch {
+    return c.json({ error: "Unknown media file." }, 404);
+  }
 });
 
 // SSE Streaming endpoint for agent tool-calling loop
@@ -226,6 +285,9 @@ app.post("/api/agent", async (c) => {
       attachments: Array.isArray(attachments) ? attachments : undefined,
       history: Array.isArray(history) ? history : [],
       retryLast: retry === true,
+      // Client disconnect (Stop button) aborts the model call and the
+      // tool loop; runAgentLoop rolls the turn back for retry.
+      signal: c.req.raw.signal,
       onEvent: async (event: AgentStepEvent) => {
         await stream.writeSSE({
           event: event.type,

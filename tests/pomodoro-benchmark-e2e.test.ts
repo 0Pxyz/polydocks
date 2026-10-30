@@ -44,6 +44,7 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
     db.query("DELETE FROM workspace_plugins WHERE workspace_id LIKE '%-test' OR plugin_id = 'pomodoro-benchmark-test'").run();
     db.query("DELETE FROM workspaces WHERE id LIKE '%-test'").run();
     db.query("DELETE FROM plugins WHERE id = 'pomodoro-benchmark-test'").run();
+    db.query("DELETE FROM plugin_files WHERE plugin_id = 'pomodoro-benchmark-test'").run();
   });
 
   it("completes full lifecycle: create -> use storage -> in-place modify -> publish -> cross-workspace install", async () => {

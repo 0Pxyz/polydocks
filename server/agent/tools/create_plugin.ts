@@ -11,6 +11,7 @@ export interface CreatePluginArgs {
   code: string;
   workspaceId?: string;
   idempotencyKey?: string;
+  userApproved?: boolean;
   capabilities?: Array<{
     id: string;
     title: string;
@@ -23,7 +24,7 @@ export interface CreatePluginArgs {
 export const create_plugin: AgentTool<CreatePluginArgs> = {
   name: "create_plugin",
   description:
-    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin) or for city tabs (use create_tab).",
+    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin) or for city tabs (use create_tab). UI must look native: theme tokens only, no bordered cards, no separators, no decorative pills, sentence case (docs/design-slop.md).",
   schema: z.object({
     id: z
       .string()
@@ -53,6 +54,10 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .string()
       .optional()
       .describe("Optional idempotency key to prevent duplicate creation on retry"),
+    userApproved: z
+      .boolean()
+      .optional()
+      .describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
     capabilities: z
       .array(
         z.object({
@@ -67,6 +72,20 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       .describe("Optional programmatic capabilities exposed to the agent or other tools"),
   }),
   execute: async (args, ctx) => {
+
+    // Install policy: agent writes need an explicit user yes.
+    const { enforceInstallPolicy } = await import("../installPolicy");
+    const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
+    if (denied) return denied;
+
+    // Visual kit gate (agent-created code is validated strict).
+    {
+      const { validateSlop } = await import("../../plugins/slop");
+      const report = validateSlop(args.code, { strict: ctx?.actor === "agent" });
+      if (!report.ok) {
+        return { success: false, error: `Design kit violation: ${report.errors.join("; ")}`, code: "slop_violation" };
+      }
+    }
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
 
     // Retry safety: an idempotency key that already executed returns the

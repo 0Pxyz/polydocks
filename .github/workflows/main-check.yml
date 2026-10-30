@@ -17,3 +17,15 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile --no-progress
       - run: bun run check
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile --no-progress
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run build
+      - run: bun run test:browser

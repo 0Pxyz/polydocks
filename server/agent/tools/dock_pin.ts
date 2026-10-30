@@ -27,6 +27,15 @@ export const dock_pin: AgentTool<{ id: string; cityId?: string }> = {
         message: `"${resolution.entry.title}" lives in the store and is not installed. Install it first, then pin it.`,
       };
     }
+    // Durable pin record (server truth; the client keeps its own cache).
+    // Builtins and city tabs have no plugin row — the dock_pins table
+    // covers every kind of item uniformly.
+    try {
+      const { pinDockItem } = await import("../../workspace/workspaces");
+      pinDockItem(ctx.workspaceId || targetCity, resolution.entry.id);
+    } catch {
+      // Non-fatal: the client-side pin still applies.
+    }
     return {
       success: true,
       id: resolution.entry.id,

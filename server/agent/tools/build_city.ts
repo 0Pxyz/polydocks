@@ -2,6 +2,7 @@ import { z } from "zod";
 import { buildCityWorkspace } from "../../city-builder/pipeline";
 import type { CityBuildEvent } from "../../city-builder/types";
 import { TinyFishClient } from "../../discovery/tinyfish";
+import { db } from "../../workspace/db";
 import type { AgentTool } from "./types";
 
 export const build_city: AgentTool = {
@@ -15,8 +16,12 @@ export const build_city: AgentTool = {
       .enum(["overview", "deep", "mastery"])
       .default("deep")
       .describe("Level of depth for discovery and quest planning"),
+    region: z
+      .string()
+      .optional()
+      .describe("Region the city belongs to (from plan_map). Defaults to Core Region."),
   }),
-  async execute({ cityId, topic, depth = "deep" }) {
+  async execute({ cityId, topic, depth = "deep", region }) {
     const tinyfish = new TinyFishClient();
     const emittedEvents: CityBuildEvent[] = [];
 
@@ -29,6 +34,23 @@ export const build_city: AgentTool = {
         emittedEvents.push(ev);
       },
     });
+
+    // Register the city entity so the map, /api/cities metadata join, and
+    // place_city verification all see the same state the files imply.
+    // Files alone never constitute a city.
+    try {
+      db.query(
+        `INSERT OR REPLACE INTO cities (id, title, region, level, tags, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(cityId, topic, region || "Core Region", 1, JSON.stringify([]), Math.floor(Date.now() / 1000));
+    } catch (err) {
+      return {
+        success: false,
+        error: `City workspace built but registration failed: ${err instanceof Error ? err.message : String(err)}`,
+        retryable: true,
+        cityId,
+      };
+    }
 
     return {
       success: true,

@@ -88,7 +88,7 @@ workspacesRouter.delete("/:id", (c) => {
 /**
  * GET /api/workspaces/:id/plugins - Lists plugins mounted in this workspace
  */
-workspacesRouter.get("/:id/plugins", (c) => {
+workspacesRouter.get("/:id/plugins", async (c) => {
   const id = c.req.param("id");
   const ws = WorkspaceService.getWorkspace(id);
   if (!ws) {
@@ -96,7 +96,33 @@ workspacesRouter.get("/:id/plugins", (c) => {
   }
 
   const plugins = WorkspaceService.listWorkspacePlugins(id);
-  return c.json({ success: true, count: plugins.length, data: plugins });
+  const { listDockPins } = await import("../workspace/workspaces");
+  return c.json({ success: true, count: plugins.length, data: plugins, pinned: listDockPins(id) });
+});
+
+/**
+ * POST /api/workspaces/:id/pins - Records a dock pin server-side
+ * { id }. The palette keeps its instant local pin; this is the durable
+ * record shared with the agent, CLI and routes.
+ */
+workspacesRouter.post("/:id/pins", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const itemId = (body as any)?.id;
+  if (typeof itemId !== "string" || !itemId) {
+    return c.json({ success: false, error: "Pin needs { id }." }, 400);
+  }
+  const { pinDockItem, listDockPins } = await import("../workspace/workspaces");
+  pinDockItem(c.req.param("id"), itemId);
+  return c.json({ success: true, pinned: listDockPins(c.req.param("id")) });
+});
+
+/**
+ * DELETE /api/workspaces/:id/pins/:itemId - Removes a server dock pin.
+ */
+workspacesRouter.delete("/:id/pins/:itemId", async (c) => {
+  const { unpinDockItem, listDockPins } = await import("../workspace/workspaces");
+  unpinDockItem(c.req.param("id"), c.req.param("itemId"));
+  return c.json({ success: true, pinned: listDockPins(c.req.param("id")) });
 });
 
 /**

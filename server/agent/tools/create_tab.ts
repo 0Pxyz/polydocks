@@ -18,7 +18,7 @@ export interface CreateTabArgs {
 export const create_tab: AgentTool<CreateTabArgs> = {
   name: "create_tab",
   description:
-    "Builds a new city-scoped tab (TSX code or legacy html, exactly one). Use only for a tool the user wants to come back to; do not use for persistent workspace tools (use create_plugin) or to fix an existing tab (use update_tab).",
+    "Builds a new city-scoped tab (TSX code or legacy html, exactly one). Use only for a tool the user wants to come back to; do not use for persistent workspace tools (use create_plugin) or to fix an existing tab (use update_tab). UI must look native: theme tokens only, no bordered cards, no separators, no decorative pills, sentence case (docs/design-slop.md).",
   schema: z
     .object({
       id: z

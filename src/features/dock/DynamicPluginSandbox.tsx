@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createHostBridge } from "./bridge/host-bridge";
 import { ReaderView } from "./ReaderView";
+import { TaskNotice } from "./TaskNotice";
+import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { cn } from "@/lib/cn";
 
@@ -74,9 +76,13 @@ export function DynamicPluginSandbox({
   // Connect host postMessage bridge scoped to workspace + plugin.
   // openContent opens the native in-app Reader (articles render as app
   // components, video as embeds — no iframe, no cross-plugin messaging).
+  //
+  // The target window is resolved at MESSAGE time from the iframe element
+  // (not captured once at mount: the iframe only renders after the srcdoc
+  // fetch resolves, so a mount-time capture is null forever and every reply
+  // is dropped). Rebinding on srcdoc change keeps exactly one listener.
   useEffect(() => {
-    const targetWin = iframeRef.current?.contentWindow || null;
-    const bridge = createHostBridge(targetWin, {
+    const bridge = createHostBridge(() => iframeRef.current?.contentWindow ?? null, {
       cityId: workspaceId,
       tabId: pluginId,
       workspaceId,
@@ -84,6 +90,14 @@ export function DynamicPluginSandbox({
       storagePrefix: "polydocks",
       onCollapse: onDismiss,
       onOpenContent: (url) => setReaderUrl(url),
+      onTaskEvent: (event) => {
+        const store = useTabHostStore.getState();
+        if (event.type === "start") {
+          store.registerTask(pluginId, { id: event.taskId, label: event.label || "Task", detail: event.detail });
+        } else {
+          store.updateTask(event.taskId, event.status || (event.type === "done" ? "done" : "running"), event.detail);
+        }
+      },
       onReady: () => {
         if (handshakeTimerRef.current) {
           clearTimeout(handshakeTimerRef.current);
@@ -99,7 +113,7 @@ export function DynamicPluginSandbox({
     return () => {
       bridge.destroy();
     };
-  }, [workspaceId, pluginId, onDismiss]);
+  }, [workspaceId, pluginId, onDismiss, srcdoc]);
 
   // 3-second ready handshake timeout once srcdoc is mounted.
   // Strict for new builds (ready marker present): no ready signal means the
@@ -213,6 +227,9 @@ export function DynamicPluginSandbox({
           )}
         />
       )}
+      {/* Background task status: work registered via polymax.task keeps a
+          quiet row here so results that finish while hidden are seen. */}
+      {isReady && !readerUrl && <TaskNotice tabId={pluginId} />}
         </>
       )}
     </div>

@@ -17,6 +17,8 @@ import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
 import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { useTabHostStore } from "@/lib/tabs/tabHostStore";
+import { TabHost } from "@/features/dock/TabHost";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { buildCityDockTools, CITY_TOOL_IDS } from "@/lib/dock/dockModel";
 import { getLastCityTool, setLastCityTool } from "@/lib/city/cityModel";
@@ -30,6 +32,7 @@ export default function App() {
 
   const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
   const { setActiveTool: setDockActiveTool } = useDockStore();
+  const hostTabs = useTabHostStore((s) => s.tabs);
 
   const {
     layoutState,
@@ -53,27 +56,67 @@ export default function App() {
     wallpaperBlur,
   } = useThemeStore();
 
-  const { workspacePlugins } = useWorkspaceStore();
+  const { workspacePlugins, fetchWorkspaces } = useWorkspaceStore();
 
-  const workspaceDockTools: DockToolItem[] = workspacePlugins
-    .filter((wp) => wp.enabled && wp.plugin)
-    .map((wp) => ({
-      id: wp.pluginId,
-      label: wp.plugin?.name || wp.pluginId,
-      type: "icon",
-      icon: resolveIcon(wp.plugin?.icon || "Cards"),
-      iconKey: wp.plugin?.icon || wp.pluginId,
-    }));
+  // Home must reflect installed plugins dynamically: fetch once on boot so
+  // the workspace registry (not a hardcoded list) drives the home dock
+  // section. Polymax ships as one entry below until #153 extracts it.
+  useEffect(() => {
+    void fetchWorkspaces();
+  }, [fetchWorkspaces]);
+
+  // Polymax as one installed plugin, not the app: the knowledge-worlds map
+  // surface listed alongside dynamically installed workspace plugins.
+  // Migration shim — the full extraction (map/cities/quests as real plugins)
+  // is tracked in #153; until then this entry opens the maps view.
+  const homePlugins = useMemo(
+    () => [
+      { id: "maps", label: "Polymax", detail: "Knowledge worlds", iconKey: "Compass" },
+      ...workspacePlugins
+        .filter((wp) => wp.enabled && wp.plugin && wp.pluginId !== "maps")
+        .map((wp) => ({
+          id: wp.pluginId,
+          label: wp.plugin?.name || wp.pluginId,
+          detail: wp.plugin?.description,
+          iconKey: wp.plugin?.icon,
+        })),
+    ],
+    [workspacePlugins]
+  );
+
+  // Memoized: fresh arrays every render would retrigger the tab-host
+  // registration effect below and loop openTab -> rerender forever.
+  const workspaceDockTools: DockToolItem[] = useMemo(
+    () =>
+      workspacePlugins
+        .filter((wp) => wp.enabled && wp.plugin)
+        .map((wp) => ({
+          id: wp.pluginId,
+          label: wp.plugin?.name || wp.pluginId,
+          type: "icon",
+          icon: resolveIcon(wp.plugin?.icon || "Cards"),
+          iconKey: wp.plugin?.icon || wp.pluginId,
+        })),
+    [workspacePlugins]
+  );
 
   // The Plugin Store is not a dock item: store plugins are reachable only
   // through dock search, which installs and opens them directly.
-  const activeExtraTools = [
-    ...extraTools.filter((t) => t.id !== "store"),
-    ...workspaceDockTools.filter((wt) => wt.id !== "store" && !extraTools.some((et) => et.id === wt.id)),
-  ];
+  const activeExtraTools = useMemo(
+    () => [
+      ...extraTools.filter((t) => t.id !== "store"),
+      ...workspaceDockTools.filter((wt) => wt.id !== "store" && !extraTools.some((et) => et.id === wt.id)),
+    ],
+    [extraTools, workspaceDockTools]
+  );
 
   const handleDismissTool = (toolIdToDismiss?: string) => {
     const targetTool = toolIdToDismiss ?? activeToolId;
+    // Explicit dismiss destroys the tab runtime (reopen mounts fresh);
+    // toggling via the dock merely hides it (state kept).
+    if (targetTool && activeExtraTools.some((t) => t.id === targetTool)) {
+      useTabHostStore.getState().closeTab(targetTool);
+    }
     setActiveToolId("");
     if (targetTool) {
       const dockBtn = document.querySelector<HTMLButtonElement>(
@@ -222,6 +265,21 @@ export default function App() {
       dock.closeTool(dock.openIds[0]);
     }
   }, [activeToolId]);
+
+  useEffect(() => {
+    // Host-owned lifecycle: selecting a dynamic plugin tab mounts it once.
+    // The TabHost below keeps it mounted but hidden afterwards, so
+    // returning to it is 0 remounts; hibernated tabs restore on reopen.
+    // The live-status guard plus the memoized list above keep this from
+    // retriggering on every render (which would loop openTab forever).
+    if (
+      activeToolId &&
+      activeExtraTools.some((t) => t.id === activeToolId) &&
+      hostTabs[activeToolId]?.status !== "live"
+    ) {
+      useTabHostStore.getState().openTab(activeToolId, "plugin");
+    }
+  }, [activeToolId, activeExtraTools, hostTabs]);
 
   const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
   const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
@@ -459,15 +517,25 @@ export default function App() {
               </DockSurface>
             ) : activeExtraTools.some((t) => t.id === activeToolId) ? (
               <DockSurface variant="immersive">
-                <DynamicPluginSandbox
-                  pluginId={activeToolId}
-                  title={activeExtraTools.find((t) => t.id === activeToolId)?.label}
-                  onDismiss={() => handleDismissTool(activeToolId)}
-                  onAskAgentFix={(errorMsg) => {
-                    handleToolPromptSubmit(`Fix tool "${activeToolId}": ${errorMsg}`, {
-                      origin: "dock-fix",
-                    });
-                  }}
+                <TabHost
+                  activeId={activeToolId}
+                  tabs={activeExtraTools
+                    .filter((t) => hostTabs[t.id]?.status === "live")
+                    .map((t) => ({
+                      id: t.id,
+                      render: () => (
+                        <DynamicPluginSandbox
+                          pluginId={t.id}
+                          title={t.label}
+                          onDismiss={() => handleDismissTool(t.id)}
+                          onAskAgentFix={(errorMsg) => {
+                            handleToolPromptSubmit(`Fix tool "${t.id}": ${errorMsg}`, {
+                              origin: "dock-fix",
+                            });
+                          }}
+                        />
+                      ),
+                    }))}
                 />
               </DockSurface>
             ) : isCityMode ? (
@@ -488,11 +556,11 @@ export default function App() {
                     const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
                     setLayoutState(isWide ? "side" : "sheet");
                   }}
-                  onEnterCity={(cityName) => {
-                    setSelectedCity(cityName);
-                    enterCity(cityName);
-                    setActiveToolId("");
-                    setDockActiveTool("");
+                  installedPlugins={homePlugins}
+                  onOpenPlugin={(pluginId) => handleSelectTool(pluginId)}
+                  onOpenStore={() => {
+                    setActiveToolId("plugins");
+                    setDockActiveTool("plugins");
                   }}
                 />
               </DockSurface>

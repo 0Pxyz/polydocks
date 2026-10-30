@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createHostBridge } from "./bridge/host-bridge";
 import { ReaderView } from "./ReaderView";
+import { TaskNotice } from "./TaskNotice";
+import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { cn } from "@/lib/cn";
 
 export interface DynamicTabContainerProps {
@@ -74,16 +76,30 @@ export function DynamicTabContainer({
     fetchSrcdoc();
   }, [fetchSrcdoc]);
 
-  // Connect host postMessage bridge (openContent -> native Reader)
+  // City-scoped tab identity for the host task registry. Namespaced so
+  // tasks from different cities never collide in the shared store.
+  const runtimeTabId = `city:${cityId}:${tabId}`;
+  // Connect host postMessage bridge (openContent -> native Reader).
+  // The target window is resolved at MESSAGE time from the iframe element
+  // (not captured once at mount: the iframe only renders after the srcdoc
+  // fetch resolves, so a mount-time capture is null forever and every reply
+  // is dropped). Rebinding on srcdoc change keeps exactly one listener.
   useEffect(() => {
-    const targetWin = iframeRef.current?.contentWindow || null;
-    const bridge = createHostBridge(targetWin, {
+    const bridge = createHostBridge(() => iframeRef.current?.contentWindow ?? null, {
       cityId,
       tabId,
       onExpand,
       onCollapse,
       onSubmitCommand,
       onOpenContent: (url) => setReaderUrl(url),
+      onTaskEvent: (event) => {
+        const store = useTabHostStore.getState();
+        if (event.type === "start") {
+          store.registerTask(runtimeTabId, { id: event.taskId, label: event.label || "Task" });
+        } else {
+          store.updateTask(event.taskId, event.status || (event.type === "done" ? "done" : "running"), event.detail);
+        }
+      },
       onReady: () => {
         if (handshakeTimerRef.current) {
           clearTimeout(handshakeTimerRef.current);
@@ -99,7 +115,7 @@ export function DynamicTabContainer({
     return () => {
       bridge.destroy();
     };
-  }, [cityId, tabId, onExpand, onCollapse, onSubmitCommand]);
+  }, [cityId, tabId, onExpand, onCollapse, onSubmitCommand, srcdoc]);
 
   // 3-second ready handshake timeout once srcdoc is mounted
   useEffect(() => {
@@ -199,6 +215,7 @@ export function DynamicTabContainer({
           )}
         />
       )}
+      {isReady && !readerUrl && <TaskNotice tabId={runtimeTabId} />}
         </>
       )}
     </div>

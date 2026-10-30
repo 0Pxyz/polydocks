@@ -6,6 +6,8 @@ import {
   create_tab,
   defaultTools,
   delete_tab,
+  fullTools,
+  minimalTools,
   get_city_context,
   list_tabs,
   open_source,
@@ -29,11 +31,12 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(43);
+    expect(defaultTools.length).toBe(45);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
     expect(names).toContain("open_intent");
+    expect(names).toContain("enter_city");
     expect(names).toContain("inspect_tab");
     expect(names).toContain("close_tray");
     expect(names).toContain("dock_search");
@@ -74,6 +77,30 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("record_memory");
     expect(names).toContain("connect_cities");
     expect(names).toContain("apply_theme");
+    expect(names).toContain("generate_image");
+  });
+
+  it("minimal surface is the eleven verb tools", () => {
+    const names = minimalTools.map((t) => t.name).sort();
+    expect(names).toEqual(
+      [
+        "dock.close",
+        "dock.list",
+        "dock.open",
+        "dock.pin",
+        "dock.unpin",
+        "plugins.create",
+        "plugins.edit",
+        "plugins.install",
+        "plugins.operate",
+        "plugins.rollback",
+        "plugins.uninstall",
+      ].sort()
+    );
+    // Full catalog is exactly the current 45 (default mode unchanged);
+    // verb tools live only in the minimal surface.
+    expect(fullTools.length).toBe(45);
+    expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
   it("list_tabs returns builtins and dynamic tabs", async () => {
@@ -215,15 +242,39 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(setRes.action).toBe("map.changed");
     expect(setRes.mapId).toBe("ancient");
 
-    // 3. place_city
-    const placeRes = (await place_city.execute(
-      { title: "Distributed Consensus", regionHint: "Reach", mapId: "gloom" },
+    // 3. place_city refuses cities that were never built (never silently confirms)
+    const missing = (await place_city.execute(
+      { title: "No Such City XYZ", mapId: "gloom" },
       { cityId: TEST_CITY, step: 3 }
     )) as any;
 
-    expect(placeRes.action).toBe("map.point.added");
-    expect(placeRes.cityId).toBe("city-distributed-consensus");
-    expect(placeRes.x).toBeGreaterThan(0);
-    expect(placeRes.y).toBeGreaterThan(0);
+    expect(missing.error).toContain("No Such City XYZ");
+    expect(missing.retryable).toBe(true);
+    expect(missing.action).toBeUndefined();
+
+    // 4. place_city pins and re-reads for a registered city
+    const { db } = await import("../../workspace/db");
+    db.query(
+      "INSERT OR REPLACE INTO cities (id, title, region, level, tags, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run("city-test-cartography", "Test Cartography", "Core Region", 1, "[]", Math.floor(Date.now() / 1000));
+    try {
+      const placeRes = (await place_city.execute(
+        { title: "Test Cartography", mapId: "gloom" },
+        { cityId: TEST_CITY, step: 4 }
+      )) as any;
+
+      expect(placeRes.action).toBe("map.point.added");
+      expect(placeRes.cityId).toBe("city-test-cartography");
+      expect(typeof placeRes.pointId).toBe("string");
+      expect(placeRes.x).toBeGreaterThan(0);
+      expect(placeRes.y).toBeGreaterThan(0);
+      const stored = db
+        .query("SELECT id FROM map_points WHERE id = ?")
+        .get(placeRes.pointId) as { id: string } | null;
+      expect(stored?.id).toBe(placeRes.pointId);
+    } finally {
+      db.query("DELETE FROM map_points WHERE city_id = ?").run("city-test-cartography");
+      db.query("DELETE FROM cities WHERE id = ?").run("city-test-cartography");
+    }
   });
 });

@@ -20,10 +20,12 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
 import { useConversationStore } from "@/lib/agent/conversationStore";
+import { cancelSpeech } from "@/lib/agent/speech";
 import { useThemeStore } from "@/lib/theme";
 import {
   connectRealtimeVoice,
@@ -91,6 +93,10 @@ export function AgentConversation({
     draft,
     isStreaming,
     statusText,
+    activity,
+    lastEventAt,
+    currentPhase,
+    streamingText,
     activeApproval,
     activeModel,
     soundEnabled,
@@ -133,6 +139,20 @@ export function AgentConversation({
   // One-shot anchor: expanding to full/side lands on the last user message,
   // never at the top after a reload. Reset when leaving the expanded views.
   const anchoredRef = useRef(false);
+
+  // Live clock for activity elapsed times + the stuck message. Ticks only
+  // while a turn is streaming.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isStreaming) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [isStreaming]);
+
+  const stuckSecs =
+    isStreaming && lastEventAt > 0 ? Math.max(0, Math.floor((now - lastEventAt) / 1000)) : 0;
+  const isStuck = stuckSecs >= 8;
+  const reduceMotion = prefersReducedMotion();
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -269,16 +289,53 @@ export function AgentConversation({
       return;
     }
 
+    // Stop any spoken reply first: without this the mic transcribes the
+    // agent's own TTS voice into the next user turn (feedback loop).
+    cancelSpeech();
     setOrbState("listening");
     setStatusText("Listening… speak now. Tap the Orb to stop.");
 
+    // Single-shot voice command: the first final transcript stops the mic,
+    // flushes the turn (endStream) and sends itself as a chat message.
+    // Partials only preview into the draft — nothing sends twice.
+    let sent = false;
+    let busyHandoff = false;
+    const stopSession = () => {
+      realtimeRef.current?.stopMic();
+      realtimeRef.current?.close();
+      realtimeRef.current = null;
+    };
+
     try {
       const session = connectRealtimeVoice({
-        onPartial: (text) => setDraft(text),
+        onPartial: (text) => {
+          if (!sent) setDraft(text);
+        },
+        onSpeechStart: () => {
+          if (!sent) setStatusText("Listening…");
+        },
+        onSpeechEnd: () => {
+          if (!sent) setStatusText("Understanding…");
+        },
         onFinal: (text) => {
-          if (!text.trim()) return;
+          const clean = text.trim();
+          if (!clean || sent) return;
+          sent = true;
+          stopSession();
+          const store = useConversationStore.getState();
+          if (store.isStreaming) {
+            // Never drop the user's words: park them in the draft so they
+            // can press send once the running turn finishes.
+            busyHandoff = true;
+            setDraft(clean);
+            setOrbState("idle");
+            setStatusText("Still working — your words are in the box, press send when ready.");
+            return;
+          }
           setDraft("");
-          void sendMessage(text, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
+          setOrbState("idle");
+          setStatusText("");
+          void store.sendMessage(clean, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
         },
         onLevel: (level) => setAudioLevel(level),
         onError: (message) => {
@@ -291,7 +348,9 @@ export function AgentConversation({
         onClose: () => {
           realtimeRef.current = null;
           setOrbState("idle");
-          setStatusText("");
+          // Keep the busy-handoff message: the user's words are parked in
+          // the draft and clearing the status would hide where they went.
+          if (!busyHandoff) setStatusText("");
         },
       });
 
@@ -508,6 +567,22 @@ export function AgentConversation({
               )}
             </div>
 
+            {isStreaming && isStuck && (
+              <div className="mb-2 flex items-center justify-center gap-2 text-[11px] font-mono text-muted-foreground">
+                <span>
+                  Still working: {(currentPhase || "thinking").toLowerCase()} ({stuckSecs}s)
+                </span>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  onClick={abortStream}
+                  className="text-[var(--accent-lime)] hover:underline cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
             {/* Staging bar for attachments */}
             {stagedAttachments.length > 0 && (
               <AttachmentStagingBar
@@ -713,12 +788,24 @@ export function AgentConversation({
             const isLastMessage = idx === messages.length - 1;
 
             if (isTool) {
+              const branded =
+                (msg.toolName && isTinyFishTool(msg.toolName)) || msg.content.includes("TinyFish");
               return (
                 <div
                   key={msg.id}
                   className="flex items-center gap-2 text-xs font-mono text-muted-foreground/80 py-1"
                 >
-                  <span className="text-[var(--accent-lime)] text-[10px]">✦</span>
+                  {branded ? (
+                    <img
+                      src={TINYFISH_LOGO_SRC}
+                      alt="TinyFish"
+                      width={14}
+                      height={14}
+                      className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <span className="text-[var(--accent-lime)] text-[10px]">✦</span>
+                  )}
                   <span>{msg.content}</span>
                 </div>
               );
@@ -764,7 +851,7 @@ export function AgentConversation({
                 key={msg.id}
                 data-msg-role="assistant"
                 data-msg-id={msg.id}
-                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1 prose-table:-mx-2"
+                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -851,11 +938,88 @@ export function AgentConversation({
             );
           })}
 
-          {/* Transient status line during streaming */}
-          {isStreaming && statusText && (
-            <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)] py-1">
-              <span className="animate-spin text-xs">✦</span>
-              <span>{statusText}</span>
+          {/* Live progress during streaming: one row per step, then the stuck line */}
+          {isStreaming && (
+            <div className="flex flex-col gap-1 py-1" aria-live="polite">
+              {streamingText && (
+                <div className="w-full leading-relaxed whitespace-pre-wrap text-[15px] text-foreground/90 font-sans pb-1">
+                  {streamingText}
+                </div>
+              )}
+              {activity.map((row) => {
+                const elapsed = Math.max(
+                  0,
+                  Math.floor(((row.finishedAt ?? now) - row.startedAt) / 1000)
+                );
+                const branded =
+                  (row.tool && isTinyFishTool(row.tool)) || row.label.includes("TinyFish");
+                return (
+                  <div
+                    key={row.id}
+                    className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
+                  >
+                    {branded ? (
+                      <img
+                        src={TINYFISH_LOGO_SRC}
+                        alt="TinyFish"
+                        width={14}
+                        height={14}
+                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                      />
+                    ) : row.state === "running" ? (
+                      <span
+                        className={cn(
+                          "text-[var(--accent-lime)] text-[10px]",
+                          !reduceMotion && "animate-spin inline-block"
+                        )}
+                      >
+                        ✦
+                      </span>
+                    ) : row.state === "done" ? (
+                      <Check className="w-3 h-3 text-[var(--accent-lime)]" />
+                    ) : (
+                      <X className="w-3 h-3 text-red-400" />
+                    )}
+                    <span className="truncate">{row.label}</span>
+                    <span className="text-muted-foreground/60 shrink-0">{elapsed}s</span>
+                  </div>
+                );
+              })}
+              {activity.length === 0 && (statusText || currentPhase) && (
+                <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)]">
+                  {(statusText || "").includes("TinyFish") ? (
+                    <img
+                      src={TINYFISH_LOGO_SRC}
+                      alt="TinyFish"
+                      width={14}
+                      height={14}
+                      className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <span
+                      className={cn(!reduceMotion && "animate-spin inline-block")}
+                    >
+                      ✦
+                    </span>
+                  )}
+                  <span>{statusText || currentPhase || "Thinking…"}</span>
+                </div>
+              )}
+              {isStuck && (
+                <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground pt-1">
+                  <span>
+                    Still working: {(currentPhase || "thinking").toLowerCase()} ({stuckSecs}s)
+                  </span>
+                  <span aria-hidden>·</span>
+                  <button
+                    type="button"
+                    onClick={abortStream}
+                    className="text-[var(--accent-lime)] hover:underline cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

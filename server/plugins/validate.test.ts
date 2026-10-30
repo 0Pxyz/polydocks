@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { db } from "../workspace/db";
-import { validatePluginRender, validatePluginCode, findHardcodedHex } from "./validate";
+import { validatePluginRender, validatePluginCode, findHardcodedHex, findSlopPatterns, findLifecycleViolations } from "./validate";
 import { bundleFeatureCode } from "../workspace/reactKit";
 import { PluginService } from "../services/pluginService";
 
@@ -45,6 +45,42 @@ describe("Pre-publish validation", () => {
     expect(res.ok).toBe(true);
     expect(res.warnings.length).toBeGreaterThan(0);
     expect(res.warnings[0]).toContain("#C8FF57");
+  });
+
+  it("warns on design slop instead of hard-rejecting", async () => {
+    const sloppy = `${GOOD}\nconst x = '<div className="rounded-xl border border-border bg-card"><Separator /><p className="uppercase tracking-tight">hi</p></div>';`;
+    expect(findSlopPatterns(sloppy).length).toBeGreaterThan(0);
+    expect(findSlopPatterns(GOOD)).toEqual([]);
+    const res = await validatePluginCode({ code: sloppy, bundle: bundleFeatureCode });
+    expect(res.ok).toBe(true);
+    expect(res.warnings.some((w) => w.includes("Design slop"))).toBe(true);
+  });
+
+  it("rejects lifecycle-contract violations with a clear error, not a warning", async () => {
+    const violations: Array<[string, string]> = [
+      ["location.reload()", `function App() { location.reload(); return <div/>; }`],
+      ["early return on isActive", `function App({ isActive }) { if (!isActive) return null; return <div/>; }`],
+      ["ternary to null", `function App({ isActive }) { return isActive ? <div/> : null; }`],
+      ["gated JSX", `function App({ activeTab }) { return <div>{activeTab && <span/>}</div>; }`],
+      ["active-derived key", `function App({ activeTab }) { return <div key={activeTab}>x</div>; }`],
+    ];
+    for (const [label, body] of violations) {
+      const code = `import { createRoot } from "react-dom/client";\n${body}\ncreateRoot(document.getElementById("app")).render(<App />);`;
+      expect(findLifecycleViolations(code).length, label).toBeGreaterThan(0);
+      const res = await validatePluginCode({ code, bundle: bundleFeatureCode });
+      expect(res.ok, label).toBe(false);
+      expect(res.error || "", label).toContain("Lifecycle contract");
+    }
+    // Contract-compliant code (storage + task APIs, unconditional render) passes.
+    const compliant = `import { createRoot } from "react-dom/client";
+function App() {
+  const [v, setV] = React.useState(null);
+  React.useEffect(() => { window.polymax.storage.get("v").then(setV); }, []);
+  const run = () => { window.polymax.task.start({ label: "Export" }).then(({ id }) => window.polymax.task.done(id)); };
+  return <div><button onClick={run}>go</button><span>{v}</span></div>;
+}
+createRoot(document.getElementById("app")).render(<App />);`;
+    expect(findLifecycleViolations(compliant)).toEqual([]);
   });
 
   it("blocks activation when the render test fails, keeping the previous version live", async () => {

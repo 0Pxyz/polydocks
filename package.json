@@ -5,7 +5,8 @@
   "private": true,
   "license": "MIT",
   "bin": {
-    "polydocks": "./bin/polydocks"
+    "polydocks": "./bin/polydocks",
+    "polymax": "./bin/polydocks"
   },
   "type": "module",
   "engines": {
@@ -21,6 +22,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "oxlint",
     "test": "bun test",
+    "test:browser": "bun tests/browser/reader-smoke.ts",
     "seed": "bun scripts/seedDemoWorld.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
@@ -67,6 +69,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.6",
     "oxlint": "^1.90.0",
+    "playwright": "1.64.1",
     "typescript": "~7.0.2",
     "vite": "^8.3.5"
   }

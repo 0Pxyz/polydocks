@@ -56,24 +56,65 @@ export function ParticleWorldView({
       ]);
       if (fetchedCities && fetchedCities.length > 0) setCities(fetchedCities);
       setLinks(fetchedLinks);
+      return fetchedCities;
     } catch {
       // Keep fallback cities; world stays explorable offline.
+      return null;
     }
   }, []);
+
+  // New-city announcement: pulse the placed territory so it is visible
+  // without hunting. Cleared after a few seconds (or on the next event).
+  const [pulseCityId, setPulseCityId] = useState<string | null>(null);
+  const pulseTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (pulseTimerRef.current) window.clearTimeout(pulseTimerRef.current);
+    };
+  }, []);
+
+  const onCitiesChanged = useCallback(
+    async (e?: Event) => {
+      const detail = (e as CustomEvent<{ cityId?: string; title?: string }> | undefined)?.detail;
+      const list = await refreshWorld();
+      if (pulseTimerRef.current) {
+        window.clearTimeout(pulseTimerRef.current);
+        pulseTimerRef.current = null;
+      }
+      setPulseCityId(null);
+      if (detail && list) {
+        const slug = (detail.title || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        const match = list.find(
+          (c) =>
+            (detail.cityId && (c.id === detail.cityId || c.id === `city-${detail.cityId}`)) ||
+            (slug && (c.id === slug || c.id === `city-${slug}`)) ||
+            (detail.title && c.title.toLowerCase() === detail.title.toLowerCase())
+        );
+        if (match) {
+          setPulseCityId(match.id);
+          pulseTimerRef.current = window.setTimeout(() => setPulseCityId(null), 6000);
+        }
+      }
+    },
+    [refreshWorld]
+  );
 
   useEffect(() => {
     void refreshWorld();
     const interval = setInterval(refreshWorld, 30000);
     const onFocus = () => void refreshWorld();
-    const onCitiesChanged = () => void refreshWorld();
+    const onCitiesChangedEvt = (e: Event) => void onCitiesChanged(e);
     window.addEventListener("focus", onFocus);
-    window.addEventListener("polymax:cities-changed", onCitiesChanged);
+    window.addEventListener("polymax:cities-changed", onCitiesChangedEvt);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", onFocus);
-      window.removeEventListener("polymax:cities-changed", onCitiesChanged);
+      window.removeEventListener("polymax:cities-changed", onCitiesChangedEvt);
     };
-  }, [refreshWorld]);
+  }, [refreshWorld, onCitiesChanged]);
 
   useEffect(() => {
     if (foundPrompt) setTimeout(() => inputRef.current?.focus(), 50);
@@ -182,6 +223,7 @@ export function ParticleWorldView({
       <ParticleWorldCanvas
         world={world}
         selectedRegionId={selectedRegion?.id}
+        pulseRegionId={pulseCityId}
         onSelectRegion={handleSelectRegion}
         initialCamera={initialCamera}
         onCameraChange={(cam) => setCachedCamera(specKey, cam)}
