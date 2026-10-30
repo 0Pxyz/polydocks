@@ -17,9 +17,13 @@ import {
   write_city_file,
 } from "./index";
 import { resolveSafeCityPath } from "../../workspace/cityWorkspace";
+import { db } from "../../workspace/db";
 
 const TEST_CITY = "test-city-tools-catalog";
 const TEST_DIR = path.resolve(process.cwd(), "workspace", TEST_CITY);
+// Unique per run (isolated from concurrent demo activity and leftovers;
+// the global id guard would otherwise collide). Cleaned in afterAll.
+const LIFECYCLE_TAB_ID = `flashcards-lifecycle-${Date.now().toString(36)}`;
 
 describe("Agent Tool Catalog & Security Guards", () => {
   beforeAll(async () => {
@@ -28,6 +32,10 @@ describe("Agent Tool Catalog & Security Guards", () => {
 
   afterAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
+    for (const t of ["plugin_files", "plugin_versions", "plugins", "workspace_plugins"]) {
+      const col = t === "plugins" ? "id" : "plugin_id";
+      db.query(`DELETE FROM ${t} WHERE ${col} = ?`).run(LIFECYCLE_TAB_ID);
+    }
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
@@ -152,10 +160,13 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("create_tab, update_tab, and delete_tab manage dynamic micro-app lifecycle", async () => {
+    // Unique id per run: the id guard is global, so a fixed id collides with
+    // concurrent demo activity or leftovers in the shared database.
+    const tabId = LIFECYCLE_TAB_ID;
     // 1. Create
     const createRes = (await create_tab.execute(
       {
-        id: "flashcards",
+        id: tabId,
         title: "Flashcards",
         html: "<!DOCTYPE html><html><body><h1>Flashcards</h1></body></html>",
       },
@@ -163,12 +174,12 @@ describe("Agent Tool Catalog & Security Guards", () => {
     )) as any;
 
     expect(createRes.action).toBe("tab.created");
-    expect(createRes.tab.id).toBe("flashcards");
+    expect(createRes.tab.id).toBe(tabId);
 
     // 2. Update
     const updateRes = (await update_tab.execute(
       {
-        id: "flashcards",
+        id: tabId,
         title: "Updated Flashcards",
       },
       { cityId: TEST_CITY, step: 2 }
@@ -178,7 +189,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
 
     // 3. Delete without approval must be paused
     const deletePaused = (await delete_tab.execute(
-      { id: "flashcards", userApproved: false },
+      { id: tabId, userApproved: false },
       { cityId: TEST_CITY, step: 3 }
     )) as any;
 
@@ -186,7 +197,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
 
     // 4. Delete with approval succeeds
     const deleteDone = (await delete_tab.execute(
-      { id: "flashcards", userApproved: true },
+      { id: tabId, userApproved: true },
       { cityId: TEST_CITY, step: 4 }
     )) as any;
 
@@ -234,16 +245,42 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("build_city tool executes pipeline and constructs workspace assets", async () => {
-    const { build_city } = await import("./build_city");
-    const result = (await build_city.execute(
-      { cityId: TEST_CITY, topic: "Distributed Systems", depth: "overview" },
-      { cityId: TEST_CITY, step: 1 }
-    )) as any;
+    // Hermetic TinyFish: the pipeline needs search + fetch, never network.
+    const realFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, init?: any) => {
+      const u = String(url);
+      if (u.includes("api.search.tinyfish.ai")) {
+        const q = new URL(u).searchParams.get("query") || "topic";
+        return Response.json({
+          results: [
+            { title: `${q} paper`, url: "https://arxiv.org/abs/2301.00001", snippet: "S1" },
+            { title: `${q} guide`, url: "https://example.org/guide", snippet: "S2" },
+          ],
+        });
+      }
+      if (u.includes("api.fetch.tinyfish.ai")) {
+        const body = (() => { try { return JSON.parse((init as any)?.body || "{}"); } catch { return {}; } })();
+        const urls: string[] = Array.isArray(body.urls) ? body.urls : [];
+        return Response.json({
+          results: urls.map((pageUrl: string) => ({ url: pageUrl, status: 200, markdown: `# ${pageUrl}\n\nContent.` })),
+        });
+      }
+      return realFetch(url, init);
+    };
+    try {
+      const { build_city } = await import("./build_city");
+      const result = (await build_city.execute(
+        { cityId: TEST_CITY, topic: "Distributed Systems", depth: "overview" },
+        { cityId: TEST_CITY, step: 1 }
+      )) as any;
 
-    expect(result.success).toBe(true);
-    expect(result.topic).toBe("Distributed Systems");
-    expect(result.status).toBe("ready");
-    expect(result.questsCount).toBe(3);
+      expect(result.success).toBe(true);
+      expect(result.topic).toBe("Distributed Systems");
+      expect(result.status).toBe("ready");
+      expect(result.questsCount).toBe(3);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   }, 30000);
 
   it("list_maps, set_map, and place_city tools manage Maps v2 world cartography", async () => {
