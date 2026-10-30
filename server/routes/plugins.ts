@@ -340,6 +340,7 @@ pluginsRouter.post("/:pluginId/:capability", async (c) => {
   const cityId =
     (body && typeof body === "object" && typeof (body as any).cityId === "string"
       ? (body as any).cityId
+
       : undefined) ??
     (input && typeof input === "object" && typeof (input as any).cityId === "string"
       ? (input as any).cityId

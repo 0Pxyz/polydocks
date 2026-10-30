@@ -44,6 +44,8 @@ export interface ActivityRow {
   state: "running" | "done" | "error";
   startedAt: number;
   finishedAt?: number;
+  /** Machine tool name (used for provider branding, e.g. TinyFish). */
+  tool?: string;
 }
 
 interface ConversationStoreState {
@@ -544,6 +546,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                     label: event.statusLabel as string,
                     state: "running" as const,
                     startedAt: Date.now(),
+                    tool: event.name,
                   },
                 ],
               }));
@@ -777,8 +780,28 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
-          case "theme.applied": {
-            const applied = event.applied || {};
+          case "reader.open": {
+            const url = typeof event.url === "string" ? event.url : "";
+            if (url) {
+              try {
+                const { openExternalUrl } = await import("@/lib/platform");
+                openExternalUrl(url);
+                set({ statusText: `Opening "${event.title || url}".` });
+              } catch {
+                set({ statusText: `Open this link: ${url}` });
+              }
+            }
+            break;
+          }
+
+          case "source.added": {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("polymax:source.added", { detail: event.source }));
+            }
+            break;
+          }
+
+          case "theme.applied": {            const applied = event.applied || {};
             const failures: string[] = [];
 
             let wallpaperUrl =

@@ -103,7 +103,7 @@ export function useCityWorkspace(cityId: string) {
 
         // Enriched feed is the source of truth: one validated row per URL,
         // saved via sources.add. Legacy shapes (sources/* filenames, raw
-        // feed.json items) are never mapped into cards.
+        // feed.json items, "#" links) are never mapped into cards.
         let sourcesList: CitySourceItem[] = [];
         try {
           const feedRes = await fetch(`/api/cities/${encodeURIComponent(cityId)}/sources`);
@@ -111,19 +111,22 @@ export function useCityWorkspace(cityId: string) {
             const feedJson = await feedRes.json();
             if (Array.isArray(feedJson.data)) {
               sourcesList = feedJson.data
-                .filter((item: any) => item && typeof item.url === "string" && typeof item.title === "string")
+                .filter((item: any) => item && typeof item.url === "string" && item.url !== "#" && typeof item.title === "string")
                 .map((item: any) => ({
                   id: item.id,
                   title: item.title,
                   url: item.url,
-                  kind: item.kind,
-                  why: item.why,
-                  domain: item.site,
-                  image: item.image,
-                  hook: item.hook,
-                  publishedAt: item.publishedAt,
-                  readMinutes: item.readMinutes,
-                  fullText: item.fullText,
+                  kind: item.kind || "article",
+                  site: item.site,
+                  domain: item.site || (item.url ? new URL(item.url).hostname.replace(/^www\./, "") : "web"),
+                  image: item.image || null,
+                  author: item.author || null,
+                  hook: item.hook || null,
+                  why: item.why || item.hook || undefined,
+                  publishedAt: item.publishedAt || null,
+                  readMinutes: item.readMinutes || null,
+                  durationSec: item.durationSec || null,
+                  fullText: item.fullText || null,
                 }));
             }
           }
@@ -173,7 +176,7 @@ export function useCityWorkspace(cityId: string) {
           cityId,
           title: formatCityTitle(cityId),
           notes: notesList,
-          sources: sourcesList.length > 0 ? sourcesList : prev.sources,
+          sources: sourcesList,
           dynamicTabs,
           quests: prev.quests.length > 0 ? prev.quests : getDefaultQuests(formatCityTitle(cityId)),
         }));
@@ -189,6 +192,45 @@ export function useCityWorkspace(cityId: string) {
   useEffect(() => {
     fetchCityData();
   }, [fetchCityData]);
+
+  // Live SSE listener: when the agent or user adds a source, update the feed automatically
+  useEffect(() => {
+    const handleSourceAdded = (e: Event) => {
+      const added = (e as CustomEvent).detail;
+      if (!added || !added.url || !added.title || added.url === "#") return;
+      if (added.cityId && added.cityId !== cityId) return;
+
+      setData((prev) => {
+        if (prev.sources.some((s) => s.id === added.id || (s.url && s.url === added.url))) {
+          return prev;
+        }
+        const newSource: CitySourceItem = {
+          id: added.id,
+          title: added.title,
+          url: added.url,
+          kind: added.kind || "article",
+          site: added.site || (added.url ? new URL(added.url).hostname.replace(/^www\./, "") : "web"),
+          domain: added.site || (added.url ? new URL(added.url).hostname.replace(/^www\./, "") : "web"),
+          image: added.image || null,
+          author: added.author || null,
+          hook: added.hook || null,
+          why: added.hook || undefined,
+          publishedAt: added.publishedAt || null,
+          readMinutes: added.readMinutes || null,
+          durationSec: added.durationSec || null,
+        };
+        return {
+          ...prev,
+          sources: [newSource, ...prev.sources],
+        };
+      });
+    };
+
+    window.addEventListener("polymax:source.added", handleSourceAdded);
+    return () => {
+      window.removeEventListener("polymax:source.added", handleSourceAdded);
+    };
+  }, [cityId]);
 
   const saveNote = useCallback((name: string, content: string) => {
     setData((prev) => {

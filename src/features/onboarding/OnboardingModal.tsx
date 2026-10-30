@@ -2,7 +2,6 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   House,
-  Compass,
   Sparkle,
   Storefront,
   ArrowRight,
@@ -22,39 +21,32 @@ interface OnboardingStep {
 
 const STEPS: OnboardingStep[] = [
   {
-    title: "Home",
+    title: "Polydocks",
     description:
-      "Tell your agent what you want to learn, explore, or build. It maps the domain and builds the path forward.",
+      "Your personal agentic workspace. One agent, one dock, and plugins that extend what both can do.",
     icon: House,
     actionText: "Next",
   },
   {
-    title: "Knowledge Cities",
+    title: "Ask your agent",
     description:
-      "Explore subjects through connected concepts, primary research papers, interactive tools, and mastery quests.",
-    icon: Compass,
-    actionText: "Next",
-  },
-  {
-    title: "The Agentic Dock",
-    description:
-      "Your persistent control surface. Click any tool to mount its surface directly into the active viewport without window sprawl.",
-    icon: SquaresFour,
-    actionText: "Next",
-  },
-  {
-    title: "Your Dock Agent",
-    description:
-      "Press ⌘K or speak to research topics, synthesize custom interactive micro-tools on demand, and organize your workspace.",
+      "Research, build, write, automate, organize. Press ⌘K anytime — the agent does real work using the tools in your dock.",
     icon: Sparkle,
     actionText: "Next",
   },
   {
-    title: "Plugin Store",
+    title: "Your dock",
     description:
-      "Discover, install, and share reusable agent-synthesized capabilities across your learning workspaces.",
+      "Installed plugins live here as interactive tools. Click one to open it directly in your workspace.",
+    icon: SquaresFour,
+    actionText: "Next",
+  },
+  {
+    title: "Plugins, including Polymax",
+    description:
+      "Polymax knowledge worlds is one installed plugin among many. Discover, install, or ask the agent to create new ones.",
     icon: Storefront,
-    actionText: "Start Exploring",
+    actionText: "Start working",
   },
 ];
 

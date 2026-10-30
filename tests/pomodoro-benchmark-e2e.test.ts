@@ -38,6 +38,8 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
     (globalThis as any).localStorage = mockStorage;
     ensureDefaultWorkspace();
     // Clean up test records
+    db.query("DELETE FROM plugin_files WHERE plugin_id = 'pomodoro-benchmark-test'").run();
+    db.query("DELETE FROM plugin_versions WHERE plugin_id = 'pomodoro-benchmark-test'").run();
     db.query("DELETE FROM registry_plugins WHERE id = 'pomodoro-benchmark-test'").run();
     db.query("DELETE FROM workspace_plugins WHERE workspace_id LIKE '%-test' OR plugin_id = 'pomodoro-benchmark-test'").run();
     db.query("DELETE FROM workspaces WHERE id LIKE '%-test'").run();

@@ -56,7 +56,33 @@ export default function App() {
     wallpaperBlur,
   } = useThemeStore();
 
-  const { workspacePlugins } = useWorkspaceStore();
+  const { workspacePlugins, fetchWorkspaces } = useWorkspaceStore();
+
+  // Home must reflect installed plugins dynamically: fetch once on boot so
+  // the workspace registry (not a hardcoded list) drives the home dock
+  // section. Polymax ships as one entry below until #153 extracts it.
+  useEffect(() => {
+    void fetchWorkspaces();
+  }, [fetchWorkspaces]);
+
+  // Polymax as one installed plugin, not the app: the knowledge-worlds map
+  // surface listed alongside dynamically installed workspace plugins.
+  // Migration shim — the full extraction (map/cities/quests as real plugins)
+  // is tracked in #153; until then this entry opens the maps view.
+  const homePlugins = useMemo(
+    () => [
+      { id: "maps", label: "Polymax", detail: "Knowledge worlds", iconKey: "Compass" },
+      ...workspacePlugins
+        .filter((wp) => wp.enabled && wp.plugin && wp.pluginId !== "maps")
+        .map((wp) => ({
+          id: wp.pluginId,
+          label: wp.plugin?.name || wp.pluginId,
+          detail: wp.plugin?.description,
+          iconKey: wp.plugin?.icon,
+        })),
+    ],
+    [workspacePlugins]
+  );
 
   // Memoized: fresh arrays every render would retrigger the tab-host
   // registration effect below and loop openTab -> rerender forever.
@@ -620,9 +646,11 @@ export default function App() {
                     const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
                     setLayoutState(isWide ? "side" : "sheet");
                   }}
-                  onEnterCity={(cityName) => {
-                    setSelectedCity(cityName);
-                    enterCity(cityName);
+                  installedPlugins={homePlugins}
+                  onOpenPlugin={(pluginId) => handleSelectTool(pluginId)}
+                  onOpenStore={() => {
+                    setActiveToolId("plugins");
+                    setDockActiveTool("plugins");
                   }}
                 />
               </DockSurface>

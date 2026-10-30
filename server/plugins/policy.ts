@@ -87,7 +87,7 @@ export async function evaluateCapabilityPolicy(params: {
   // 3. External operations: Request user confirmation on first use
   if (risk === "external") {
     const hasGrant = pluginRegistry.hasGrant(plugin.id, "external", scope);
-    if (!hasGrant && manifest.trust !== "core") {
+    if (!hasGrant && manifest.trust !== "core" && manifest.trust !== "first-party") {
       const decision = await approvalManager.requestApproval({
         pluginId: plugin.id,
         capabilityId: capability.id,

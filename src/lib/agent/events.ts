@@ -130,6 +130,11 @@ export type UIEvent =
       reason?: string;
     }
   | {
+      type: "source.added";
+      step: number;
+      source: Record<string, unknown>;
+    }
+  | {
       type: "approval.required";
       step: number;
       approval: ApprovalRequest;
@@ -172,6 +177,19 @@ export type UIEvent =
     };
 
 /**
+ * Tools powered by TinyFish web discovery. Only these show TinyFish branding.
+ */
+export const TINYFISH_TOOLS = ["search_web", "fetch_page"] as const;
+export type TinyFishTool = (typeof TINYFISH_TOOLS)[number];
+
+/** Local copy of the TinyFish mark (public/tinyfish-logo.png). */
+export const TINYFISH_LOGO_SRC = "/tinyfish-logo.png";
+
+export function isTinyFishTool(toolName: string): boolean {
+  return (TINYFISH_TOOLS as readonly string[]).includes(toolName);
+}
+
+/**
  * Human-friendly status line mapping for substantive tools.
  * Internal bookkeeping, inspections, and instant queries return null to suppress noisy progress updates.
  */
@@ -179,10 +197,10 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
   switch (toolName) {
     case "search_web": {
       const q = typeof args?.query === "string" ? args.query : "";
-      return q ? `Searching the web for "${q}"…` : "Searching the web…";
+      return q ? `Searching the web via TinyFish for "${q}"…` : "Searching the web via TinyFish…";
     }
     case "fetch_page":
-      return "Reading primary sources…";
+      return "Reading primary sources via TinyFish…";
     case "create_tab": {
       const title = typeof args?.title === "string" ? args.title : "";
       return title ? `Building "${title}"…` : "Building the interactive experience…";
@@ -491,6 +509,12 @@ export function adaptBackendEvent(raw: {
       };
     }
 
+    case "source.added":
+      return {
+        type: "source.added",
+        step,
+        source: payload,
+      };
     case "error":
       return {
         type: "agent.error",
