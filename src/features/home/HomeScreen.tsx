@@ -154,7 +154,7 @@ export function HomeScreen({
               Discover
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {visiblePlugins.map((plugin, index) => {
               const Icon = resolveIcon(plugin.iconKey || plugin.id);
               return (
