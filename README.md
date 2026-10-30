@@ -59,6 +59,10 @@ One model per job. Plugins declare a `modelRole`; `server/agent/modelRegistry.ts
 
 Every model failure returns a structured `{ ok: false, error: { code, message, retryable, role } }` — never a fake success. Details in [docs/meta-model-api.md](docs/meta-model-api.md).
 
+## Powered by Modal (agent code execution)
+
+Isolated per-workspace sandboxes run shell commands, files and dev servers; previews come back as tunnel URLs. Runs on Modal (`node:22-slim` image, per-workspace volume at `/repo`); configure with `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` in `.env` or `modal setup`. Details in [docs/sandbox.md](docs/sandbox.md).
+
 ---
 
 ## Current status (honest)

@@ -213,6 +213,20 @@ CREATE TABLE IF NOT EXISTS session_transcripts (
 
 CREATE INDEX IF NOT EXISTS idx_session_transcripts_session_id ON session_transcripts(session_id);
 
+-- Agent sandbox identity (Modal). One row per workspace: the sandbox id,
+-- volume and preview live here; product data stays in workspace tables.
+-- Sandboxes and volumes are disposable — this row is only a pointer.
+CREATE TABLE IF NOT EXISTS workspace_sandboxes (
+  workspace_id TEXT PRIMARY KEY,
+  sandbox_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  volume TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  preview_url TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 -- PolyDocks V2 Multi-Workspace Architecture
 
 CREATE TABLE IF NOT EXISTS workspaces (

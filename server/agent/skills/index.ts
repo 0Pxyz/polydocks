@@ -407,6 +407,16 @@ export function isThemeIntent(prompt: string): boolean {
   return false;
 }
 
+/** Isolated execution: run code, servers, previews (never conversational). */
+export function isSandboxIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  if (!lower.trim()) return false;
+  return (
+    /\b(run|execute|executa|executar|rode|rodar|start|inicie|iniciar|serve|preview|deploy local|install deps|npm install|server|servidor|terminal|logs|console output)\b/.test(lower) &&
+    /\b(code|código|codigo|app|application|aplicativo|script|server|servidor|command|comando|terminal|sandbox|preview|localhost|porta|port|test|teste|debug)\b/.test(lower)
+  );
+}
+
 /** Verify-before-done protocol: state checks, not new work. */
 export function isVerifyIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -431,6 +441,7 @@ export type DomainSkillName =
   | "plugins"
   | "capabilities-and-mcp"
   | "content-and-reader"
+  | "sandbox"
   | "world-and-cities"
   | "memory-and-files"
   | "verify-and-report";
@@ -453,6 +464,7 @@ export function selectDomainSkills(prompt: string): DomainSkillName[] {
   if (isVerifyIntent(prompt) && ARTIFACT_WORD.test(prompt.toLowerCase())) add("plugins");
   if (isThemeIntent(prompt)) add("theme");
   if (isCapabilitiesIntent(prompt)) add("capabilities-and-mcp");
+  if (isSandboxIntent(prompt)) add("sandbox");
   if (!picked.includes("capabilities-and-mcp") && (isResearchIntent(prompt) || isContentOpenIntent(prompt)))
     add("content-and-reader");
   if (isWorldPlanningIntent(prompt)) add("world-and-cities");

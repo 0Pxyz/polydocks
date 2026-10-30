@@ -31,7 +31,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(54);
+    expect(defaultTools.length).toBe(62);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -85,8 +85,15 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("list_tasks");
     expect(names).toContain("list_artifacts");
     expect(names).toContain("read_artifact");
+    expect(names).toContain("sandbox_exec");
+    expect(names).toContain("sandbox_write_file");
+    expect(names).toContain("sandbox_read_file");
+    expect(names).toContain("sandbox_list_files");
+    expect(names).toContain("sandbox_serve");
+    expect(names).toContain("sandbox_logs");
+    expect(names).toContain("sandbox_status");
+    expect(names).toContain("sandbox_terminate");
   });
-
   it("minimal surface is the verb tools", () => {
     const names = minimalTools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -109,9 +116,9 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "plugins.uninstall",
       ].sort()
     );
-    // Full catalog is exactly the current 54 (default mode unchanged);
+    // Full catalog is exactly the current 62 (default mode unchanged);
     // verb tools live only in the minimal surface.
-    expect(fullTools.length).toBe(54);
+    expect(fullTools.length).toBe(62);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 

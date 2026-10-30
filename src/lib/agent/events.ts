@@ -215,6 +215,23 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       const action = typeof args?.action === "string" ? args.action : "";
       return action ? `Running "${action}"…` : "Running the tool…";
     }
+    case "sandbox_exec": {
+      const command = typeof args?.command === "string" ? args.command : "";
+      return command ? `Running \`${command.slice(0, 60)}\` in the sandbox…` : "Running in the sandbox…";
+    }
+    case "sandbox_write_file": {
+      const p = typeof args?.path === "string" ? args.path : "";
+      return p ? `Writing ${p} in the sandbox…` : "Writing in the sandbox…";
+    }
+    case "sandbox_serve":
+      return "Starting the preview server…";
+    case "sandbox_read_file":
+    case "sandbox_list_files":
+    case "sandbox_logs":
+      return "Reading the sandbox…";
+    case "sandbox_status":
+    case "sandbox_terminate":
+      return null;
     case "apply_theme":
       return "Applying theme…";
     case "publish_plugin":
@@ -519,6 +536,28 @@ export function adaptBackendEvent(raw: {
         id: undefined,
         title: typeof payload.title === "string" ? payload.title : undefined,
         cityId: typeof payload.cityId === "string" ? payload.cityId : undefined,
+        site: undefined,
+        image: undefined,
+        mode: undefined,
+        markdown: undefined,
+        embedUrl: undefined,
+        reason: undefined,
+      };
+    }
+
+    case "sandbox.preview": {
+      const url = typeof payload.previewUrl === "string" ? payload.previewUrl : "";
+      if (!url) return null;
+      return {
+        type: "reader.open",
+        step,
+        url,
+        id: undefined,
+        title:
+          typeof payload.port !== "undefined"
+            ? `Sandbox preview :${String(payload.port)}`
+            : "Sandbox preview",
+        cityId: undefined,
         site: undefined,
         image: undefined,
         mode: undefined,

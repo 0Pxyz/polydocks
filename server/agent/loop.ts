@@ -46,6 +46,10 @@ export interface AgentStepEvent {
     | "plugin.updated"
     | "plugin.published"
     | "plugin.operated"
+    | "browser.open"
+    | "sandbox.preview"
+    | "city.enter"
+    | "dock.layout"
     | "theme.apply"
     | "agent.finish"
     | "error";
@@ -928,6 +932,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           await emit({
             step: currentStep,
             type: "tray.open",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
+        // Sandbox previews must surface in the UI: sandbox_serve runs through
+        // the sandbox.serve capability, so emit a preview event the same way
+        // open_source emits browser.open.
+        if (
+          toolName === "sandbox_serve" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).success === true &&
+          typeof (toolOutput as any).previewUrl === "string"
+        ) {
+          await emit({
+            step: currentStep,
+            type: "sandbox.preview",
             payload: toolOutput as Record<string, unknown>,
           });
         }
