@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentTool } from "./types";
 import { writeLegacyFeature, writeFeature } from "../../workspace/features";
 import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
+import { isValidIconId, findCloseMatches } from "../../icons/catalog";
 
 export interface CreateTabArgs {
   id: string;
@@ -28,7 +29,24 @@ export const create_tab: AgentTool<CreateTabArgs> = {
           "Tab id must contain only lowercase letters, numbers, hyphens or underscores"
         ),
       title: z.string().min(1).describe("Human-readable title shown on the dock icon / header"),
-      icon: z.string().default("Layers").describe("Lucide icon name (e.g. Layers, Scale, Bookmark)"),
+      icon: z
+        .string()
+        .optional()
+        .default("layers")
+        .superRefine((val, ctx) => {
+          if (!val) return;
+          if (!isValidIconId(val)) {
+            const matches = findCloseMatches(val, 4);
+            const suggestion = matches.length > 0 ? ` Did you mean: ${matches.join(", ")}?` : "";
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Unknown icon '${val}'.${suggestion} Call search_icons to find a valid icon id.`,
+            });
+          }
+        })
+        .describe(
+          "Dock icon id from the renderable icon catalog (e.g. cards, atom, code, stack, scales). Call search_icons to discover valid ids; unknown ids are rejected."
+        ),
       code: z
         .string()
         .optional()
@@ -67,7 +85,7 @@ export const create_tab: AgentTool<CreateTabArgs> = {
     const manifest = {
       id: normalized,
       title: args.title,
-      icon: args.icon || "Layers",
+      icon: (args.icon || "layers").toLowerCase().trim(),
       scope: args.scope || "city",
       capabilities: args.capabilities || [],
       permissions: args.permissions || [],

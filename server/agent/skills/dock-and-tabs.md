@@ -9,11 +9,11 @@
 ## Tools in order
 
 Read: `list_tabs({cityId?})`, then `open_tab({tabId, cityId?})` or `open_intent({tabId, url?, payload?})`. `inspect_tab` is debug-only. `close_tray({})` takes no id and returns to the map.
-Write: `create_tab`, then `open_tab` to show it. `update_tab({id, ...})` needs a city scope or it throws. `delete_tab({id, userApproved, cityId?})` without `userApproved: true` only returns `approval_required`.
+Write: `create_tab`, then `open_tab`. `update_tab` needs a city scope. `delete_tab({id, userApproved, cityId?})` without `userApproved: true` only returns `approval_required`.
 
 ## Backend contract
 
-`create_tab`: `id` matches `^[a-z0-9_-]+$`, `title` required, `icon` is a Lucide name (default `Layers`), exactly one of `code` (TSX) or `html` (legacy), `scope` `city` (default) or `global`. Returns `{success, tab, cityId}`; emits `tab.created`. `open_tab`/`open_intent` emit `tray.open`; `open_intent` also emits `tab.prime` and persists intent state. `update_tab` returns `tab.updated`; `delete_tab` returns `tab.deleted`.
+`create_tab`: `id` matches `^[a-z0-9_-]+$`, `title` required, `icon` is a catalog id (default `layers`; use `search_icons`, unknown ids rejected), exactly one of `code` (TSX) or `html` (legacy), `scope` `city` (default) or `global`. Returns `{success, tab, cityId}`; emits `tab.created`. `open_tab`/`open_intent` emit `tray.open`; `open_intent` also emits `tab.prime` and persists intent state. `update_tab` returns `tab.updated`; `delete_tab` returns `tab.deleted`.
 
 ## Sandbox, bridge, code rules
 

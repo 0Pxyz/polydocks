@@ -31,7 +31,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
   });
 
   it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(45);
+    expect(defaultTools.length).toBe(47);
     const names = defaultTools.map((t) => t.name);
     expect(names).toContain("list_tabs");
     expect(names).toContain("open_tab");
@@ -102,9 +102,9 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "plugins.uninstall",
       ].sort()
     );
-    // Full catalog is exactly the current 45 (default mode unchanged);
+    // Full catalog is exactly the current 47 (default mode unchanged);
     // verb tools live only in the minimal surface.
-    expect(fullTools.length).toBe(45);
+    expect(fullTools.length).toBe(47);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
