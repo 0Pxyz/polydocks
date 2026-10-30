@@ -313,7 +313,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
     // Verify friendly status mapping for these substantive tools
     expect(getFriendlyToolStatus("search_web", { query: "agentic coding developments" })).toBe(
-      'Searching the web for "agentic coding developments"…'
+      'Searching the web via TinyFish for "agentic coding developments"…'
     );
     expect(getFriendlyToolStatus("write_file")).toBe("Writing your notes…");
   });

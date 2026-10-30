@@ -20,6 +20,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import { Orb } from "./Orb";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
@@ -787,12 +788,24 @@ export function AgentConversation({
             const isLastMessage = idx === messages.length - 1;
 
             if (isTool) {
+              const branded =
+                (msg.toolName && isTinyFishTool(msg.toolName)) || msg.content.includes("TinyFish");
               return (
                 <div
                   key={msg.id}
                   className="flex items-center gap-2 text-xs font-mono text-muted-foreground/80 py-1"
                 >
-                  <span className="text-[var(--accent-lime)] text-[10px]">✦</span>
+                  {branded ? (
+                    <img
+                      src={TINYFISH_LOGO_SRC}
+                      alt="TinyFish"
+                      width={14}
+                      height={14}
+                      className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <span className="text-[var(--accent-lime)] text-[10px]">✦</span>
+                  )}
                   <span>{msg.content}</span>
                 </div>
               );
@@ -938,12 +951,22 @@ export function AgentConversation({
                   0,
                   Math.floor(((row.finishedAt ?? now) - row.startedAt) / 1000)
                 );
+                const branded =
+                  (row.tool && isTinyFishTool(row.tool)) || row.label.includes("TinyFish");
                 return (
                   <div
                     key={row.id}
                     className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
                   >
-                    {row.state === "running" ? (
+                    {branded ? (
+                      <img
+                        src={TINYFISH_LOGO_SRC}
+                        alt="TinyFish"
+                        width={14}
+                        height={14}
+                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                      />
+                    ) : row.state === "running" ? (
                       <span
                         className={cn(
                           "text-[var(--accent-lime)] text-[10px]",
@@ -964,11 +987,21 @@ export function AgentConversation({
               })}
               {activity.length === 0 && (statusText || currentPhase) && (
                 <div className="flex items-center gap-2 text-xs font-mono text-[var(--accent-lime)]">
-                  <span
-                    className={cn(!reduceMotion && "animate-spin inline-block")}
-                  >
-                    ✦
-                  </span>
+                  {(statusText || "").includes("TinyFish") ? (
+                    <img
+                      src={TINYFISH_LOGO_SRC}
+                      alt="TinyFish"
+                      width={14}
+                      height={14}
+                      className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <span
+                      className={cn(!reduceMotion && "animate-spin inline-block")}
+                    >
+                      ✦
+                    </span>
+                  )}
                   <span>{statusText || currentPhase || "Thinking…"}</span>
                 </div>
               )}
