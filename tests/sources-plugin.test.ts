@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { invoke_capability } from "../server/agent/tools/invoke_capability";
 import { find_capabilities } from "../server/agent/tools/find_capabilities";
 import { runContractCommand } from "../server/plugins/contractCli";
@@ -200,10 +202,35 @@ describe("Sources Plugin & First-Party Capabilities", () => {
   });
 
   it("migrates existing city workspace feed.json and sources into SQLite sources table", async () => {
-    const res = await migrateLegacyCitySources();
-    expect(typeof res.migratedCount).toBe("number");
-    const sources = listSources("neural-networks");
-    expect(sources.length).toBeGreaterThan(0);
-    expect(sources.some((s) => s.url.includes("nature.com") || s.title.includes("Deep Learning"))).toBe(true);
+    // Self-sufficient fixtures: the migration reads real workspace files,
+    // so the test writes its own instead of depending on seeded demo data.
+    const fixtureCity = "test-migrate-ws";
+    const fixtureRoot = path.resolve(process.cwd(), "workspace", fixtureCity);
+    await fs.mkdir(path.join(fixtureRoot, "sources"), { recursive: true });
+    await fs.writeFile(
+      path.join(fixtureRoot, "feed.json"),
+      JSON.stringify({
+        items: [
+          { url: "https://www.nature.com/articles/dl-2015", title: "Deep Learning", kind: "paper" },
+        ],
+      }),
+      "utf-8"
+    );
+    await fs.writeFile(
+      path.join(fixtureRoot, "sources", "legacy.json"),
+      JSON.stringify({ url: "https://arxiv.org/abs/1409.1556", title: "Legacy Paper", kind: "paper" }),
+      "utf-8"
+    );
+    try {
+      const res = await migrateLegacyCitySources();
+      expect(typeof res.migratedCount).toBe("number");
+      const sources = listSources(fixtureCity);
+      expect(sources.length).toBeGreaterThan(0);
+      expect(sources.some((s) => s.url.includes("nature.com") || s.title.includes("Deep Learning"))).toBe(true);
+      expect(sources.some((s) => s.url.includes("arxiv.org"))).toBe(true);
+    } finally {
+      await fs.rm(fixtureRoot, { recursive: true, force: true }).catch(() => {});
+      db.query("DELETE FROM sources WHERE city_id = ?").run(fixtureCity);
+    }
   });
 });

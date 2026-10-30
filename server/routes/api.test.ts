@@ -49,24 +49,43 @@ describe("Polymax REST API Endpoints", () => {
   });
 
   it("GET and POST /api/cities/:id/feed manages curated discovery feeds", async () => {
-    const refreshRes = await app.fetch(
-      new Request(`http://localhost:3000/api/cities/${TEST_CITY}/feed/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: "Distributed Consensus" }),
-      })
-    );
+    // Hermetic TinyFish: the feed pipeline needs search hits, never network.
+    const realFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any, init?: any) => {
+      const u = String(url);
+      if (u.includes("api.search.tinyfish.ai")) {
+        const q = new URL(u).searchParams.get("query") || "topic";
+        return Response.json({
+          results: [
+            { title: `${q} paper`, url: "https://arxiv.org/abs/2301.00001", snippet: "S1" },
+            { title: `${q} guide`, url: "https://example.org/guide", snippet: "S2" },
+          ],
+        });
+      }
+      return realFetch(url, init);
+    };
+    try {
+      const refreshRes = await app.fetch(
+        new Request(`http://localhost:3000/api/cities/${TEST_CITY}/feed/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic: "Distributed Consensus" }),
+        })
+      );
 
-    expect(refreshRes.status).toBe(200);
-    const refreshData = (await refreshRes.json()) as any;
-    expect(refreshData.success).toBe(true);
-    expect(refreshData.data.items.length).toBeGreaterThan(0);
+      expect(refreshRes.status).toBe(200);
+      const refreshData = (await refreshRes.json()) as any;
+      expect(refreshData.success).toBe(true);
+      expect(refreshData.data.items.length).toBeGreaterThan(0);
 
-    const getRes = await app.fetch(new Request(`http://localhost:3000/api/cities/${TEST_CITY}/feed`));
-    expect(getRes.status).toBe(200);
-    const getData = (await getRes.json()) as any;
-    expect(getData.success).toBe(true);
-    expect(getData.data.items.length).toBe(refreshData.data.items.length);
+      const getRes = await app.fetch(new Request(`http://localhost:3000/api/cities/${TEST_CITY}/feed`));
+      expect(getRes.status).toBe(200);
+      const getData = (await getRes.json()) as any;
+      expect(getData.success).toBe(true);
+      expect(getData.data.items.length).toBe(refreshData.data.items.length);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   it("POST /api/agent validates prompt parameter", async () => {

@@ -46,26 +46,45 @@ describe("Issue #165 — one source of truth per data type", () => {
     expect(src).not.toContain("INTO city_sources");
     expect(src).toContain("INTO sources");
 
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
-    const before = (db.query("SELECT COUNT(*) as n FROM city_sources WHERE city_id = ?").get(CITY) as any).n;
-    const { generateCityFeed } = await import("../server/discovery/feedGenerator");
-    const feed = await generateCityFeed(CITY, "Persistence");
-    expect(feed.items.length).toBeGreaterThan(0);
+    // Hermetic TinyFish: canned search hits, no network, no fabricated data.
+    const realFetch = globalThis.fetch;
+    (globalThis as any).fetch = async (url: any) => {
+      const u = String(url);
+      if (u.includes("api.search.tinyfish.ai")) {
+        const q = new URL(u).searchParams.get("query") || "topic";
+        return Response.json({
+          results: [
+            { title: `${q} paper`, url: "https://arxiv.org/abs/2301.00001", snippet: "S1" },
+            { title: `${q} guide`, url: "https://example.org/guide", snippet: "S2" },
+          ],
+        });
+      }
+      return realFetch(url);
+    };
+    try {
+      db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
+      const before = (db.query("SELECT COUNT(*) as n FROM city_sources WHERE city_id = ?").get(CITY) as any).n;
+      const { generateCityFeed } = await import("../server/discovery/feedGenerator");
+      const feed = await generateCityFeed(CITY, "Persistence");
+      expect(feed.items.length).toBeGreaterThan(0);
 
-    const rows = db.query("SELECT url, title, kind FROM sources WHERE city_id = ?").all(CITY) as any[];
-    expect(rows.length).toBeGreaterThan(0);
-    // Same URLs as the feed, deduped by (city_id, url).
-    const urls = new Set(rows.map((r) => r.url));
-    expect(urls.size).toBe(rows.length);
-    for (const item of feed.items) {
-      expect([...urls].some((u) => u === item.url || item.url.includes(u.replace(/^https?:\/\//, "").slice(0, 20)) || u.length > 0)).toBe(true);
+      const rows = db.query("SELECT url, title, kind FROM sources WHERE city_id = ?").all(CITY) as any[];
+      expect(rows.length).toBeGreaterThan(0);
+      // Same URLs as the feed, deduped by (city_id, url).
+      const urls = new Set(rows.map((r) => r.url));
+      expect(urls.size).toBe(rows.length);
+      for (const item of feed.items) {
+        expect([...urls].some((u) => u === item.url || item.url.includes(u.replace(/^https?:\/\//, "").slice(0, 20)) || u.length > 0)).toBe(true);
+      }
+      const after = (db.query("SELECT COUNT(*) as n FROM city_sources WHERE city_id = ?").get(CITY) as any).n;
+      expect(after).toBe(before);
+
+      // Legacy feed.json compat write is preserved for the /feed reader.
+      const raw = await fs.readFile(path.resolve(process.cwd(), "workspace", CITY, "feed.json"), "utf-8");
+      expect(JSON.parse(raw).items.length).toBe(feed.items.length);
+    } finally {
+      globalThis.fetch = realFetch;
     }
-    const after = (db.query("SELECT COUNT(*) as n FROM city_sources WHERE city_id = ?").get(CITY) as any).n;
-    expect(after).toBe(before);
-
-    // Legacy feed.json compat write is preserved for the /feed reader.
-    const raw = await fs.readFile(path.resolve(process.cwd(), "workspace", CITY, "feed.json"), "utf-8");
-    expect(JSON.parse(raw).items.length).toBe(feed.items.length);
   });
 
   it("plugin_versions backfills into plugin_files (idempotent, reversible)", async () => {
