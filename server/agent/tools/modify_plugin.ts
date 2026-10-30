@@ -3,6 +3,7 @@ import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
 import { normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
 import { readFeature } from "../../workspace/features";
+import { isValidIconId, findCloseMatches } from "../../icons/catalog";
 
 export interface ModifyPluginArgs {
   id: string;
@@ -48,7 +49,21 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
         .describe("Clear explanation of what was changed, added, or fixed"),
       name: z.string().optional().describe("Optional updated display name"),
       description: z.string().optional().describe("Optional updated description"),
-      icon: z.string().optional().describe("Optional updated Phosphor icon name"),
+      icon: z
+        .string()
+        .optional()
+        .superRefine((val, ctx) => {
+          if (!val) return;
+          if (!isValidIconId(val)) {
+            const matches = findCloseMatches(val, 4);
+            const suggestion = matches.length > 0 ? ` Did you mean: ${matches.join(", ")}?` : "";
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Unknown icon '${val}'.${suggestion} Call search_icons to find a valid icon id.`,
+            });
+          }
+        })
+        .describe("Optional updated dock icon id from the renderable icon catalog (see search_icons)"),
       workspaceId: z.string().optional().describe("Workspace where plugin is located"),
       userApproved: z
         .boolean()
@@ -86,6 +101,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
     }
     const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
     const normalized = normalizePluginId(args.id);
+    const cleanIcon = args.icon ? args.icon.toLowerCase().trim() : undefined;
 
     // Surgical patch path: apply find/replace to the current source so small
     // fixes do not require resending the whole file.
@@ -121,14 +137,14 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
         changeSummary: args.changeSummary,
         name: args.name,
         description: args.description,
-        icon: args.icon,
+        icon: cleanIcon,
         workspaceId,
         actor: "agent",
       });
       if (!updated.success) return updated;
       ensurePluginRegisteredAndMounted(normalized, workspaceId, {
         title: updated.name,
-        icon: args.icon,
+        icon: cleanIcon,
       });
       const verification = await verifyPluginStateAsync(normalized, workspaceId);
       if (!verification.ok) {
@@ -155,7 +171,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       }
       const manifest = { ...current.manifest };
       if (args.name) manifest.title = args.name;
-      if (args.icon) manifest.icon = args.icon;
+      if (cleanIcon) manifest.icon = cleanIcon;
       if (args.description) (manifest as Record<string, unknown>).description = args.description;
       manifest.updatedAt = new Date().toISOString();
       // Preserve the existing source so future patches keep working.
@@ -213,7 +229,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
       changeSummary: args.changeSummary,
       name: args.name,
       description: args.description,
-      icon: args.icon,
+      icon: cleanIcon,
       workspaceId,
       actor: "agent",
     });
@@ -221,7 +237,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
 
     ensurePluginRegisteredAndMounted(normalized, workspaceId, {
       title: updated.name,
-      icon: args.icon,
+      icon: cleanIcon,
     });
     const verification = await verifyPluginStateAsync(normalized, workspaceId);
     if (!verification.ok) {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentTool } from "./types";
 import { readFeature, writeFeature, writeLegacyFeature } from "../../workspace/features";
 import { normalizePluginId, verifyPluginStateAsync, ensurePluginRegisteredAndMounted } from "../../plugins/verify";
+import { isValidIconId, findCloseMatches } from "../../icons/catalog";
 
 export interface UpdateTabArgs {
   id: string;
@@ -19,7 +20,21 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
   schema: z.object({
     id: z.string().describe("Target tab id to update"),
     title: z.string().optional(),
-    icon: z.string().optional(),
+    icon: z
+      .string()
+      .optional()
+      .superRefine((val, ctx) => {
+        if (!val) return;
+        if (!isValidIconId(val)) {
+          const matches = findCloseMatches(val, 4);
+          const suggestion = matches.length > 0 ? ` Did you mean: ${matches.join(", ")}?` : "";
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unknown icon '${val}'.${suggestion} Call search_icons to find a valid icon id.`,
+          });
+        }
+      })
+      .describe("Dock icon id from the renderable icon catalog (see search_icons)"),
     code: z
       .string()
       .optional()
@@ -38,7 +53,7 @@ export const update_tab: AgentTool<UpdateTabArgs> = {
     const manifest = { ...current.manifest };
 
     if (args.title) manifest.title = args.title;
-    if (args.icon) manifest.icon = args.icon;
+    if (args.icon) manifest.icon = args.icon.toLowerCase().trim();
     manifest.updatedAt = new Date().toISOString();
 
     if (args.code) {

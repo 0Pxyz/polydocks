@@ -40,6 +40,8 @@ import { recall_memory } from "./recall_memory";
 import { record_memory } from "./record_memory";
 import { plan_ascii_world } from "./plan_ascii_world";
 import { dock_search } from "./dock_search";
+import { search_icons } from "./search_icons";
+import { list_icon_categories } from "./list_icon_categories";
 import { dock_pin } from "./dock_pin";
 import { dock_unpin } from "./dock_unpin";
 import { dock_close } from "./dock_close";
@@ -60,6 +62,8 @@ export {
   inspect_tab,
   close_tray,
   dock_search,
+  search_icons,
+  list_icon_categories,
   dock_pin,
   dock_unpin,
   dock_close,
@@ -128,6 +132,8 @@ const fullToolsList: AgentTool[] = [
   inspect_tab,
   close_tray,
   dock_search,
+  search_icons,
+  list_icon_categories,
   dock_pin,
   dock_unpin,
   dock_close,

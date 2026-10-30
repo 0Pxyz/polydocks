@@ -1,6 +1,6 @@
 # Skill: Plugins (persistent tools: create, patch, run, share)
 
-> A plugin is a workspace-persistent tool. Any fix or change to an existing one goes `inspect_experience` first, then `modify_plugin`. Never recreate to fix. For city tabs see `dock-and-tabs`.
+> A plugin is a workspace-persistent tool. Fixes go `inspect_experience` first, then `modify_plugin`; Never recreate to fix. For city tabs see `dock-and-tabs`.
 
 ## Lifecycle
 
@@ -8,14 +8,14 @@
 
 ## Backend contract
 
-`create_plugin`: `id` matches `^[a-z0-9_-]+$`; `name`, `description`, `code` required; `icon` is a Phosphor name (default `Cards`); plus `workspaceId?`, `idempotencyKey?`, `capabilities?`. Returns `{success, pluginId, version}`; success emits `plugin.created`. Duplicate ids refused; `verifyPluginState` must pass.
+`create_plugin`: `id` matches `^[a-z0-9_-]+$`; `name`, `description`, `code` required; `icon` is a catalog id (default `cards`; use `search_icons`, unknown ids rejected); plus `workspaceId?`, `idempotencyKey?`, `capabilities?`. Returns `{success, pluginId, version}`; success emits `plugin.created`. Duplicate ids refused; `verifyPluginState` must pass.
 `modify_plugin`: `id`, `changeSummary` required plus `patch {find, replace}`, full `code`, or metadata fields. Bumps version (history kept), preserves stored keys, emits `plugin.updated`.
 `inspect_experience({id, cityId?})`: `{success, errors (last 10), isHealthy, verification}` or not-found. Always inspect before writing a fix.
 `operate_plugin({pluginId, action, args?, workspaceId?})`: runs a declared capability; undeclared fails. Success emits `plugin.operated`. `publish_plugin`/`promote_to_plugin` emit `plugin.published`.
 
 ## Design (must look native, docs/design-slop.md)
 
-Theme tokens only. No bordered cards, Separator rules, or Badge pills. Sentence case, normal tracking. Group with whitespace, not boxes.
+Theme tokens only. No bordered cards, Separators, or Badge pills. Sentence case, normal tracking. Group with whitespace, not boxes.
 
 ## Code, storage, verification
 

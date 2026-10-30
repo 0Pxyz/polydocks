@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
 import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync } from "../../plugins/verify";
+import { isValidIconId, findCloseMatches } from "../../icons/catalog";
 
 export interface CreatePluginArgs {
   id: string;
@@ -38,8 +39,21 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
     icon: z
       .string()
       .optional()
-      .default("Cards")
-      .describe("Phosphor icon name (e.g. 'Clock', 'Cards', 'Brain', 'Globe', 'Sparkle')"),
+      .default("cards")
+      .superRefine((val, ctx) => {
+        if (!val) return;
+        if (!isValidIconId(val)) {
+          const matches = findCloseMatches(val, 4);
+          const suggestion = matches.length > 0 ? ` Did you mean: ${matches.join(", ")}?` : "";
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unknown icon '${val}'.${suggestion} Call search_icons to find a valid icon id.`,
+          });
+        }
+      })
+      .describe(
+        "Dock icon id from the renderable icon catalog (e.g. clock, cards, brain, globe, sparkle). Call search_icons to discover valid ids; unknown ids are rejected."
+      ),
     code: z
       .string()
       .min(10)
@@ -119,7 +133,7 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       id: normalized,
       name: args.name,
       description: args.description,
-      icon: args.icon,
+      icon: (args.icon || "cards").toLowerCase().trim(),
       code: args.code,
       workspaceId,
       capabilities: args.capabilities,
