@@ -275,8 +275,8 @@ export async function installFromRegistry(
  * Seeds default canonical community plugins if none exist in the database.
  */
 export function seedDefaultCommunityPlugins(): void {
+  ensureRegistrySchema();
   const count = db.query<any, []>("SELECT COUNT(*) as count FROM registry_plugins").get()?.count || 0;
-  if (count > 0) return;
 
   const now = new Date().toISOString();
 
@@ -299,18 +299,18 @@ export function seedDefaultCommunityPlugins(): void {
     app.innerHTML = \`
       <div style="max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px;">
         <div style="display: flex; gap: 8px;">
-          <button id="m-work" class="primary" style="padding: 6px 16px; border-radius: 20px;">⚡ Focus (25m)</button>
-          <button id="m-break" style="padding: 6px 16px; border-radius: 20px;">☕ Break (5m)</button>
+          <button id="m-work" class="primary" style="padding: 6px 16px; border-radius: 20px;">Focus 25m</button>
+          <button id="m-break" style="padding: 6px 16px; border-radius: 20px;">Break 5m</button>
         </div>
         <div id="disp" style="font-family: var(--font-mono); font-size: 64px; font-weight: 700; color: var(--accent); letter-spacing: -2px;">
           25:00
         </div>
         <div style="display: flex; gap: 12px;">
-          <button id="toggle" class="primary" style="padding: 10px 24px; font-size: 15px;">Start Session</button>
+          <button id="toggle" class="primary" style="padding: 10px 24px; font-size: 15px;">Start session</button>
           <button id="reset" style="padding: 10px 18px;">Reset</button>
         </div>
-        <div style="width: 100%; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
-          <div style="font-size: 11px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px;">Completed Sessions: <span id="cnt">0</span></div>
+        <div style="width: 100%; margin-top: 8px; padding-top: 8px;">
+          <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Completed sessions: <span id="cnt">0</span></div>
           <div id="hist" style="display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto;"></div>
         </div>
       </div>
@@ -322,19 +322,31 @@ export function seedDefaultCommunityPlugins(): void {
       document.getElementById('disp').innerText = \`\${m}:\${s}\`;
     }
 
+    function setMode(next) {
+      if (isRunning) return;
+      mode = next;
+      timeLeft = mode === 'work' ? 25 * 60 : 5 * 60;
+      updateDisp();
+      document.getElementById('m-work').className = mode === 'work' ? 'primary' : '';
+      document.getElementById('m-break').className = mode === 'break' ? 'primary' : '';
+      document.getElementById('toggle').innerText = 'Start session';
+    }
+
     function renderHistory() {
       const list = document.getElementById('hist');
       const count = document.getElementById('cnt');
       if (!list || !count) return;
       count.innerText = sessions.length;
       list.innerHTML = sessions.slice(-5).reverse().map(s => \`
-        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 6px 10px; background: var(--surface); border-radius: 6px;">
-          <span>\${s.mode === 'work' ? '⚡ Focus' : '☕ Break'}</span>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 8px 4px;">
+          <span>\${s.mode === 'work' ? 'Focus' : 'Break'}</span>
           <span style="color: var(--muted); font-family: var(--font-mono);">\${new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
       \`).join('');
     }
 
+    document.getElementById('m-work').addEventListener('click', () => setMode('work'));
+    document.getElementById('m-break').addEventListener('click', () => setMode('break'));
     document.getElementById('toggle').addEventListener('click', () => {
       isRunning = !isRunning;
       document.getElementById('toggle').innerText = isRunning ? 'Pause' : 'Resume';
@@ -385,6 +397,27 @@ export function seedDefaultCommunityPlugins(): void {
     ],
     permissions: [],
   };
+
+  // Upsert so existing checkouts pick up the fixed timer (working mode
+  // switch, whitespace grouping, sentence case) without duplicate rows.
+  const existing = count > 0
+    ? (db.query<any, ["string"]>("SELECT code FROM registry_plugins WHERE id = ?").get("pomodoro-focus") as any)
+    : null;
+  if (existing && typeof existing.code === "string" && existing.code.includes("setMode")) {
+    return;
+  }
+  if (existing) {
+    db.query(
+      "UPDATE registry_plugins SET description = ?, manifest_json = ?, code = ?, updated_at = ? WHERE id = ?"
+    ).run(
+      "Tactile Pomodoro timer with customizable intervals and local session logging.",
+      JSON.stringify(pomodoroManifest),
+      pomodoroCode,
+      now,
+      "pomodoro-focus"
+    );
+    return;
+  }
 
   db.query(`
     INSERT INTO registry_plugins (id, name, description, icon, version, author, tags_json, manifest_json, code, downloads, created_at, updated_at)
