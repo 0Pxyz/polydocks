@@ -1,33 +1,38 @@
-# Skill: Plugins (persistent tools: create, patch, run, share)
+# Skill: Plugins
 
-> A plugin is a workspace-persistent tool. Fixes go `inspect_experience` first, then `modify_plugin`; Never recreate to fix. For city tabs see `dock-and-tabs`.
-
-## Lifecycle
-
-`inspect_experience` (source, version, mounts, experience_errors), then `create_plugin` or `modify_plugin`, then `operate_plugin`, then `promote_to_plugin` or `publish_plugin`.
+> A workspace-persistent tool. Never recreate to fix. For city tabs see `dock-and-tabs`.
 
 ## Backend contract
 
-`create_plugin`: `id` matches `^[a-z0-9_-]+$`; `name`, `description`, `code` required; `icon` is a catalog id (default `cards`; use `search_icons`, unknown ids rejected); plus `workspaceId?`, `idempotencyKey?`, `capabilities?`. Returns `{success, pluginId, version}`; success emits `plugin.created`. Duplicate ids refused; `verifyPluginState` must pass.
-`modify_plugin`: `id`, `changeSummary` required plus `patch {find, replace}`, full `code`, or metadata fields. Bumps version (history kept), preserves stored keys, emits `plugin.updated`.
-`inspect_experience({id, cityId?})`: `{success, errors (last 10), isHealthy, verification}` or not-found. Always inspect before writing a fix.
-`operate_plugin({pluginId, action, args?, workspaceId?})`: runs a declared capability; undeclared fails. Success emits `plugin.operated`. `publish_plugin`/`promote_to_plugin` emit `plugin.published`.
+`create_plugin`: `id` `^[a-z0-9_-]+$`, `name` `description` `code`; icon via `search_icons` (default `cards`); `workspaceId?` `idempotencyKey?` `capabilities?`. Emits `plugin.created`; duplicates refused; `verifyPluginState` gates.
+`modify_plugin`: `id` `changeSummary` + `patch {find, replace}`, full `code`, or metadata. Bumps version, keeps stored keys, emits `plugin.updated`.
+`inspect_experience({id, cityId?})`: `{success, errors (last 10), isHealthy, verification}` or not-found; history in `experience_errors`; inspect before fixing.
+`operate_plugin({pluginId, action, ...})`: declared capability or fails; emits `plugin.operated`. `publish_plugin` / `promote_to_plugin` emit `plugin.published`.
 
-## Design (must look native, docs/design-slop.md)
+## Design system (native by default, docs/design-slop.md)
 
-Theme tokens only. No bordered cards, Separators, or Badge pills. Sentence case, normal tracking. Group with whitespace, not boxes.
+Kit first, raw controls last; custom layouts welcome. Tokens
+(auto-theme): `background foreground card secondary muted muted-foreground
+primary accent border input ring popover destructive radius`. Sentence case, two levels max. Every control: hover, active, focus ring, disabled,
+loading. Banned: hex, gradients, glows, external sources, decorative pills,
+borders, separators. Actions: `Button` (outline/ghost quiet, size icon).
+Type: 15px semibold, 13px, xs muted, mono tabular numbers. Live: `Badge` or
+dot + label. Group: `bg-card` step, whitespace. Select: `Tabs`. Load/empty:
+`Skeleton`, truth + one action. Input: `Input` `Textarea`. Help: `Tooltip`.
+Plain script: `.px-btn` `.px-text` `.px-badge` `.px-group`
+`.px-tabs` `.px-input` `.px-skeleton` `.px-empty`, `data-px-tip`. Icons: catalog ids, no emoji.
 
 ## Code, storage, verification
 
-One TSX file in SQLite `plugin_files`; imports allowlisted to `react`, `react-dom/client`, `@/components/ui/*`; real CSP in the srcdoc; mount `#app`. Render test blocks bad publishes (hex/slop are warnings). Bridge `window.polymax`: `storage`, `invoke`/`useCapability`, `openUrl`, `openContent` (native Reader), `ui.expand/collapse`, `task`; iframes stay `allow-scripts` isolated.
+One TSX file, SQLite `plugin_files`; imports `react`, `react-dom/client`, `@/components/ui/*`; mount `#app`. Bridge `window.polymax`: `storage`, `invoke`/`useCapability`, `openUrl`, `openContent`, `ui.expand/collapse`, `task`, `theme.get`; sandboxed.
 
-## Lifecycle (host owns mount/hide/hibernate — read docs/plugins/lifecycle.md first)
+## Host-owned lifecycle (read docs/plugins/lifecycle.md first)
 
-State in `polymax.storage`, work in `polymax.task`; FORBIDDEN: `location.reload()`, active-tab rendering, active-derived keys (see docs/plugins/lifecycle.md).
+State in `polymax.storage`, work in `polymax.task`; FORBIDDEN: `location.reload()`, active-tab rendering, active-derived keys.
 
 ## Common mistakes
 
-`create_plugin` for a fix; `modify_plugin` without inspecting; `operate_plugin` with an undeclared action; clearing storage keys in a rewrite; claiming success before the tool result or verification.
+`create_plugin` for a fix; `modify_plugin` without inspecting; `operate_plugin` undeclared; clearing stored keys; raw `<button>` not kit `Button`; no early success claims.
 
 <!--
 Source files (maintainer refs, stripped before injection):

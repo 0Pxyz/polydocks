@@ -50,12 +50,13 @@ export function validateSlop(code: string, opts?: { strict?: boolean }): SlopRep
   }
 
   if (/<(Badge|Pill)\b/.test(src)) {
-    const msg = "Badge/Pill components: state as plain text, never decorative chips";
-    if (strict) errors.push(msg);
-    else warnings.push(msg);
+    // Kit Badge is the one legitimate pill: binary live state (Live/Paused).
+    // Decorative status pills stay banned, but that is a taste warning, not
+    // a gate — the Design section teaches when a badge earns its place.
+    warnings.push("Badge/Pill components: state as plain text or one live badge, never decorative chips");
   }
   if (/<Card[\s>]/.test(src)) {
-    const msg = "Card containers: let content breathe on the surface instead of boxing it";
+    const msg = "Card containers: group content on a subtle surface step (px-group / bg-card) instead of boxing it";
     if (strict) errors.push(msg);
     else warnings.push(msg);
   }

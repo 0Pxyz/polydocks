@@ -28,7 +28,7 @@ const patchSchema = z
 export const modify_plugin: AgentTool<ModifyPluginArgs> = {
   name: "modify_plugin",
   description:
-    "Patches an existing plugin in place (patch {find, replace}, full code, or metadata-only; preserves storage, bumps version). Use for every plugin fix or change; never recreate the plugin id to fix. UI must look native: theme tokens only, no bordered cards, no separators, no decorative pills, sentence case (docs/design-slop.md).",
+    "Patches an existing plugin in place (patch {find, replace}, full code, or metadata-only; preserves storage, bumps version). Use for every plugin fix or change; never recreate the plugin id to fix. UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
   schema: z
     .object({
       id: z

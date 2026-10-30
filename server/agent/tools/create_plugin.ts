@@ -25,7 +25,7 @@ export interface CreatePluginArgs {
 export const create_plugin: AgentTool<CreatePluginArgs> = {
   name: "create_plugin",
   description:
-    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin) or for city tabs (use create_tab). UI must look native: theme tokens only, no bordered cards, no separators, no decorative pills, sentence case (docs/design-slop.md).",
+    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin) or for city tabs (use create_tab). UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
   schema: z.object({
     id: z
       .string()
