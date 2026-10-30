@@ -241,7 +241,14 @@ export function createHostBridge(
           options.onReady?.();
           // The guest awaits this reply as its handshake ack: it proves the
           // host is listening. A missing ack surfaces "bridge not responding".
-          respond(requestId, true);
+          // The ack also carries the active theme so the sandbox renders the
+          // same theme as the app from the first frame (no reload needed).
+          respond(requestId, { ready: true, theme: options.getTheme?.() || "void" });
+          return true;
+        }
+
+        case "theme.get": {
+          respond(requestId, options.getTheme?.() || "void");
           return true;
         }
 
@@ -332,6 +339,15 @@ export function createHostBridge(
 
   return {
     handleMessage,
+    /**
+     * Pushes a theme change into the guest so the sandbox follows the app
+     * theme without a reload. No-op when the guest window is gone.
+     */
+    pushTheme: (theme: string) => {
+      const target = resolveWindowSource(targetWindowOrGetter);
+      if (!target) return;
+      target.postMessage({ polymaxTheme: theme }, "*");
+    },
     destroy: () => {
       if (typeof window !== "undefined") {
         window.removeEventListener("message", listener);

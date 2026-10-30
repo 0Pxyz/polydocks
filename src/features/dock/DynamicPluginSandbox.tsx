@@ -4,6 +4,7 @@ import { ReaderView } from "./ReaderView";
 import { TaskNotice } from "./TaskNotice";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
+import { useThemeStore } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 
 export interface DynamicPluginSandboxProps {
@@ -40,6 +41,7 @@ export function DynamicPluginSandbox({
   const [error, setError] = useState<string | null>(null);
   const [readerUrl, setReaderUrl] = useState<string | null>(null);
   const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bridgeRef = useRef<{ pushTheme: (theme: string) => void } | null>(null);
   // New builds post `polymaxAction: "ui.ready"` after mounting (see
   // buildFeatureSrcdoc/buildReactSrcdoc). Only those get strict timeout
   // behavior; legacy srcdocs keep the lenient auto-reveal below.
@@ -90,6 +92,9 @@ export function DynamicPluginSandbox({
       storagePrefix: "polydocks",
       onCollapse: onDismiss,
       onOpenContent: (url) => setReaderUrl(url),
+      // The sandbox renders the app theme from the first frame and follows
+      // live theme changes without a reload (see guest-bridge theme).
+      getTheme: () => useThemeStore.getState().theme,
       onTaskEvent: (event) => {
         const store = useTabHostStore.getState();
         if (event.type === "start") {
@@ -109,11 +114,19 @@ export function DynamicPluginSandbox({
         setError(typeof err === "string" ? err : "Runtime error in experience");
       },
     });
+    bridgeRef.current = bridge;
 
     return () => {
       bridge.destroy();
+      if (bridgeRef.current === bridge) bridgeRef.current = null;
     };
   }, [workspaceId, pluginId, onDismiss, srcdoc]);
+
+  // Follow the app theme live: push changes into the guest sandbox.
+  const activeTheme = useThemeStore((s) => s.theme);
+  useEffect(() => {
+    bridgeRef.current?.pushTheme(activeTheme);
+  }, [activeTheme]);
 
   // 3-second ready handshake timeout once srcdoc is mounted.
   // Strict for new builds (ready marker present): no ready signal means the

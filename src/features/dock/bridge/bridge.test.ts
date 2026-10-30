@@ -336,4 +336,57 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     expect(targetWin.receivedMessages.length).toBe(0);
     expect(attackerWin.receivedMessages.length).toBe(0);
   });
+
+  it("carries the active theme in the ui.ready ack and answers theme.get", async () => {
+    const targetWin = new MockTargetWindow() as any;
+    const bridge = createHostBridge(targetWin, {
+      cityId: "city-1",
+      tabId: "tab-1",
+      getTheme: () => "cyber",
+    });
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "ui.ready", polymaxRequestId: 701 },
+    } as any);
+    expect(targetWin.receivedMessages[0].result).toMatchObject({ ready: true, theme: "cyber" });
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "theme.get", polymaxRequestId: 702 },
+    } as any);
+    expect(targetWin.receivedMessages[1].result).toBe("cyber");
+  });
+
+  it("defaults to the void theme without a theme provider", async () => {
+    const targetWin = new MockTargetWindow() as any;
+    const bridge = createHostBridge(targetWin, {
+      cityId: "city-1",
+      tabId: "tab-1",
+    });
+
+    await bridge.handleMessage({
+      source: targetWin,
+      data: { polymaxAction: "ui.ready", polymaxRequestId: 703 },
+    } as any);
+    expect(targetWin.receivedMessages[0].result).toMatchObject({ ready: true, theme: "void" });
+  });
+
+  it("pushes live theme changes into the guest window", () => {
+    const targetWin = new MockTargetWindow() as any;
+    const bridge = createHostBridge(targetWin, {
+      cityId: "city-1",
+      tabId: "tab-1",
+      getTheme: () => "amber",
+    });
+
+    bridge.pushTheme("amber");
+    expect(targetWin.receivedMessages[0]).toMatchObject({ polymaxTheme: "amber" });
+  });
+
+  it("guest script applies the acked theme and listens for live pushes", () => {
+    expect(GUEST_BRIDGE_SCRIPT).toContain("polymaxTheme");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("dataset.theme");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("theme.get");
+  });
 });

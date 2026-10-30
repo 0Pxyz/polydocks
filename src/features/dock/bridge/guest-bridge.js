@@ -18,8 +18,23 @@ export const GUEST_BRIDGE_SCRIPT = `
   // timeout so a dead bridge is reported while the host error row is live.
   const READY_ACK_TIMEOUT_MS = window.__POLYMAX_BRIDGE_ACK_TIMEOUT_MS || 4000;
 
+  // Active theme: the host owns it. Applied from the ui.ready ack and
+  // from live polymaxTheme pushes so the sandbox follows theme changes
+  // without a reload. Names are restricted to the known theme ids.
+  function applyTheme(name) {
+    try {
+      if (typeof name === "string" && /^[a-z-]{1,24}$/.test(name)) {
+        document.documentElement.dataset.theme = name;
+      }
+    } catch (e) { /* headless or detached document */ }
+  }
+
   window.addEventListener('message', function(event) {
     if (!event.data || typeof event.data !== 'object') return;
+    if (typeof event.data.polymaxTheme === 'string') {
+      applyTheme(event.data.polymaxTheme);
+      return;
+    }
     const { polymaxResponseId, result, error } = event.data;
     if (polymaxResponseId && pendingRequests.has(polymaxResponseId)) {
       const { resolve, reject, timer } = pendingRequests.get(polymaxResponseId);
@@ -75,7 +90,10 @@ export const GUEST_BRIDGE_SCRIPT = `
   // ("Ask the agent to fix it") and records the experience error.
   function signalReady() {
     return sendHostRequest('ui.ready', {}, READY_ACK_TIMEOUT_MS).then(
-      function() { return true; },
+      function(result) {
+        if (result && typeof result.theme === "string") applyTheme(result.theme);
+        return true;
+      },
       function(err) {
         reportBridgeError(
           "Bridge not responding: the tool mounted but the host did not " +
@@ -161,6 +179,10 @@ export const GUEST_BRIDGE_SCRIPT = `
       bg: '#0A0A0C',
       surface: '#131318',
       text: '#F0F0F5',
+      // Live theme name from the host (mount-time ack). Prefer dataset over
+      // these static defaults: they only describe the void palette.
+      get: () => sendHostRequest('theme.get', {}),
+      apply: (name) => { applyTheme(name); return Promise.resolve(true); },
     }
   };
   window.polydocks = window.polymax;
