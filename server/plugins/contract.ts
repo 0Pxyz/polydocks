@@ -195,9 +195,6 @@ export function defineCapability(def: ContractCapabilityDef): string {
     // result payload. Never the handler's job: when the handler names
     // explicit events, exactly those go out; otherwise all declared ones.
     const emitted: ContractEvent[] = [...recorded];
-    // result payload. Never the handler's job: when the handler names
-    // explicit events, exactly those go out; otherwise all declared ones.
-    const emitted: ContractEvent[] = [...recorded];
     const basePayload: Record<string, unknown> = {
       capability: fullId,
       plugin: def.plugin,
