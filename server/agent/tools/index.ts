@@ -46,6 +46,13 @@ import { dock_pin } from "./dock_pin";
 import { dock_unpin } from "./dock_unpin";
 import { dock_close } from "./dock_close";
 import { generate_image } from "./generate_image";
+import { install_plugin } from "./install_plugin";
+import { rollback_plugin } from "./rollback_plugin";
+import { list_sessions } from "./list_sessions";
+import { inspect_session } from "./inspect_session";
+import { list_tasks } from "./list_tasks";
+import { list_artifacts } from "./list_artifacts";
+import { read_artifact } from "./read_artifact";
 // Verb tools (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/list and
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
@@ -102,6 +109,13 @@ export {
   record_memory,
   plan_ascii_world,
   generate_image,
+  install_plugin,
+  rollback_plugin,
+  list_sessions,
+  inspect_session,
+  list_tasks,
+  list_artifacts,
+  read_artifact,
   // Verb family (aliases stay importable; registry below decides).
   dockOpen,
   dockClose,
@@ -172,6 +186,13 @@ const fullToolsList: AgentTool[] = [
   record_memory,
   plan_ascii_world,
   generate_image,
+  install_plugin,
+  rollback_plugin,
+  list_sessions,
+  inspect_session,
+  list_tasks,
+  list_artifacts,
+  read_artifact,
 ];
 
 /**

@@ -654,3 +654,33 @@ export async function agentModels(): Promise<FacadeEnvelope> {
   );
   return { ok: true, data, events: [] };
 }
+
+// artifacts.* — read-only inspection for the agent and facade routes.
+// Writes stay on the legacy POST /api/artifacts route; the agent only lists
+// and reads (creation is a product-surface concern, not an agent tool).
+export async function agentArtifacts(
+  op: "list" | "read",
+  params: Record<string, unknown> = {}
+): Promise<FacadeEnvelope> {
+  try {
+    const { ArtifactService } = await import("../services/artifactService");
+    if (op === "list") {
+      const workspaceId = (params.workspaceId as string) || "default";
+      const data = ArtifactService.listArtifacts(
+        workspaceId,
+        params.sessionId as string | undefined
+      );
+      return { ok: true, data, events: [] };
+    }
+    if (op === "read") {
+      const id = params.artifactId as string;
+      if (!id) return { ok: false, error: "artifacts.read needs { artifactId }.", retryable: false, code: "invalid_input" };
+      const artifact = ArtifactService.getArtifact(id);
+      if (!artifact) return { ok: false, error: `Artifact "${id}" not found.`, retryable: false, code: "not_found" };
+      return { ok: true, data: artifact, events: [] };
+    }
+    return { ok: false, error: `Unknown artifacts op "${op}" (list|read).`, retryable: false, code: "unknown_op" };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Artifacts op failed.", retryable: false };
+  }
+}

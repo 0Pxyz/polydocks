@@ -20,9 +20,8 @@ const envSchema = z.object({
   OPENWEIGHT_MODEL_ID: z.string().default("meta-models/muse-spark-open-1026"),
   TINYFISH_API_KEY: z.string().optional().default(""),
   // Product surface: three APIs (/api/plugins, /api/dock, /api/agent).
-  // legacy = current routes only. facade = also mounts the thin facade
-  // routers (old routes stay untouched).
-  PRODUCT_SURFACE: z.enum(["legacy", "facade"]).default("legacy"),
+  // facade = also mounts the thin facade routers (old routes stay untouched).
+  PRODUCT_SURFACE: z.enum(["legacy", "facade"]).default("facade"),
   // Agent tool surface: full = current catalog. minimal = verb tools only
   // (dock.open/close/pin/unpin/list, plugins.create/edit/install/uninstall/operate).
   AGENT_SURFACE: z.enum(["full", "minimal"]).default("full"),

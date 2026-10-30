@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   agentApprovals,
+  agentArtifacts,
   agentMemory,
   agentModels,
   agentSession,
@@ -93,5 +94,25 @@ agentRouter.post("/memory", async (c) => {
   const { op, ...params } = body ?? {};
   const out = await agentMemory(op, params ?? {}, ctxFrom(c, body));
   if (!out.ok) return c.json(out, 400);
+  return c.json(out);
+});
+
+/** GET /api/agent/artifacts — list artifacts (read-only facade over the store). */
+agentRouter.get("/artifacts", async (c) => {
+  const out = await agentArtifacts("list", {
+    workspaceId: c.req.query("workspaceId"),
+    sessionId: c.req.query("sessionId"),
+  });
+  if (!out.ok) return c.json(out, 400);
+  return c.json(out);
+});
+
+/** GET /api/agent/artifacts/:id — read one artifact. */
+agentRouter.get("/artifacts/:id", async (c) => {
+  const out = await agentArtifacts("read", { artifactId: c.req.param("id") });
+  if (!out.ok) {
+    const status = (out as any).code === "not_found" ? 404 : 400;
+    return c.json(out, status as any);
+  }
   return c.json(out);
 });
