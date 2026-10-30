@@ -396,6 +396,17 @@ export function isContentOpenIntent(prompt: string): boolean {
   );
 }
 
+/** Theme customization: appearance-only requests (never research/city/plugin). */
+export function isThemeIntent(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  if (!lower.trim()) return false;
+  if (isPluginFixIntent(prompt) || isPluginUpdateIntent(prompt)) return false;
+  if (/\b(theme|tema|wallpaper|wallpapers|background|fundo|papel de parede|accent|acento|dock style|dock position)\b/.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
 /** Verify-before-done protocol: state checks, not new work. */
 export function isVerifyIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
@@ -416,6 +427,7 @@ export function isVerifyIntent(prompt: string): boolean {
 export type DomainSkillName =
   | "dock-and-tabs"
   | "dock"
+  | "theme"
   | "plugins"
   | "capabilities-and-mcp"
   | "content-and-reader"
@@ -439,6 +451,7 @@ export function selectDomainSkills(prompt: string): DomainSkillName[] {
 
   if (isPluginFixIntent(prompt) || isPluginUpdateIntent(prompt)) add("plugins");
   if (isVerifyIntent(prompt) && ARTIFACT_WORD.test(prompt.toLowerCase())) add("plugins");
+  if (isThemeIntent(prompt)) add("theme");
   if (isCapabilitiesIntent(prompt)) add("capabilities-and-mcp");
   if (!picked.includes("capabilities-and-mcp") && (isResearchIntent(prompt) || isContentOpenIntent(prompt)))
     add("content-and-reader");

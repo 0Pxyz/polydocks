@@ -235,9 +235,9 @@ describe("Skill drift guard: intent to skills mapping (PT+EN)", () => {
     { prompt: "fechar a aba de flashcards", expected: ["dock-and-tabs"] },
     { prompt: "what tabs do I have", expected: ["dock-and-tabs"] },
     { prompt: "quais abas eu tenho", expected: ["dock-and-tabs"] },
-    // No theme backend on main (no apply_theme tool): theme asks select
-    // nothing until the theme PR lands. Pinned here so it updates then.
-    { prompt: "add this background to my theme", expected: [] },
+    // Theme backend exists (apply_theme tool + theme.md skill): theme asks
+    // select the theme skill so the protocol is injected on demand.
+    { prompt: "add this background to my theme", expected: ["theme"] },
   ];
 
   for (const { prompt, expected } of cases) {

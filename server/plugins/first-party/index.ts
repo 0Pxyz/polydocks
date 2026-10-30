@@ -47,7 +47,7 @@ export const searchPluginManifest: PluginManifest = {
     },
   ],
   skill: {
-    file: "server/agent/skills/web-research.md",
+    file: "server/agent/skills/content-and-reader.md",
     triggers: [
       "search",
       "pesquise",
