@@ -70,6 +70,7 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   const [installUrlLoading, setInstallUrlLoading] = useState(false);
   const [installUrlError, setInstallUrlError] = useState<string | null>(null);
   const [pendingManifest, setPendingManifest] = useState<any | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchPlugins = async () => {
     try {
@@ -113,36 +114,53 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   }, [initialTab]);
 
   const handleToggle = async (pluginId: string) => {
+    const prev = plugins.find((p) => p.id === pluginId);
+    // Optimistic flip with rollback on failure so the dock feels instant.
+    setPlugins((prevList) =>
+      prevList.map((p) => (p.id === pluginId ? { ...p, enabled: !p.enabled } : p))
+    );
+    setActionError(null);
     try {
       const res = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}/toggle`, {
         method: "POST",
       });
-      if (res.ok) {
-        setPlugins((prev) =>
-          prev.map((p) => (p.id === pluginId ? { ...p, enabled: !p.enabled } : p))
-        );
-        if (selectedPlugin?.id === pluginId) {
-          setSelectedPlugin((prev) => (prev ? { ...prev, enabled: !prev.enabled } : null));
-        }
+      if (!res.ok) {
+        throw new Error(`Toggle failed (HTTP ${res.status})`);
       }
-    } catch (err) {
-      console.error("Failed to toggle plugin", err);
+      if (selectedPlugin?.id === pluginId && prev) {
+        setSelectedPlugin({ ...selectedPlugin, enabled: !prev.enabled });
+      }
+    } catch (err: any) {
+      // Roll back to the previous enabled state.
+      setPlugins((prevList) =>
+        prevList.map((p) => (p.id === pluginId ? { ...p, enabled: prev?.enabled ?? p.enabled } : p))
+      );
+      setActionError(err?.message || "Could not change plugin state. Try again.");
     }
   };
 
   const handleUninstall = async (pluginId: string) => {
+    const prev = plugins;
+    const prevSelected = selectedPlugin;
+    setPlugins((prevList) => prevList.filter((p) => p.id !== pluginId));
+    if (selectedPlugin?.id === pluginId) {
+      setSelectedPlugin(null);
+    }
+    setActionError(null);
     try {
       const res = await fetch(`/api/plugins/${encodeURIComponent(pluginId)}`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        setPlugins((prev) => prev.filter((p) => p.id !== pluginId));
-        if (selectedPlugin?.id === pluginId) {
-          setSelectedPlugin(null);
-        }
+      if (!res.ok) {
+        throw new Error(`Uninstall failed (HTTP ${res.status})`);
       }
-    } catch (err) {
-      console.error("Failed to uninstall plugin", err);
+    } catch (err: any) {
+      // Roll back: restore the list and selection.
+      setPlugins(prev);
+      if (prevSelected?.id === pluginId) {
+        setSelectedPlugin(prevSelected);
+      }
+      setActionError(err?.message || "Could not uninstall plugin. Try again.");
     }
   };
 
@@ -392,6 +410,12 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
           </button>
         ))}
       </div>
+
+      {actionError && (
+        <div className="w-full px-3.5 py-2.5 rounded-xl bg-red-500/[0.08] border border-red-500/20 text-xs text-red-200/90">
+          {actionError}
+        </div>
+      )}
 
       {activeTab === "discover" ? (
         <PluginStoreView onOpenPlugin={onOpenPlugin} />

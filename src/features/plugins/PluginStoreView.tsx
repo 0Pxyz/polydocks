@@ -44,6 +44,7 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
   const [loadError, setLoadError] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   const fetchRegistry = useCallback(async () => {
     setLoading(true);
@@ -91,25 +92,31 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
   }, [plugins, selectedTag]);
 
   const handleInstall = async (pluginId: string) => {
+    if (installingId) return;
     setInstallingId(pluginId);
     setFailedId(null);
+    setInstallError(null);
     try {
+      // Read fresh workspace id at action time so a stale closure never
+      // installs into the wrong workspace.
+      const wsId = useWorkspaceStore.getState().activeWorkspaceId || "default";
       const res = await fetch(`/api/registry/${encodeURIComponent(pluginId)}/install`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceId: activeWorkspaceId }),
+        body: JSON.stringify({ workspaceId: wsId }),
       });
-      if (res.ok) {
-        await fetchWorkspacePlugins(activeWorkspaceId);
-        await fetchRegistry();
-        if (onOpenPlugin) {
-          onOpenPlugin(pluginId);
-        }
-      } else {
-        setFailedId(pluginId);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `Install failed (HTTP ${res.status})`);
       }
-    } catch {
+      await fetchWorkspacePlugins(wsId);
+      await fetchRegistry();
+      if (onOpenPlugin) {
+        onOpenPlugin(pluginId);
+      }
+    } catch (err: any) {
       setFailedId(pluginId);
+      setInstallError(err?.message || "Install failed. Try again.");
     } finally {
       setInstallingId(null);
     }
@@ -183,6 +190,11 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
         activeWorkspaceId={activeWorkspaceId}
         onOpenPlugin={onOpenPlugin}
       />
+      {installError && (
+        <div className="w-full px-3.5 py-2.5 rounded-xl bg-red-500/[0.08] border border-red-500/20 text-xs text-red-200/90 font-sans">
+          {installError}
+        </div>
+      )}
       <div className="w-full">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
