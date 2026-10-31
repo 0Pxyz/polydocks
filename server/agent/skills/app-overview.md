@@ -18,10 +18,11 @@
 |---|---|
 | Explain, summarize, answer | Reply inline, no tools |
 | Do something with data | `find_capabilities`, then `invoke_capability`, no UI |
-| Open, show, resume existing | `dock.open` |
+| Open, show, resume existing | `dock.open` (if the plugin is installed but inactive: `plugins.activate` first) |
 | What tools do I have | `dock.list` only |
 | Build a tool to come back to | `create_plugin` (workspace) |
 | Change or fix an existing tool | `inspect_experience`, then `modify_plugin` |
+| Enable or hide an installed tool | `plugins.activate` / `plugins.deactivate` (data kept; deactivation closes it in the dock) |
 | Research, papers, sources | `search_web`, `fetch_page`, then `open_source` |
 | Remember or recall | `record_memory` / `recall_memory` |
 
