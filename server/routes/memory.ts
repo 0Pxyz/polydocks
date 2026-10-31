@@ -4,6 +4,7 @@ import {
   updateMemoryMd,
   recordMemory,
   recallMemory,
+  deleteMemoryEntry,
 } from "../agent/memory";
 
 export const memoryRouter = new Hono();
@@ -95,5 +96,40 @@ memoryRouter.post("/recall", async (c) => {
     return c.json({ query, count: memories.length, memories });
   } catch (err: any) {
     return c.json({ error: `Failed to recall memories: ${err.message}` }, 500);
+  }
+});
+
+/**
+ * DELETE /api/agent/memory/entry
+ * Removes a single entry by content match (#105 inspector backend).
+ * Body: { content, scope?: curated|daily|all, date?: YYYY-MM-DD }.
+ */
+memoryRouter.delete("/entry", async (c) => {
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON request body" }, 400);
+  }
+
+  if (!body.content || typeof body.content !== "string" || body.content.trim().length === 0) {
+    return c.json({ error: "Missing required 'content' field in request body" }, 400);
+  }
+  if (body.scope !== undefined && !["curated", "daily", "all"].includes(body.scope)) {
+    return c.json({ error: "Invalid 'scope', expected curated|daily|all" }, 400);
+  }
+
+  try {
+    const result = await deleteMemoryEntry({
+      content: body.content,
+      scope: body.scope,
+      date: body.date,
+    });
+    if (!result.removed) {
+      return c.json({ removed: false, scope: null }, 404);
+    }
+    return c.json({ removed: true, scope: result.scope });
+  } catch (err: any) {
+    return c.json({ error: `Failed to delete memory entry: ${err.message}` }, 500);
   }
 });
