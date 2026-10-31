@@ -478,3 +478,64 @@ export async function updateMemoryMd(
   const sanitized = sanitizeMemoryContent(content);
   return await writeFileSafe("MEMORY.md", sanitized, { rootDir, overwrite: true });
 }
+
+export interface DeleteMemoryEntryOptions {
+  /** Substring matched against the entry text (sanitized before compare). */
+  content: string;
+  /** Where to delete from. `all` tries curated first, then the daily log. */
+  scope?: "curated" | "daily" | "all";
+  /** Daily log date `YYYY-MM-DD` for scope daily (defaults to today). */
+  date?: string;
+  rootDir?: string;
+}
+
+/**
+ * Deletes a single memory entry by content match (#105 inspector backend).
+ * Removes the first matching line only so one UI delete never wipes
+ * duplicates. Returns which scope lost the entry.
+ */
+export async function deleteMemoryEntry(
+  options: DeleteMemoryEntryOptions
+): Promise<{ removed: boolean; scope: string | null }> {
+  const needle = sanitizeMemoryContent((options.content || "").trim());
+  if (!needle) throw new Error("Missing required 'content' field for delete.");
+  const scope = options.scope ?? "all";
+
+  if (scope === "curated" || scope === "all") {
+    try {
+      const res = await readFileSafe("MEMORY.md", { rootDir: options.rootDir });
+      const lines = res.content.split("\n");
+      const idx = lines.findIndex(
+        (line) => line.trim().startsWith("-") && line.includes(needle)
+      );
+      if (idx >= 0) {
+        lines.splice(idx, 1);
+        await writeFileSafe("MEMORY.md", lines.join("\n"), {
+          rootDir: options.rootDir,
+          overwrite: true,
+        });
+        return { removed: true, scope: "curated" };
+      }
+    } catch {
+      // No curated file yet — fall through to daily when scope is all.
+    }
+    if (scope === "curated") return { removed: false, scope: null };
+  }
+
+  const date = (options.date || "").trim() || getTodayDateString();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid 'date', expected YYYY-MM-DD.");
+  try {
+    const rel = path.join("memory", `${date}.md`);
+    const res = await readFileSafe(rel, { rootDir: options.rootDir });
+    const lines = res.content.split("\n");
+    const idx = lines.findIndex(
+      (line) => line.trim().startsWith("- [") && line.includes(needle)
+    );
+    if (idx < 0) return { removed: false, scope: null };
+    lines.splice(idx, 1);
+    await writeFileSafe(rel, lines.join("\n"), { rootDir: options.rootDir, overwrite: true });
+    return { removed: true, scope: "daily" };
+  } catch {
+    return { removed: false, scope: null };
+  }
+}
