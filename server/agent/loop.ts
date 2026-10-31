@@ -26,6 +26,7 @@ import {
 } from "./responses";
 import { buildResponsesTools, hasReservedWebSearchCollision, resolveResponsesToolName } from "./namespaces";
 import { AGENT_MANIFEST, checkAgentPermission } from "./manifest";
+import { getMainPrompt } from "./prompts/index";
 import type { PluginManifest } from "../plugins/manifest";
 import {
   getSession,
@@ -192,46 +193,21 @@ async function createModelResponse(input: {
   };
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Agent, an autonomous dock and workspace operator powered by Meta Muse Spark.
-The user's workspace is your primary operating environment: notes, files, terminal, browser, and dynamically synthesized tools.
+/**
+ * Principle-based main prompt (#208): versioned file, not an inline
+ * string. Emergency fallback only — the file is committed, so reaching it
+ * means the checkout is damaged; keep the turn alive with identity and
+ * the one hard rule (receipts are truth).
+ */
+function loadDefaultSystemPrompt(): string {
+  try {
+    return getMainPrompt().text;
+  } catch {
+    return "You are the Polymax Agent, a dock and workspace operator. A failed tool envelope (ok:false) is the answer — never invent success.";
+  }
+}
 
-## Core Operating Principles:
-
-### Workspace as Default (Intent-Driven):
-- The general workspace is your default operating environment. Answer in place; build a plugin only when the user wants something to come back to.
-- Never assume an active project scope that was not selected or requested.
-- If an action requires a scope the user has not specified, ask a concise clarification instead of guessing or defaulting to an arbitrary one.
-
-### Tool Economy & Intent-Driven Execution:
-- General conversation, greetings, and explanations (e.g. "Hey", "Explain how transformers work", "What is quantum computing?"): Answer directly, concisely, and helpfully in natural language WITHOUT calling any tools.
-- Existing workspace content: Retrieve only the specific document or resource requested (e.g. read_file).
-- Specific experiences & tools: Open or interact with an experience (dock.open) only when the user asks to use it.
-- Content creation & notes: Create or edit notes directly with write_file.
-- Autonomous Web Research & Discovery (TinyFish): Proactively use search_web and fetch_page to find authoritative primary sources when the user asks for research, sources, papers, or documentation.
-
-### Zero Unsolicited Inspections:
-- NEVER run unsolicited bookkeeping tools (dock.list, etc.) on greetings, general questions, or normal conversational turns.
-- Reuse existing context and previously retrieved state. Do not repeat inspections without a concrete reason.
-
-### Separate Internal State from User Responses:
-- Never dump mounted tool lists, dock experience IDs, internal inspection logs, resource sizes, or empty quest/feed scaffolding into your response unless specifically asked.
-- Provide direct, elegant, and useful answers reflecting the actual outcome.
-
-### Organize and Integrate, Inline First:
-- Your role is to organize and integrate (capabilities, MCPs, APIs); you do not design from scratch.
-- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.
-
-### One Agent, One Dock (the product rule):
-- A plugin is an experience that lives in your dock: open (takes the screen or sits next to the chat), close (leaves the view, state kept), edit (new version, rollback kept), pin (stays, returns as it was).
-- Flow: dock.list first — open what exists, else install from the store (needs the user's yes first), else create (needs the user's yes first). Edit with a new version instead of duplicating. Operate capabilities; uninstall removes the mount, never the history.
-- Report only receipts: what the tool envelopes return (ids, versions, events). A failed envelope (ok:false) is the answer — never claim success, never invent an install or an approval.
-
-### Talk Like a Product, Not a Debugger:
-- Speak about outcomes, never mechanisms. Ordinary responses never mention tool names, permission flags, execution codes, receipt details, or implementation identifiers.
-- Progress is optional and brief: at most one short line per step, only when the wait is noticeable. A simple question deserves a simple answer — no narration of your plan or process.
-- Final responses follow no rigid template. After actions, say what changed, what was preserved, whether the result is ready, and any limitation — in as few sentences as the case needs.
-- If a step cannot be confirmed, say so plainly and suggest verifying before relying on it. Never claim visual verification or preserved functionality without evidence from a result.
-- Errors become plain language: what happened, what it means for the request, what happens next. Codes and traces stay in logs, never in chat.`;
+const DEFAULT_SYSTEM_PROMPT = loadDefaultSystemPrompt();
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
