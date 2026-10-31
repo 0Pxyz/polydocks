@@ -109,3 +109,6 @@
 | 2026-11-01 | Onboarding dock-first lifecycle (#256): every entry opens the dock tab, close removes + persists no-reopen, agent bridge, creative copy/UI untouched | [#256](https://github.com/0Pxyz/polymax/pull/256) |
 | 2026-11-01 | Onboarding takeover-pause (#259): manual dock switch pauses the tour instead of focus-stealing, ghost-thought cleanup, tested predicate | [#259](https://github.com/0Pxyz/polymax/pull/259) |
 | 2026-11-01 | Cinematic onboarding tab, video flow (#260): orb + live thought + narration auto-play in the dock tab, overlay unmounted, creative copy/UI intact | [#260](https://github.com/0Pxyz/polymax/pull/260) |
+| 2026-11-01 | Onboarding engine mounted, cinematic stage in tab (#262): runtime survives focus switches, verified headless in a real browser | [#262](https://github.com/0Pxyz/polymax/pull/262) |
+| 2026-11-01 | Media re-record on cinematic engine (#263): walkthrough mp4 + spotlights + gifs | [#263](https://github.com/0Pxyz/polymax/pull/263) |
+| 2026-11-01 | Theme control reachable on minimal surface (#264): apply_theme ships on minimal, namespace-guess resolution, live-verified background set | [#264](https://github.com/0Pxyz/polymax/pull/264) |
