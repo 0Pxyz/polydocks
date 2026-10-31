@@ -89,7 +89,11 @@ export const DOCK_TOOLS: DockToolItem[] = ROOT_DOCK_TOOLS;
 
 interface AgenticDockProps {
   activeToolId?: string;
-  onSelectTool?: (toolId: string) => void;
+  onSelectTool?: (toolId: string, opts?: { beside?: boolean }) => void;
+  /** Open a dock tool in the beside panel (no-op for ineligible rows). */
+  onOpenBesideItem?: (id: string) => void;
+  /** Right offset (px) reserving the beside panel, mirroring the chat side offset. */
+  besideOffsetPx?: number;
   className?: string;
   isAgentWorking?: boolean;
   isAgentSheetOpen?: boolean;
@@ -126,6 +130,8 @@ export function AgenticDock({
   onFixWithAgent,
   onOpenAgent,
   onOpenMcpConnect,
+  onOpenBesideItem,
+  besideOffsetPx = 0,
   isBuilding = false,
   buildingName,
   statusText,
@@ -271,7 +277,13 @@ export function AgenticDock({
     };
   }, [isBottom]);
 
-  const handleToolClick = (toolId: string) => {
+  const handleToolClick = (toolId: string, beside = false) => {
+    // Shift+click opens beside instead of focusing into the main view
+    // (works on the focused tool too: it moves beside).
+    if (beside) {
+      onSelectTool?.(toolId, { beside: true });
+      return;
+    }
     // One click always resolves: clicking the focused item closes it,
     // clicking another focuses it (background items come forward).
     // Never a visible-but-inaccessible state.
@@ -382,6 +394,7 @@ export function AgenticDock({
                 openTool(toolId);
                 onSelectTool?.(toolId);
               }}
+              onOpenBesideItem={onOpenBesideItem}
               onCloseItem={onCloseItem}
               onSubmitToolPrompt={onSubmitToolPrompt}
               onFixWithAgent={onFixWithAgent}
@@ -425,7 +438,10 @@ export function AgenticDock({
   return (
     <header
       ref={headerRef}
-      style={sideOffset > 0 ? { left: sideOffset } : undefined}
+      style={{
+        ...(sideOffset > 0 ? { left: sideOffset } : null),
+        ...(besideOffsetPx > 0 ? { right: besideOffsetPx } : null),
+      }}
       className={cn(
         "fixed left-0 right-0 z-50 flex flex-col items-center select-none pointer-events-none",
         isBottom ? "bottom-0 pb-3" : "top-0 pt-3",
@@ -475,7 +491,7 @@ export function AgenticDock({
                 type="button"
                 data-dock-tool-id={tool.id}
                 data-dock-index={index}
-                onClick={() => handleToolClick(tool.id)}
+                onClick={(e) => handleToolClick(tool.id, e.shiftKey)}
                 className={cn(
                   "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-lime)]",
                   isActive ? currentStyle.activeItemClass : currentStyle.inactiveItemClass,
