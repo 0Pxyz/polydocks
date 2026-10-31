@@ -10,7 +10,7 @@
 
 `search_web({query, domain_type?, limit?})`: `domain_type` is `web` (default), `news`, or `research_paper`; `limit` 1-20 (default 5); returns `{query, domain_type, count, results}`. Keep queries keyword-rich.
 `fetch_page({urls (1-10), cityId?, saveToSources?})`: no `format` argument, always markdown. Discovery caps pages at 16KB; the tool truncates to 8000 chars plus a 500-char preview. With a city scope it saves full text to `sources/<slug>.json`.
-`open_source({url, title?})`: opens the URL in the Browser dock tab. It shows; it does not fetch. `openContent` is the guest-side equivalent: it opens an article/video in the native in-app Reader (Markdown rendered by app components, YouTube/Vimeo via embed, no iframe), so frame-blocking sites still open.
+`open_source({url, title?})`: opens the URL in the native Browser surface (Chromium via Atrium — all pages and videos open here, remote playback for now). It shows; it does not fetch. Rule: ALL web content goes through this surface, never ad-hoc iframes. `openContent` is the guest-side equivalent: it opens an article/video in the native in-app Reader (Markdown rendered by app components, YouTube/Vimeo via embed, no iframe), so frame-blocking sites still open.
 
 ## Output actions
 

@@ -73,16 +73,17 @@ export const searchPluginManifest: PluginManifest = {
 export const browserPluginManifest: PluginManifest = {
   apiVersion: 1,
   id: "browser",
-  name: "Primary Source Reader",
+  name: "Browser",
   version: "1.0.0",
-  description: "Displays external primary sources and papers inside the dock reader view",
+  description: "Real Chromium browsing inside the dock",
   icon: "Globe",
   trust: "first-party",
   capabilities: [
     {
       id: "browser.open",
       title: "Open Source in Browser",
-      description: "Opens an external source URL in the active dock Browser view.",
+      description:
+        "Opens an external source URL in the native Browser surface (real Chromium via Atrium; falls back to the Reader when the worker is unavailable).",
       input: z.object({
         url: z.string().url().describe("Source URL"),
         title: z.string().optional().describe("Optional title"),
@@ -93,7 +94,7 @@ export const browserPluginManifest: PluginManifest = {
   surfaces: [
     {
       id: "browser",
-      title: "Research & Sources",
+      title: "Browser",
       icon: "Globe",
       variant: "immersive",
       entry: "SourcesView",

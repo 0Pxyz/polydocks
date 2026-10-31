@@ -13,8 +13,8 @@
 
 Kit first, raw controls last; custom layouts welcome. Tokens
 (auto-theme): `background foreground card secondary muted muted-foreground
-primary accent border input ring popover destructive radius`. Sentence case, two levels max. Every control: hover, active, focus ring, disabled,
-loading. Banned: hex, gradients, glows, external sources, decorative pills,
+primary accent border input ring popover destructive radius`. Sentence case. Every control: hover, active, focus ring, disabled,
+loading. Banned: hex, gradients, glows, opaque boxes, external sources, web iframes, decorative pills,
 borders, separators. Actions: `Button` (outline/ghost quiet, size icon).
 Type: 15px semibold, 13px, xs muted, mono tabular numbers. Live: `Badge` or
 dot + label. Group: `bg-card` step, whitespace. Select: `Tabs`. Load/empty:
