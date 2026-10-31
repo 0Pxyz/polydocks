@@ -22,7 +22,7 @@ describe("Polymax REST API Endpoints", () => {
     expect(Array.isArray(data.data)).toBe(true);
   });
 
-  it("unknown routes return 404, not a city fallback", async () => {
+  it("unknown routes return 404, not a legacy fallback", async () => {
     const res = await app.fetch(new Request("http://localhost:3000/api/cities"));
     expect(res.status).toBe(404);
   });

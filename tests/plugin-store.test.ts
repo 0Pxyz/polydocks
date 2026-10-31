@@ -59,7 +59,7 @@ describe("PolyDocks V2 Community Plugin Registry & Store", () => {
         code,
         workspaceId: "default",
       },
-      { cityId: "default" }
+      { workspaceId: "default" }
     );
 
     // 2. Publish to registry
@@ -111,7 +111,7 @@ describe("PolyDocks V2 Community Plugin Registry & Store", () => {
         code: "const app = document.getElementById('app');",
         workspaceId: "default",
       },
-      { cityId: "default" }
+      { workspaceId: "default" }
     );
 
     const res = await publish_plugin.execute(
@@ -121,7 +121,7 @@ describe("PolyDocks V2 Community Plugin Registry & Store", () => {
         author: "Agent Spark",
         tags: ["agent-made", "productivity"],
       },
-      { cityId: "default" }
+      { workspaceId: "default" }
     );
 
     expect(res.success).toBe(true);
@@ -148,7 +148,7 @@ describe("PolyDocks V2 Community Plugin Registry & Store", () => {
         code: "const app = document.getElementById('app');",
         workspaceId: "default",
       },
-      { cityId: "default" }
+      { workspaceId: "default" }
     );
 
     const pubRes = await app.fetch(

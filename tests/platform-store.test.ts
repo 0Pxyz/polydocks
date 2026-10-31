@@ -30,16 +30,16 @@ describe("Platform Abstraction Layer & Storage", () => {
   });
 
   it("clears storage keys selectively by prefix", () => {
-    platformStorage.setItem("city:athens:notes", "notes data");
-    platformStorage.setItem("city:athens:sources", "sources data");
+    platformStorage.setItem("ws:athens:notes", "notes data");
+    platformStorage.setItem("ws:athens:sources", "sources data");
     platformStorage.setItem("global:settings", "settings data");
 
-    const athensKeys = platformStorage.getAllKeys("city:athens");
+    const athensKeys = platformStorage.getAllKeys("ws:athens");
     expect(athensKeys.length).toBe(2);
 
-    platformStorage.clear("city:athens");
+    platformStorage.clear("ws:athens");
 
-    expect(platformStorage.getItem("city:athens:notes")).toBeNull();
+    expect(platformStorage.getItem("ws:athens:notes")).toBeNull();
     expect(platformStorage.getItem("global:settings")).toBe("settings data");
   });
 

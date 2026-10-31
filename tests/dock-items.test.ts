@@ -16,35 +16,35 @@ import {
 } from "../src/lib/dock/dockItems";
 
 describe("dock_items single source (P0 regression)", () => {
-  test("symptom 1: open 3 city items, go to map and back: same items, order, focus", () => {
+  test("symptom 1: open 3 workspace items, switch context and back: same items, order, focus", () => {
     let dock = emptyDock();
-    dock = { ...dock, activeContextId: "city-stoicism" };
-    dock = openItem(dock, "sources", "city-stoicism");
-    dock = openItem(dock, "notes", "city-stoicism");
-    dock = openItem(dock, "quests", "city-stoicism");
+    dock = { ...dock, activeContextId: "ws-stoicism" };
+    dock = openItem(dock, "sources", "ws-stoicism");
+    dock = openItem(dock, "notes", "ws-stoicism");
+    dock = openItem(dock, "quests", "ws-stoicism");
     const beforeOrder = [...dock.order];
     const beforeFocus = dock.focusedId;
     expect(beforeFocus).toBe("quests");
 
     dock = setActiveContext(dock, null);
-    // Map shows no city item, but records persist.
+    // Home shows no workspace item, but records persist.
     expect(visibleIds(dock)).toEqual([]);
     expect(Object.keys(dock.items).sort()).toEqual(["notes", "quests", "sources"]);
 
-    dock = setActiveContext(dock, "city-stoicism");
+    dock = setActiveContext(dock, "ws-stoicism");
     expect([...dock.order]).toEqual(beforeOrder);
     expect(dock.focusedId).toBe(beforeFocus);
     expect(visibleIds(dock)).toEqual(["sources", "notes", "quests"]);
   });
 
-  test("symptom 2: in map no city item appears; every visible item opens first try", () => {
+  test("symptom 2: out-of-scope items stay hidden; every visible item opens first try", () => {
     let dock = emptyDock();
-    dock = { ...dock, activeContextId: "city-x" };
-    dock = openItem(dock, "notes", "city-x");
+    dock = { ...dock, activeContextId: "ws-x" };
+    dock = openItem(dock, "notes", "ws-x");
     dock = openItem(dock, "maps", null);
     dock = setActiveContext(dock, null);
     const visible = visibleIds(dock);
-    // Only the global map entry is visible; city notes persist hidden.
+    // Only the global entry is visible; workspace notes persist hidden.
     expect(visible).toEqual(["maps"]);
     // Focusing the visible map entry works immediately.
     dock = focusItem(dock, "maps");
@@ -57,8 +57,8 @@ describe("dock_items single source (P0 regression)", () => {
 
   test("symptom 3: close any visible item in one click; zero open-but-invisible", () => {
     let dock = emptyDock();
-    dock = { ...dock, activeContextId: "city-x" };
-    dock = openItem(dock, "notes", "city-x");
+    dock = { ...dock, activeContextId: "ws-x" };
+    dock = openItem(dock, "notes", "ws-x");
     expect(visibleIds(dock)).toContain("notes");
     dock = closeItem(dock, "notes");
     expect(visibleIds(dock)).not.toContain("notes");
@@ -70,10 +70,10 @@ describe("dock_items single source (P0 regression)", () => {
 
   test("order is never recalculated: reopen keeps registration order", () => {
     let dock = emptyDock();
-    dock = { ...dock, activeContextId: "city-x" };
-    dock = openItem(dock, "a", "city-x");
-    dock = openItem(dock, "b", "city-x");
-    dock = openItem(dock, "c", "city-x");
+    dock = { ...dock, activeContextId: "ws-x" };
+    dock = openItem(dock, "a", "ws-x");
+    dock = openItem(dock, "b", "ws-x");
+    dock = openItem(dock, "c", "ws-x");
     expect(visibleIds(dock)).toEqual(["a", "b", "c"]);
     dock = focusItem(dock, "a");
     // Focus changes states, never the stable order.

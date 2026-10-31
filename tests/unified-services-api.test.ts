@@ -167,7 +167,7 @@ describe("Unified Product API & Shared Service Layer (Issue #77)", () => {
           workspaceId: "default",
           idempotencyKey: key,
         },
-        { cityId: "default", step: 1 }
+        { workspaceId: "default", step: 1 }
       )) as any;
 
       expect(res1.success).toBe(true);
@@ -182,7 +182,7 @@ describe("Unified Product API & Shared Service Layer (Issue #77)", () => {
           workspaceId: "default",
           idempotencyKey: key,
         },
-        { cityId: "default", step: 2 }
+        { workspaceId: "default", step: 2 }
       )) as any;
 
       expect(res2.success).toBe(true);
@@ -225,7 +225,7 @@ describe("Unified Product API & Shared Service Layer (Issue #77)", () => {
           changeSummary: "Updated to version 2",
           workspaceId: "default",
         },
-        { cityId: "default", step: 2 }
+        { workspaceId: "default", step: 2 }
       )) as any;
 
       expect(modRes.success).toBe(true);
@@ -243,7 +243,7 @@ describe("Unified Product API & Shared Service Layer (Issue #77)", () => {
           author: "Polymax Agent",
           tags: ["utility"],
         },
-        { cityId: "default", step: 3 }
+        { workspaceId: "default", step: 3 }
       )) as any;
 
       expect(pubRes.success).toBe(true);
@@ -325,17 +325,19 @@ describe("Unified Product API & Shared Service Layer (Issue #77)", () => {
   });
 
   describe("Backward Compatibility", () => {
-    it("existing V1 routes (/api/health, /api/cities, /api/maps) remain functional", async () => {
+    it("serves health and workspaces; retired knowledge-map routes are gone", async () => {
       const healthRes = await app.fetch(new Request("http://localhost/api/health"));
       expect(healthRes.status).toBe(200);
       const health = (await healthRes.json()) as any;
       expect(health.status).toBe("ok");
 
-      const citiesRes = await app.fetch(new Request("http://localhost/api/cities"));
-      expect(citiesRes.status).toBe(200);
+      const wsRes = await app.fetch(new Request("http://localhost/api/workspaces"));
+      expect(wsRes.status).toBe(200);
 
-      const mapsRes = await app.fetch(new Request("http://localhost/api/maps"));
-      expect(mapsRes.status).toBe(200);
+      for (const path of ["/api/cities", "/api/maps", "/api/world", "/api/mcp"]) {
+        const res = await app.fetch(new Request(`http://localhost${path}`));
+        expect(res.status).toBe(404);
+      }
     });
   });
 });

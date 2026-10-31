@@ -38,7 +38,7 @@ describe("Agent Durable Memory & Retrieval Engine (Issue #75)", () => {
       const res = await recordMemory({
         content: "User explored quantum computing fundamentals and requested Bell states simulation.",
         category: "project_insight",
-        workspaceId: "quantum-city",
+        workspaceId: "quantum-notes",
         rootDir: TEST_ROOT,
       });
 
@@ -50,7 +50,7 @@ describe("Agent Durable Memory & Retrieval Engine (Issue #75)", () => {
       const content = await fs.readFile(dailyFile, "utf-8");
       expect(content).toContain("# Daily Memory Log");
       expect(content).toContain("[project_insight]");
-      expect(content).toContain("(workspace: quantum-city)");
+      expect(content).toContain("(workspace: quantum-notes)");
       expect(content).toContain("quantum computing fundamentals");
     });
 
@@ -146,7 +146,7 @@ describe("Agent Durable Memory & Retrieval Engine (Issue #75)", () => {
       });
 
       await recordMemory({
-        content: "Quantum superposition and Hadamard quantum gates notes in physics city.",
+        content: "Quantum superposition and Hadamard quantum gates notes on physics.",
         category: "project_insight",
         workspaceId: "physics",
         rootDir: TEST_ROOT,
@@ -257,7 +257,7 @@ describe("Agent Durable Memory & Retrieval Engine (Issue #75)", () => {
           category: "user_preference",
           durable: true,
         },
-        { cityId: "test-city", step: 1 }
+        { workspaceId: "test-ws", step: 1 }
       )) as any;
 
       expect(res.recorded).toBe(true);
@@ -267,7 +267,7 @@ describe("Agent Durable Memory & Retrieval Engine (Issue #75)", () => {
         {
           query: "user preference Promises",
         },
-        { cityId: "test-city", step: 2 }
+        { workspaceId: "test-ws", step: 2 }
       )) as any;
 
       expect(recallRes.count).toBeGreaterThanOrEqual(1);

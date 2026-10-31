@@ -218,6 +218,7 @@ describe("PolyDocks V2 Agentic Runtime End-to-End Integration Benchmark (Issue #
       // 1. polydocks status --json
       const statusRes = spawnSync("bun", [cliBin, "status", "--json"], {
         encoding: "utf-8",
+        maxBuffer: 32 * 1024 * 1024,
         env: { ...process.env, AGENT_HOME_DIR: tmpAgentHome },
       });
 
@@ -231,6 +232,7 @@ describe("PolyDocks V2 Agentic Runtime End-to-End Integration Benchmark (Issue #
       // 2. polydocks sessions --json
       const sessionsRes = spawnSync("bun", [cliBin, "sessions", "--json"], {
         encoding: "utf-8",
+        maxBuffer: 32 * 1024 * 1024,
         env: { ...process.env, AGENT_HOME_DIR: tmpAgentHome },
       });
 
@@ -241,6 +243,7 @@ describe("PolyDocks V2 Agentic Runtime End-to-End Integration Benchmark (Issue #
       // 3. polydocks plugins --json
       const pluginsRes = spawnSync("bun", [cliBin, "plugins", "--json"], {
         encoding: "utf-8",
+        maxBuffer: 32 * 1024 * 1024,
         env: { ...process.env, AGENT_HOME_DIR: tmpAgentHome },
       });
 
@@ -269,7 +272,7 @@ describe("PolyDocks V2 Agentic Runtime End-to-End Integration Benchmark (Issue #
       expect(wsBody.success).toBe(true);
       expect(Array.isArray(wsBody.data)).toBe(true);
 
-      // 3. Retired city/world routes stay gone
+      // 3. Retired knowledge-map routes stay gone
       for (const path of ["/api/cities", "/api/maps", "/api/world", "/api/mcp"]) {
         const res = await app.fetch(new Request(`http://localhost${path}`));
         expect(res.status).toBe(404);

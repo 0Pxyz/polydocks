@@ -124,7 +124,7 @@ describe("Agent evaluation scenarios (scripted model, tool selection)", () => {
         if (e.type === "tool.start") started.push(e.payload?.name);
       },
     });
-    // No research, no city writes, no synthesis for a theme ask.
+    // No research, no writes, no synthesis for a theme ask.
     expect(started).toEqual([]);
   });
 

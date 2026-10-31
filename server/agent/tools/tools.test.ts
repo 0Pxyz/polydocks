@@ -51,7 +51,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("sandbox_logs");
     expect(names).toContain("sandbox_status");
     expect(names).toContain("sandbox_terminate");
-    // City, legacy tabs, and world cartography are gone (parked branch).
+    // Legacy tabs and world cartography are gone (parked branch).
     for (const gone of [
       "list_tabs",
       "open_tab",

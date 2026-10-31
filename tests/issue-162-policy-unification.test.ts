@@ -6,34 +6,40 @@ import { db } from "../server/workspace/db";
 import { initializeFirstPartyPlugins } from "../server/plugins/first-party";
 import { collectReceipt } from "../server/agent/receipts";
 
-const CITY = "test-162-policy";
-const TEST_DIR = path.resolve(process.cwd(), "workspace", CITY);
+const WS = "test-162-policy";
+const TEST_DIR = path.resolve(process.cwd(), "workspace", WS);
 
 describe("Issue #162 — one policy, one audit", () => {
   beforeAll(async () => {
     initializeFirstPartyPlugins();
-    await fs.mkdir(TEST_DIR, { recursive: true });
+    await fs.mkdir(TEST_DIR, { recursive: true }).catch(() => {});
   });
 
   afterAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("create_tab without approval is denied for actor=agent (no bypass)", async () => {
-    const { create_tab } = await import("../server/agent/tools/create_tab");
-    const out: any = await create_tab.execute(
-      { id: "policy-tab-1", title: "T", html: "<h1>x</h1>" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
+  it("create_plugin without approval is denied for actor=agent (no bypass)", async () => {
+    const { create_plugin } = await import("../server/agent/tools/create_plugin");
+    const out: any = await create_plugin.execute(
+      {
+        id: "policy-plugin-1",
+        name: "P",
+        description: "d",
+        code: "const a = 1;",
+        workspaceId: WS,
+      } as any,
+      { workspaceId: WS, step: 1, actor: "agent" } as any
     );
     expect(out.ok).toBe(false);
     expect(out.code).toBe("approval_required");
   });
 
-  it("update_tab without approval is denied for actor=agent", async () => {
-    const { update_tab } = await import("../server/agent/tools/update_tab");
-    const out: any = await update_tab.execute(
-      { id: "policy-tab-1", title: "New" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
+  it("modify_plugin without approval is denied for actor=agent", async () => {
+    const { modify_plugin } = await import("../server/agent/tools/modify_plugin");
+    const out: any = await modify_plugin.execute(
+      { id: "policy-plugin-1", changeSummary: "x", code: "const a = 2;" } as any,
+      { workspaceId: WS, step: 1, actor: "agent" } as any
     );
     expect(out.ok).toBe(false);
     expect(out.code).toBe("approval_required");
@@ -43,31 +49,44 @@ describe("Issue #162 — one policy, one audit", () => {
     const { promote_to_plugin } = await import("../server/agent/tools/promote_to_plugin");
     const out: any = await promote_to_plugin.execute(
       { id: "whatever" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
+      { workspaceId: WS, step: 1, actor: "agent" } as any
     );
     expect(out.ok).toBe(false);
     expect(out.code).toBe("approval_required");
   });
 
-  it("delete_tab preserves approval_required envelope and honors never/auto", async () => {
-    const { delete_tab } = await import("../server/agent/tools/delete_tab");
+  it("create_plugin preserves approval_required envelope and honors never/auto", async () => {
+    const { create_plugin } = await import("../server/agent/tools/create_plugin");
     const saved = (config as any).INSTALL_POLICY;
 
-    // ask (default): no approval -> legacy envelope
+    // ask (default): no approval -> denied envelope
     (config as any).INSTALL_POLICY = "ask";
-    const paused: any = await delete_tab.execute(
-      { id: "x" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
+    const paused: any = await create_plugin.execute(
+      {
+        id: "policy-plugin-2",
+        name: "P",
+        description: "d",
+        code: "const a = 1;",
+        workspaceId: WS,
+      } as any,
+      { workspaceId: WS, step: 1, actor: "agent" } as any
     );
-    expect(paused.status).toBe("approval_required");
-    expect(paused.requiresConfirmation).toBe(true);
+    expect(paused.ok).toBe(false);
+    expect(paused.code).toBe("approval_required");
 
     // never: install_denied even with approval
     (config as any).INSTALL_POLICY = "never";
     try {
-      const denied: any = await delete_tab.execute(
-        { id: "x", userApproved: true } as any,
-        { cityId: CITY, step: 1, actor: "agent" } as any
+      const denied: any = await create_plugin.execute(
+        {
+          id: "policy-plugin-2",
+          name: "P",
+          description: "d",
+          code: "const a = 1;",
+          workspaceId: WS,
+          userApproved: true,
+        } as any,
+        { workspaceId: WS, step: 1, actor: "agent" } as any
       );
       expect(denied.ok).toBe(false);
       expect(denied.code).toBe("install_denied");
@@ -77,47 +96,38 @@ describe("Issue #162 — one policy, one audit", () => {
   });
 
   it("native twins run through the bus (audited in executions)", async () => {
-    const { write_city_file } = await import("../server/agent/tools/write_city_file");
-    const { read_city_file } = await import("../server/agent/tools/read_city_file");
-    const { get_city_context } = await import("../server/agent/tools/get_city_context");
     const { open_source } = await import("../server/agent/tools/open_source");
+    const { invoke_capability } = await import("../server/agent/tools/invoke_capability");
 
     const before = (db.query("SELECT COUNT(*) as n FROM executions").get() as any).n;
 
-    await write_city_file.execute(
-      { path: "notes/162.md", content: "# hi" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
-    );
-    const read: any = await read_city_file.execute(
-      { path: "notes/162.md" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
-    );
-    expect(read.content).toContain("# hi");
-
-    await get_city_context.execute({} as any, { cityId: CITY, step: 1, actor: "agent" } as any);
     const opened: any = await open_source.execute(
       { url: "https://example.com/a" } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
+      { workspaceId: WS, step: 1, actor: "agent" } as any
     );
     expect(opened.success).toBe(true);
     expect(opened.action).toBe("browser.open");
+
+    const listed: any = await invoke_capability.execute(
+      { id: "sources.list", input: { workspaceId: WS } } as any,
+      { workspaceId: WS, step: 1, actor: "agent" } as any
+    );
+    expect(listed.success).toBe(true);
 
     const after = (db.query("SELECT COUNT(*) as n FROM executions").get() as any).n;
     expect(after).toBeGreaterThan(before);
 
     const rows = db.query("SELECT capability_id FROM executions ORDER BY rowid DESC LIMIT 20").all() as any[];
     const ids = rows.map((r) => r.capability_id);
-    expect(ids).toContain("writing.write_file");
-    expect(ids).toContain("writing.read_file");
-    expect(ids).toContain("workspace.get_context");
     expect(ids).toContain("browser.open");
+    expect(ids).toContain("sources.list");
   });
 
   it("fetch_page uses sources.add (no raw JSON dump) and is audited", async () => {
     const { fetch_page } = await import("../server/agent/tools/fetch_page");
     const out: any = await fetch_page.execute(
-      { urls: ["https://example.com/162-test"], cityId: CITY, saveToSources: true } as any,
-      { cityId: CITY, step: 1, actor: "agent" } as any
+      { urls: ["https://example.com/162-test"], workspaceId: WS, saveToSources: true } as any,
+      { workspaceId: WS, step: 1, actor: "agent" } as any
     );
     expect(out.count).toBe(1);
     expect(out.pages[0].markdown.length).toBeGreaterThan(0);
@@ -140,11 +150,10 @@ describe("Issue #162 — one policy, one audit", () => {
   it("facade plugins.operate resolves first-party capabilities (not only contracts)", async () => {
     const { invokeCapability } = await import("../server/facade/shared");
     for (const [plugin, cap, input] of [
-      ["browser", "open", { url: "https://example.com/facade", cityId: CITY }],
-      ["writing", "write_file", { path: "notes/facade.md", content: "hi", cityId: CITY }],
-      ["workspace", "get_context", { cityId: CITY }],
+      ["browser", "open", { url: "https://example.com/facade", workspaceId: WS }],
+      ["sources", "list", { workspaceId: WS }],
     ] as Array<[string, string, Record<string, unknown>]>) {
-      const out: any = await invokeCapability(plugin, cap, input, { actor: "user", cityId: CITY });
+      const out: any = await invokeCapability(plugin, cap, input, { actor: "user", workspaceId: WS });
       expect(out.ok).toBe(true);
     }
     const unknown: any = await invokeCapability("nope", "missing", {}, { actor: "user" });
@@ -155,9 +164,9 @@ describe("Issue #162 — one policy, one audit", () => {
   it("approval_required never counts as success in receipts", async () => {
     const denied = { ok: false, error: "Install policy is 'ask'", retryable: false, code: "approval_required" };
     const paused = { status: "approval_required", requiresConfirmation: true, message: "paused" };
-    expect(collectReceipt("create_tab", {}, denied).ok).toBe(false);
-    expect(collectReceipt("delete_tab", {}, paused).ok).toBe(false);
+    expect(collectReceipt("create_plugin", {}, denied).ok).toBe(false);
+    expect(collectReceipt("modify_plugin", {}, paused).ok).toBe(false);
     // Even a wrapped success with approval text must not count.
-    expect(collectReceipt("create_tab", {}, { success: true, status: "approval_required" }).ok).toBe(false);
+    expect(collectReceipt("create_plugin", {}, { success: true, status: "approval_required" }).ok).toBe(false);
   });
 });

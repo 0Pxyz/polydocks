@@ -40,7 +40,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     const fullCapture = { system: "" };
     await runAgentLoop({
       prompt: "pesquise os papers mais recentes sobre distributed systems",
-      cityId: "distributed-systems",
+      workspaceId: "distributed-systems",
       llmClient: mockLlm(fullCapture),
     });
     expect(fullCapture.system).toContain("Specialized Skill: content-and-reader");
@@ -84,7 +84,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     } as any;
     await runAgentLoop({ prompt: "build a pomodoro timer", llmClient: buildLlm });
 
-    // Theme request: theme skill injected, research/city tools hidden.
+    // Theme request: theme skill injected, research tools hidden.
     const themeCapture = { system: "" };
     const themeLlm = {
       chat: {
@@ -115,14 +115,9 @@ describe("Issue #163 — progressive context and capability discovery", () => {
       }
     }
 
-    // Research keeps discovery; city keeps planning; both block theme/delete.
-    expect(INTENT_TOOL_DENYLIST.research).toContain("build_city");
+    // Research keeps discovery and blocks theme changes.
     expect(INTENT_TOOL_DENYLIST.research).toContain("apply_theme");
     expect(INTENT_TOOL_DENYLIST.research).not.toContain("search_web");
-    expect(INTENT_TOOL_DENYLIST.city).toContain("apply_theme");
-    expect(INTENT_TOOL_DENYLIST.city).toContain("delete_tab");
-    expect(INTENT_TOOL_DENYLIST.city).not.toContain("build_city");
-    expect(INTENT_TOOL_DENYLIST.city).not.toContain("plan_map");
 
     // General conversation denies nothing: discovery always available.
     expect(INTENT_TOOL_DENYLIST.general).toEqual([]);
@@ -142,7 +137,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     const theme = await loadSkill("theme");
     expect(skillTokens(theme)).toBeLessThanOrEqual(600);
     // All injected skills stay within per-skill budgets.
-    for (const name of ["plugins", "dock-and-tabs", "dock", "theme", "capabilities-and-mcp", "content-and-reader", "sandbox", "world-and-cities", "memory-and-files", "verify-and-report"]) {
+    for (const name of ["plugins", "dock", "theme", "capabilities-and-mcp", "content-and-reader", "sandbox", "memory-and-files", "verify-and-report"]) {
       expect(skillTokens(await loadSkill(name)), name).toBeLessThanOrEqual(600);
     }
     expect(skillTokens(await loadSkill("app-overview"))).toBeLessThanOrEqual(700);
@@ -158,7 +153,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     await expect(fs.readFile(path.resolve(process.cwd(), ref), "utf-8")).resolves.toContain("search");
 
     // Every loadable skill name resolves (web-research stays an explicit miss).
-    for (const name of ["plugins", "dock-and-tabs", "dock", "theme", "capabilities-and-mcp", "content-and-reader", "world-and-cities", "memory-and-files", "verify-and-report", "app-overview"]) {
+    for (const name of ["plugins", "dock", "theme", "capabilities-and-mcp", "content-and-reader", "memory-and-files", "verify-and-report", "app-overview"]) {
       await expect(loadSkill(name)).resolves.toBeDefined();
     }
 
@@ -166,7 +161,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     const dockSkill = stripSkillMetadata(await loadSkill("dock"));
     expect(dockSkill).toContain("/api/dock/action");
     const { app } = await import("../server/index");
-    expect((await app.request("/api/dock/tabs")).status).toBe(200);
+    expect((await app.request("/api/dock/tabs")).status).toBe(404);
   });
 
   it("prompt and context budgets are pinned", () => {

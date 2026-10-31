@@ -221,8 +221,8 @@ describe("Plugins Dock Tool & Lifecycle UI (Issue #48)", () => {
         pluginId: "test_approval_plugin",
         capabilityId: "test_approval_plugin.delete_file",
         risk: "destructive",
-        scope: "city:stoicism",
-        summary: "Delete notes file in Stoicism city",
+        scope: "workspace:test-ws",
+        summary: "Delete a workspace file",
         timeoutMs: 5000,
       });
 
@@ -249,8 +249,8 @@ describe("Plugins Dock Tool & Lifecycle UI (Issue #48)", () => {
         pluginId: "test_approval_plugin",
         capabilityId: "test_approval_plugin.wipe",
         risk: "destructive",
-        scope: "city:stoicism",
-        summary: "Wipe all city files",
+        scope: "workspace:test-ws",
+        summary: "Wipe all workspace files",
         timeoutMs: 5000,
       });
 

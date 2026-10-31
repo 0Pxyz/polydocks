@@ -57,7 +57,7 @@ describe("Capability Bus, Execution Logging & Unified Catalog", () => {
         { message: "hello polymax" },
         {
           actor: "agent",
-          cityId: "stoicism",
+          workspaceId: "stoicism",
           onEvent: (evt) => {
             emittedEvents.push(evt);
           },
@@ -203,79 +203,15 @@ describe("Capability Bus, Execution Logging & Unified Catalog", () => {
       expect(Array.isArray(capData.capabilities)).toBe(true);
     });
 
-    it("integrates registered capabilities dynamically into POST /api/mcp tools/list and tools/call", async () => {
-      capabilityBus.register(
-        "test-bus-mcp",
-        {
-          id: "test-bus.mcp_action",
-          title: "MCP Action",
-          description: "Test action for MCP call",
-          input: { type: "object", properties: { num: { type: "number" } } },
-          risk: "read",
-        },
-        async (args) => ({ resultNumber: (args.num || 0) * 2 })
-      );
-
-      // Verify tools/list contains registered capability
-      const listRes = await app.fetch(
-        new Request("http://localhost:3000/api/mcp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 10,
-            method: "tools/list",
-          }),
-        })
-      );
-
-      expect(listRes.status).toBe(200);
-      const listBody = (await listRes.json()) as any;
-      const names = listBody.result.tools.map((t: any) => t.name);
-      expect(names).toContain("test-bus.mcp_action");
-
-      // Verify tools/call invokes registered capability through bus
-      const callRes = await app.fetch(
-        new Request("http://localhost:3000/api/mcp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 11,
-            method: "tools/call",
-            params: {
-              name: "test-bus.mcp_action",
-              arguments: { num: 21 },
-            },
-          }),
-        })
-      );
-
-      expect(callRes.status).toBe(200);
-      const callBody = (await callRes.json()) as any;
-      expect(callBody.result.content[0].text).toContain('"resultNumber": 42');
-    });
-
-    it("enforces bearer token authentication on remote MCP requests", async () => {
-      // Simulate remote non-loopback host
+    it("retired /api/mcp endpoint stays gone", async () => {
       const res = await app.fetch(
-        new Request("http://192.168.1.50:3000/api/mcp", {
+        new Request("http://localhost:3000/api/mcp", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Host: "192.168.1.50:3000",
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 12,
-            method: "tools/list",
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/list" }),
         })
       );
-
-      expect(res.status).toBe(401);
-      const body = (await res.json()) as any;
-      expect(body.error.message).toContain("MCP bearer token required");
+      expect(res.status).toBe(404);
     });
   });
 });

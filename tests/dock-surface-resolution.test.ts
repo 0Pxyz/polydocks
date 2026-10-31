@@ -14,7 +14,7 @@ describe("Dock Surface Resolution & Legacy Tab Adapter", () => {
     it("wraps a legacy tab config into a compliant PluginManifest (apiVersion: 1)", () => {
       const legacyTab = {
         id: "terminal",
-        label: "City Terminal",
+        label: "Terminal",
         icon: TerminalWindow,
       };
 
@@ -22,7 +22,7 @@ describe("Dock Surface Resolution & Legacy Tab Adapter", () => {
 
       expect(manifest.apiVersion).toBe(1);
       expect(manifest.id).toBe("terminal");
-      expect(manifest.name).toBe("City Terminal");
+      expect(manifest.name).toBe("Terminal");
       expect(manifest.trust).toBe("first-party");
       expect(manifest.surfaces?.length).toBe(1);
       expect(manifest.surfaces?.[0].id).toBe("terminal");
@@ -104,7 +104,7 @@ describe("Dock Surface Resolution & Legacy Tab Adapter", () => {
         },
         {
           id: "files",
-          label: "City Files",
+          label: "Files",
           type: "icon" as const,
           icon: Folder,
         },
@@ -116,7 +116,7 @@ describe("Dock Surface Resolution & Legacy Tab Adapter", () => {
       expect(resolved[0].id).toBe("browser");
       expect(resolved[0].label).toBe("Research & Sources");
       expect(resolved[1].id).toBe("files");
-      expect(resolved[1].label).toBe("City Files");
+      expect(resolved[1].label).toBe("Files");
     });
   });
 });

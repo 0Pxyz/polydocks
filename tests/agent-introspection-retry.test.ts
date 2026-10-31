@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import app from "../server/index";
 import {
-  appendCityMessage,
-  getCityConversationMessages,
-  clearCityConversation,
-} from "../server/workspace/conversations";
+  appendThreadMessage,
+  getThreadContext,
+  clearAgentThread,
+} from "../server/workspace/thread";
 import { inspect_execution } from "../server/agent/tools/inspect_execution";
 import { list_recent_executions } from "../server/agent/tools/list_recent_executions";
 import { capabilityBus } from "../server/plugins/bus";
@@ -12,79 +12,37 @@ import { runAgentLoop } from "../server/agent/loop";
 import { db } from "../server/workspace/db";
 import { z } from "zod";
 
-describe("Agent Introspection, Per-City Conversation & Failure Retry (Issue #50)", () => {
-  const testCity = "city_retro_test";
+describe("Agent Introspection, Thread Conversation & Failure Retry (Issue #50)", () => {
+  const testWs = "ws-retro-test";
+  const testUser = `test-retro-user-${Date.now().toString(36)}`;
 
   beforeEach(() => {
-    clearCityConversation(testCity);
+    clearAgentThread(testUser);
     db.query("DELETE FROM executions WHERE plugin_id = 'test_introspection'").run();
   });
 
   afterEach(() => {
-    clearCityConversation(testCity);
+    clearAgentThread(testUser);
     db.query("DELETE FROM executions WHERE plugin_id = 'test_introspection'").run();
   });
 
-  describe("Per-City Conversation Persistence", () => {
+  describe("Thread Conversation Persistence", () => {
     it("persists conversation messages in SQLite and retrieves them chronologically", () => {
-      const msg1 = appendCityMessage(testCity, "user", "What are the core Stoic virtues?");
-      const msg2 = appendCityMessage(
-        testCity,
-        "assistant",
-        "The core virtues are Wisdom, Courage, Justice, and Temperance."
-      );
+      const msg1 = appendThreadMessage(testUser, "user", "What are the core Stoic virtues?");
+      const msg2 = appendThreadMessage(testUser, "assistant", "The core virtues are Wisdom, Courage, Justice, and Temperance.");
 
       expect(msg1.id).toBeDefined();
       expect(msg2.id).toBeDefined();
 
-      const messages = getCityConversationMessages(testCity);
-      expect(messages.length).toBe(2);
-      expect(messages[0].role).toBe("user");
-      expect(messages[0].content).toContain("core Stoic virtues");
-      expect(messages[1].role).toBe("assistant");
-      expect(messages[1].content).toContain("Wisdom, Courage");
+      const ctx = getThreadContext(testUser);
+      expect(ctx.messages.length).toBe(2);
+      expect(ctx.messages[0].role).toBe("user");
+      expect(ctx.messages[0].content).toContain("core Stoic virtues");
+      expect(ctx.messages[1].role).toBe("assistant");
+      expect(ctx.messages[1].content).toContain("Wisdom, Courage");
     });
 
-    it("manages conversation history via REST endpoints GET, POST, and DELETE /api/cities/:id/conversation", async () => {
-      // POST message
-      const postRes = await app.fetch(
-        new Request(`http://localhost:3000/api/cities/${testCity}/conversation`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            role: "user",
-            content: "Synthesize flashcards for this city.",
-          }),
-        })
-      );
-      expect(postRes.status).toBe(201);
-
-      // GET conversation
-      const getRes = await app.fetch(
-        new Request(`http://localhost:3000/api/cities/${testCity}/conversation`)
-      );
-      expect(getRes.status).toBe(200);
-      const getData = (await getRes.json()) as any;
-      expect(getData.success).toBe(true);
-      expect(getData.messages.length).toBe(1);
-      expect(getData.messages[0].content).toBe("Synthesize flashcards for this city.");
-
-      // DELETE conversation
-      const delRes = await app.fetch(
-        new Request(`http://localhost:3000/api/cities/${testCity}/conversation`, {
-          method: "DELETE",
-        })
-      );
-      expect(delRes.status).toBe(200);
-
-      const emptyRes = await app.fetch(
-        new Request(`http://localhost:3000/api/cities/${testCity}/conversation`)
-      );
-      const emptyData = (await emptyRes.json()) as any;
-      expect(emptyData.messages.length).toBe(0);
-    });
-
-    it("automatically persists user prompts and assistant responses in runAgentLoop when cityId is provided", async () => {
+    it("automatically persists user prompts and assistant responses in runAgentLoop with a user thread", async () => {
       const mockLlm = {
         chat: {
           completions: {
@@ -104,8 +62,8 @@ describe("Agent Introspection, Per-City Conversation & Failure Retry (Issue #50)
 
       const events: any[] = [];
       await runAgentLoop({
-        prompt: "Hello Stoicism City",
-        cityId: testCity,
+        prompt: "Hello Stoicism",
+        userId: testUser,
         history: [],
         llmClient: mockLlm,
         onEvent: (evt) => {
@@ -113,12 +71,11 @@ describe("Agent Introspection, Per-City Conversation & Failure Retry (Issue #50)
         },
       });
 
-      const messages = getCityConversationMessages(testCity);
-      expect(messages.length).toBe(2);
-      expect(messages[0].role).toBe("user");
-      expect(messages[0].content).toBe("Hello Stoicism City");
-      expect(messages[1].role).toBe("assistant");
-      expect(messages[1].content).toContain("Stoic virtue is cultivated daily");
+      const ctx = getThreadContext(testUser);
+      const roles = ctx.messages.map((m) => m.role);
+      expect(roles).toContain("user");
+      expect(roles).toContain("assistant");
+      expect(ctx.messages[0].content).toBe("Hello Stoicism");
     });
   });
 
@@ -141,7 +98,7 @@ describe("Agent Introspection, Per-City Conversation & Failure Retry (Issue #50)
       // 1. Successful execution
       const successRes = await capabilityBus.invoke(capId, { a: 10, b: 2 }, {
         actor: "user",
-        cityId: testCity,
+        workspaceId: testWs,
       });
       expect(successRes.success).toBe(true);
 
@@ -157,7 +114,7 @@ describe("Agent Introspection, Per-City Conversation & Failure Retry (Issue #50)
       // 2. Failed execution
       const failRes = await capabilityBus.invoke(capId, { a: 10, b: 0 }, {
         actor: "user",
-        cityId: testCity,
+        workspaceId: testWs,
       });
       expect(failRes.success).toBe(false);
 
@@ -183,18 +140,18 @@ describe("Agent Introspection, Per-City Conversation & Failure Retry (Issue #50)
         return { done: true };
       });
 
-      await capabilityBus.invoke(capId, { ok: true }, { actor: "user", cityId: testCity });
-      await capabilityBus.invoke(capId, { ok: false }, { actor: "user", cityId: testCity });
+      await capabilityBus.invoke(capId, { ok: true }, { actor: "user", workspaceId: testWs });
+      await capabilityBus.invoke(capId, { ok: false }, { actor: "user", workspaceId: testWs });
 
       const listAll = (await list_recent_executions.execute(
-        { cityId: testCity, pluginId: "test_introspection", status: "all" },
+        { workspaceId: testWs, pluginId: "test_introspection", status: "all" },
         { step: 1 }
       )) as any;
       expect(listAll.success).toBe(true);
       expect(listAll.executions.length).toBe(2);
 
       const listFailed = (await list_recent_executions.execute(
-        { cityId: testCity, pluginId: "test_introspection", status: "failed" },
+        { workspaceId: testWs, pluginId: "test_introspection", status: "failed" },
         { step: 2 }
       )) as any;
       expect(listFailed.success).toBe(true);

@@ -39,8 +39,8 @@ describe("tab lifecycle contract: every plugin, present and future", () => {
     // First-party surface is always present via initializeFirstPartyPlugins.
     expect(ids).toContain("search");
     expect(ids).toContain("browser");
-    // Deterministic order for stable reports.
-    expect(ids).toEqual([...ids].sort());
+    // Deterministic order for stable reports (locale-aware, matches impl).
+    expect(ids).toEqual([...ids].sort((a, b) => a.localeCompare(b)));
   });
 
   it("a newly added plugin joins the suite automatically", async () => {

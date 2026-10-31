@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { useThemeStore } from "../src/lib/theme";
 import { platformStorage } from "../src/lib/platform/storage";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("Dock Positioning and Spacing Cleanliness", () => {
@@ -104,12 +104,9 @@ describe("Dock Positioning and Spacing Cleanliness", () => {
       expect(homeScreenSource.includes("my-auto")).toBe(true);
     });
 
-    it("ensures CityOverview does not enforce duplicate viewport min-height", () => {
-      const cityOverviewSource = readFileSync(
-        resolve(__dirname, "../src/features/city/CityOverview.tsx"),
-        "utf8"
-      );
-      expect(cityOverviewSource.includes("min-h-[calc(100vh-var(--dock-bottom")).toBe(false);
+    it("knowledge-map views are gone from the dock path (parked, not special-cased)", () => {
+      expect(existsSync(resolve(__dirname, "../src/features/city"))).toBe(false);
+      expect(existsSync(resolve(__dirname, "../src/features/views"))).toBe(false);
     });
 
     it("ensures AgenticDock uses stable baseHudRef measuring status line + capsule together", () => {

@@ -288,7 +288,7 @@ describe("Persistent Work Sessions & Background Task Engine (Issue #76)", () => 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: "Synthesize notes on distributed consensus",
-            cityId: "distributed-systems",
+            workspaceId: "distributed-systems",
           }),
         })
       );

@@ -13,7 +13,7 @@ describe("Agent Meta-Tools & First-Party Plugin Orchestration", () => {
     it("discovers search capabilities based on keyword query", async () => {
       const res = (await find_capabilities.execute(
         { query: "search web papers", limit: 5 },
-        { cityId: "test-city", step: 1 }
+        { workspaceId: "test-ws", step: 1 }
       )) as any;
 
       expect(res.found).toBeGreaterThan(0);
@@ -22,21 +22,21 @@ describe("Agent Meta-Tools & First-Party Plugin Orchestration", () => {
       expect(capIds).toContain("search.web");
     });
 
-    it("discovers writing and workspace capabilities", async () => {
+    it("discovers sources and sandbox capabilities", async () => {
       const res = (await find_capabilities.execute(
-        { query: "workspace note file", limit: 5 },
-        { cityId: "test-city", step: 1 }
+        { query: "sources list sandbox", limit: 5 },
+        { workspaceId: "test-ws", step: 1 }
       )) as any;
 
       expect(res.found).toBeGreaterThan(0);
       const capIds = res.capabilities.map((c: any) => c.id);
-      expect(capIds.some((id: string) => id.startsWith("writing.") || id.startsWith("workspace."))).toBe(true);
+      expect(capIds.some((id: string) => id.startsWith("sources.") || id.startsWith("sandbox."))).toBe(true);
     });
 
     it("returns empty matches when query has no matching terms", async () => {
       const res = (await find_capabilities.execute(
         { query: "xyznonexistentcapability12345", limit: 5 },
-        { cityId: "test-city", step: 1 }
+        { workspaceId: "test-ws", step: 1 }
       )) as any;
 
       expect(res.found).toBe(0);
@@ -45,18 +45,18 @@ describe("Agent Meta-Tools & First-Party Plugin Orchestration", () => {
   });
 
   describe("invoke_capability Meta-Tool", () => {
-    it("invokes first-party workspace capability successfully via the bus", async () => {
+    it("invokes first-party sources capability successfully via the bus", async () => {
       const res = (await invoke_capability.execute(
         {
-          id: "workspace.get_context",
-          input: { cityId: "stoicism" },
+          id: "sources.list",
+          input: { workspaceId: "test-ws-meta" },
         },
-        { cityId: "stoicism", step: 1 }
+        { workspaceId: "test-ws-meta", step: 1 }
       )) as any;
 
       expect(res.success).toBe(true);
-      expect(res.capabilityId).toBe("workspace.get_context");
-      expect(res.pluginId).toBe("workspace");
+      expect(res.capabilityId).toBe("sources.list");
+      expect(res.pluginId).toBe("sources");
       expect(res.data).toBeDefined();
     });
 
@@ -66,7 +66,7 @@ describe("Agent Meta-Tools & First-Party Plugin Orchestration", () => {
           id: "nonexistent.tool",
           input: {},
         },
-        { cityId: "stoicism", step: 1 }
+        { workspaceId: "test-ws-meta", step: 1 }
       )) as any;
 
       expect(res.error).toBeDefined();

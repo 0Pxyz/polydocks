@@ -6,10 +6,10 @@ import { find_capabilities } from "../server/agent/tools/find_capabilities";
 import { runContractCommand } from "../server/plugins/contractCli";
 import { getContractCapability } from "../server/plugins/contract";
 import { db } from "../server/workspace/db";
-import { migrateLegacyCitySources, listSources } from "../server/plugins/sources";
+import { migrateLegacyWorkspaceSources, listSources } from "../server/plugins/sources";
 import app from "../server/index";
 
-const CITY = "test-sources-ws";
+const WS = "test-sources-ws";
 const ARTICLE_URL = "https://example.com/articles/deep-work";
 const VIDEO_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 const VIMEO_URL = "https://vimeo.com/76979871";
@@ -68,12 +68,12 @@ function stubFetch() {
 describe("Sources Plugin & First-Party Capabilities", () => {
   beforeEach(() => {
     stubFetch();
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(WS);
   });
 
   afterEach(() => {
     globalThis.fetch = realFetch;
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(WS);
   });
 
   it("registers sources capabilities on the bus and contract registry", async () => {
@@ -87,7 +87,7 @@ describe("Sources Plugin & First-Party Capabilities", () => {
   });
 
   it("agent tool, HTTP route and CLI return the same envelope and event", async () => {
-    const input = { url: ARTICLE_URL, cityId: CITY };
+    const input = { url: ARTICLE_URL, workspaceId: WS };
 
     // 1. Agent surface: sources.add
     const viaAgent = (await invoke_capability.execute({ id: "sources.add", input }, { step: 1 } as any)) as any;
@@ -115,20 +115,20 @@ describe("Sources Plugin & First-Party Capabilities", () => {
     expect(httpEnv.data.deduped).toBe(true);
     expect(httpEnv.events.some((e: any) => e.type === "source.added")).toBe(false);
 
-    // 3. CLI surface: polydocks sources add --url ... --city ...
-    const cli = await runContractCommand("sources", "add", ["--url", ARTICLE_URL, "--city", CITY], { json: true });
+    // 3. CLI surface: polydocks sources add --url ... --workspace ...
+    const cli = await runContractCommand("sources", "add", ["--url", ARTICLE_URL, "--workspace", WS], { json: true });
     expect(cli.found).toBe(true);
     expect((cli.envelope as any)?.ok).toBe(true);
     expect((cli.envelope as any)?.id).toBe(savedId);
 
     // One row only in database: dedupe held across all three surfaces
-    const count = db.query("SELECT COUNT(*) as n FROM sources WHERE city_id = ?").get(CITY) as any;
+    const count = db.query("SELECT COUNT(*) as n FROM sources WHERE workspace_id = ?").get(WS) as any;
     expect(count.n).toBe(1);
   });
 
   it("infers video kind with thumbnail via YouTube oEmbed", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: VIDEO_URL, cityId: CITY } },
+      { id: "sources.add", input: { url: VIDEO_URL, workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(res.success).toBe(true);
@@ -139,7 +139,7 @@ describe("Sources Plugin & First-Party Capabilities", () => {
 
   it("handles Vimeo video with thumbnail and oEmbed author/title", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: VIMEO_URL, cityId: CITY } },
+      { id: "sources.add", input: { url: VIMEO_URL, workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(res.success).toBe(true);
@@ -152,7 +152,7 @@ describe("Sources Plugin & First-Party Capabilities", () => {
 
   it("falls back to markdown heading and markdown image when og tags missing", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: MD_IMAGE_URL, cityId: CITY } },
+      { id: "sources.add", input: { url: MD_IMAGE_URL, workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(res.success).toBe(true);
@@ -164,15 +164,15 @@ describe("Sources Plugin & First-Party Capabilities", () => {
   it("lists sources via sources.list and opens a source via sources.open", async () => {
     // 1. Add source
     const added = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: ARTICLE_URL, cityId: CITY } },
+      { id: "sources.add", input: { url: ARTICLE_URL, workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(added.data.ok).toBe(true);
     const sourceId = added.data.id;
 
-    // 2. sources.list({ cityId })
+    // 2. sources.list({ workspaceId })
     const listRes = (await invoke_capability.execute(
-      { id: "sources.list", input: { cityId: CITY } },
+      { id: "sources.list", input: { workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(listRes.success).toBe(true);
@@ -182,7 +182,7 @@ describe("Sources Plugin & First-Party Capabilities", () => {
 
     // 3. sources.open({ id })
     const openRes = (await invoke_capability.execute(
-      { id: "sources.open", input: { id: sourceId, cityId: CITY } },
+      { id: "sources.open", input: { id: sourceId, workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(openRes.success).toBe(true);
@@ -193,19 +193,19 @@ describe("Sources Plugin & First-Party Capabilities", () => {
 
   it("rejects sources without a verifiable title", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: NO_TITLE_URL, cityId: CITY } },
+      { id: "sources.add", input: { url: NO_TITLE_URL, workspaceId: WS } },
       { step: 1 } as any
     )) as any;
     expect(res.data?.ok ?? res.success).toBe(false);
-    const rows = db.query("SELECT COUNT(*) as n FROM sources WHERE city_id = ?").get(CITY) as any;
+    const rows = db.query("SELECT COUNT(*) as n FROM sources WHERE workspace_id = ?").get(WS) as any;
     expect(rows.n).toBe(0);
   });
 
-  it("migrates existing city workspace feed.json and sources into SQLite sources table", async () => {
+  it("migrates existing workspace feed.json and sources into SQLite sources table", async () => {
     // Self-sufficient fixtures: the migration reads real workspace files,
     // so the test writes its own instead of depending on seeded demo data.
-    const fixtureCity = "test-migrate-ws";
-    const fixtureRoot = path.resolve(process.cwd(), "workspace", fixtureCity);
+    const fixtureWs = "test-migrate-ws";
+    const fixtureRoot = path.resolve(process.cwd(), "workspace", fixtureWs);
     await fs.mkdir(path.join(fixtureRoot, "sources"), { recursive: true });
     await fs.writeFile(
       path.join(fixtureRoot, "feed.json"),
@@ -222,15 +222,15 @@ describe("Sources Plugin & First-Party Capabilities", () => {
       "utf-8"
     );
     try {
-      const res = await migrateLegacyCitySources();
+      const res = await migrateLegacyWorkspaceSources();
       expect(typeof res.migratedCount).toBe("number");
-      const sources = listSources(fixtureCity);
+      const sources = listSources(fixtureWs);
       expect(sources.length).toBeGreaterThan(0);
       expect(sources.some((s) => s.url.includes("nature.com") || s.title.includes("Deep Learning"))).toBe(true);
       expect(sources.some((s) => s.url.includes("arxiv.org"))).toBe(true);
     } finally {
       await fs.rm(fixtureRoot, { recursive: true, force: true }).catch(() => {});
-      db.query("DELETE FROM sources WHERE city_id = ?").run(fixtureCity);
+      db.query("DELETE FROM sources WHERE workspace_id = ?").run(fixtureWs);
     }
   });
 });

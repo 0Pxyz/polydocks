@@ -15,8 +15,8 @@ import { ArtifactService } from "../server/services/artifactService";
 import {
   tileMotif,
   tileVariant,
-  territoryAccent,
-} from "../src/features/city/sourceMedia";
+  tileAccent,
+} from "../src/lib/source-tiles";
 
 const realFetch = globalThis.fetch;
 const TINY_PNG_B64 =
@@ -56,8 +56,8 @@ describe("imageless feed tiles (deterministic, zero spend)", () => {
   });
 
   it("territory accent is a stable hsl color per key", () => {
-    expect(territoryAccent("TikTok")).toBe(territoryAccent("TikTok"));
-    expect(territoryAccent("TikTok")).toMatch(/^hsl\(\d+ 55% 38%\)$/);
+    expect(tileAccent("TikTok")).toBe(tileAccent("TikTok"));
+    expect(tileAccent("TikTok")).toMatch(/^hsl\(\d+ 55% 38%\)$/);
   });
 });
 
@@ -113,7 +113,7 @@ describe("chat-requested images (budget + artifacts)", () => {
   });
 
   it("share card rejects invalid input without spending", async () => {
-    const out = await requestShareCard({ city: "" } as any);
+    const out = await requestShareCard({ title: "" } as any);
     expect(out.ok).toBe(false);
     expect(out.code).toBe("invalid_input");
     expect(getImageSpend()).toBe(spendBefore);

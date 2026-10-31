@@ -68,7 +68,7 @@ Every agent action is categorized by risk level (`server/plugins/policy.ts`):
 ### Maestri (Evercraft Labs v0.28.1 bundle analysis)
 - **Persisted Workspace State:** Maestri persists spatial canvas nodes into layout files. Polymax applies this to the Dock: the active dock plugins, open tabs, and reading state persist in `workspace.json`.
 - **Guest Runtime:** Maestri runs webviews with per-partition sessions. Polymax runs dynamic tabs in isolated `iframe srcdoc` containers communicating solely via a typed `postMessage` bridge (`window.polymax`).
-- **CLI and Headless Parity:** Maestri includes a bundled CLI (`maestri floor create`). Polymax provides the MCP Server (`/api/mcp`) and `llms.txt` so external CLI tools and agents can operate directly on cities.
+- **CLI and Headless Parity:** Maestri includes a bundled CLI (`maestri floor create`). Polymax provides the `bin/polydocks` CLI (same handlers as the HTTP routes) so external tools and agents can operate directly on workspaces.
 
 ---
 

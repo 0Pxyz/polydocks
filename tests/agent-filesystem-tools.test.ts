@@ -84,7 +84,7 @@ describe("Agent Filesystem Service & Tool Suite (Issue #74)", () => {
       expect(files.some((f) => f.path.includes("artifacts/deliverable.txt"))).toBe(true);
 
       // Verify tool execution
-      const toolRes = (await list_files.execute({ path: "artifacts" }, { cityId: "test", step: 1 })) as any;
+      const toolRes = (await list_files.execute({ path: "artifacts" }, { workspaceId: "test", step: 1 })) as any;
       expect(toolRes.totalEntries).toBeGreaterThanOrEqual(1);
       expect(toolRes.entries.some((e: any) => e.name === "deliverable.txt")).toBe(true);
     });
@@ -112,7 +112,7 @@ describe("Agent Filesystem Service & Tool Suite (Issue #74)", () => {
       expect(capped.content).toContain("[truncated: file exceeded byte cap]");
 
       // Test read_file tool
-      const toolRes = (await read_file.execute({ path: "memory/log.txt", offset: 0, limit: 1 }, { cityId: "test", step: 1 })) as any;
+      const toolRes = (await read_file.execute({ path: "memory/log.txt", offset: 0, limit: 1 }, { workspaceId: "test", step: 1 })) as any;
       expect(toolRes.content).toBe("Line 1");
     });
 
@@ -137,7 +137,7 @@ describe("Agent Filesystem Service & Tool Suite (Issue #74)", () => {
       // Verify write_file tool
       const toolRes = (await write_file.execute(
         { path: "artifacts/test_tool.md", content: "Tool content", overwrite: true },
-        { cityId: "test", step: 1 }
+        { workspaceId: "test", step: 1 }
       )) as any;
       expect(toolRes.path).toBe("artifacts/test_tool.md");
     });
@@ -168,7 +168,7 @@ describe("Agent Filesystem Service & Tool Suite (Issue #74)", () => {
       // Verify edit_file tool
       const toolRes = (await edit_file.execute(
         { path: "tasks/todo.txt", target: "Status: Completed", replacement: "Status: Verified" },
-        { cityId: "test", step: 1 }
+        { workspaceId: "test", step: 1 }
       )) as any;
       expect(toolRes.replacements).toBe(1);
     });
@@ -195,7 +195,7 @@ describe("Agent Filesystem Service & Tool Suite (Issue #74)", () => {
       // Verify search_files tool
       const toolRes = (await search_files.execute(
         { query: "entanglement", extension: ".md" },
-        { cityId: "test", step: 1 }
+        { workspaceId: "test", step: 1 }
       )) as any;
       expect(toolRes.totalMatches).toBe(1);
       expect(toolRes.matches[0].text).toContain("entanglement");
