@@ -50,6 +50,12 @@ export const CORE_DOCK_TOOLS: DockToolItem[] = [
     isAgent: true,
   },
   {
+    id: "onboarding",
+    label: "Demo",
+    type: "icon",
+    icon: Sparkle,
+  },
+  {
     id: "browser",
     label: "Browser",
     type: "icon",

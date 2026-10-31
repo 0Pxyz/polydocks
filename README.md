@@ -8,6 +8,9 @@
 <!-- HERO: a 10-15s GIF or video of the full flow (ask Poly → thoughts rise → browser, sources and terminal open in the dock). This is the first thing people see, so make it the best take. -->
 ![PolyDocks hero](docs/media/hero.gif)
 
+> 🎬 **Watch the Live Onboarding Demo:** [Full Product Walkthrough (MP4)](docs/media/videos/polydocks-product-walkthrough.mp4)  
+> **Feature Spotlights:** [01: Agentic Dock](docs/media/videos/feature-01-agentic-dock.mp4) • [02: Native Browser & TinyFish Research](docs/media/videos/feature-02-native-browser-research.mp4) • [03: Agent Builds Plugins](docs/media/videos/feature-03-agent-builds-plugins.mp4)
+
 PolyDocks is a way of using AI agents that feels like a place instead of a conversation. You talk (or type) to **Poly**, your agent, and it works inside **your dock**: it browses the web in a real browser, reads and saves sources, runs code in a sandbox, keeps your notes and files, and builds new tools for you on the spot. All of it sits side by side in a single, modern interface, instead of being scattered across a dozen tabs and apps.
 
 ---

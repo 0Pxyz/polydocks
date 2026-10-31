@@ -4,6 +4,8 @@ import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
+import { DeepWorkFlashcardsView } from "@/features/dock/DeepWorkFlashcardsView";
+import { LiveOnboardingTab } from "@/features/onboarding/LiveOnboardingTab";
 
 export interface SurfaceSandboxTab {
   id: string;
@@ -83,6 +85,20 @@ export function ToolSurface({
         <div className="w-full flex-1 min-w-0 flex flex-col min-h-0">
           <NativeBrowserView workspaceKey="home" />
         </div>
+      </DockSurface>
+    );
+  }
+  if (toolId === "deep-work-flashcards") {
+    return (
+      <DockSurface frameless>
+        <DeepWorkFlashcardsView onDismiss={() => onDismiss("deep-work-flashcards")} />
+      </DockSurface>
+    );
+  }
+  if (toolId === "onboarding") {
+    return (
+      <DockSurface frameless>
+        <LiveOnboardingTab onDismiss={() => onDismiss("onboarding")} />
       </DockSurface>
     );
   }

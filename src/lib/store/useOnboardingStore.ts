@@ -169,3 +169,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
     });
   },
 }));
+
+if (typeof window !== "undefined") {
+  (window as any).__onboardingStore = useOnboardingStore;
+}
