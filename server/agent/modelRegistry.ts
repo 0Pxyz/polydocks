@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { config } from "../config";
 
-export type ModelRole = "agent" | "fast" | "vision" | "voice" | "image" | "segmentation";
+export type ModelRole = "agent" | "fast" | "orchestrator" | "vision" | "voice" | "image" | "segmentation";
 export type ModelProvider = "meta" | "openai-compatible";
 
 export interface ResolvedModel {
@@ -33,10 +33,11 @@ function metaKey(): string {
  * never changes the plugin catalog.
  *
  * Truth table (verified against dev.meta.ai/docs/models):
- * - agent: MODEL_AGENT_ID || MODEL_ID (default muse-spark-1.3).
+ * - agent: AGENT_MODEL || MODEL_AGENT_ID || MODEL_ID (default muse-spark-1.3).
  *   AGENT_PROVIDER=openweight routes to OPENWEIGHT_* (default
  *   meta-models/muse-spark-open-1026 on Baseten).
  * - fast: MODEL_FAST_ID (default muse-spark-1.3, cheap/low-latency work).
+ * - orchestrator: ORCHESTRATOR_MODEL || MODEL_FAST_ID (default muse-spark-1.3).
  * - vision: MODEL_VISION_ID override, else the agent model. Spark and
  *   Wonder take image input natively, so no separate vision model is
  *   required unless a deployment pins one.
@@ -87,6 +88,19 @@ export function getModelForRole(role: ModelRole): ResolvedModel {
         configured: metaKey().length > 0,
       };
     }
+    case "orchestrator": {
+      const override = config.ORCHESTRATOR_MODEL?.trim();
+      const modelId =
+        (override && override.length > 0 ? override : config.MODEL_FAST_ID) || config.MODEL_ID;
+      return {
+        role,
+        provider: "meta",
+        baseURL: config.MODEL_BASE_URL,
+        apiKey: metaKey(),
+        modelId,
+        configured: metaKey().length > 0,
+      };
+    }
     case "vision": {
       const override = config.MODEL_VISION_ID?.trim();
       const modelId = override && override.length > 0 ? override : config.MODEL_ID;
@@ -112,13 +126,13 @@ export function getModelForRole(role: ModelRole): ResolvedModel {
           configured: key.length > 0 && config.OPENWEIGHT_BASE_URL.length > 0,
         };
       }
-      const override = config.MODEL_AGENT_ID?.trim();
+      const agentOverride = config.AGENT_MODEL?.trim() || config.MODEL_AGENT_ID?.trim();
       return {
         role: "agent",
         provider: "meta",
         baseURL: config.MODEL_BASE_URL,
         apiKey: metaKey(),
-        modelId: override && override.length > 0 ? override : config.MODEL_ID,
+        modelId: agentOverride && agentOverride.length > 0 ? agentOverride : config.MODEL_ID,
         configured: metaKey().length > 0,
       };
     }
@@ -151,4 +165,17 @@ export function getClientForRole(role: ModelRole): { client: OpenAI; modelId: st
 /** Backwards-compatible default: the agent-role client. */
 export function getAgentClient(): { client: OpenAI; modelId: string } {
   return getClientForRole("agent");
+}
+
+/**
+ * Reasoning effort per role (#210: low for the orchestrator, higher for
+ * the heavy agent). Responses nests it as `reasoning.effort`; Chat
+ * Completions uses top-level `reasoning_effort` — both already honored
+ * by the loop. Empty agent effort preserves today's behavior (the model
+ * decides unless a turn passes reasoningEffort explicitly).
+ */
+export function roleReasoningEffort(role: "orchestrator" | "agent"): string | undefined {
+  if (role === "orchestrator") return config.ORCHESTRATOR_EFFORT?.trim() || "low";
+  const effort = config.AGENT_EFFORT?.trim();
+  return effort && effort.length > 0 ? effort : undefined;
 }
