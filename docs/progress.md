@@ -98,3 +98,9 @@
 | 2026-10-31 | Routing metrics (#214): orchestrator-vs-heavy eval harness with escalation rate and mismatch gate | [#241](https://github.com/0Pxyz/polymax/pull/241) |
 | 2026-10-31 | Risk ladder server slice (#180): stated tiers, install envelope permissions, grant list/revoke routes, tiering tests | [#242](https://github.com/0Pxyz/polymax/pull/242) |
 | 2026-10-31 | Sandbox trust tiers doc (#183): stated model with verified enforcement pointers, doc-rot guard | [#244](https://github.com/0Pxyz/polymax/pull/244) |
+| 2026-10-31 | Approval lifecycle spec (#167): state diagram + envelope shapes verified against dev, no runtime change (closes #167) | [#245](https://github.com/0Pxyz/polymax/pull/245) |
+| 2026-10-31 | Deploy-mode local guard (#191 slice 1): DEPLOY_MODE flag, health reports mode, fixed-owner resolution, non-loopback refuse (fork keeps slices 2-5) | [#246](https://github.com/0Pxyz/polymax/pull/246) |
+| 2026-10-31 | Memory single-entry delete backend (#105): deleteMemoryEntry + DELETE /api/agent/memory/entry with validation, 4 tests (UI surface stays open) | [#248](https://github.com/0Pxyz/polymax/pull/248) |
+| 2026-10-31 | Deterministic dispatcher fast path (#178 slice 1): zero-model-call open/close/list/theme with manifest gate + fallback, 7 tests (jobs stay open) | [#249](https://github.com/0Pxyz/polymax/pull/249) |
+| 2026-10-31 | Voice frame counters (#177 slice): isSilentPcm16LE + MicFrameStats wired via onStats, 4 tests (mic repro stays open) | [#251](https://github.com/0Pxyz/polymax/pull/251) |
+| 2026-10-31 | Inspect row contract (#181 slice): SSE-to-row mapping with shapes-only redaction, 4 tests (live surface stays open) | [#252](https://github.com/0Pxyz/polymax/pull/252) |
