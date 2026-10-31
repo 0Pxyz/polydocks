@@ -108,128 +108,6 @@ export function isPluginSynthesisIntent(prompt: string): boolean {
   return triggers.some((t) => lower.includes(t));
 }
 
-export function isTabSynthesisIntent(prompt: string): boolean {
-
-  const lower = prompt.toLowerCase();
-
-  // If prompt is clearly about world map or knowledge territory planning, avoid false tab trigger
-  if (
-    isWorldPlanningIntent(prompt) &&
-    !lower.includes("tab") &&
-    !lower.includes("aba") &&
-    !lower.includes("dock") &&
-    !lower.includes("micro-app") &&
-    !lower.includes("flashcard")
-  ) {
-    return false;
-  }
-
-  const triggers = [
-    "create tab",
-    "create a tab",
-    "cria uma tab",
-    "crie uma tab",
-    "build tool",
-    "build a tool",
-    "make a tool",
-    "synthesize tool",
-    "synthesize a tab",
-    "crie uma nova experiência",
-    "crie uma experiência",
-    "criar experiência",
-    "nova experiência",
-    "experiência na dock",
-    "experiencia na dock",
-    "mapa do tema",
-    "mapa mental",
-    "mapa de conceitos",
-    "concept map",
-    "interactive concept graph",
-    "interactive map",
-    "flashcard",
-    "comparator",
-    "matrix",
-    "quiz tab",
-    "calculator tab",
-    "tool for",
-    "tab for",
-    "experience for",
-  ];
-
-  return triggers.some((t) => lower.includes(t));
-}
-
-/**
- * Heuristic detector for whether user prompt involves planning or expanding knowledge domains, world regions, or cities.
- */
-export function isWorldPlanningIntent(prompt: string): boolean {
-  const lower = prompt.toLowerCase();
-
-  // Negative filter: general informational questions, greetings, explanations
-  if (
-    lower.startsWith("what is") ||
-    lower.startsWith("what are") ||
-    lower.startsWith("o que e") ||
-    lower.startsWith("o que é") ||
-    lower.startsWith("how does") ||
-    lower.startsWith("como funciona") ||
-    lower.startsWith("explain") ||
-    lower.startsWith("explica") ||
-    lower.startsWith("why is") ||
-    lower.startsWith("por que")
-  ) {
-    if (
-      !lower.includes("city") &&
-      !lower.includes("cidade") &&
-      !lower.includes("world map") &&
-      !lower.includes("mapa") &&
-      !lower.includes("territory")
-    ) {
-      return false;
-    }
-  }
-
-  const triggers = [
-    "cria uma cidade",
-    "crie uma cidade",
-    "criar uma cidade",
-    "cidade sobre",
-    "nova area",
-    "nova área",
-    "area de conhecimento",
-    "área de conhecimento",
-    "knowledge area",
-    "knowledge domain",
-    "knowledge territory",
-    "knowledge map",
-    "world map",
-    "mapa do mundo",
-    "plan map",
-    "plan the map",
-    "expand map",
-    "expand the map",
-    "build city",
-    "criar cidade",
-    "nova cidade",
-    "fundar cidade",
-    "found city",
-    "knowledge city",
-    "cidade do conhecimento",
-    "create city",
-    "create a city",
-    "create a knowledge city",
-    "novo tema",
-    "novo topico",
-    "novo tópico",
-    "new topic",
-    "new domain",
-    "quero aprender sobre física quântica",
-    "want to learn neuroscience",
-  ];
-
-  return triggers.some((t) => lower.includes(t));
-}
-
 /**
  * Heuristic detector for whether user prompt involves web research, discovery, or content curation.
  * Evaluates triggers declared in plugin manifests, falling back to canonical defaults.
@@ -301,7 +179,7 @@ export function isResearchIntent(prompt: string): boolean {
  * app-overview). Each detector is keyword-only, PT+EN, with no model call.
  * Priority order below decides which two win when several match: repair and
  * creation intents outrank read-only ones so the agent patches in place
- * instead of recreating, and research/city planning outrank generic tab work.
+ * instead of recreating, and research outranks generic tab work.
  */
 
 /** Broken artifact: patch it in place, never recreate. */
@@ -317,7 +195,7 @@ export function isPluginUpdateIntent(prompt: string): boolean {
 }
 
 const DOCK_OPEN_WORD = /\b(open|abrir|abra|focusing|focus)\b/;
-const DOCK_TAB_WORD = /\b(tab|aba|tabs|abas|tray|dock|browser|notes|papers|files|terminal|lab|flashcard|flashcards|timer|pomodoro|plugin|tool|experience)\b/;
+const DOCK_TAB_WORD = /\b(tab|aba|tabs|abas|tray|dock|browser|timer|pomodoro|plugin|tool|tools|experience|flashcard|flashcards)\b/;
 
 /** Open/close/list/inspect dock tabs (not web content, not repairs). */
 export function isDockTabsIntent(prompt: string): boolean {
@@ -437,14 +315,12 @@ export function isVerifyIntent(prompt: string): boolean {
 }
 
 export type DomainSkillName =
-  | "dock-and-tabs"
   | "dock"
   | "theme"
   | "plugins"
   | "capabilities-and-mcp"
   | "content-and-reader"
   | "sandbox"
-  | "world-and-cities"
   | "memory-and-files"
   | "verify-and-report";
 
@@ -469,10 +345,9 @@ export function selectDomainSkills(prompt: string): DomainSkillName[] {
   if (isSandboxIntent(prompt)) add("sandbox");
   if (!picked.includes("capabilities-and-mcp") && (isResearchIntent(prompt) || isContentOpenIntent(prompt)))
     add("content-and-reader");
-  if (isWorldPlanningIntent(prompt)) add("world-and-cities");
-  if (isDockTabsIntent(prompt)) add("dock-and-tabs");
+  if (isDockTabsIntent(prompt)) add("dock");
   if (isDockExperienceIntent(prompt)) add("dock");
-  if (isPluginSynthesisIntent(prompt) && !picked.includes("dock-and-tabs")) add("plugins");
+  if (isPluginSynthesisIntent(prompt) && !picked.includes("dock")) add("plugins");
   if (isMemoryFilesIntent(prompt)) add("memory-and-files");
   if (isVerifyIntent(prompt)) add("verify-and-report");
   return picked;

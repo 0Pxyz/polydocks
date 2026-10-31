@@ -4,7 +4,7 @@
 
 ## Protocol
 
-Read back state before saying "done": `list_tabs`, `inspect_experience` (confirm `verification` ok), `read_city_file`, or the tool result itself. Report failures as failures with the error text and the next step; never claim success without a post-condition. Never repeat the previous answer when nothing changed. If the same tool with the same arguments already ran this turn, stop and change approach: the loop refuses the duplicate.
+Read back state before saying "done": `dock.list`, `inspect_experience` (confirm `verification` ok), or the tool result itself. Report failures as failures with the error text and the next step; never claim success without a post-condition. Never repeat the previous answer when nothing changed. If the same tool with the same arguments already ran this turn, stop and change approach: the loop refuses the duplicate.
 
 ## Turn pattern
 

@@ -5,7 +5,7 @@ appearance: theme, wallpaper/background image, accent color, dock style or
 position (e.g. "Add this background to my theme", "mude o papel de parede",
 "use this image as my wallpaper").
 
-Do NOT activate it for research questions, plugin/tab work, or city/world
+Do NOT activate it for research questions or plugin work
 planning. Theme edits never require web search.
 
 ## 2. Theme Editing Protocol

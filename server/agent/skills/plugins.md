@@ -1,6 +1,6 @@
 # Skill: Plugins
 
-> A workspace-persistent tool. Never recreate to fix. For city tabs see `dock-and-tabs`.
+> A workspace-persistent tool. Never recreate to fix.
 
 ## Backend contract
 
