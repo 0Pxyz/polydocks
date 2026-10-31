@@ -12,6 +12,16 @@ const envSchema = z.object({
   MODEL_VISION_ID: z.string().optional().default(""),
   MODEL_IMAGE_ID: z.string().default("muse-image-1.0"),
   MODEL_SEGMENTATION_ID: z.string().default("sam-3.1"),
+  // Orchestrator / heavy-agent role names (#210). Canonical names first,
+  // legacy per-role ids as fallback — either model fills either role by
+  // configuration only, no provider switch in code.
+  ORCHESTRATOR_MODEL: z.string().optional().default(""),
+  AGENT_MODEL: z.string().optional().default(""),
+  // Reasoning effort per role (#210): low for the orchestrator, higher for
+  // the heavy agent. Empty AGENT_EFFORT preserves today's behavior (the
+  // model decides unless a turn passes reasoningEffort explicitly).
+  ORCHESTRATOR_EFFORT: z.string().optional().default("low"),
+  AGENT_EFFORT: z.string().optional().default(""),
   // Open-weight toggle (Baseten / Modal / self-hosted OpenAI-compatible endpoint).
   // When AGENT_PROVIDER=openweight the agent role routes here instead of Meta.
   AGENT_PROVIDER: z.enum(["meta", "openweight"]).default("meta"),

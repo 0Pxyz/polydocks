@@ -75,4 +75,46 @@ describe("Model registry resolves one model per role from env", () => {
       (config as any).OPENWEIGHT_MODEL_ID = saved.model;
     }
   });
+
+  it("either model fills either role by configuration only (#210)", async () => {
+    const { config } = await import("../server/config");
+    const { getModelForRole, roleReasoningEffort } = await import("../server/agent/modelRegistry");
+    const saved = {
+      orch: (config as any).ORCHESTRATOR_MODEL,
+      agent: (config as any).AGENT_MODEL,
+      fast: (config as any).MODEL_FAST_ID,
+      agentId: (config as any).MODEL_AGENT_ID,
+      orchEffort: (config as any).ORCHESTRATOR_EFFORT,
+      agentEffort: (config as any).AGENT_EFFORT,
+    };
+    try {
+      // Canonical names win; legacy ids are the fallback chain.
+      (config as any).ORCHESTRATOR_MODEL = "muse-wonder-1.0";
+      (config as any).MODEL_FAST_ID = "muse-spark-1.3";
+      expect(getModelForRole("orchestrator").modelId).toBe("muse-wonder-1.0");
+      (config as any).ORCHESTRATOR_MODEL = "";
+      expect(getModelForRole("orchestrator").modelId).toBe("muse-spark-1.3");
+
+      (config as any).AGENT_MODEL = "muse-wonder-1.0";
+      expect(getModelForRole("agent").modelId).toBe("muse-wonder-1.0");
+      (config as any).AGENT_MODEL = "";
+      (config as any).MODEL_AGENT_ID = "custom-agent";
+      expect(getModelForRole("agent").modelId).toBe("custom-agent");
+
+      // Effort per role: low orchestrator, unset heavy agent by default.
+      (config as any).ORCHESTRATOR_EFFORT = "low";
+      (config as any).AGENT_EFFORT = "";
+      expect(roleReasoningEffort("orchestrator")).toBe("low");
+      expect(roleReasoningEffort("agent")).toBeUndefined();
+      (config as any).AGENT_EFFORT = "high";
+      expect(roleReasoningEffort("agent")).toBe("high");
+    } finally {
+      (config as any).ORCHESTRATOR_MODEL = saved.orch;
+      (config as any).AGENT_MODEL = saved.agent;
+      (config as any).MODEL_FAST_ID = saved.fast;
+      (config as any).MODEL_AGENT_ID = saved.agentId;
+      (config as any).ORCHESTRATOR_EFFORT = saved.orchEffort;
+      (config as any).AGENT_EFFORT = saved.agentEffort;
+    }
+  });
 });
