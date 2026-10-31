@@ -1,6 +1,44 @@
-node_modules
-dist
-.git
+# Build context exclusions: never bake state, secrets, or history into the image.
+node_modules/
+.git/
+.github/
+
+# Runtime state (always mounted volumes, never image layers).
+data/
+agent-home/
+workspace/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Secrets and local env.
 .env
-data
-internal-docs
+.env*.local
+.env.production
+.env.development
+*.pem
+*.key
+*.cert
+
+# Test artifacts and drafts.
+eval-results/
+coverage/
+.internal/
+internal-docs/
+brainstorm/
+scratch/
+notes/
+tmp/
+*.draft.md
+*.scratch.*
+
+# Editor and OS noise.
+.vscode/
+.idea/
+.DS_Store/
+
+# Build output is regenerated inside the image.
+dist/
