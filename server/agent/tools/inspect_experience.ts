@@ -15,7 +15,7 @@ export interface InspectExperienceArgs {
 export const inspect_experience: AgentTool<InspectExperienceArgs> = {
   name: "inspect_experience",
   description:
-    "Reads back a tab or plugin's state, source, version history, mounts, verification and errors. Use before writing any fix (inspect -> patch -> verify); never as an existence list (use list_tabs).",
+    "Reads back a plugin's state, source, version history, mounts, verification and errors. Use before writing any fix (inspect -> patch -> verify); never as an existence list (use dock_search).",
   schema: z.object({
     id: z
       .string()

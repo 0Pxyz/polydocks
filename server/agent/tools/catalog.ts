@@ -32,7 +32,11 @@ function schemaFromInput(input: unknown): z.ZodType<any> {
 
 export function buildDynamicCapabilityTools(): AgentTool[] {
   const bus = CapabilityBus.getInstance();
-  const caps = bus.getCapabilities();
+  // Only capabilities of active (enabled) plugins are exposed (#153):
+  // deactivating a plugin hides its tools from the agent; reactivating
+  // brings them back. Handler-registered capabilities without a plugin
+  // record are unaffected (no record to be disabled).
+  const caps = bus.getCapabilities({ enabledOnly: true });
   return caps.map((cap) => ({
     name: capabilityToolName(cap.id),
     description: `${cap.title}: ${cap.description} (capability ${cap.id} from ${cap.pluginId})`,
