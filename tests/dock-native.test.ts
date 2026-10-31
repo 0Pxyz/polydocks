@@ -19,12 +19,12 @@ describe("Dock Native Architecture (core tools only)", () => {
     expect(tools?.label).toContain("Tools");
   });
 
-  it("retired city routes stay gone", async () => {
+  it("retired knowledge-map routes stay gone", async () => {
     const res = await app.fetch(new Request("http://localhost:3000/api/cities/x/files"));
     expect(res.status).toBe(404);
   });
 
-  it("contextual suggestions are generic (no city variants)", () => {
+  it("contextual suggestions are generic (no knowledge-map variants)", () => {
     const rows = getStaticCreateRows();
     expect(rows.map((r) => r.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
   });

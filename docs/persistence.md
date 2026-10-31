@@ -2,13 +2,13 @@
 
 Ownership map for workspace and product state (issue #165). Every type has
 exactly one writer path and one read path. Migrations are additive and
-reversible: backfill first, verify, remove later. The retired city/world
+reversible: backfill first, verify, remove later. The retired knowledge-map
 tables (`cities`, `city_tabs`, `city_notes`, `city_sources`, `maps`,
 `map_points`, `city_conversations`, `conversation_messages`) are dropped
 from the schema; a one-way boot migration in `server/workspace/db.ts`
 renames scope columns (`city_id` → `workspace_id`) with data preserved and
 drops the parked tables. Workspace folders on disk are never touched. The
-city experience itself lives on the `future/city-experience` branch.
+knowledge-map experience itself lives on the `future/city-experience` branch.
 
 ## Sources of truth
 
@@ -33,7 +33,7 @@ city experience itself lives on the `future/city-experience` branch.
 - Scope columns renamed with data preserved (`city_id` → `workspace_id`
   on `sources`, `audit_log`, `executions`, `experience_errors`,
   `agent_thread_messages`), verified idempotent on reboot.
-- Parked city/world tables dropped from the schema; existing databases
+- Parked knowledge-map tables dropped from the schema; existing databases
   shed them on boot via the one-way migration. Workspace folders on disk
   are untouched.
 - All audit writes go through `recordAudit`.

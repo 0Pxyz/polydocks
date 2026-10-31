@@ -23,7 +23,7 @@ describe("Issue #166 — Modal sandbox slices (no mocks, real provider)", () => 
 
   it("workspace resource names are Modal-safe and stable", () => {
     expect(sandboxNameFor("default")).toBe("ws-default");
-    expect(sandboxNameFor("City: São Paulo!")).toMatch(/^ws-[a-z0-9-]+$/);
+    expect(sandboxNameFor("São Paulo!")).toMatch(/^ws-[a-z0-9-]+$/);
     expect(volumeNameFor("default")).toBe("polydocks-ws-default");
     expect(sandboxNameFor("x").length).toBeLessThanOrEqual(64);
     expect(sandboxNameFor("default")).toBe(sandboxNameFor("default"));

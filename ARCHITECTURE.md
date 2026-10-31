@@ -12,9 +12,9 @@
 
 **Data.** `bun:sqlite` at `DATA_DIR/polymax.db` (`server/workspace/db.ts:11-16`), 28 `CREATE TABLE` in `server/workspace/schema.sql`, idempotent, unversioned. Agent home files (`server/system/agentHome.ts`). Unified `sources` table keyed by workspace (`UNIQUE(workspace_id, url)`); retired knowledge-map tables dropped from the schema with a data-preserving boot migration (`server/workspace/db.ts`). Orphan `dock_items` table live with zero code references.
 
-**Identity.** None: `resolveUserId` falls back to `"local"` (`server/identity.ts:11-39`), header is self-asserted. Only `/api/mcp` has real auth (optional `MCP_TOKEN` bearer).
+**Identity.** None: `resolveUserId` falls back to `"local"` (`server/identity.ts:11-39`), header is self-asserted. No route has real auth (per-plugin secrets are scoped server-side).
 
-**Knowledge-map coupling removed.** The city/world knowledge-map experience is parked on the `future/city-experience` branch. Mainline has no city routes, tools, views, tables, or skills: one `grep -ri city` over `src server docs tests` returns empty (except intentional migration comments).
+**Knowledge-map coupling removed.** The retired knowledge-map experience is parked on the `future/city-experience` branch. Mainline has no knowledge-map routes, tools, views, tables, or skills: one word-boundary `grep -rniw city` over `src server docs tests` returns only the documented exceptions (boot migration strings, retired-route 404 assertions, parked-branch mentions, immutable history).
 
 ## 2. Target
 
@@ -25,7 +25,7 @@ Microkernel core (enumerated in §4): runtime/routes, agent loop transport, perm
 | # | Gap | Evidence it is real |
 |---|---|---|
 | 1 | No per-user isolation or auth | `server/identity.ts`, single `polymax.db`, compose has no tenants |
-| 2 | City hardcoded in core | removed; experience parked on `future/city-experience` |
+| 2 | Knowledge-map hardcoded in core | removed; experience parked on `future/city-experience` |
 | 3 | `plugins.install` missing from full agent surface | only `verbs/plugins.ts:53-65` (minimal) + HTTP/CLI |
 | 4 | Split-brain persistence (client pins / `dock_pins` / in-memory tab host) | `useDockStore.ts:10-30`, `schema.sql`, `tabHostStore.ts` |
 | 5 | No migrations, drift (`dock_items` orphan, `image_spend` outside schema) | `schema.sql` vs live DB; `server/media/budget.ts:11` |
@@ -34,4 +34,4 @@ Microkernel core (enumerated in §4): runtime/routes, agent loop transport, perm
 
 ## 4. What stays core (never a plugin)
 
-Runtime + routes, agent loop transport, permission/approval engine, persistence, sandbox bridge, secrets/keys. (Adopted from `docs/plugin-core-readme`; the city/world experience was removed to a parked branch instead of extracted.)
+Runtime + routes, agent loop transport, permission/approval engine, persistence, sandbox bridge, secrets/keys. (Adopted from `docs/plugin-core-readme`; the knowledge-map experience was removed to a parked branch instead of extracted.)
