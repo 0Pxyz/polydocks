@@ -84,4 +84,43 @@ describe("Agent loop over Responses API", () => {
     expect(dones[0].payload?.id).toBe("call_resp_1");
     expect(dones[0].payload?.name).toBe("dock.open");
   });
+
+  it("offers namespaced tools with native search instead of find_capabilities", async () => {
+    let seenTools: any[] = [];
+    const mockClient: any = {
+      responses: {
+        create: async (params: any) => {
+          seenTools = params.tools ?? [];
+          return {
+            id: "resp_ns",
+            usage: { input_tokens: 5, output_tokens: 5 },
+            output: [{ type: "message", content: [{ type: "output_text", text: "No tools needed." }] }],
+          };
+        },
+      },
+    };
+    const result = await runAgentLoop({
+      prompt: "Hello",
+      llmClient: mockClient,
+      onEvent: () => {},
+    });
+    expect(result.status).toBe("completed");
+    const namespaces = seenTools.filter((t) => t.type === "namespace");
+    expect(namespaces.length).toBeGreaterThan(0);
+    for (const ns of namespaces) {
+      expect(ns.tools.length).toBeLessThanOrEqual(9);
+      for (const fn of ns.tools) expect(fn.defer_loading).toBe(true);
+    }
+    expect(seenTools.filter((t) => t.type === "tool_search")).toHaveLength(1);
+    const flatNames: string[] = [];
+    for (const t of seenTools) {
+      if (t.type === "namespace") for (const fn of t.tools) flatNames.push(fn.name);
+      else if (t.type === "function") flatNames.push(t.name);
+    }
+    expect(flatNames).not.toContain("find_capabilities");
+    const { defaultTools } = await import("./tools/index");
+    if (defaultTools.some((t) => t.name === "invoke_capability")) {
+      expect(flatNames).toContain("invoke_capability");
+    }
+  });
 });

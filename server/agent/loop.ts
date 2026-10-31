@@ -21,10 +21,9 @@ import {
   createResponsesTurn,
   hasResponsesSurface,
   normalizeCallId,
-  toResponsesName,
-  toResponsesTools,
   toResponsesUserContent,
 } from "./responses";
+import { buildResponsesTools, resolveResponsesToolName } from "./namespaces";
 import {
   getSession,
   createSession,
@@ -295,8 +294,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // the turn knows up front whether it needs workspace state at all. Pure
   // conversational turns (general/theme, no workspace skills,
   // no attachments, not a dock-add build) skip the registry list, mounts and
-  // memory recall entirely; find_capabilities stays available so the agent can
-  // still discover anything outside the immediate context.
+  // memory recall entirely; discovery (native tool search on Responses,
+  // find_capabilities on the Chat fallback) stays available so the agent
+  // can still reach anything outside the immediate context.
   const earlyDomainSkills = selectDomainSkills(prompt);
   const hasWorkspaceSignals =
     earlyDomainSkills.some((s) => s !== "theme") ||
@@ -478,14 +478,22 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     // Progressive Disclosure: Summarize installed plugins. Skipped on the
     // fast path: general conversation never needs the registry list, and
-    // find_capabilities remains the discovery route when it does.
+    // discovery (native tool search on Responses, find_capabilities on the
+    // Chat fallback) remains the route when it does.
     if (!isFastPath) {
       const installedPlugins = pluginRegistry.list({ enabledOnly: true });
       if (installedPlugins.length > 0) {
         const summaryLines = installedPlugins.map(
           (p) => `- ${p.name} (${p.id}): ${p.manifest.description} [${(p.manifest.capabilities || []).map((c) => c.id).join(", ")}]`
         );
-        activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):\n${summaryLines.join("\n")}`;
+        // The discovery route differs per transport: native tool search
+        // over deferred namespaces on Responses (#222), the custom
+        // find_capabilities root on the Chat fallback. Name only the route
+        // the model can actually call so it never reaches for a missing tool.
+        const discoveryLine = hasResponsesSurface(llmClient)
+          ? "## Installed Plugins (Discover capability actions through native tool search over the namespaces - do NOT enumerate or summarize this list to the user unless explicitly asked):"
+          : "## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):";
+        activeSystemPrompt = `${activeSystemPrompt}\n\n${discoveryLine}\n${summaryLines.join("\n")}`;
       }
     }
 
@@ -642,12 +650,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       { role: "user", content: toResponsesUserContent(userMessageContent) as any },
     ];
 
-    // Responses function tools mirror the scoped Chat tools. Names allow at
-    // most one dot; grouping plugin-scoped functions under namespaces is
-    // #222 work — this mapping stays 1:1 so coverage never diverges.
-    const responsesTools = toResponsesTools(scopedTools);
-    const responsesNameToOriginal = new Map<string, string>();
-    for (const t of scopedTools) responsesNameToOriginal.set(toResponsesName(t.name), t.name);
+    // Responses input tools: the scoped set grouped into deferred
+    // namespaces with native tool search (#222). Coverage stays 1:1 with
+    // the scoped Chat tools minus the superseded `find_capabilities` root;
+    // denylists are already applied to `scopedTools`, and the bus
+    // re-checks policy at invoke time.
+    const builtResponses = buildResponsesTools(scopedTools);
+    const responsesTools = builtResponses.tools;
+    const responsesNameToOriginal = builtResponses.nameMap;
 
     // Responses when the client exposes it (prod Meta client); Chat
     // otherwise (test doubles, eval scripted LLM, openweight endpoints).
@@ -728,7 +738,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Responses resends instructions/tools/reasoning.effort every turn
       // (they do not persist across turns) with store:false.
       let assistantContent = "";
-      let normalizedCalls: Array<{ id: string; name: string; argsText: string }> = [];
+      let normalizedCalls: Array<{ id: string; name: string; namespace?: string; argsText: string }> = [];
       let assistantMessage: any = null;
 
       if (useResponses) {
@@ -752,15 +762,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         normalizedCalls = turn.functionCalls.map((c, i) => ({
           id: normalizeCallId(c.callId, i),
           name: c.name,
+          ...(c.namespace ? { namespace: c.namespace } : {}),
           argsText: c.argsText,
         }));
         // Record model outputs in the stateless input so the next turn
-        // replays the full conversation (function_call items pair with
-        // the function_call_output items appended after execution).
+        // replays the full conversation: hosted tool_search handshake
+        // items first (keeps the loaded set stable), then each
+        // function_call paired with the function_call_output appended
+        // after execution.
+        for (const ts of turn.toolSearchItems) responsesInput.push(ts);
         for (const c of normalizedCalls) {
           responsesInput.push({
             type: "function_call",
             call_id: c.id,
+            ...(c.namespace ? { namespace: c.namespace } : {}),
             name: c.name,
             arguments: c.argsText,
           });
@@ -876,9 +891,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       currentPhase = "running_tool";
       for (const call of toolCalls) {
         const rawToolName = (call as any).name ?? (call as any).function?.name;
-        // Responses names are sanitized (≤1 dot); map back to the registry
-        // name before execution so coverage never diverges (#221 → #222).
-        const toolName = useResponses ? (responsesNameToOriginal.get(rawToolName) ?? rawToolName) : rawToolName;
+        // Responses names are sanitized (≤1 dot) and may arrive with a
+        // namespace qualifier; map back to the registry name before
+        // execution so coverage never diverges (#221 → #222).
+        const toolName = useResponses
+          ? resolveResponsesToolName(responsesNameToOriginal, rawToolName, (call as any).namespace)
+          : rawToolName;
         const toolId = normalizeCallId((call as any).id, 0);
         currentTool = toolName;
         const toolStart = Date.now();

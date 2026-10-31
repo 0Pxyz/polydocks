@@ -129,4 +129,60 @@ describe("Responses adapter (#221)", () => {
     expect(turn.text).toBe("hello");
     expect(turn.functionCalls[0].name).toBe("dock.open");
   });
+
+  it("captures namespaced function calls and hosted tool_search items", async () => {
+    const turn = normalizeResponsesObject({
+      id: "resp_ts",
+      usage: {},
+      output: [
+        { type: "tool_search_call", id: "tsc_1", call_id: null, execution: "server", status: "completed", arguments: { paths: ["sandbox"] } },
+        {
+          type: "tool_search_output",
+          id: "tso_1",
+          call_id: null,
+          execution: "server",
+          status: "completed",
+          tools: [{ type: "namespace", name: "sandbox", tools: [] }],
+        },
+        { type: "function_call", call_id: "call_ns1", namespace: "sandbox", name: "sandbox_exec", arguments: "{}" },
+      ],
+    });
+    expect(turn.toolSearchItems).toHaveLength(2);
+    expect(turn.toolSearchItems[0].type).toBe("tool_search_call");
+    expect(turn.functionCalls[0]).toMatchObject({ callId: "call_ns1", namespace: "sandbox", name: "sandbox_exec" });
+  });
+
+  it("accumulates streaming tool_search handshake items without executing them", async () => {
+    async function* stream() {
+      yield {
+        type: "response.output_item.done",
+        output_index: 0,
+        item: { type: "tool_search_call", id: "tsc_s", call_id: null, execution: "server", status: "completed", arguments: {} },
+      };
+      yield {
+        type: "response.completed",
+        response: {
+          id: "resp_ts2",
+          usage: {},
+          output: [
+            { type: "tool_search_call", id: "tsc_s", call_id: null, execution: "server", status: "completed", arguments: {} },
+            { type: "tool_search_output", id: "tso_s", call_id: null, execution: "server", status: "completed", tools: [] },
+            { type: "function_call", call_id: "call_s2", namespace: "dock", name: "dock_search", arguments: "{}" },
+          ],
+        },
+      };
+    }
+    const turn = await createResponsesTurn({
+      client: { responses: { create: async () => stream() } } as any,
+      model: "muse-spark-1.3",
+      instructions: "sys",
+      inputItems: [],
+      tools: [],
+      onTextDelta: () => {},
+    });
+    // Deduplicated by id: streamed item + completed output merge to two.
+    expect(turn.toolSearchItems).toHaveLength(2);
+    expect(turn.functionCalls).toHaveLength(1);
+    expect(turn.functionCalls[0]).toMatchObject({ namespace: "dock", name: "dock_search" });
+  });
 });
