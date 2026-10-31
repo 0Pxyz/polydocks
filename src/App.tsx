@@ -14,6 +14,7 @@ import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { ToolSurface } from "@/features/dock/ToolSurface";
 import { BesidePanel, type BesideTab } from "@/features/dock/BesidePanel";
+import { LiveOnboardingOverlay } from "@/features/onboarding/LiveOnboardingOverlay";
 import {
   matchDockShortcut,
   panelLayout,
@@ -570,7 +571,7 @@ export default function App() {
   // Tool hosted by the main viewport (single home per tool; beside tools
   // live in the beside panel).
   const MAIN_STATIC_IDS = useMemo(
-    () => new Set(["settings", "theme", "plugins", "creations", "store"]),
+    () => new Set(["settings", "theme", "plugins", "creations", "store", "deep-work-flashcards"]),
     []
   );
   const mainToolId =
@@ -817,6 +818,9 @@ export default function App() {
               </DockSurface>
             )}
           </main>
+
+          {/* Live Onboarding Tour Floating Guide (Bottom Pill) */}
+          <LiveOnboardingOverlay />
         </div>
       </RootLayout>
     </AppProviders>

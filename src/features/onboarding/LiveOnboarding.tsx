@@ -1,1 +1,1 @@
-export { LiveOnboardingTab, LiveOnboardingTab as LiveOnboarding } from "./LiveOnboardingTab";
+export { LiveOnboardingOverlay, LiveOnboardingOverlay as LiveOnboarding } from "./LiveOnboardingOverlay";
