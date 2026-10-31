@@ -14,6 +14,10 @@ Report only what the tool envelopes return: ids, versions, events (`tab.created`
 
 Theme tokens only, no hardcoded colors, no gradients, no external URLs; validated on create, edit and publish. Sentence case, Inter with Geist Mono for metrics, one accent, whitespace grouping.
 
+## Bridge (guest side)
+
+Guests reach the host through `window.polymax`: `storage.get/set/remove`, `openContent` (native reader), `openUrl`, `useCapability`/`invoke` (declared capabilities only), `ui.expand/collapse`, `task.start/update/done`, `theme.get/apply`. Never raw `window.open` or ad-hoc iframes.
+
 ## Routes (same handlers as your tools)
 
 `POST /api/dock/action` (`op`), `GET /api/dock/tabs`, `POST /api/plugins/lifecycle`, `POST /api/plugins/:id/:capability`, `GET /api/plugins/:id/versions`.

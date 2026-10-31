@@ -12,7 +12,7 @@ Act, read back, then report exactly what the result contains (ids, versions, tit
 
 ## Ready means opened and healthy
 
-After a write, open it (`open_tab` / `open_intent`) and read it back (`inspect_experience` — `isHealthy` true, no errors) before concluding. Updated = the write returned ok. Mounted = the open ran ok. Ready / loads successfully = healthy read-back in hand. Reopen and check it yourself; never ask the user to QA. Never claim visual verification — no tool inspects pixels.
+After a write, open it (`dock.open`) and read it back (`inspect_experience` — `isHealthy` true, no errors) before concluding. Updated = the write returned ok. Mounted = the open ran ok. Ready / loads successfully = healthy read-back in hand. Reopen and check it yourself; never ask the user to QA. Never claim visual verification — no tool inspects pixels.
 
 ## Common mistakes
 
@@ -25,6 +25,6 @@ After `modify_plugin` returns `{success: true, version: "1.0.1"}`, call `inspect
 <!--
 Source files (maintainer refs, stripped before injection):
 server/agent/loop.ts, server/agent/tools/inspect_experience.ts,
-server/agent/tools/list_tabs.ts, server/agent/tools/inspect_tab.ts,
-server/agent/tools/list_recent_executions.ts
+server/agent/tools/list_recent_executions.ts,
+server/agent/tools/verbs/dock.ts
 -->

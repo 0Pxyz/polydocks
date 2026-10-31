@@ -104,6 +104,7 @@ export type UIEvent =
       /** URL (external fallback only; in-UI modes never auto-open tabs). */
       url: string;
       title?: string;
+      workspaceId?: string;
       site?: string;
       image?: string | null;
       /** Open mode decided server-side. */
@@ -497,6 +498,7 @@ export function adaptBackendEvent(raw: {
         url,
         id: pick("id"),
         title: pick("title"),
+        workspaceId: pick("workspaceId"),
         site: pick("site"),
         image: (payload.image as string | null) ?? undefined,
         mode: mode === "video" || mode === "reader" || mode === "embed" || mode === "external" ? mode : undefined,

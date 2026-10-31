@@ -73,6 +73,7 @@ interface ConversationStoreState {
     mode: "video" | "reader" | "embed" | "external";
     title: string;
     url: string;
+    workspaceId?: string;
     site?: string;
     image?: string | null;
     markdown?: string;
@@ -938,6 +939,7 @@ export function applyReaderOpened(event: {
   mode?: "video" | "reader" | "embed" | "external";
   title?: string;
   url: string;
+  workspaceId?: string;
   site?: string;
   image?: string | null;
   markdown?: string;
@@ -949,6 +951,7 @@ export function applyReaderOpened(event: {
     mode: event.mode || "external",
     title: event.title || event.url,
     url: event.url,
+    workspaceId: event.workspaceId,
     site: event.site,
     image: event.image ?? undefined,
     markdown: event.markdown,

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AgentTool } from "../../types";
 import { dockAction, invokeCapability, pluginLifecycle, pluginRollback } from "../../../facade/shared";
 
-function actorCtx(ctx: { workspaceId?: string; workspaceId?: string; sessionId?: string }) {
+function actorCtx(ctx: { workspaceId?: string; sessionId?: string }) {
   return { actor: "agent" as const, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId };
 }
 

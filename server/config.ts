@@ -41,7 +41,7 @@ const envSchema = z.object({
   // publish): ask = needs { userApproved: true } (default), auto = proceed,
   // never = always deny. actor=user|cli means an explicit human action.
   INSTALL_POLICY: z.enum(["ask", "auto", "never"]).default("ask"),
-  // Spending guard for generated images (covers, city art, share cards).
+  // Spending guard for generated images (covers, share cards).
   // Counted per UTC day in SQLite (image_spend); requests beyond the cap
   // fail with budget_exceeded instead of spending.
   IMAGE_MAX_PER_DAY: z.coerce.number().int().min(0).default(25),

@@ -183,7 +183,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
 
     const res = targetWin.receivedMessages[0];
     expect(res.polymaxResponseId).toBe(301);
-    expect(res.result.cityId).toBe("athens-stoicism");
+    expect(res.result.workspaceId).toBe("athens-stoicism");
     expect(res.result.tabId).toBe("matrix");
     expect(res.result.topic).toBe("Stoic Philosophy");
     expect(res.result.notesCount).toBe(5);

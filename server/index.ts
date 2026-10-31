@@ -195,7 +195,7 @@ app.get("/api/experiences/:id/errors", (c) => {
   return c.json({ errors });
 });
 
-// Share card: generated milestone backdrop (client renders city/XP/streak
+// Share card: generated milestone backdrop (client renders title/XP/streak
 // text on top so stats stay exact). Daily image budget applies.
 app.post("/api/share-card", async (c) => {
   let body: any = {};
@@ -217,7 +217,7 @@ app.post("/api/share-card", async (c) => {
   }
 });
 
-// Generated image cache (Muse Image covers / city art / share cards).
+// Generated image cache (Muse Image covers / share cards).
 // Strict filename allowlist: <32-hex>.<ext> only, no traversal.
 app.get("/api/media/image-cache/:filename", async (c) => {
   const filename = c.req.param("filename");

@@ -16,11 +16,12 @@ export interface DockCatalogEntry {
  * frontend dock model descriptions (src/lib/dock/dockModel.ts).
  */
 export const DOCK_BUILTINS: DockCatalogEntry[] = [
-  { id: "agent", title: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
+  { id: "agent", title: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin" },
   { id: "browser", title: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
   { id: "settings", title: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
-  { id: "store", title: "Plugin Store", description: "Community plugin store", icon: "store", kind: "builtin" },
-  { id: "plugins", title: "Plugins", description: "Installed plugins", icon: "plugins", kind: "builtin" },
+  { id: "store", title: "Library", description: "Library: discover what others have built", icon: "store", kind: "builtin" },
+  { id: "plugins", title: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
+  { id: "creations", title: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },
 ];
 
 function scoreEntry(entry: DockCatalogEntry, q: string): number {
