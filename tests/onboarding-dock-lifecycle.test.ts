@@ -61,10 +61,11 @@ describe("onboarding dock lifecycle", () => {
     expect(useDockStore.getState().openIds).toContain(ONBOARDING_TAB_ID);
   });
 
-  it("tour steps point at real dock tabs (tools, settings)", () => {
+  it("tour steps keep creative's choreography (TinyFish research, flashcards demo)", () => {
     const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]));
-    expect(byId.get("tools")?.dockTarget).toBe("plugins");
-    expect(byId.get("workspace")?.dockTarget).toBe("settings");
+    expect(byId.get("research")?.dockTarget).toBe("browser");
+    expect(byId.get("tools")?.dockTarget).toBe("deep-work-flashcards");
+    expect(byId.get("research")?.subtitle).toContain("TinyFish");
     for (const step of ONBOARDING_STEPS) {
       expect(step.title.length).toBeGreaterThan(0);
       expect(step.subtitle.length).toBeGreaterThan(0);
