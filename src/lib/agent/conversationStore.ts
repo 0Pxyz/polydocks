@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { streamAgentLoop } from "./client";
 import { type UIEvent, type ApprovalRequest } from "./events";
+import { feedThoughtEvent } from "./thoughtStream";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
@@ -557,6 +558,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                   },
                 ],
               }));
+              // Living-agent stream: status lines drift up and fade; the
+              // sheet keeps the persistent activity rows.
+              feedThoughtEvent({ type: event.type, statusLabel: event.statusLabel });
             }
             break;
 
