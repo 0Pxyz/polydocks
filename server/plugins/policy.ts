@@ -17,12 +17,12 @@ export async function evaluateCapabilityPolicy(params: {
   capability: RegisteredCapability;
   plugin: InstalledPluginRecord;
   actor: "agent" | "user";
-  cityId?: string;
+  workspaceId?: string;
   input?: Record<string, unknown>;
   timeoutMs?: number;
   emit?: (event: { type: string; payload: Record<string, unknown> }) => Promise<void> | void;
 }): Promise<PolicyEvaluationResult> {
-  const { capability, plugin, actor, cityId, input, timeoutMs, emit } = params;
+  const { capability, plugin, actor, workspaceId, input, timeoutMs, emit } = params;
   const manifest = plugin.manifest;
 
   // 1. Default-deny: Verify undeclared permissions for adapters
@@ -57,7 +57,7 @@ export async function evaluateCapabilityPolicy(params: {
   }
 
   const risk = capability.risk;
-  const scope = cityId ? `city:${cityId}` : `plugin:${plugin.id}`;
+  const scope = workspaceId ? `workspace:${workspaceId}` : `plugin:${plugin.id}`;
 
   // 2. Destructive actions: ALWAYS prompt user confirmation and halt on timeout/rejection
   if (risk === "destructive") {
@@ -115,8 +115,8 @@ export async function evaluateCapabilityPolicy(params: {
 
   // 4. Write operations
   if (risk === "write") {
-    // Auto-allowed for first-party plugins within active city workspace
-    if (manifest.trust === "core" || (manifest.trust === "first-party" && cityId)) {
+    // Auto-allowed for first-party plugins within the active workspace
+    if (manifest.trust === "core" || (manifest.trust === "first-party" && workspaceId)) {
       return { allowed: true };
     }
 

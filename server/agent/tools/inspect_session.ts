@@ -13,7 +13,7 @@ export const inspect_session: AgentTool<{ sessionId: string; fromStep?: number }
   execute: async (args, ctx) =>
     agentSession("resume", { sessionId: args.sessionId, fromStep: args.fromStep }, {
       actor: "agent",
-      cityId: ctx?.cityId,
+      workspaceId: ctx?.workspaceId,
       workspaceId: ctx?.workspaceId,
       sessionId: ctx?.sessionId,
     }),

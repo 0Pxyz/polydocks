@@ -1,4 +1,3 @@
-import { getCityContext } from "../../workspace/cityWorkspace";
 import { listWorkspacePlugins } from "../../workspace/workspaces";
 import { listRegistryPlugins, getRegistryPlugin } from "../../plugins/communityRegistry";
 
@@ -17,19 +16,12 @@ export interface DockCatalogEntry {
  * frontend dock model descriptions (src/lib/dock/dockModel.ts).
  */
 export const DOCK_BUILTINS: DockCatalogEntry[] = [
-  { id: "agent", title: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
-  { id: "maps", title: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
-  { id: "browser", title: "Research & Sources", description: "Research and sources", icon: "browser", kind: "builtin" },
-  { id: "notes", title: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
-  { id: "files", title: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
-  { id: "papers", title: "Papers", description: "Reading list and papers", icon: "papers", kind: "builtin" },
-  { id: "sources", title: "Sources", description: "Saved sources", icon: "sources", kind: "builtin" },
-  { id: "quests", title: "Quests", description: "Mastery quests and progress", icon: "quests", kind: "builtin" },
-  { id: "flashcards", title: "Flashcards", description: "Interactive flashcards", icon: "flashcards", kind: "builtin" },
-  { id: "terminal", title: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
+  { id: "agent", title: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin" },
+  { id: "browser", title: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
   { id: "settings", title: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
-  { id: "store", title: "Plugin Store", description: "Community plugin store", icon: "store", kind: "builtin" },
-  { id: "plugins", title: "Plugins", description: "Installed plugins", icon: "plugins", kind: "builtin" },
+  { id: "store", title: "Library", description: "Library: discover what others have built", icon: "store", kind: "builtin" },
+  { id: "plugins", title: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
+  { id: "creations", title: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },
 ];
 
 function scoreEntry(entry: DockCatalogEntry, q: string): number {
@@ -47,42 +39,24 @@ function scoreEntry(entry: DockCatalogEntry, q: string): number {
 
 export interface DockSearchOptions {
   query?: string;
-  cityId?: string;
+  workspaceId?: string;
   workspaceId?: string;
   limit?: number;
 }
 
 /**
- * Searches everything the dock can show: builtins, city tabs, installed
- * workspace plugins, and community store plugins. Read-only: it never
- * touches plugin storage, publish state, or verification code.
+ * Searches everything the dock can show: builtins, installed workspace
+ * plugins, and community store plugins. Read-only: it never touches
+ * plugin storage, publish state, or verification code.
  */
 export async function searchDockCatalog(
   options: DockSearchOptions = {}
 ): Promise<DockCatalogEntry[]> {
   const q = (options.query || "").trim().toLowerCase();
-  const cityId = options.cityId || "default";
-  const workspaceId = options.workspaceId || cityId;
+  const workspaceId = options.workspaceId || "default";
   const limit = options.limit || 20;
 
   const entries: DockCatalogEntry[] = [...DOCK_BUILTINS];
-
-  try {
-    const context = await getCityContext(cityId);
-    for (const tabId of context.tabs || []) {
-      if (!entries.some((e) => e.id === tabId)) {
-        entries.push({
-          id: tabId,
-          title: tabId,
-          description: `City tab in ${cityId}`,
-          icon: tabId,
-          kind: "dynamic",
-        });
-      }
-    }
-  } catch {
-    // City without context contributes no dynamic tabs.
-  }
 
   let installedIds = new Set<string>();
   try {
@@ -141,7 +115,7 @@ export interface DockTargetResolution {
  */
 export async function resolveDockTarget(
   id: string,
-  options: { cityId?: string; workspaceId?: string } = {}
+  options: { workspaceId?: string } = {}
 ): Promise<DockTargetResolution> {
   const normalized = id.trim();
   if (!normalized) return { error: "No dock item id was given." };
@@ -149,25 +123,7 @@ export async function resolveDockTarget(
   const builtin = DOCK_BUILTINS.find((e) => e.id === normalized);
   if (builtin) return { entry: builtin };
 
-  const cityId = options.cityId || "default";
-  const workspaceId = options.workspaceId || cityId;
-
-  try {
-    const context = await getCityContext(cityId);
-    if ((context.tabs || []).includes(normalized)) {
-      return {
-        entry: {
-          id: normalized,
-          title: normalized,
-          description: `City tab in ${cityId}`,
-          icon: normalized,
-          kind: "dynamic",
-        },
-      };
-    }
-  } catch {
-    // Fall through to plugin checks.
-  }
+  const workspaceId = options.workspaceId || "default";
 
   try {
     const installed = listWorkspacePlugins(workspaceId);

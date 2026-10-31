@@ -34,13 +34,16 @@ describe("dock agent tools", () => {
     expect(result.success).toBe(true);
     const ids = result.results.map((row: any) => row.id);
     expect(ids).toContain("agent");
-    expect(ids).toContain("maps");
+    expect(ids).toContain("browser");
+    expect(ids).toContain("plugins");
+    expect(ids).toContain("creations");
+    expect(ids).toContain("store");
   });
 
-  test("two keystrokes find an installed plugin", async () => {
-    const result = (await dock_search.execute({ query: "flas" }, ctx)) as any;
+  test("two keystrokes find a builtin by prefix", async () => {
+    const result = (await dock_search.execute({ query: "br" }, ctx)) as any;
     const ids = result.results.map((row: any) => row.id);
-    expect(ids).toContain("flashcards");
+    expect(ids).toContain("browser");
   });
 
   test("dock_pin succeeds for a builtin and emits a dock.pin action", async () => {
@@ -52,7 +55,7 @@ describe("dock agent tools", () => {
 
   test("dock_pin fails visibly for unknown ids", async () => {
     const result = (await dock_pin.execute(
-      { id: "test_no_such_dock_item", cityId: "test_no_such_city" },
+      { id: "test_no_such_dock_item", workspaceId: "test_no_such_workspace" },
       ctx
     )) as any;
     expect(result.success).toBe(false);
@@ -69,14 +72,14 @@ describe("dock agent tools", () => {
     expect(result.message).toMatch(/install/i);
   });
 
-  test("dock_unpin removes optional tools like maps (unpin never deletes)", async () => {
-    const mapsRes = (await dock_unpin.execute({ id: "maps" }, ctx)) as any;
+  test("dock_unpin removes optional tools like creations (unpin never deletes)", async () => {
+    const mapsRes = (await dock_unpin.execute({ id: "creations" }, ctx)) as any;
     expect(mapsRes.success).toBe(true);
     expect(mapsRes.action).toBe("dock.unpin");
   });
 
   test("dock_close succeeds for a builtin tab without deleting", async () => {
-    const result = (await dock_close.execute({ id: "flashcards" }, ctx)) as any;
+    const result = (await dock_close.execute({ id: "browser" }, ctx)) as any;
     expect(result.success).toBe(true);
     expect(result.action).toBe("dock.close");
     expect(result.message).toMatch(/nothing was deleted/i);
@@ -84,7 +87,7 @@ describe("dock agent tools", () => {
 
   test("dock_close fails visibly for unknown ids", async () => {
     const result = (await dock_close.execute(
-      { id: "test_no_such_dock_item", cityId: "test_no_such_city" },
+      { id: "test_no_such_dock_item", workspaceId: "test_no_such_workspace" },
       ctx
     )) as any;
     expect(result.success).toBe(false);

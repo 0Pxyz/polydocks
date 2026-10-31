@@ -6,7 +6,7 @@ import type { PluginManifest } from "../../plugins/manifest";
 
 export interface PromoteToPluginArgs {
   id: string;
-  cityId?: string;
+  workspaceId?: string;
   name?: string;
   version?: string;
   description?: string;
@@ -16,12 +16,12 @@ export interface PromoteToPluginArgs {
 export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
   name: "promote_to_plugin",
   description:
-    "Makes a verified experience reusable across cities via the catalog. Use for proven tools only; do not use on unverified work.",
+    "Makes a verified experience reusable via the catalog. Use for proven tools only; do not use on unverified work.",
   schema: z.object({
     id: z
       .string()
       .regex(/^[a-z0-9_-]+$/, "Experience ID must contain only lowercase alphanumeric characters, dashes, or underscores"),
-    cityId: z.string().optional().describe("City workspace where the experience was synthesized"),
+    workspaceId: z.string().optional().describe("Workspace where the experience was synthesized"),
     name: z.string().optional().describe("User-facing plugin name"),
     version: z
       .string()
@@ -40,13 +40,13 @@ export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
     const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
     if (denied) return denied;
 
-    const targetCity = args.cityId || ctx.cityId || "global";
+    const targetWorkspace = args.workspaceId || ctx.workspaceId || "global";
 
-    const feature = await readFeature(targetCity, args.id);
+    const feature = await readFeature(targetWorkspace, args.id);
     if (!feature) {
       return {
         success: false,
-        error: `Cannot promote experience "${args.id}": not found in city workspace "${targetCity}".`,
+        error: `Cannot promote experience "${args.id}": not found in workspace "${targetWorkspace}".`,
       };
     }
 
@@ -54,7 +54,7 @@ export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
     const pluginName = args.name || feature.manifest.title || args.id;
     const version = args.version || "1.0.0";
     const description =
-      args.description || `Synthesized experience "${feature.manifest.title}" from ${targetCity}`;
+      args.description || `Synthesized experience "${feature.manifest.title}" from ${targetWorkspace}`;
     const icon = (feature.manifest.icon as string) || "PuzzlePiece";
 
     const capabilities = ((feature.manifest.capabilities as string[]) || []).map((capId) => {

@@ -4,16 +4,16 @@ import { capabilityBus } from "../../plugins/bus";
 
 export const fetch_page: AgentTool<{
   urls: string[];
-  cityId?: string;
+  workspaceId?: string;
   saveToSources?: boolean;
 }> = {
   name: "fetch_page",
   description:
-    "Reads up to 10 URLs as capped markdown and saves to sources with a city scope. Use to read found sources; do not use to discover URLs (use search_web) or to display them (use open_source).",
+    "Reads up to 10 URLs as capped markdown and saves to sources with a workspace scope. Use to read found sources; do not use to discover URLs (use search_web) or to display them (use open_source).",
   schema: z.object({
     urls: z.array(z.string().url()).min(1).max(10).describe("Array of HTTP/HTTPS URLs to fetch"),
-    cityId: z.string().optional().describe("Optional city workspace to persist source files into"),
-    saveToSources: z.boolean().default(true).describe("Whether to save fetched pages into the city sources feed"),
+    workspaceId: z.string().optional().describe("Optional workspace to persist source files into"),
+    saveToSources: z.boolean().default(true).describe("Whether to save fetched pages into the workspace sources feed"),
   }),
   execute: async (args, ctx) => {
     // Thin alias over the canonical capabilities: search.fetch reads, sources.add
@@ -21,13 +21,13 @@ export const fetch_page: AgentTool<{
     // the canonical store (see server/plugins/sources.ts).
     const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
     initializeFirstPartyPlugins();
-    const targetCity = args.cityId || (ctx as any)?.cityId;
+    const targetWorkspace = args.workspaceId || (ctx as any)?.workspaceId;
     const pages: Array<{ url: string; status: number; markdown: string; markdownPreview: string }> = [];
 
     for (const url of args.urls) {
       const fetched = await capabilityBus.invoke("search.fetch", { url }, {
         actor: "agent",
-        cityId: targetCity,
+        workspaceId: targetWorkspace,
         step: (ctx as any)?.step,
       });
       if (!fetched.success) {
@@ -49,11 +49,11 @@ export const fetch_page: AgentTool<{
 
       // Canonical persistence: sources.add (dedupe + enrichment + audit).
       // Failures here never fail the read itself.
-      if (args.saveToSources && targetCity) {
+      if (args.saveToSources && targetWorkspace) {
         try {
-          await capabilityBus.invoke("sources.add", { url, cityId: targetCity }, {
+          await capabilityBus.invoke("sources.add", { url, workspaceId: targetWorkspace }, {
             actor: "agent",
-            cityId: targetCity,
+            workspaceId: targetWorkspace,
             step: (ctx as any)?.step,
           });
         } catch {

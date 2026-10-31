@@ -8,7 +8,7 @@ import { db } from "../../workspace/db";
 
 export interface InspectExperienceArgs {
   id: string;
-  cityId?: string;
+  workspaceId?: string;
   includeSource?: boolean;
 }
 
@@ -20,7 +20,7 @@ export const inspect_experience: AgentTool<InspectExperienceArgs> = {
     id: z
       .string()
       .regex(/^[a-z0-9_-]+$/, "Experience ID must contain only lowercase alphanumeric characters, dashes, or underscores"),
-    cityId: z.string().optional().describe("City identifier where the experience is stored (defaults to current city)"),
+    workspaceId: z.string().optional().describe("Workspace identifier where the experience is stored"),
     includeSource: z
       .boolean()
       .optional()
@@ -28,26 +28,26 @@ export const inspect_experience: AgentTool<InspectExperienceArgs> = {
       .describe("Include the current source code in the response (default true)"),
   }),
   execute: async (args, ctx) => {
-    const targetCity = args.cityId || ctx.cityId || ctx.workspaceId || "global";
+    const targetWorkspace = args.workspaceId || ctx?.workspaceId || "global";
     const id = normalizePluginId(args.id);
 
     let feature;
     try {
-      feature = await readFeature(targetCity, id);
+      feature = await readFeature(targetWorkspace, id);
     } catch {
       return {
         success: false,
-        error: `Experience "${id}" not found in workspace "${targetCity}".`,
+        error: `Experience "${id}" not found in workspace "${targetWorkspace}".`,
       };
     }
     if (!feature) {
       return {
         success: false,
-        error: `Experience "${id}" not found in workspace "${targetCity}".`,
+        error: `Experience "${id}" not found in workspace "${targetWorkspace}".`,
       };
     }
 
-    const errors = getExperienceErrors(id, targetCity, 10);
+    const errors = getExperienceErrors(id, targetWorkspace, 10);
     const sizeBytes = feature.code
       ? Buffer.byteLength(feature.code, "utf-8")
       : Buffer.byteLength(feature.srcdoc || "", "utf-8");
@@ -80,7 +80,7 @@ export const inspect_experience: AgentTool<InspectExperienceArgs> = {
 
     let verification: unknown = null;
     try {
-      verification = await verifyPluginStateAsync(id, targetCity);
+      verification = await verifyPluginStateAsync(id, targetWorkspace);
     } catch {
       // ignore
     }
@@ -107,7 +107,7 @@ export const inspect_experience: AgentTool<InspectExperienceArgs> = {
         ...(args.includeSource === false ? {} : { source: feature.code ?? null }),
         srcdocBytes: Buffer.byteLength(feature.srcdoc || "", "utf-8"),
       },
-      cityId: targetCity,
+      workspaceId: targetWorkspace,
       fixHint: "Fix without recreating: modify_plugin with { patch: { find, replace } } or full code, then verify.",
     };
   },

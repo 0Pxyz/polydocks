@@ -51,7 +51,7 @@ describe("Agent Home Persistent Filesystem (Issue #73)", () => {
     expect(getAgentHomePath("AGENTS.md")).toBe(path.join(TEST_ROOT, "AGENTS.md"));
     expect(getMemoryPath("2026-10-28.md")).toBe(path.join(TEST_ROOT, "memory", "2026-10-28.md"));
     expect(getSessionsPath("session-1.jsonl")).toBe(path.join(TEST_ROOT, "sessions", "session-1.jsonl"));
-    expect(getWorkspacesPath("city-1")).toBe(path.join(TEST_ROOT, "workspaces", "city-1"));
+    expect(getWorkspacesPath("ws-1")).toBe(path.join(TEST_ROOT, "workspaces", "ws-1"));
     expect(getPluginsPath("wiki")).toBe(path.join(TEST_ROOT, "plugins", "wiki"));
     expect(getTasksPath("task-42.json")).toBe(path.join(TEST_ROOT, "tasks", "task-42.json"));
     expect(getArtifactsPath("deliverable.html")).toBe(path.join(TEST_ROOT, "artifacts", "deliverable.html"));

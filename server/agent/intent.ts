@@ -1,4 +1,4 @@
-import { isResearchIntent, isWorldPlanningIntent } from "./skills";
+import { isResearchIntent } from "./skills";
 import { UPDATE_WORD, ARTIFACT_WORD, FIX_WORD } from "./intent-words";
 
 /**
@@ -11,7 +11,7 @@ import { UPDATE_WORD, ARTIFACT_WORD, FIX_WORD } from "./intent-words";
  * not by suppressing progress messages in the UI.
  */
 
-export type AgentIntent = "theme" | "plugin_update" | "plugin_fix" | "research" | "city" | "general";
+export type AgentIntent = "theme" | "plugin_update" | "plugin_fix" | "research" | "general";
 
 export interface IntentHints {
   hasImageAttachments?: boolean;
@@ -42,10 +42,9 @@ export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIn
     return "theme";
   }
 
-  // Research and city planning reuse the existing skill matchers so there
-  // is exactly one definition of those intents.
+  // Research reuses the existing skill matcher so there is exactly one
+  // definition of that intent.
   if (isResearchIntent(prompt)) return "research";
-  if (isWorldPlanningIntent(prompt)) return "city";
 
   return "general";
 }
@@ -55,33 +54,18 @@ export function classifyIntent(prompt: string, hints: IntentHints = {}): AgentIn
  * call what it is offered, so exclusion here is a hard routing safeguard.
  */
 export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
-  // Theme edits are local UI operations: no research, no cities, no
-  // artifact synthesis, no writes outside the theme contract.
+  // Theme edits are local UI operations: no research, no artifact
+  // synthesis, no writes outside the theme contract.
   theme: [
     "search_web",
     "fetch_page",
-    "plan_map",
-    "plan_ascii_world",
-    "build_city",
-    "place_city",
-    "set_map",
-    "list_maps",
-    "create_tab",
-    "update_tab",
-    "delete_tab",
     "create_plugin",
     "modify_plugin",
     "operate_plugin",
     "publish_plugin",
     "promote_to_plugin",
-    "open_tab",
-    "open_intent",
-    "write_city_file",
     "write_file",
     "edit_file",
-    "get_city_context",
-    "inspect_tab",
-    "list_tabs",
     "search_icons",
     "list_icon_categories",
     "sandbox_exec",
@@ -94,22 +78,12 @@ export const INTENT_TOOL_DENYLIST: Record<AgentIntent, readonly string[]> = {
     "sandbox_list_files",
   ],
   // Updates must reuse the existing artifact, never synthesize a duplicate.
-  plugin_update: ["create_tab", "create_plugin"],
+  plugin_update: ["create_plugin"],
   // Fixes must patch the existing artifact in place: no recreate, no delete.
-  plugin_fix: ["create_tab", "create_plugin", "delete_tab"],
-  // Research reads the web; it never mutates territories, themes, or tabs.
+  plugin_fix: ["create_plugin"],
+  // Research reads the web; it never mutates themes or plugins.
   research: [
-    "plan_map",
-    "plan_ascii_world",
-    "build_city",
-    "place_city",
-    "set_map",
-    "connect_cities",
     "apply_theme",
-    "delete_tab",
   ],
-  // City planning shapes territories; it never changes the theme, deletes,
-  // or executes code (city building runs through its own pipeline).
-  city: ["apply_theme", "delete_tab", "sandbox_exec", "sandbox_write_file", "sandbox_serve", "sandbox_terminate"],
   general: [],
 };

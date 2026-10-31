@@ -42,7 +42,7 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
     // Visual kit gate on the stored code (agent-published code is strict).
     {
       const { getPluginFile } = await import("../../workspace/pluginFiles");
-      const stored = getPluginFile(input.pluginId, input.workspaceId || ctx?.workspaceId || ctx?.cityId);
+      const stored = getPluginFile(input.pluginId, input.workspaceId || ctx?.workspaceId);
       if (stored?.sourceCode) {
         const { validateSlop } = await import("../../plugins/slop");
         const report = validateSlop(stored.sourceCode, { strict: ctx?.actor === "agent" });
@@ -51,7 +51,7 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
         }
       }
     }
-    const workspaceId = input.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
+    const workspaceId = input.workspaceId || ctx?.workspaceId || "default";
 
     return await PluginService.publishPlugin({
       pluginId: input.pluginId,

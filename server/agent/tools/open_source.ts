@@ -14,13 +14,13 @@ export const open_source: AgentTool<{ url: string; title?: string }> = {
     // policy, audit and browser.open event fire on every surface.
     const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
     initializeFirstPartyPlugins();
-    const targetCity = (ctx as any)?.cityId;
+    const targetWorkspace = (ctx as any)?.workspaceId;
     const result = await capabilityBus.invoke("browser.open", {
       url: args.url,
       title: args.title || args.url,
     }, {
       actor: "agent",
-      cityId: targetCity,
+      workspaceId: targetWorkspace,
       step: (ctx as any)?.step,
     });
     if (!result.success) {

@@ -7,7 +7,7 @@ import { PluginRegistry } from "../server/plugins/registry";
 import { db } from "../server/workspace/db";
 import app from "../server/index";
 
-const CITY = "test-sources-ws";
+const WS = "test-sources-ws";
 const ARTICLE_URL = "https://example.com/articles/deep-work";
 const VIDEO_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 const NO_TITLE_URL = "https://example.com/empty-page";
@@ -67,35 +67,34 @@ function stubFetch() {
 describe("Contract: one definition, every surface", () => {
   beforeEach(() => {
     stubFetch();
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(WS);
     // Hermetic TinyFish fetch: drop cached markdown so the stubbed
     // api.fetch.tinyfish.ai responses above are always consulted.
     db.query("DELETE FROM discovery_cache WHERE query_type = 'fetch'").run();
-    // First-use approval, as a user would grant once: external fetch and
-    // city writes are policy-gated without these.
+    // First-use approval, as a user would grant once: external fetch is
+    // policy-gated without this.
     const registry = PluginRegistry.getInstance();
-    registry.recordGrant("sources", "external", `city:${CITY}`, "allow_always");
-    registry.recordGrant("cities", "write", "plugin:cities", "allow_always");
-  });
+    registry.recordGrant("sources", "external", `workspace:${WS}`, "allow_always");
+      });
 
   afterEach(() => {
     globalThis.fetch = realFetch;
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
-    db.query("DELETE FROM plugin_grants WHERE plugin_id IN ('sources', 'cities')").run();
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(WS);
+    db.query("DELETE FROM plugin_grants WHERE plugin_id = 'sources'").run();
   });
 
   it("registers sources.add on the bus (agent surface)", async () => {
     expect(getContractCapability("sources", "add")).toBeDefined();
-    const found = (await find_capabilities.execute({ query: "add a web source" }, { step: 1, cityId: CITY } as any)) as any;
+    const found = (await find_capabilities.execute({ query: "add a web source" }, { step: 1, workspaceId: WS } as any)) as any;
     const ids: string[] = (found.capabilities || found || []).map((c: any) => c.id ?? c);
     expect(ids).toContain("sources.add");
   });
 
   it("agent tool, HTTP route and CLI return the same envelope and event", async () => {
-    const input = { url: ARTICLE_URL, cityId: CITY };
+    const input = { url: ARTICLE_URL, workspaceId: WS };
 
     // 1. Agent surface
-    const viaAgent = (await invoke_capability.execute({ id: "sources.add", input }, { step: 1, cityId: CITY } as any)) as any;
+    const viaAgent = (await invoke_capability.execute({ id: "sources.add", input }, { step: 1, workspaceId: WS } as any)) as any;
     expect(viaAgent.success).toBe(true);
     const agentEnv = viaAgent.data;
     expect(agentEnv.ok).toBe(true);
@@ -128,20 +127,20 @@ describe("Contract: one definition, every surface", () => {
     expect(httpEnv.events.some((e: any) => e.type === "source.added")).toBe(false);
 
     // 3. CLI surface (flags from schema, JSON envelope)
-    const cli = await runContractCommand("sources", "add", ["--url", ARTICLE_URL, "--city", CITY], { json: true });
+    const cli = await runContractCommand("sources", "add", ["--url", ARTICLE_URL, "--workspace", WS], { json: true });
     expect(cli.found).toBe(true);
     expect((cli.envelope as any)?.ok).toBe(true);
     expect((cli.envelope as any)?.id).toBe(savedId);
 
     // One row only: dedupe held across all three surfaces.
-    const count = db.query("SELECT COUNT(*) as n FROM sources WHERE city_id = ?").get(CITY) as any;
+    const count = db.query("SELECT COUNT(*) as n FROM sources WHERE workspace_id = ?").get(WS) as any;
     expect(count.n).toBe(1);
   });
 
   it("infers video kind with thumbnail via oEmbed", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: VIDEO_URL, cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.add", input: { url: VIDEO_URL, workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     expect(res.success).toBe(true);
     expect(res.data.ok).toBe(true);
@@ -151,8 +150,8 @@ describe("Contract: one definition, every surface", () => {
 
   it("handles Vimeo video with thumbnail and oEmbed author/title", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: VIMEO_URL, cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.add", input: { url: VIMEO_URL, workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     expect(res.success).toBe(true);
     expect(res.data.ok).toBe(true);
@@ -164,8 +163,8 @@ describe("Contract: one definition, every surface", () => {
 
   it("falls back to markdown heading and markdown image when og tags missing", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: MD_IMAGE_URL, cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.add", input: { url: MD_IMAGE_URL, workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     expect(res.success).toBe(true);
     expect(res.data.ok).toBe(true);
@@ -176,16 +175,16 @@ describe("Contract: one definition, every surface", () => {
   it("lists sources via sources.list and opens a source via sources.open", async () => {
     // 1. Add source
     const added = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: ARTICLE_URL, cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.add", input: { url: ARTICLE_URL, workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     expect(added.data.ok).toBe(true);
     const sourceId = added.data.id;
 
-    // 2. sources.list({ cityId })
+    // 2. sources.list({ workspaceId })
     const listRes = (await invoke_capability.execute(
-      { id: "sources.list", input: { cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.list", input: { workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     expect(listRes.success).toBe(true);
     expect(listRes.data.ok).toBe(true);
@@ -194,8 +193,8 @@ describe("Contract: one definition, every surface", () => {
 
     // 3. sources.open({ id })
     const openRes = (await invoke_capability.execute(
-      { id: "sources.open", input: { id: sourceId, cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.open", input: { id: sourceId, workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     expect(openRes.success).toBe(true);
     expect(openRes.data.ok).toBe(true);
@@ -205,27 +204,14 @@ describe("Contract: one definition, every surface", () => {
 
   it("rejects sources without a verifiable title", async () => {
     const res = (await invoke_capability.execute(
-      { id: "sources.add", input: { url: NO_TITLE_URL, cityId: CITY } },
-      { step: 1, cityId: CITY } as any
+      { id: "sources.add", input: { url: NO_TITLE_URL, workspaceId: WS } },
+      { step: 1, workspaceId: WS } as any
     )) as any;
     // Contract envelope: ok:false surfaces through the tool result.
     expect(res.data?.ok ?? res.success).toBe(false);
-    const rows = db.query("SELECT COUNT(*) as n FROM sources WHERE city_id = ?").get(CITY) as any;
+    const rows = db.query("SELECT COUNT(*) as n FROM sources WHERE workspace_id = ?").get(WS) as any;
     expect(rows.n).toBe(0);
   });
 
-  it("cities.create registers and cities.enter opens the workspace", async () => {
-    const created = (await invoke_capability.execute(
-      { id: "cities.create", input: { cityId: CITY, title: "Test Sources", region: "Core Region" } },
-      { step: 1, cityId: CITY } as any
-    )) as any;
-    expect(created.success).toBe(true);
-    expect(created.data.ok).toBe(true);
-    const entered = (await invoke_capability.execute(
-      { id: "cities.enter", input: { cityId: CITY } },
-      { step: 1, cityId: CITY } as any
-    )) as any;
-    expect(entered.success).toBe(true);
-    db.query("DELETE FROM cities WHERE id = ?").run(CITY);
-  });
+
 });

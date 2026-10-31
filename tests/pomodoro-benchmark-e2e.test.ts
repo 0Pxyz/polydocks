@@ -80,7 +80,7 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
         code: initialPomodoroCode,
         workspaceId: "focus-hub-test",
       },
-      { cityId: "focus-hub-test" }
+      { workspaceId: "focus-hub-test" }
     );
 
     expect(createResult.success).toBe(true);
@@ -102,7 +102,7 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
     } as unknown as Window;
 
     const bridge = createHostBridge(mockGuestWindow, {
-      cityId: "focus-hub-test",
+      workspaceId: "focus-hub-test",
       tabId: "pomodoro-benchmark-test",
       workspaceId: "focus-hub-test",
       pluginId: "pomodoro-benchmark-test",
@@ -142,7 +142,7 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
         changeSummary: "Added streak counter and updated UI layout",
         workspaceId: "focus-hub-test",
       },
-      { cityId: "focus-hub-test" }
+      { workspaceId: "focus-hub-test" }
     );
 
     expect(modifyResult.success).toBe(true);
@@ -180,7 +180,7 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
         author: "Gabriel (PolyDocks Creator)",
         tags: ["productivity", "timer", "focus"],
       },
-      { cityId: "focus-hub-test" }
+      { workspaceId: "focus-hub-test" }
     );
 
     expect(pubResult.success).toBe(true);

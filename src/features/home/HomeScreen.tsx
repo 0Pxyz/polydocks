@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
+import { ThoughtStream } from "./ThoughtStream";
+import { pushThought } from "@/lib/agent/thoughtStream";
+import { useConversationStore } from "@/lib/agent/conversationStore";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
 
@@ -73,6 +76,32 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
     onOpenAgent();
   };
 
+  // Thoughts stay anchored above the home orb spot. Shown in both quiet
+  // modes: idle home (orb only) and compact bottom sheet. Sidebar/full
+  // keep the transcript only.
+  const layoutState = useConversationStore((s) => s.layoutState);
+  const showThoughts = layoutState === "sheet" || layoutState === "closed";
+
+  // Dev-only fake emitter (?thought-demo=1): two parallel fake jobs drive
+  // the stream without any backend. Never fires in production builds.
+  // Guarded against StrictMode double-effects (dev only).
+  const demoFiredRef = useRef(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV || demoFiredRef.current) return;
+    try {
+      (window as unknown as { __pushThought?: unknown }).__pushThought = pushThought;
+      (window as unknown as { __thoughtDemo?: unknown }).__thoughtDemo = () => {
+        void import("@/lib/agent/thoughtDev").then((m) => m.emitFakeThoughtDemo());
+      };
+      if (window.location.search.includes("thought-demo=1")) {
+        demoFiredRef.current = true;
+        void import("@/lib/agent/thoughtDev").then((m) => m.emitFakeThoughtDemo());
+      }
+    } catch {
+      // Dev hooks must never break the home screen.
+    }
+  }, []);
+
   return (
     <div
       className={cn(
@@ -80,6 +109,9 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
         className
       )}
     >
+      {/* Living-agent thoughts: same spot above the orb, visible only
+          while the compact bottom sheet is open. */}
+      {showThoughts && <ThoughtStream />}
       <AnimatePresence mode="wait" initial={false}>
         {!panelOpen && (
           <motion.div

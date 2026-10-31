@@ -12,7 +12,7 @@
 
 ## Risk and policy
 
-Every capability declares `risk: read|write|destructive|external` (`server/plugins/manifest.ts`). `read` runs free; `destructive` and `external` always pause for user approval; `write` is auto-allowed for core and first-party plugins in a city, otherwise it needs a grant or approval (15s timeout; denial halts with the reason). The bus enforces this per call, records each run in `executions`, and times out at 30s.
+Every capability declares `risk: read|write|destructive|external` (`server/plugins/manifest.ts`). `read` runs free; `destructive` and `external` always pause for user approval; `write` is auto-allowed for core and first-party plugins, otherwise it needs a grant or approval (15s timeout; denial halts with the reason). The bus enforces this per call, records each run in `executions`, and times out at 30s.
 
 ## Wiring data sources
 

@@ -32,7 +32,7 @@ export const record_memory: AgentTool<{
     workspaceId: z
       .string()
       .optional()
-      .describe("Optional city or workspace identifier to associate with the memory"),
+      .describe("Optional workspace identifier to associate with the memory"),
   }),
   execute: async (args) => {
     return await recordMemory({

@@ -1,18 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
-  Compass,
   Globe,
-  NotePencil,
   Sparkle,
   Plus,
-  Storefront,
-  Folder,
   Gear,
-  Paperclip,
-  Target,
-  Cards,
-  TerminalWindow,
-  PlugsConnected,
+  Toolbox,
+  Hammer,
+  Books,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
@@ -50,128 +44,56 @@ export interface DockToolItem {
 export const CORE_DOCK_TOOLS: DockToolItem[] = [
   {
     id: "agent",
-    label: "Agent (⌘K)",
+    label: "Poly (⌘K)",
     type: "icon",
     icon: Sparkle,
     isAgent: true,
   },
   {
-    id: "maps",
-    label: "World Map",
-    type: "icon",
-    icon: Compass,
-  },
-  {
     id: "browser",
-    label: "Research & Sources",
+    label: "Browser",
     type: "icon",
     icon: Globe,
   },
   {
-    id: "notes",
-    label: "Notes",
+    id: "plugins",
+    label: "Tools",
     type: "icon",
-    icon: NotePencil,
+    icon: Toolbox,
+  },
+  {
+    id: "creations",
+    label: "Creations",
+    type: "icon",
+    icon: Hammer,
+  },
+  {
+    id: "store",
+    label: "Library",
+    type: "icon",
+    icon: Books,
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    type: "icon",
+    icon: Gear,
   },
 ];
-
-export const STORE_DOCK_TOOL: DockToolItem = {
-  id: "store",
-  label: "Plugin Store",
-  type: "icon",
-  icon: Storefront,
-  iconKey: "storefront",
-};
 
 export const ROOT_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
 
-export const HOME_DOCK_TOOLS: DockToolItem[] = [
-  {
-    id: "agent",
-    label: "Agent (⌘K)",
-    type: "icon",
-    icon: Sparkle,
-    isAgent: true,
-  },
-  {
-    id: "plugins",
-    label: "Plugins",
-    type: "icon",
-    icon: PlugsConnected,
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    type: "icon",
-    icon: Gear,
-  },
-];
-
-export const CITY_DOCK_TOOLS: DockToolItem[] = [
-  {
-    id: "agent",
-    label: "Agent (⌘K)",
-    type: "icon",
-    icon: Sparkle,
-    isAgent: true,
-  },
-  {
-    id: "maps",
-    label: "World Map",
-    type: "icon",
-    icon: Compass,
-  },
-  {
-    id: "sources",
-    label: "Sources",
-    type: "icon",
-    icon: Paperclip,
-  },
-  {
-    id: "notes",
-    label: "Notes",
-    type: "icon",
-    icon: NotePencil,
-  },
-  {
-    id: "files",
-    label: "City Files",
-    type: "icon",
-    icon: Folder,
-  },
-  {
-    id: "quests",
-    label: "Quests",
-    type: "icon",
-    icon: Target,
-  },
-  {
-    id: "flashcards",
-    label: "Flashcards",
-    type: "icon",
-    icon: Cards,
-  },
-  {
-    id: "terminal",
-    label: "Terminal",
-    type: "icon",
-    icon: TerminalWindow,
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    type: "icon",
-    icon: Gear,
-  },
-];
+export const HOME_DOCK_TOOLS: DockToolItem[] = CORE_DOCK_TOOLS;
 
 export const DOCK_TOOLS: DockToolItem[] = ROOT_DOCK_TOOLS;
 
 interface AgenticDockProps {
-  mode?: "world" | "city";
-  cityName?: string;
   activeToolId?: string;
-  onSelectTool?: (toolId: string) => void;
+  onSelectTool?: (toolId: string, opts?: { beside?: boolean }) => void;
+  /** Open a dock tool in the beside panel (no-op for ineligible rows). */
+  onOpenBesideItem?: (id: string) => void;
+  /** Right offset (px) reserving the beside panel, mirroring the chat side offset. */
+  besideOffsetPx?: number;
   className?: string;
   isAgentWorking?: boolean;
   isAgentSheetOpen?: boolean;
@@ -187,11 +109,6 @@ interface AgenticDockProps {
   onFixWithAgent?: (prompt: string) => void;
   onOpenAgent?: () => void;
   onOpenMcpConnect?: () => void;
-  /**
-   * Contextual ids (city tools): shown in the bar while their context is
-   * active, without ever becoming global pins.
-   */
-  contextualIds?: string[];
   isBuilding?: boolean;
   buildingName?: string;
   statusText?: string;
@@ -200,7 +117,6 @@ interface AgenticDockProps {
 }
 
 export function AgenticDock({
-  cityName,
   activeToolId: controlledActiveToolId,
   onSelectTool,
   className,
@@ -214,7 +130,8 @@ export function AgenticDock({
   onFixWithAgent,
   onOpenAgent,
   onOpenMcpConnect,
-  contextualIds = [],
+  onOpenBesideItem,
+  besideOffsetPx = 0,
   isBuilding = false,
   buildingName,
   statusText,
@@ -360,7 +277,13 @@ export function AgenticDock({
     };
   }, [isBottom]);
 
-  const handleToolClick = (toolId: string) => {
+  const handleToolClick = (toolId: string, beside = false) => {
+    // Shift+click opens beside instead of focusing into the main view
+    // (works on the focused tool too: it moves beside).
+    if (beside) {
+      onSelectTool?.(toolId, { beside: true });
+      return;
+    }
     // One click always resolves: clicking the focused item closes it,
     // clicking another focuses it (background items come forward).
     // Never a visible-but-inaccessible state.
@@ -384,8 +307,7 @@ export function AgenticDock({
       ? statusText
       : null;
 
-  const defaultTools = cityName ? CITY_DOCK_TOOLS : HOME_DOCK_TOOLS;
-  const baseTools = explicitTools ?? defaultTools;
+  const baseTools = explicitTools ?? HOME_DOCK_TOOLS;
   // The bar can show any builtin catalog item, not just the mode slice, so a
   // pinned or open tool never vanishes for missing a local definition.
   const universe: DockToolItem[] = [...baseTools];
@@ -398,7 +320,7 @@ export function AgenticDock({
 
   // Single-source ordering: the dock_items registration order is stable and
   // never recalculated. Visible = globals + active context (other contexts
-  // persist hidden, so the map never shows city items and nothing reshuffles
+  // persist hidden, so other-context items never show and nothing reshuffles
   // on return). Pinned globals not yet registered still appear once.
   const visibleCap = computeVisibleCap(barWidth);
   const byId = new Map(allTools.map((tool) => [tool.id, tool]));
@@ -421,8 +343,6 @@ export function AgenticDock({
   for (const id of stableOrder) {
     if (dockVisible.includes(id)) take(id);
   }
-  // Contextual tools not yet registered (first visit) appear in definition order.
-  for (const id of contextualIds) take(id);
   for (const id of pinnedToolIds) take(id);
   const cappedIds = orderedIds.slice(0, Math.max(1, visibleCap));
   const visibleTools = cappedIds
@@ -459,7 +379,6 @@ export function AgenticDock({
             )}
           >
             <CommandPalette
-              cityId={cityName}
               extraItems={sessionTools.map(
                 (tool): DockItem => ({
                   id: tool.id,
@@ -475,6 +394,7 @@ export function AgenticDock({
                 openTool(toolId);
                 onSelectTool?.(toolId);
               }}
+              onOpenBesideItem={onOpenBesideItem}
               onCloseItem={onCloseItem}
               onSubmitToolPrompt={onSubmitToolPrompt}
               onFixWithAgent={onFixWithAgent}
@@ -518,7 +438,10 @@ export function AgenticDock({
   return (
     <header
       ref={headerRef}
-      style={sideOffset > 0 ? { left: sideOffset } : undefined}
+      style={{
+        ...(sideOffset > 0 ? { left: sideOffset } : null),
+        ...(besideOffsetPx > 0 ? { right: besideOffsetPx } : null),
+      }}
       className={cn(
         "fixed left-0 right-0 z-50 flex flex-col items-center select-none pointer-events-none",
         isBottom ? "bottom-0 pb-3" : "top-0 pt-3",
@@ -568,7 +491,7 @@ export function AgenticDock({
                 type="button"
                 data-dock-tool-id={tool.id}
                 data-dock-index={index}
-                onClick={() => handleToolClick(tool.id)}
+                onClick={(e) => handleToolClick(tool.id, e.shiftKey)}
                 className={cn(
                   "group relative w-10 h-10 min-w-[40px] flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-lime)]",
                   isActive ? currentStyle.activeItemClass : currentStyle.inactiveItemClass,

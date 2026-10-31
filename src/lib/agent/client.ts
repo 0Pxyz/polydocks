@@ -3,7 +3,6 @@ import type { ChatAttachment } from "./attachments";
 
 export interface SendAgentMessageOptions {
   prompt: string;
-  cityId?: string;
   userId?: string;
   modelId?: string;
   /** Reasoning effort level ("auto" omits the parameter server-side). */
@@ -23,7 +22,7 @@ export interface SendAgentMessageOptions {
 export async function streamAgentLoop(
   options: SendAgentMessageOptions
 ): Promise<void> {
-  const { prompt, cityId, userId, modelId, reasoningEffort, attachments, origin, history = [], retry = false, onEvent, signal } = options;
+  const { prompt, userId, modelId, reasoningEffort, attachments, origin, history = [], retry = false, onEvent, signal } = options;
 
   let response: Response;
   try {
@@ -36,7 +35,6 @@ export async function streamAgentLoop(
       },
       body: JSON.stringify({
         prompt,
-        cityId,
         userId,
         modelId,
         reasoningEffort,

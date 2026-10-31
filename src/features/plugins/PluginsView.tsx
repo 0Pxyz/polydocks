@@ -16,7 +16,16 @@ import {
   ShieldWarning,
   MagnifyingGlass,
   Storefront,
+  DotsThree,
+  Info,
 } from "@phosphor-icons/react";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { resolveSurfaceIcon } from "../dock/surfaceResolver";
 import { PluginStoreView } from "./PluginStoreView";
 
@@ -60,7 +69,11 @@ interface InstalledListProps {
   onToggle: (pluginId: string) => void;
   onUninstall: (pluginId: string) => void;
   onOpenPlugin?: (pluginId: string) => void;
+  onBrowseLibrary?: () => void;
 }
+
+/** Search and group pills appear only for long, mixed lists. */
+const SHORT_LIST_LIMIT = 6;
 
 const TRUST_SECTIONS: Array<{ trust: PluginItem["trust"]; title: string }> = [
   { trust: "core", title: "Built-in" },
@@ -84,6 +97,7 @@ function InstalledPluginList({
   onToggle,
   onUninstall,
   onOpenPlugin,
+  onBrowseLibrary,
 }: InstalledListProps) {
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState<string>("All");
@@ -109,7 +123,8 @@ function InstalledPluginList({
 
   return (
     <div className="w-full flex flex-col gap-4">
-      {/* Search + group filter (same controls as Discover) */}
+      {/* Search + group filter appear only for long, mixed lists. */}
+      {plugins.length >= SHORT_LIST_LIMIT && (
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <MagnifyingGlass
@@ -125,23 +140,26 @@ function InstalledPluginList({
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-full bg-white/[0.04] border border-[var(--border-subtle)] p-0.5">
-          {["All", ...groups.map((g) => g.title)].map((label) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setGroup(label)}
-              className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap ${
-                group === label
-                  ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] font-medium"
-                  : "text-[var(--text-muted)] hover:text-white"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {groups.length > 1 && (
+          <div className="flex items-center gap-1 rounded-full bg-white/[0.04] border border-[var(--border-subtle)] p-0.5">
+            {["All", ...groups.map((g) => g.title)].map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setGroup(label)}
+                className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap ${
+                  group === label
+                    ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] font-medium"
+                    : "text-[var(--text-muted)] hover:text-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -153,12 +171,22 @@ function InstalledPluginList({
           ))}
         </div>
       ) : plugins.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Storefront size={28} className="text-[var(--text-dim)]" />
-          <p className="text-xs text-[var(--text-muted)] max-w-xs mt-2">
-            No plugins installed yet. Ask the agent to build one, then publish it.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Storefront size={20} />}
+          title="No tools yet"
+          hint="Ask the agent to build one, then publish it."
+          action={
+            onBrowseLibrary ? (
+              <button
+                type="button"
+                onClick={onBrowseLibrary}
+                className="mt-1 px-3.5 py-1.5 rounded-full text-xs font-medium bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/25 transition-colors cursor-pointer"
+              >
+                Browse Library
+              </button>
+            ) : undefined
+          }
+        />
       ) : (
         TRUST_SECTIONS.map((section) => {
           const items = plugins.filter((p) => p.trust === section.trust && matches(p));
@@ -179,17 +207,23 @@ function InstalledPluginList({
                     : lastRun?.status === "failed"
                       ? "Needs attention"
                       : "Connected";
+                  // One click zone per row: opens enabled tools, enables
+                  // disabled ones. Everything else lives in the hover menu.
+                  const primaryAction = () => {
+                    if (plugin.enabled) onOpenPlugin?.(plugin.id);
+                    else onToggle(plugin.id);
+                  };
 
                   return (
                     <div
                       key={plugin.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => onSelect(plugin)}
+                      onClick={primaryAction}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          onSelect(plugin);
+                          primaryAction();
                         }
                       }}
                       className={`group flex items-center gap-3.5 p-3.5 rounded-2xl outline-none transition-colors duration-150 cursor-pointer focus-visible:ring-1 focus-visible:ring-[var(--accent-lime)]/40 ${
@@ -218,60 +252,54 @@ function InstalledPluginList({
                         )}
                       </div>
 
-                      {/* Quiet action + discrete controls */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {plugin.enabled ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenPlugin?.(plugin.id);
-                            }}
-                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-[var(--accent-lime)]/10 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/20 transition-colors cursor-pointer"
+                      {/* Secondary actions live in the hover menu */}
+                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={`Actions for ${plugin.name}`}
+                              title="Tool actions"
+                              className="p-1.5 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)] [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:min-w-[44px]"
+                            >
+                              <DotsThree size={18} weight="bold" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            sideOffset={4}
+                            className="min-w-44 p-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-overlay)] text-[var(--text-main)] shadow-2xl z-50"
                           >
-                            Open
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onToggle(plugin.id);
-                            }}
-                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/[0.04] text-[var(--text-muted)] hover:bg-[var(--accent-lime)]/10 hover:text-[var(--accent-lime)] transition-colors cursor-pointer"
-                          >
-                            Enable
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          aria-label={plugin.enabled ? `Disable ${plugin.name}` : `Enable ${plugin.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggle(plugin.id);
-                          }}
-                          className="p-1.5 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                        >
-                          {plugin.enabled ? (
-                            <ToggleRight className="w-5 h-5 text-emerald-400" weight="fill" />
-                          ) : (
-                            <ToggleLeft className="w-5 h-5 text-white/30" />
-                          )}
-                        </button>
-                        {plugin.trust !== "core" && (
-                          <button
-                            type="button"
-                            aria-label={`Uninstall ${plugin.name}`}
-                            title={`Uninstall ${plugin.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onUninstall(plugin.id);
-                            }}
-                            className="p-1.5 rounded-full text-white/40 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
-                          >
-                            <Trash className="w-4 h-4" />
-                          </button>
-                        )}
+                            <DropdownMenuItem
+                              onSelect={() => onSelect(plugin)}
+                              className="gap-2.5 px-2.5 py-2 text-[13px] rounded-lg focus:bg-[var(--overlay-hover)] [@media(pointer:coarse)]:min-h-[44px]"
+                            >
+                              <Info size={15} className="text-[var(--text-muted)]" />
+                              Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => onToggle(plugin.id)}
+                              className="gap-2.5 px-2.5 py-2 text-[13px] rounded-lg focus:bg-[var(--overlay-hover)] [@media(pointer:coarse)]:min-h-[44px]"
+                            >
+                              {plugin.enabled ? (
+                                <ToggleRight size={15} className="text-[var(--text-muted)]" weight="fill" />
+                              ) : (
+                                <ToggleLeft size={15} className="text-[var(--text-muted)]" />
+                              )}
+                              {plugin.enabled ? "Disable" : "Enable"}
+                            </DropdownMenuItem>
+                            {plugin.trust !== "core" && (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => onUninstall(plugin.id)}
+                                className="gap-2.5 px-2.5 py-2 text-[13px] rounded-lg [@media(pointer:coarse)]:min-h-[44px]"
+                              >
+                                <Trash size={15} />
+                                Uninstall
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   );
@@ -283,12 +311,23 @@ function InstalledPluginList({
       )}
 
       {!loading && plugins.length > 0 && TRUST_SECTIONS.every((s) => plugins.filter((p) => p.trust === s.trust && matches(p)).length === 0) && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Storefront size={28} className="text-[var(--text-dim)]" />
-          <p className="text-xs text-[var(--text-muted)] max-w-xs mt-2">
-            No plugins match this filter.
-          </p>
-        </div>
+        <EmptyState
+          icon={<MagnifyingGlass size={20} />}
+          title="No plugins match"
+          hint="Try a different search."
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setGroup("All");
+              }}
+              className="mt-1 px-3.5 py-1.5 rounded-full text-xs font-medium bg-[var(--overlay-strong)] text-[var(--text-main)] hover:bg-[var(--overlay-hover)] transition-colors cursor-pointer"
+            >
+              Clear search
+            </button>
+          }
+        />
       )}
     </div>
   );
@@ -568,6 +607,7 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
           onToggle={handleToggle}
           onUninstall={handleUninstall}
           onOpenPlugin={onOpenPlugin}
+          onBrowseLibrary={() => setActiveTab("discover")}
         />
       )}
 

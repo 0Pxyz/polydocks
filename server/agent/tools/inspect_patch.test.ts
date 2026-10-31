@@ -5,8 +5,8 @@ import { inspect_experience } from "./inspect_experience";
 import { create_plugin } from "./create_plugin";
 import { deleteFeature } from "../../workspace/features";
 
-const WS = "test-inspect-patch-ws";
-const ID = "test-patch-plugin";
+const WS = `test-inspect-patch-ws-${Date.now().toString(36)}`;
+const ID = `test-patch-plugin-${Date.now().toString(36)}`;
 
 const CODE_V1 = `const app = document.getElementById('app'); if (app) app.textContent = 'hello v1';`;
 
@@ -17,7 +17,7 @@ describe("inspect -> patch -> verify (no recreate)", () => {
     db.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(ID);
     await create_plugin.execute(
       { id: ID, name: "Patch Me", description: "patch test", code: CODE_V1, workspaceId: WS },
-      { cityId: WS, workspaceId: WS, step: 1 }
+      { workspaceId: WS, workspaceId: WS, step: 1 }
     );
   });
 
@@ -25,12 +25,14 @@ describe("inspect -> patch -> verify (no recreate)", () => {
     await deleteFeature(WS, ID).catch(() => {});
     db.query("DELETE FROM plugins WHERE id = ?").run(ID);
     db.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(ID);
+    db.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(ID);
+    db.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(ID);
   });
 
   it("inspect returns source, version, history, mounts, verification", async () => {
     const res = (await inspect_experience.execute(
-      { id: ID, cityId: WS },
-      { cityId: WS, workspaceId: WS, step: 1 }
+      { id: ID, workspaceId: WS },
+      { workspaceId: WS, workspaceId: WS, step: 1 }
     )) as any;
     expect(res.success).toBe(true);
     expect(res.files.source).toContain("hello v1");
@@ -50,14 +52,14 @@ describe("inspect -> patch -> verify (no recreate)", () => {
         changeSummary: "bump greeting",
         workspaceId: WS,
       },
-      { cityId: WS, workspaceId: WS, step: 2 }
+      { workspaceId: WS, workspaceId: WS, step: 2 }
     )) as any;
     expect(res.success).toBe(true);
     expect(res.pluginId).toBe(ID);
 
     const reinspected = (await inspect_experience.execute(
-      { id: ID, cityId: WS },
-      { cityId: WS, workspaceId: WS, step: 3 }
+      { id: ID, workspaceId: WS },
+      { workspaceId: WS, workspaceId: WS, step: 3 }
     )) as any;
     expect(reinspected.files.source).toContain("hello v2");
     expect(reinspected.files.source).not.toContain("hello v1");
@@ -71,7 +73,7 @@ describe("inspect -> patch -> verify (no recreate)", () => {
         changeSummary: "bad patch",
         workspaceId: WS,
       },
-      { cityId: WS, workspaceId: WS, step: 4 }
+      { workspaceId: WS, workspaceId: WS, step: 4 }
     )) as any;
     expect(res.success).toBe(false);
     expect(res.error).toContain("Patch target not found");
@@ -80,12 +82,12 @@ describe("inspect -> patch -> verify (no recreate)", () => {
   it("metadata-only update works without code", async () => {
     const res = (await modify_plugin.execute(
       { id: ID, changeSummary: "rename", name: "Patched Title", workspaceId: WS },
-      { cityId: WS, workspaceId: WS, step: 5 }
+      { workspaceId: WS, workspaceId: WS, step: 5 }
     )) as any;
     expect(res.success).toBe(true);
     const reinspected = (await inspect_experience.execute(
-      { id: ID, cityId: WS },
-      { cityId: WS, workspaceId: WS, step: 6 }
+      { id: ID, workspaceId: WS },
+      { workspaceId: WS, workspaceId: WS, step: 6 }
     )) as any;
     expect(reinspected.files.source).toContain("hello v2");
   });

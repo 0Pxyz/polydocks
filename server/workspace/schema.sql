@@ -1,49 +1,13 @@
 -- Polymax Local SQLite Schema
 -- High-concurrency WAL mode enabled in runtime
 
-CREATE TABLE IF NOT EXISTS cities (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  region TEXT,
-  level INTEGER DEFAULT 1,
-  tags TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS city_tabs (
-  id TEXT NOT NULL,
-  city_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  icon TEXT DEFAULT 'Layers',
-  scope TEXT DEFAULT 'city',
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (id, city_id)
-);
-
-CREATE TABLE IF NOT EXISTS city_notes (
-  id TEXT PRIMARY KEY,
-  city_id TEXT NOT NULL,
-  path TEXT NOT NULL,
-  title TEXT,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS city_sources (
-  id TEXT PRIMARY KEY,
-  city_id TEXT NOT NULL,
-  url TEXT NOT NULL,
-  title TEXT,
-  kind TEXT DEFAULT 'web',
-  cached_at TEXT NOT NULL
-);
-
 -- Unified enriched source store (contract plugin `sources`). Replaces the
 -- three legacy shapes: workspace/sources/* filenames, hand-written
 -- feed.json items and pipeline feed.json items. The agent passes a URL;
 -- the server enriches and validates.
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
-  city_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'article',
   url TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -56,7 +20,7 @@ CREATE TABLE IF NOT EXISTS sources (
   hook TEXT,
   full_text TEXT,
   created_at TEXT NOT NULL,
-  UNIQUE(city_id, url)
+  UNIQUE(workspace_id, url)
 );
 
 CREATE TABLE IF NOT EXISTS discovery_cache (
@@ -69,39 +33,12 @@ CREATE TABLE IF NOT EXISTS discovery_cache (
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  city_id TEXT,
+  workspace_id TEXT,
   actor TEXT DEFAULT 'user', -- 'agent' | 'user' | 'cli'
   action TEXT NOT NULL,
   target_id TEXT,
   details TEXT,
   created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS maps (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  style TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  image_url TEXT NOT NULL,
-  image_width INTEGER NOT NULL,
-  image_height INTEGER NOT NULL,
-  thumbnail_url TEXT NOT NULL,
-  regions_json TEXT,
-  sites_json TEXT,
-  license TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS map_points (
-  id TEXT PRIMARY KEY,
-  map_id TEXT NOT NULL,
-  city_id TEXT NOT NULL,
-  title TEXT,
-  x REAL NOT NULL,
-  y REAL NOT NULL,
-  status TEXT DEFAULT 'discovered',
-  created_at TEXT NOT NULL,
-  UNIQUE(map_id, city_id)
 );
 
 -- Core Plugin Architecture & Capability Bus
@@ -133,7 +70,7 @@ CREATE TABLE IF NOT EXISTS executions (
   capability_id TEXT NOT NULL,
   plugin_id TEXT NOT NULL,
   actor TEXT NOT NULL, -- 'agent' | 'user'
-  city_id TEXT,
+  workspace_id TEXT,
   status TEXT NOT NULL, -- 'running' | 'success' | 'failed' | 'denied'
   duration_ms INTEGER DEFAULT 0,
   input_json TEXT,
@@ -145,7 +82,7 @@ CREATE TABLE IF NOT EXISTS executions (
 CREATE TABLE IF NOT EXISTS experience_errors (
   id TEXT PRIMARY KEY,
   experience_id TEXT NOT NULL,
-  city_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
   message TEXT NOT NULL,
   filename TEXT,
   lineno INTEGER,
@@ -154,29 +91,8 @@ CREATE TABLE IF NOT EXISTS experience_errors (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS city_conversations (
-  id TEXT PRIMARY KEY,
-  city_id TEXT NOT NULL,
-  title TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE(city_id)
-);
-
-CREATE TABLE IF NOT EXISTS conversation_messages (
-  id TEXT PRIMARY KEY,
-  conversation_id TEXT NOT NULL,
-  city_id TEXT NOT NULL,
-  role TEXT NOT NULL, -- 'user' | 'assistant' | 'system' | 'tool'
-  content TEXT NOT NULL,
-  tool_calls_json TEXT,
-  tool_call_id TEXT,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (conversation_id) REFERENCES city_conversations(id) ON DELETE CASCADE
-);
-
 -- Single persistent agent thread per user
--- One transcript per user, independent of the active city or the current view.
+-- One transcript per user, independent of the active workspace or the current view.
 -- Older turns are folded into a rolling summary so the model never reloads the whole history.
 
 CREATE TABLE IF NOT EXISTS agent_threads (
@@ -195,7 +111,7 @@ CREATE TABLE IF NOT EXISTS agent_thread_messages (
   thread_id TEXT NOT NULL,
   role TEXT NOT NULL, -- 'user' | 'assistant' | 'system'
   content TEXT NOT NULL,
-  city_id TEXT,
+  workspace_id TEXT,
   attachments_json TEXT,
   created_at TEXT NOT NULL,
   FOREIGN KEY (thread_id) REFERENCES agent_threads(id) ON DELETE CASCADE

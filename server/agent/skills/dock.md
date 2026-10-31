@@ -8,11 +8,15 @@
 
 ## Receipts
 
-Report only what the tool envelopes return: ids, versions, events (`tab.created`, `tray.open`, `plugin.created`, `plugin.updated`). A failed envelope (`ok:false`) is the answer — never claim success, never invent an install or an approval.
+Report only what the tool envelopes return: ids, versions, events (`tray.open`, `plugin.created`, `plugin.updated`, `plugin.published`). A failed envelope (`ok:false`) is the answer — never claim success, never invent an install or an approval.
 
 ## Look
 
 Theme tokens only, no hardcoded colors, no gradients, no external URLs; validated on create, edit and publish. Sentence case, Inter with Geist Mono for metrics, one accent, whitespace grouping.
+
+## Bridge (guest side)
+
+Guests reach the host through `window.polymax`: `storage.get/set/remove`, `openContent` (native reader), `openUrl`, `useCapability`/`invoke` (declared capabilities only), `ui.expand/collapse`, `task.start/update/done`, `theme.get/apply`. Never raw `window.open` or ad-hoc iframes.
 
 ## Routes (same handlers as your tools)
 

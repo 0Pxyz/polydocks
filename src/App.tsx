@@ -3,37 +3,49 @@ import { AppProviders } from "@/app/providers";
 import { RootLayout } from "@/app/layout";
 import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
 import { DockSurface } from "@/features/dock/DockSurface";
-import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
-import { PluginsView } from "@/features/plugins/PluginsView";
-import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { HomeScreen } from "@/features/home/HomeScreen";
 import { OnboardingModal } from "@/features/onboarding/OnboardingModal";
-import { WorldView } from "@/features/views/WorldView";
-import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
-import { useNavigationStore } from "@/lib/store/useNavigationStore";
-import { useDockStore } from "@/lib/store/useDockStore";
+import { useDockStore, loadBeside } from "@/lib/store/useDockStore";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
-import { TabHost } from "@/features/dock/TabHost";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
-import { buildCityDockTools } from "@/lib/dock/dockModel";
-import { matchDockShortcut, TWO_PANEL_MIN_WIDTH } from "@/lib/dock/dockItems";
-import { useCitySummaryStore } from "@/lib/store/useCitySummaryStore";
+import { ToolSurface } from "@/features/dock/ToolSurface";
+import { BesidePanel, type BesideTab } from "@/features/dock/BesidePanel";
+import {
+  matchDockShortcut,
+  panelLayout,
+  isBesideEligible,
+  shouldYieldEscToMedia,
+} from "@/lib/dock/dockItems";
+import { DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
 import { cn } from "@/lib/cn";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
   const [pluginsInitialTab] = useState<"installed" | "discover">("installed");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
-  const [selectedCity, setSelectedCity] = useState<string | undefined>(undefined);
 
-  const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
   const { setActiveTool: setDockActiveTool } = useDockStore();
   const hostTabs = useTabHostStore((s) => s.tabs);
+  const hostTasks = useTabHostStore((s) => s.tasks);
+  const besideIds = useDockStore((s) => s.besideIds);
+  const besideWidth = useDockStore((s) => s.besideWidth);
+  // Reload restores the panel exactly: persisted selection and collapsed
+  // state survive a boot (ids/width live in the store itself).
+  const persistedBesideUi = useMemo(loadBeside, []);
+  const [besideCollapsed, setBesideCollapsed] = useState(persistedBesideUi.collapsed);
+  const [besideSelected, setBesideSelected] = useState<string | null>(() =>
+    persistedBesideUi.selected && persistedBesideUi.ids.includes(persistedBesideUi.selected)
+      ? persistedBesideUi.selected
+      : null
+  );
+  useEffect(() => {
+    useDockStore.getState().persistBesideUi({ collapsed: besideCollapsed, selected: besideSelected });
+  }, [besideCollapsed, besideSelected]);
 
   const {
     layoutState,
@@ -93,6 +105,162 @@ export default function App() {
     [extraTools, workspaceDockTools]
   );
 
+  // Beside eligibility: built-in tool panels plus installed/session plugins.
+  // The browser stays main-only: one remote Chromium session per key.
+  const besideDynamicIds = useMemo(
+    () => new Set([...workspaceDockTools, ...activeExtraTools].map((t) => t.id)),
+    [workspaceDockTools, activeExtraTools]
+  );
+  const besideTitleMap = useMemo(() => {
+    const map = new Map<string, { title: string; iconKey?: string }>([
+      ["browser", { title: "Browser", iconKey: "browser" }],
+      ["plugins", { title: "Tools", iconKey: "toolbox" }],
+      ["creations", { title: "Creations", iconKey: "creations" }],
+      ["store", { title: "Library", iconKey: "library" }],
+      ["settings", { title: "Settings", iconKey: "settings" }],
+      ["theme", { title: "Settings", iconKey: "settings" }],
+    ]);
+    for (const item of DOCK_CORE_CATALOG) {
+      if (!map.has(item.id)) map.set(item.id, { title: item.label, iconKey: item.icon });
+    }
+    for (const t of workspaceDockTools) {
+      map.set(t.id, { title: t.label, iconKey: t.iconKey });
+    }
+    for (const t of activeExtraTools) {
+      map.set(t.id, { title: t.label, iconKey: t.iconKey });
+    }
+    return map;
+  }, [workspaceDockTools, activeExtraTools]);
+
+  // Strip tabs: open beside tools, never the focused one (single home).
+  const dockSnapshotBeside = useDockStore((s) => s.dock);
+  const besideTabs: BesideTab[] = useMemo(
+    () =>
+      dockSnapshotBeside.order
+        .filter((id) => {
+          const record = dockSnapshotBeside.items[id];
+          return (
+            record !== undefined &&
+            record.state !== "closed" &&
+            besideIds.includes(id) &&
+            id !== dockSnapshotBeside.focusedId
+          );
+        })
+        .map((id) => ({
+          id,
+          title: besideTitleMap.get(id)?.title ?? id,
+          iconKey: besideTitleMap.get(id)?.iconKey,
+        })),
+    [dockSnapshotBeside, besideIds, besideTitleMap]
+  );
+  const besideSelectedId =
+    besideSelected && besideTabs.some((t) => t.id === besideSelected)
+      ? besideSelected
+      : besideTabs[0]?.id ?? null;
+  const runningTabIds = useMemo(
+    () =>
+      Object.values(hostTasks)
+        .filter((task) => task.status === "running")
+        .map((task) => task.tabId),
+    [hostTasks]
+  );
+
+  // Sandbox tabs per host: one home per tool, never mounted twice.
+  const sandboxTabEntry = (t: DockToolItem) => ({
+    id: t.id,
+    render: () => (
+      <DynamicPluginSandbox
+        pluginId={t.id}
+        title={t.label}
+        onDismiss={() => handleDismissTool(t.id)}
+        onAskAgentFix={(errorMsg) => {
+          handleToolPromptSubmit(`Fix tool "${t.id}": ${errorMsg}`, { origin: "dock-fix" });
+        }}
+      />
+    ),
+  });
+  const mainSandboxTabs = useMemo(
+    () =>
+      activeExtraTools
+        .filter((t) => hostTabs[t.id]?.status === "live" && !besideIds.includes(t.id))
+        .map(sandboxTabEntry),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeExtraTools, hostTabs, besideIds]
+  );
+  const besideSandboxTabs = useMemo(
+    () =>
+      activeExtraTools
+        .filter((t) => hostTabs[t.id]?.status === "live" && besideIds.includes(t.id))
+        .map(sandboxTabEntry),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeExtraTools, hostTabs, besideIds]
+  );
+  // Dynamic beside ids that still need a tab-host entry (boot restore).
+  const besideDynamicMountIds = useMemo(
+    () => besideTabs.map((t) => t.id).filter((id) => activeExtraTools.some((t) => t.id === id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [besideTabs, activeExtraTools]
+  );
+
+  // Open beside: mounts (or keeps) the tool in the beside panel without
+  // touching main focus. Never steals focus.
+  const handleOpenBeside = (toolId: string) => {
+    if (!isBesideEligible(toolId, besideDynamicIds)) return;
+    useDockStore.getState().openBeside(toolId);
+    setBesideSelected(toolId);
+    setBesideCollapsed(false);
+  };
+
+  // Dock select moves a beside tool back to the main view (single home).
+  const moveBesideToMain = (toolId: string) => {
+    if (besideIds.includes(toolId)) {
+      useDockStore.getState().closeBeside(toolId);
+    }
+  };
+
+  // Focus helpers: openBeside never moves focus; closing/collapsing the
+  // panel returns focus to the main tool only when focus started inside it.
+  const focusMainTool = () => {
+    const focused = useDockStore.getState().dock.focusedId;
+    const dockBtn = focused
+      ? document.querySelector<HTMLElement>(`[data-dock-tool-id="${focused}"]`)
+      : null;
+    (dockBtn ?? document.querySelector<HTMLElement>("[data-home-orb]"))?.focus();
+  };
+  const focusInsideBeside = () =>
+    typeof document !== "undefined" &&
+    !!document.activeElement?.closest?.('[data-beside-panel="true"]');
+  const collapseBesidePanel = (focusBack = true) => {
+    setBesideCollapsed(true);
+    if (focusBack && focusInsideBeside()) focusMainTool();
+  };
+  const clearBesidePanel = () => {
+    const ids = useDockStore.getState().besideIds;
+    const dock = useDockStore.getState();
+    ids.forEach((id) => dock.closeTool(id));
+    setBesideSelected(null);
+    if (focusInsideBeside()) focusMainTool();
+  };
+  const handleBesideRemoveTab = (id: string) => {
+    const wasInside = focusInsideBeside();
+    useDockStore.getState().closeTool(id);
+    setActiveToolId(useDockStore.getState().dock.focusedId ?? "");
+    if (besideSelected === id) setBesideSelected(null);
+    if (wasInside) {
+      requestAnimationFrame(() => {
+        const st = useDockStore.getState();
+        const next = st.besideIds.find((x) => {
+          const record = st.dock.items[x];
+          return record && record.state !== "closed" && x !== st.dock.focusedId;
+        });
+        const target = next
+          ? document.querySelector<HTMLElement>(`[data-tab-id="${next}"]`)
+          : document.querySelector<HTMLElement>("[data-home-orb]");
+        target?.focus();
+      });
+    }
+  };
+
   const handleDismissTool = (toolIdToDismiss?: string) => {
     const targetTool = toolIdToDismiss ?? activeToolId;
     // Explicit dismiss destroys the tab runtime (reopen mounts fresh);
@@ -131,7 +299,21 @@ export default function App() {
     }
   };
 
-  const handleSelectTool = (toolId: string) => {
+  const handleSelectTool = (toolId: string, opts?: { beside?: boolean }) => {
+    if (!toolId) {
+      setActiveToolId("");
+      setDockActiveTool("");
+      return;
+    }
+    if (opts?.beside) {
+      if (isBesideEligible(toolId, besideDynamicIds)) {
+        handleOpenBeside(toolId);
+        return;
+      }
+      // Ineligible tools (agent, map, main-only surfaces) open normally.
+    }
+    // Focusing from the dock moves a beside tool back to the main view.
+    moveBesideToMain(toolId);
     if (toolId === "agent") {
       // Single source of truth for the glyph: the dock icon is active
       // exactly while the panel is open. Never leave a stale "agent"
@@ -145,32 +327,10 @@ export default function App() {
       return;
     }
 
-    if (toolId === "world" || toolId === "maps") {
-      if (viewMode === "city") {
-        exitToWorld();
-        setActiveToolId("maps");
-        setDockActiveTool("maps");
-        return;
-      }
-      const nextTool = activeToolId === "maps" ? "" : "maps";
-      setActiveToolId(nextTool);
-      setDockActiveTool(nextTool);
-      return;
-    }
-
     if (toolId === "settings" || toolId === "theme") {
       const nextTool = activeToolId === "settings" || activeToolId === "theme" ? "" : "settings";
       setActiveToolId(nextTool);
       setDockActiveTool(nextTool);
-      return;
-    }
-
-    if (toolId === "city") {
-      if (selectedCity) {
-        enterCity(selectedCity);
-      }
-      // Focus follows the context switch (per-context memory restores the
-      // city's tool); never blank the store here.
       return;
     }
 
@@ -202,12 +362,8 @@ export default function App() {
   };
 
   const handleToolPromptSubmit = (prompt: string, meta?: Record<string, unknown>) => {
-    const isFlashcards = prompt.toLowerCase().includes("flashcard");
-    const targetCity = viewMode === "city" ? (activeCityId || selectedCity) : undefined;
-
     sendMessage(
       prompt,
-      targetCity,
       {
         onExperienceCreated: (exp) => {
           setExtraTools((prev) => {
@@ -232,26 +388,6 @@ export default function App() {
       },
       meta || { origin: "dock-add" }
     );
-
-    if (isFlashcards) {
-      setTimeout(() => {
-        setExtraTools((prev) => {
-          if (prev.some((t) => t.id === "flashcards")) return prev;
-          return [
-            ...prev,
-            {
-              id: "flashcards",
-              label: `${targetCity} Flashcards`,
-              type: "icon",
-              icon: resolveIcon("cards"),
-              iconKey: "cards",
-            },
-          ];
-        });
-        setActiveToolId("flashcards");
-        setDockActiveTool("flashcards");
-      }, 600);
-    }
   };
 
 
@@ -274,17 +410,14 @@ export default function App() {
     ) {
       useTabHostStore.getState().openTab(activeToolId, "plugin");
     }
-  }, [activeToolId, activeExtraTools, hostTabs]);
-
-  const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
-  const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
-
-  // Active context is opaque to the core: city id or null (map). Records
-  // persist across switches; visibility filters globals + active context.
-  // Focus is remembered per context, so map -> city restores order + focus.
-  useEffect(() => {
-    useDockStore.getState().setActiveContext(cityId ?? null);
-  }, [cityId]);
+    // Beside tools mount the same way: after a reload the persisted beside
+    // set returns, and its dynamic tabs must remount or the panel is empty.
+    for (const id of besideDynamicMountIds) {
+      if (hostTabs[id]?.status !== "live") {
+        useTabHostStore.getState().openTab(id, "plugin");
+      }
+    }
+  }, [activeToolId, activeExtraTools, hostTabs, besideDynamicMountIds]);
 
   // Keep the local focus mirror in sync when the dock changes underneath
   // (keyboard, REST, CLI, agent verbs share the same registry).
@@ -293,27 +426,12 @@ export default function App() {
     if ((dockFocusedId ?? "") !== activeToolId) {
       setActiveToolId(dockFocusedId ?? "");
     }
-  }, [dockFocusedId]);
-
-  // City tools live in the dock while inside a city (contextual, never
-  // pinned globally) with live badges from real workspace counts.
-  // No per-view duplicate state: the dock record is the source; the
-  // per-city focus memory restores the same tool on return.
-  const cityTools: DockToolItem[] = useMemo(
-    () =>
-      buildCityDockTools(citySummary).map(
-        (item): DockToolItem => ({
-          id: item.id,
-          label: item.label,
-          type: "icon",
-          iconKey: item.icon,
-          badge: item.badge,
-          tooltipDetail: item.tooltipDetail,
-        })
-      ),
-    [citySummary]
-  );
-  const cityToolIds = useMemo(() => cityTools.map((t) => t.id), [cityTools]);
+    // Focusing from the bar, palette, shortcut, or verbs moves a beside
+    // tool back to the main view (single home per tool).
+    if (dockFocusedId && besideIds.includes(dockFocusedId)) {
+      useDockStore.getState().closeBeside(dockFocusedId);
+    }
+  }, [dockFocusedId, besideIds, activeToolId]);
 
   useEffect(() => {
     // Restore the single persistent thread once per session. Layout changes
@@ -332,6 +450,9 @@ export default function App() {
         altKey: e.altKey,
       });
       if (matched) {
+        // Never steal keys while typing: chat inputs own their keys.
+        // Escape below is unaffected.
+        if (isTypingTarget(e.target)) return;
         const dock = useDockStore.getState();
         if (matched.action.id === "tabs.focus") {
           e.preventDefault();
@@ -349,10 +470,6 @@ export default function App() {
           return;
         }
         if (matched.action.id === "tabs.close") {
-          // Never close the chat via W when typing inside it: the chat
-          // owns its own keys; the dock shortcut applies outside inputs.
-          const target = (e.target as HTMLElement | null)?.tagName;
-          if (target === "INPUT" || target === "TEXTAREA") return;
           e.preventDefault();
           dock.runDockAction("tabs.close");
           return;
@@ -369,6 +486,18 @@ export default function App() {
           if (focused === "agent") {
             const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
             setLayoutState(isWide ? "side" : "sheet");
+          }
+          return;
+        }
+        if (matched.action.id === "sidebar.beside") {
+          // Same store path as the agent/CLI verb. Opening never steals
+          // focus; there is nothing to focus back to.
+          e.preventDefault();
+          const focused = useDockStore.getState().dock.focusedId;
+          if (focused && isBesideEligible(focused, besideDynamicIds)) {
+            handleOpenBeside(focused);
+          } else {
+            dock.runDockAction("sidebar.beside");
           }
           return;
         }
@@ -401,22 +530,34 @@ export default function App() {
           }
         } else if (activeToolId === "theme" || activeToolId === "settings") {
           handleDismissTool(activeToolId);
-        } else if (activeToolId === "maps") {
-          setActiveToolId("");
-          setDockActiveTool("");
+        } else {
+          // Chat is closed here. Media owns Esc while fullscreen or focused
+          // inside a player: exiting fullscreen must not collapse the panel
+          // or steal focus from the video.
+          if (shouldYieldEscToMedia(e.target, document.fullscreenElement)) return;
+          // First Esc collapses the beside panel, second Esc clears it.
+          // Focus returns to the main tool only when it started inside the
+          // panel; a main-view video never loses focus.
+          const st = useDockStore.getState();
+          const hasBeside = st.besideIds.some((id) => {
+            const record = st.dock.items[id];
+            return record && record.state !== "closed" && id !== st.dock.focusedId;
+          });
+          if (hasBeside && !besideCollapsed) {
+            collapseBesidePanel();
+          } else if (hasBeside) {
+            st.clearBeside();
+            setBesideSelected(null);
+            if (focusInsideBeside()) focusMainTool();
+          }
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [layoutState, activeToolId, setLayoutState]);
+  }, [layoutState, activeToolId, besideCollapsed, besideDynamicIds, setLayoutState]);
 
-  const isSideLayout = layoutState === "side";
-  const isCityMode = viewMode === "city";
-  const isMapsOpen = !isCityMode && activeToolId === "maps";
-
-  // Two panels side by side at sufficient width; otherwise single panel.
-  // Nothing unmounts: the host keeps every record mounted, hidden via CSS.
+  // Viewport width drives the shared three-region placement rule.
   const [viewportWidth, setViewportWidth] = useState<number>(
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
@@ -426,28 +567,43 @@ export default function App() {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
-  const dockSnapshot = useDockStore((s) => s.dock);
-  const secondaryToolId = useMemo(() => {
-    if (!isCityMode || viewportWidth < TWO_PANEL_MIN_WIDTH) return null;
-    const visible = dockSnapshot.order.filter((id) => {
-      const record = dockSnapshot.items[id];
-      return (
-        record &&
-        (record.contextId === null || record.contextId === dockSnapshot.activeContextId) &&
-        (record.state === "open" || record.state === "focused")
-      );
-    });
-    if (visible.length < 2) return null;
-    const focused = dockSnapshot.focusedId && visible.includes(dockSnapshot.focusedId)
-      ? dockSnapshot.focusedId
-      : visible[0];
-    const others = visible.filter((id) => id !== focused);
-    others.sort((a, b) => (dockSnapshot.items[b]?.updatedAt ?? 0) - (dockSnapshot.items[a]?.updatedAt ?? 0));
-    return others[0] ?? null;
-  }, [isCityMode, viewportWidth, dockSnapshot]);
+
+  // Tool hosted by the main viewport (single home per tool; beside tools
+  // live in the beside panel).
+  const MAIN_STATIC_IDS = useMemo(
+    () => new Set(["settings", "theme", "plugins", "creations", "store"]),
+    []
+  );
+  const mainToolId =
+    activeToolId !== "" &&
+    !besideIds.includes(activeToolId) &&
+    (MAIN_STATIC_IDS.has(activeToolId) ||
+      activeToolId === "browser" ||
+      activeExtraTools.some((t) => t.id === activeToolId))
+      ? activeToolId
+      : null;
+
+  // One placement rule for content, beside, and chat panels.
+  const layout = useMemo(
+    () =>
+      panelLayout({
+        chatSideOpen: layoutState === "side",
+        besideCount: besideTabs.length,
+        viewportWidth,
+        sideWidth,
+        besideWidth,
+      }),
+    [layoutState, besideTabs.length, viewportWidth, sideWidth, besideWidth]
+  );
+
+  // Beside docked wide reserves the right region: chat must dock left
+  // (side), never overlay it. Sheet is the implicit overlay state, so it
+  // upgrades; an explicit full-screen maximize stays untouched.
   useEffect(() => {
-    useDockStore.getState().layoutPanels(viewportWidth);
-  }, [viewportWidth, dockSnapshot.focusedId, dockSnapshot.activeContextId]);
+    if (layout.besideSide && layoutState === "sheet") {
+      setLayoutState("side");
+    }
+  }, [layout.besideSide, layoutState, setLayoutState]);
 
   return (
     <AppProviders>
@@ -483,15 +639,14 @@ export default function App() {
 
           {/* Pinned Agentic Dock at the top edge */}
           <AgenticDock
-            cityName={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             activeToolId={activeToolId}
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
             extraTools={activeExtraTools}
             sessionTools={extraTools}
-            tools={isCityMode ? cityTools : undefined}
-            contextualIds={isCityMode ? cityToolIds : undefined}
             onSelectTool={handleSelectTool}
+            onOpenBesideItem={(id) => handleOpenBeside(id)}
+            besideOffsetPx={layout.mainMarginRight}
             onCloseItem={(toolId) => {
               if (toolId === "agent") {
                 setLayoutState("closed");
@@ -525,7 +680,7 @@ export default function App() {
             statusText={statusText}
             onStopBuilding={abortStream}
             onRetryBuilding={() =>
-              retryLast(viewMode === "city" ? (activeCityId || selectedCity) : undefined, {
+              retryLast({
                 onExperienceCreated: (exp) => {
                   setExtraTools((prev) => {
                     if (prev.some((t) => t.id === exp.id)) return prev;
@@ -555,7 +710,6 @@ export default function App() {
 
           {/* Single Agent Conversation Instance */}
           <AgentConversation
-            cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             onExperienceCreated={(exp) => {
               setExtraTools((prev) => {
                 if (prev.some((t) => t.id === exp.id)) return prev;
@@ -575,6 +729,7 @@ export default function App() {
               // Single source: register in the store, mirror locally.
               useDockStore.getState().openTool(expId);
               setActiveToolId(useDockStore.getState().dock.focusedId ?? expId);
+              if (isBesideEligible(expId, besideDynamicIds)) setBesideSelected(expId);
             }}
               onCloseExperience={(expId) => {
                 const dock = useDockStore.getState();
@@ -583,72 +738,74 @@ export default function App() {
               }}
           />
 
+          {/* Beside Panel: on-demand second tool, keep-alive while hidden */}
+          <BesidePanel
+            expanded={!besideCollapsed}
+            hasTools={besideTabs.length > 0}
+            overlay={layout.besideOverlay}
+            width={besideWidth}
+            offsetLeft={layout.mainMarginLeft}
+            onWidthChange={(w) => useDockStore.getState().setBesideWidth(w)}
+            tabs={besideTabs}
+            selectedId={besideSelectedId}
+            runningIds={runningTabIds}
+            onSelectTab={(id) => setBesideSelected(id)}
+            onRemoveTab={(id) => handleBesideRemoveTab(id)}
+            onCollapse={() => collapseBesidePanel()}
+            onClear={() => clearBesidePanel()}
+          >
+            <ToolSurface
+              toolId={besideSelectedId}
+              sandboxTabs={besideSandboxTabs}
+              sandboxActiveId={besideSelectedId}
+              onDismiss={(id) => handleBesideRemoveTab(id)}
+              onOpenPlugin={(pluginId) => {
+                moveBesideToMain(pluginId);
+                setActiveToolId(pluginId);
+                setDockActiveTool(pluginId);
+                // Overlay sheet concludes: the tool moved to the main view,
+                // so the sheet gets out of the way.
+                if (layout.besideOverlay) setBesideCollapsed(true);
+              }}
+              onSelectTool={(id) => {
+                handleSelectTool(id);
+                // Overlay sheet concludes: selecting from the sheet opens in
+                // the main view, so the sheet gets out of the way.
+                if (layout.besideOverlay) setBesideCollapsed(true);
+              }}
+              pluginsInitialTab={pluginsInitialTab}
+            />
+          </BesidePanel>
+
           {/* Main Workspace Viewport */}
           <main
-            style={isSideLayout ? { marginLeft: `${sideWidth}px` } : undefined}
+            style={
+              layout.mainMarginLeft > 0 || layout.mainMarginRight > 0
+                ? {
+                    marginLeft: `${layout.mainMarginLeft}px`,
+                    marginRight: `${layout.mainMarginRight}px`,
+                    width: `calc(100% - ${layout.mainMarginLeft + layout.mainMarginRight}px)`,
+                  }
+                : undefined
+            }
             className={cn(
-              "relative z-10 w-full flex-1 flex flex-col items-center transition-[margin] duration-150",
-              isSideLayout && "w-[calc(100%-${sideWidth}px)] max-w-full"
+              "relative z-10 w-full flex-1 flex flex-col items-center transition-[margin] duration-150 max-w-full"
             )}
           >
-            {activeToolId === "settings" || activeToolId === "theme" ? (
-              <DockSurface frameless>
-                <ThemeCustomizerView onDismiss={() => handleDismissTool("settings")} />
-              </DockSurface>
-            ) : activeToolId === "plugins" ? (
-              <DockSurface frameless>
-                <PluginsView
-                  key={pluginsInitialTab}
-                  initialTab={pluginsInitialTab}
-                  onOpenPlugin={(id) => handleSelectTool(id)}
-                  onDismiss={() => handleDismissTool("plugins")}
-                />
-              </DockSurface>
-            ) : activeToolId === "store" ? (
-              <DockSurface frameless>
-                <PluginStoreView
-                  onDismiss={() => handleDismissTool("store")}
-                  onOpenPlugin={(pluginId) => {
-                    setActiveToolId(pluginId);
-                    setDockActiveTool(pluginId);
-                  }}
-                />
-              </DockSurface>
-            ) : activeExtraTools.some((t) => t.id === activeToolId) ? (
-              <DockSurface variant="immersive">
-                <TabHost
-                  activeId={activeToolId}
-                  tabs={activeExtraTools
-                    .filter((t) => hostTabs[t.id]?.status === "live")
-                    .map((t) => ({
-                      id: t.id,
-                      render: () => (
-                        <DynamicPluginSandbox
-                          pluginId={t.id}
-                          title={t.label}
-                          onDismiss={() => handleDismissTool(t.id)}
-                          onAskAgentFix={(errorMsg) => {
-                            handleToolPromptSubmit(`Fix tool "${t.id}": ${errorMsg}`, {
-                              origin: "dock-fix",
-                            });
-                          }}
-                        />
-                      ),
-                    }))}
-                />
-              </DockSurface>
-            ) : isCityMode ? (
-              <DockSurface frameless>
-                <div className="w-full">
-                  <CityView
-                    cityName={activeCityId || selectedCity || "workspace"}
-                    activeToolId={!activeToolId ? "" : activeToolId}
-                    secondaryToolId={secondaryToolId}
-                    onSelectTool={handleSelectTool}
-                  />
-                </div>
-              </DockSurface>
-            ) : !isMapsOpen ? (
+            {mainToolId ? (
+              <ToolSurface
+                toolId={mainToolId}
+                sandboxTabs={mainSandboxTabs}
+                sandboxActiveId={besideIds.includes(activeToolId) ? null : activeToolId}
+                onDismiss={(id) => handleDismissTool(id)}
+                onOpenPlugin={(pluginId) => {
+                  setActiveToolId(pluginId);
+                  setDockActiveTool(pluginId);
+                }}
+                onSelectTool={(id) => handleSelectTool(id)}
+                pluginsInitialTab={pluginsInitialTab}
+              />
+            ) : (
               <DockSurface frameless>
                 <HomeScreen
                   onOpenAgent={() => {
@@ -662,27 +819,17 @@ export default function App() {
                   panelOpen={layoutState !== "closed"}
                 />
               </DockSurface>
-            ) : null}
-
-            {/* Living World Map */}
-            {isMapsOpen && (
-              <div className="fixed inset-0 z-0 w-full h-full animate-in fade-in duration-300">
-                <WorldView
-                  activeCityId={undefined}
-                  onEnterCity={(cityName, cityId) => {
-                    const id = cityId || cityName;
-                    setSelectedCity(id);
-                    enterCity(id);
-                  }}
-                  onFoundCityTopic={(_topic) => {
-                    setLayoutState("sheet");
-                  }}
-                />
-              </div>
             )}
           </main>
         </div>
       </RootLayout>
     </AppProviders>
   );
+}
+
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || typeof (el as HTMLElement).tagName !== "string") return false;
+  const tag = (el as HTMLElement).tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || (el as HTMLElement).isContentEditable === true;
 }

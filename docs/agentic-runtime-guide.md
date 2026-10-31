@@ -123,4 +123,4 @@ docker compose config
 - **Stage 2:** Proves concurrent multi-workspace session isolation and asynchronous background task completion.
 - **Stage 3:** Proves safe deliverable generation, exact surgical targeted edits, and path traversal rejection.
 - **Stage 4:** Proves `polydocks` CLI operations and structured JSON output.
-- **Stage 5:** Proves 100% backward compatibility with Polymax V1 REST endpoints (`/api/health`, `/api/cities`, `/api/maps`).
+- **Stage 5:** Proves REST endpoint health (`/api/health`, `/api/workspaces`) and that retired knowledge-map routes stay gone.

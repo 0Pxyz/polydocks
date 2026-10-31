@@ -35,7 +35,7 @@ export interface ScopedSecretsContext {
 
 export interface ScopedExecutionContext {
   actor: "agent" | "user";
-  cityId?: string;
+  workspaceId?: string;
   pluginId: string;
   signal?: AbortSignal;
   log: (msg: string) => void;
@@ -54,17 +54,17 @@ export function createScopedExecutionContext(params: {
   pluginId: string;
   manifest: PluginManifest;
   actor: "agent" | "user";
-  cityId?: string;
+  workspaceId?: string;
   signal?: AbortSignal;
   log?: (msg: string) => void;
   emit?: (event: { type: string; payload: Record<string, unknown> }) => Promise<void> | void;
 }): ScopedExecutionContext {
-  const { pluginId, manifest, actor, cityId, signal, log, emit } = params;
+  const { pluginId, manifest, actor, workspaceId, signal, log, emit } = params;
 
   // 1. Filesystem confinement
   const workspaceRoot = path.resolve(process.cwd(), "workspace");
-  const rootDir = cityId
-    ? path.resolve(workspaceRoot, cityId)
+  const rootDir = workspaceId
+    ? path.resolve(workspaceRoot, workspaceId)
     : path.resolve(workspaceRoot, "plugins", pluginId);
 
   // Ensure root dir exists
@@ -290,7 +290,7 @@ export function createScopedExecutionContext(params: {
 
   return {
     actor,
-    cityId,
+    workspaceId,
     pluginId,
     signal,
     log: (msg: string) => {

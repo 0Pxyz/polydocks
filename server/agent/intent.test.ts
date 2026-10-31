@@ -43,10 +43,8 @@ describe("Intent routing: update/fix classifier (PT+EN)", () => {
     });
   }
 
-  it("plugin_fix denies recreate/delete tools", () => {
-    expect(INTENT_TOOL_DENYLIST.plugin_fix).toContain("create_tab");
+  it("plugin_fix denies recreate tools", () => {
     expect(INTENT_TOOL_DENYLIST.plugin_fix).toContain("create_plugin");
-    expect(INTENT_TOOL_DENYLIST.plugin_fix).toContain("delete_tab");
     expect(INTENT_TOOL_DENYLIST.plugin_fix).not.toContain("modify_plugin");
     expect(INTENT_TOOL_DENYLIST.plugin_fix).not.toContain("inspect_experience");
   });

@@ -5,7 +5,7 @@ import { db } from "./db";
  *
  * Every user has exactly one thread. The transcript is append-only and the
  * model only ever receives a bounded window of recent turns plus a rolling
- * summary of everything older. There is no conversation list, no per-city
+ * summary of everything older. There is no conversation list, no per-workspace
  * fork: context follows the user, not the current workspace view.
  */
 
@@ -45,7 +45,7 @@ export interface AgentThreadMessage {
   threadId: string;
   role: AgentThreadRole;
   content: string;
-  cityId?: string;
+  workspaceId?: string;
   attachments?: AgentThreadAttachment[];
   createdAt: string;
 }
@@ -80,7 +80,7 @@ interface ThreadMessageRow {
   thread_id: string;
   role: string;
   content: string;
-  city_id: string | null;
+  workspace_id: string | null;
   attachments_json: string | null;
   created_at: string;
 }
@@ -117,7 +117,7 @@ function mapThreadMessage(row: ThreadMessageRow): AgentThreadMessage {
     threadId: row.thread_id,
     role: row.role as AgentThreadRole,
     content: row.content,
-    cityId: row.city_id || undefined,
+    workspaceId: row.workspace_id || undefined,
     attachments,
     createdAt: row.created_at,
   };
@@ -184,7 +184,7 @@ export function appendThreadMessage(
   role: AgentThreadRole,
   content: string,
   options?: {
-    cityId?: string;
+    workspaceId?: string;
     attachments?: AgentThreadAttachment[];
   }
 ): AgentThreadMessage {
@@ -193,14 +193,14 @@ export function appendThreadMessage(
   const createdAt = nowIso();
 
   db.query(
-    `INSERT INTO agent_thread_messages (id, thread_id, role, content, city_id, attachments_json, created_at)
+    `INSERT INTO agent_thread_messages (id, thread_id, role, content, workspace_id, attachments_json, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     thread.id,
     role,
     content,
-    options?.cityId || null,
+    options?.workspaceId || null,
     serializeThreadAttachments(options?.attachments),
     createdAt
   );
@@ -217,7 +217,7 @@ export function appendThreadMessage(
     threadId: thread.id,
     role,
     content,
-    cityId: options?.cityId,
+    workspaceId: options?.workspaceId,
     attachments: options?.attachments,
     createdAt,
   };

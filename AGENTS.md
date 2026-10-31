@@ -8,7 +8,7 @@ Rules for any agent (or human) working in this repo. Keep it short, follow it li
 
 ## 1. What PolyDocks is: a microkernel
 
-PolyDocks is a **microkernel**. The core stays minimal: **dock + capability bus + plugin lifecycle/policy + sandbox bridge**. Everything else is a plugin: maps, cities, notes, files, browser, and — as target — the agent itself as a privileged first-party plugin with permissions in its manifest, subject to the same policy as every other plugin. The core never understands domain concepts such as cities: plugins remember context, the core only passes an opaque `contextId`.
+PolyDocks is a **microkernel**. The core stays minimal: **dock + capability bus + plugin lifecycle/policy + sandbox bridge**. Everything else is a plugin: browser, notes, files, and — as target — the agent itself as a privileged first-party plugin with permissions in its manifest, subject to the same policy as every other plugin. The core never understands domain concepts: plugins remember context, the core only passes an opaque `contextId`.
 
 The user downloads the app and receives their agent in a per-user sandbox. The agent controls the dock and builds plugins that appear in the UI. Our focus is teaching the agent to control the dock and to build good plugins. Anything that does not serve that is a candidate for removal. Details: `VISION.md`, `ARCHITECTURE.md` (Today / Target / Gaps), `MIGRATION.md`.
 
@@ -35,11 +35,9 @@ No agent framework. The agent is a small loop over the Meta Model API (section 4
 
 ```
 src/
-  app/            providers, root layout, World | City switch (legacy, see #153)
+  app/            providers, root layout
   features/
     dock/         Agentic dock, status line, tool registry, sandbox hosts, bridge
-    world/        map rendering and camera (to become a plugin, #153)
-    city/         city workspace (to become plugins, #153)
     home/         plugin-tile home
     plugins/      store / community UI
     agent/        conversation UI
@@ -57,9 +55,9 @@ server/
     installPolicy.ts  INSTALL_POLICY gate (default ask)
     receipts.ts   server-verified receipts
     tools/        one file per tool, registered in tools/index.ts
-    skills/       prompt files injected on demand (plugins.md, dock-and-tabs.md,
+    skills/       prompt files injected on demand (plugins.md,
                   dock.md, capabilities-and-mcp.md, content-and-reader.md,
-                  world-and-cities.md, memory-and-files.md, verify-and-report.md,
+                  memory-and-files.md, verify-and-report.md,
                   theme.md, app-overview.md — always injected)
   discovery/      TinyFish API client (tinyfish.ts)
   system/         OS and filesystem access behind typed grants
@@ -68,7 +66,7 @@ server/
   facade/         shared route/CLI/tool handlers (single envelope)
 docs/             older public docs (see CLEANUP-PROPOSALS.md for what is stale)
 .internal/        gitignored, never committed
-workspace/        runtime data per city, gitignored (seed is versioned in seed/)
+workspace/        local runtime data, gitignored
 ```
 
 ## 4. The agent and the Meta Model API
@@ -91,17 +89,22 @@ One agent, one loop. No multi-agent graph, no verifier agent, no planner. Keep i
 
 **Config (env only, no hardcoded model ids):** `MODEL_BASE_URL`, `MODEL_ID`, `MODEL_API_KEY`, `TINYFISH_API_KEY`. Swapping to an open-weight Muse Spark served by a hosted provider (or our own vLLM/SGLang) must need only these variables.
 
-**Tools** live in `server/agent/tools/<name>.ts`, one per file, registered in `server/agent/tools/index.ts` (`fullToolsList`, 45 tools; `minimalTools`, 11 verbs; `defaultTools` switches on `AGENT_SURFACE`). Each exports `{ name, description, schema (zod), execute }`. The filename is the tool name (`[a-zA-Z0-9_.-]`).
+**Tools** live in `server/agent/tools/<name>.ts`, one per file, registered in `server/agent/tools/index.ts` (`fullTools`, 43 tools; `minimalTools`, 16 verbs; `defaultTools` switches on `AGENT_SURFACE`). Each exports `{ name, description, schema (zod), execute }`. The filename is the tool name (`[a-zA-Z0-9_.-]`).
 
-Tool families: dock (`dock.open/close/pin/unpin/list` verbs; `open_tab`, `open_intent`, `inspect_tab`, `close_tray`, `create_tab`, `update_tab`, `delete_tab` — delete needs user approval; `dock_search`, `dock_pin`, `dock_unpin`, `dock_close`), city files — **legacy, city-scoped, to be extracted under #153** (`get_city_context`, `read_city_file`, `write_city_file`, `enter_city`, `open_source`), maps — **legacy** (`plan_map`, `plan_ascii_world`, `list_maps`, `set_map`, `place_city`, `build_city`, `connect_cities`), workspace files (`list_files`, `read_file`, `write_file`, `edit_file`, `search_files`), plugins (`create_plugin`, `modify_plugin`, `operate_plugin`, `publish_plugin`, `promote_to_plugin`, `inspect_experience`, plus `find_capabilities` / `invoke_capability` over the capability bus), introspection (`inspect_execution`, `list_recent_executions`), memory (`recall_memory`, `record_memory`), research (`search_web`, `fetch_page`, TinyFish server-side only).
+Tool families: dock (`dock.open/close/pin/unpin/list` verbs; `dock_search`, `dock_pin`, `dock_unpin`, `dock_close`), workspace files (`list_files`, `read_file`, `write_file`, `edit_file`, `search_files`), plugins (`create_plugin`, `modify_plugin`, `operate_plugin`, `publish_plugin`, `promote_to_plugin`, `inspect_experience`, plus `find_capabilities` / `invoke_capability` over the capability bus), introspection (`inspect_execution`, `list_recent_executions`), memory (`recall_memory`, `record_memory`), research (`search_web`, `fetch_page`, TinyFish server-side only).
 
-Plugin tools emit reactive SSE events (`plugin.created`, `plugin.updated`, `plugin.published`, `plugin.operated`) so the UI mounts, opens, and refreshes tools in the dock the same way `create_tab` emits `tab.created`.
+Plugin tools emit reactive SSE events (`plugin.created`, `plugin.updated`, `plugin.published`, `plugin.operated`) so the UI mounts, opens, and refreshes tools in the dock.
 
-**Tabs and plugins created by the agent** are single self-contained units with a manifest `{ id, title, icon, scope }`, rendered in `<iframe sandbox="allow-scripts" srcdoc>`. They talk to the app only through the `postMessage` bridge: `polymax.storage.get/set`, `polymax.openUrl`, `polymax.getContext`. No external scripts, no direct DOM access to the host. Skill prompts: `server/agent/skills/plugins.md`, `server/agent/skills/dock-and-tabs.md`.
+**Tabs and plugins created by the agent** are single self-contained units with a manifest `{ id, title, icon, scope }`, rendered in `<iframe sandbox="allow-scripts" srcdoc>`. They talk to the app only through the `postMessage` bridge: `polymax.storage.get/set`, `polymax.openUrl`, `polymax.getContext`. No external scripts, no direct DOM access to the host. Skill prompts: `server/agent/skills/plugins.md`, `server/agent/skills/dock.md`.
 
 ## 4b. Research with TinyFish
 
 The agent fills a plugin's context with real content using the TinyFish web APIs (https://docs.tinyfish.ai, details in `docs/tinyfish.md`). Flow: the agent searches the web for tutorials, papers and news, fetches the best pages, and saves them as **sources** in the workspace context. Each source can open in the Browser surface.
+
+**Rule: all web content goes through the native Browser surface.** Every
+page, video, or research result the agent shows opens via `open_source` /
+`browser.open` (remote Chromium playback; audio pending upstream). Never
+embed third-party pages in ad-hoc iframes or open raw browser windows for content.
 
 - Server-side only. `TINYFISH_API_KEY` never reaches the front. All calls go through `server/discovery/tinyfish.ts`, a thin adapter that tests and the demo seed can mock.
 - Use **Search** (`GET https://api.search.tinyfish.ai`, `domain_type`: `web`, `news` or `research_paper`) to find candidates and **Fetch** (`POST https://api.fetch.tinyfish.ai`, `format: markdown`, up to 10 URLs per call) to read them. Both are free up to a daily quota (12,000 searches, 1,000 fetched URLs), so cache results in SQLite and batch fetches.
@@ -127,7 +130,7 @@ The agent works on the user's real files and, later, commands. `docs/system-acce
 Plugins never control their own lifecycle. Only the host mounts, hides and hibernates surfaces (mount on first open, keep alive hidden, hibernate the oldest above `LIVE_TAB_LIMIT` in `src/lib/tabs/tabHostStore.ts`); plugins never control their own lifecycle.
 - Contract (`docs/plugins/lifecycle.md`): durable state via `useTabState(tabId, key, initial)` (React) or `polymax.storage` (guests, rehydrate on boot); background work via `polymax.task.{start,update,done}` (continues hidden, host notifies on completion; hibernation marks tasks interrupted).
 - FORBIDDEN in plugin code (validation rejects with a clear error): `location.reload()`; conditional render on the active tab; active-derived keys. Render unconditionally — inactive tabs are hidden with CSS and keep running.
-- Generator prompts (`server/agent/skills/plugins.md`, `dock-and-tabs.md`) must require this contract. Contract tests iterate the live registry (`server/plugins/lifecycle.ts`), so every present and future plugin is covered automatically.
+- Generator prompts (`server/agent/skills/plugins.md`) must require this contract. Contract tests iterate the live registry (`server/plugins/lifecycle.ts`), so every present and future plugin is covered automatically.
 
 ## 5. Workflow for agents
 
@@ -163,7 +166,6 @@ bun run dev        # front + server
 bun run build
 bun run check      # typecheck + lint + test (must pass before every commit)
 bun run test
-bun run seed       # demo world: 3 regions, 2 cities each
 docker compose up  # whole app, no manual steps
 ```
 
@@ -171,7 +173,7 @@ docker compose up  # whole app, no manual steps
 
 Start here: `VISION.md` (north star), `ARCHITECTURE.md` (Today / Target / Gaps, with evidence), `MIGRATION.md` (reversible slices), `CLEANUP-PROPOSALS.md` (what is stale and what to do about it).
 - `README.md`: what it is, run it (`docker compose up`), how the agent builds plugins.
-- `docs/product-philosophy.md`: everything is a plugin, the agent is the operator, typed capability bus. (§6 confinement is still city-framed; the target is opaque `contextId` — see `ARCHITECTURE.md`.)
+- `docs/product-philosophy.md`: everything is a plugin, the agent is the operator, typed capability bus.
 - `docs/architecture.md` and `docs/adr/NNNN-title.md`: older reference architecture; partially superseded (see `CLEANUP-PROPOSALS.md`).
 - `docs/api.md`: product surfaces (`/api/plugins`, `/api/dock`, `/api/agent`) and modes (`PRODUCT_SURFACE`, `AGENT_SURFACE`).
 - `docs/design-system.md`: tokens, typography, Dock motion rules.

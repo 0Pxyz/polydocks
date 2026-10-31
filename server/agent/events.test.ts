@@ -4,16 +4,15 @@ import { adaptBackendEvent, getFriendlyToolStatus } from "../../src/lib/agent/ev
 describe("Agent UI Event Adapter & Vocabulary Guard", () => {
   it("maps tool names to friendly status lines and silences internal bookkeeping", () => {
     expect(getFriendlyToolStatus("search_web", { query: "Quantum physics" })).toContain("Quantum physics");
-    expect(getFriendlyToolStatus("create_tab", { title: "Flashcards" })).toContain("Flashcards");
-    expect(getFriendlyToolStatus("read_city_file")).toBe("Reading your notes…");
-    expect(getFriendlyToolStatus("write_city_file")).toBe("Writing your notes…");
-    expect(getFriendlyToolStatus("open_tab", { id: "browser" })).toContain("browser");
+    expect(getFriendlyToolStatus("create_plugin", { name: "Flashcards" })).toContain("Flashcards");
+    expect(getFriendlyToolStatus("read_file")).toBe("Reading your notes…");
+    expect(getFriendlyToolStatus("write_file")).toBe("Writing your notes…");
+    expect(getFriendlyToolStatus("dock_pin", { id: "browser" })).toContain("browser");
 
     // Internal bookkeeping tools are silenced (return null)
-    expect(getFriendlyToolStatus("list_tabs")).toBeNull();
-    expect(getFriendlyToolStatus("inspect_tab")).toBeNull();
-    expect(getFriendlyToolStatus("close_tray")).toBeNull();
-    expect(getFriendlyToolStatus("get_city_context")).toBeNull();
+    expect(getFriendlyToolStatus("dock.list")).toBeNull();
+    expect(getFriendlyToolStatus("find_capabilities")).toBeNull();
+    expect(getFriendlyToolStatus("open_source")).toBeNull();
     expect(getFriendlyToolStatus("inspect_experience")).toBeNull();
   });
 

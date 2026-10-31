@@ -9,7 +9,7 @@ export const search_web: AgentTool<{
 }> = {
   name: "search_web",
   description:
-    "Finds candidate URLs across web, news, or research papers. Use to discover sources; it reads nothing (use fetch_page) and never builds cities (use build_city).",
+    "Finds candidate URLs across web, news, or research papers. Use to discover sources; it reads nothing (use fetch_page).",
   schema: z.object({
     query: z.string().min(1).describe("Search query string (e.g. 'Raft consensus algorithm visual tutorial')"),
     domain_type: z
@@ -23,14 +23,14 @@ export const search_web: AgentTool<{
     // one policy check, one audit trail. Public tool contract is preserved.
     const { initializeFirstPartyPlugins } = await import("../../plugins/first-party/index");
     initializeFirstPartyPlugins();
-    const targetCity = (ctx as any)?.cityId;
+    const targetWorkspace = (ctx as any)?.workspaceId;
     const result = await capabilityBus.invoke("search.web", {
       query: args.query,
       domainType: args.domain_type || "web",
       limit: args.limit ?? 5,
     }, {
       actor: "agent",
-      cityId: targetCity,
+      workspaceId: targetWorkspace,
       step: (ctx as any)?.step,
     });
     if (!result.success) {

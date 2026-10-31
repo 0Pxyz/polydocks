@@ -14,7 +14,7 @@
     },
     {
       "type": "fs",
-      "scope": "city",
+      "scope": "workspace",
       "mode": "read"
     }
   ],
@@ -28,7 +28,7 @@
         "cli": {
           "bin": "git",
           "args": ["status", "--porcelain"],
-          "workingDir": "city"
+          "workingDir": "workspace"
         }
       },
       "input": {

@@ -2,7 +2,7 @@ export interface DynamicTabManifest {
   id: string;
   title: string;
   icon?: string;
-  scope?: "city" | "global";
+  scope?: "workspace" | "global";
   createdAt?: string;
   updatedAt?: string;
   [key: string]: unknown;
@@ -62,9 +62,8 @@ export interface HostBridgeTaskEvent {
 }
 
 export interface HostBridgeOptions {
-  cityId: string;
+  workspaceId: string;
   tabId: string;
-  workspaceId?: string;
   pluginId?: string;
   storagePrefix?: string;
   allowedCapabilities?: string[];

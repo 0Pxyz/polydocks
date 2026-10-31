@@ -23,7 +23,7 @@ async function ensureAcceptanceState(): Promise<void> {
   // validation, registry+mount ensure, and verification all run.
   const { create_plugin } = await import("./create_plugin");
   const { modify_plugin: modifyPluginTool } = await import("./modify_plugin");
-  const ctx = { cityId: "default", workspaceId: "default", step: 1 };
+  const ctx = { workspaceId: "default", workspaceId: "default", step: 1 };
   if (!current) {
     const created = (await create_plugin.execute(
       {
@@ -81,7 +81,7 @@ async function ensureAcceptanceState(): Promise<void> {
           changeSummary: "Mark superseded by native Reader",
           workspaceId: "default",
         },
-        { cityId: "default", workspaceId: "default", step: 1 }
+        { workspaceId: "default", workspaceId: "default", step: 1 }
       );
       if (!marked.success) throw new Error(`gtm-reader mark failed: ${(marked as any).error}`);
     }

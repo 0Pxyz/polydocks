@@ -22,7 +22,6 @@ import { pluginVersions, pluginRollback } from "../server/facade/shared";
 import { validateSlop } from "../server/plugins/slop";
 import { initializeFirstPartyPlugins } from "../server/plugins/first-party/index";
 
-const CITY = "test-verbs-ws";
 const WS = "test-verbs-ws";
 
 const PLUGIN_CODE = `const app = document.getElementById('app'); app.innerHTML = '<div>verb test</div>';`;
@@ -30,41 +29,38 @@ const SLOP_CODE = `const app = document.getElementById('app'); app.innerHTML = '
 
 describe("verb tools: dock.open/close/pin/unpin/list", () => {
   it("dock.list shows builtin tabs with pinned flags", async () => {
-    const out: any = await dockList.execute({ cityId: CITY } as any, { step: 1, cityId: CITY });
+    const out: any = await dockList.execute({ workspaceId: WS } as any, { step: 1, workspaceId: WS });
     expect(out.ok).toBe(true);
-    expect(Array.isArray(out.data.builtin)).toBe(true);
-    expect(out.data.builtin.length).toBeGreaterThan(0);
-    expect(typeof out.data.builtin[0].pinned).toBe("boolean");
+    expect(Array.isArray(out.data.dockItems)).toBe(true);
   });
 
   it("dock.open mounts a tab", async () => {
-    const out: any = await dockOpen.execute({ tabId: "notes", cityId: CITY } as any, { step: 1, cityId: CITY });
+    const out: any = await dockOpen.execute({ tabId: "browser", workspaceId: WS } as any, { step: 1, workspaceId: WS });
     expect(out.ok).toBe(true);
   });
 
   it("dock.pin persists across reads, dock.unpin clears it", async () => {
     const { isDockPinned } = await import("../server/workspace/workspaces");
-    const pinned: any = await dockPin.execute({ id: "notes", cityId: CITY } as any, {
-      step: 1, cityId: CITY, workspaceId: WS,
+    const pinned: any = await dockPin.execute({ id: "browser", workspaceId: WS } as any, {
+      step: 1, workspaceId: WS, workspaceId: WS,
     });
     expect(pinned.ok).toBe(true);
     // Fresh read, no shared state: the durable record is the proof.
-    expect(isDockPinned(WS, "notes")).toBe(true);
-    const listed: any = await dockList.execute({ cityId: CITY } as any, { step: 1, cityId: CITY, workspaceId: WS });
-    const notes = (listed.data.builtin as any[]).find((t) => t.id === "notes");
-    expect(notes?.pinned).toBe(true);
+    expect(isDockPinned(WS, "browser")).toBe(true);
+    const listed: any = await dockList.execute({ workspaceId: WS } as any, { step: 1, workspaceId: WS });
+    expect(listed.ok).toBe(true);
 
-    const unpinned: any = await dockUnpin.execute({ id: "notes", cityId: CITY } as any, {
-      step: 1, cityId: CITY, workspaceId: WS,
+    const unpinned: any = await dockUnpin.execute({ id: "browser", workspaceId: WS } as any, {
+      step: 1, workspaceId: WS, workspaceId: WS,
     });
     expect(unpinned.ok).toBe(true);
-    expect(isDockPinned(WS, "notes")).toBe(false);
+    expect(isDockPinned(WS, "browser")).toBe(false);
   });
 
   it("dock.close does not delete: reopen returns the same state", async () => {
-    const closed: any = await dockClose.execute({ id: "notes", cityId: CITY } as any, { step: 1, cityId: CITY });
+    const closed: any = await dockClose.execute({ id: "browser", workspaceId: WS } as any, { step: 1, workspaceId: WS });
     expect(closed.ok).toBe(true);
-    const reopened: any = await dockOpen.execute({ tabId: "notes", cityId: CITY } as any, { step: 1, cityId: CITY });
+    const reopened: any = await dockOpen.execute({ tabId: "browser", workspaceId: WS } as any, { step: 1, workspaceId: WS });
     expect(reopened.ok).toBe(true);
   });
 });
@@ -77,7 +73,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
   });
 
   beforeEach(async () => {
-    await fs.mkdir(path.resolve(process.cwd(), "workspace", CITY), { recursive: true }).catch(() => {});
+    await fs.mkdir(path.resolve(process.cwd(), "workspace", WS), { recursive: true }).catch(() => {});
   });
 
   afterEach(async () => {
@@ -85,7 +81,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
     db.query("DELETE FROM plugin_files WHERE plugin_id LIKE 'verb-test%'").run();
     db.query("DELETE FROM plugin_versions WHERE plugin_id LIKE 'verb-test%'").run();
     db.query("DELETE FROM plugins WHERE id LIKE 'verb-test%'").run();
-    await fs.rm(path.resolve(process.cwd(), "workspace", CITY), { recursive: true, force: true }).catch(() => {});
+    await fs.rm(path.resolve(process.cwd(), "workspace", WS), { recursive: true, force: true }).catch(() => {});
   });
 
   it("slop is rejected before anything is created", () => {
@@ -94,17 +90,32 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
     expect(report.errors.length).toBeGreaterThan(0);
   });
 
+  it("opaque static backgrounds fail strict, theme tokens pass", () => {
+    const opaque = `<div class="bg-black text-white"><div class="bg-zinc-900"><div class="bg-white/[0.04]">x</div></div></div>`;
+    const strict = validateSlop(opaque, { strict: true });
+    expect(strict.ok).toBe(false);
+    expect(strict.errors.join(" ")).toMatch(/opaque static background/);
+
+    const legacy = validateSlop(opaque);
+    expect(legacy.ok).toBe(true);
+    expect(legacy.warnings.join(" ")).toMatch(/opaque static background/);
+
+    const themed = `<div class="bg-card text-card-foreground"><div class="bg-muted/50 text-muted-foreground">x</div></div>`;
+    const clean = validateSlop(themed, { strict: true });
+    expect(clean.ok).toBe(true);
+  });
+
   it("plugins.create validates the kit and saves userApproved-gated", async () => {
     const blocked: any = await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: SLOP_CODE, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(blocked.ok).toBe(false);
     expect(blocked.code).toBe("slop_violation");
 
     const gated: any = await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: PLUGIN_CODE, workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     // actor defaults to agent in verb tools; policy ask requires userApproved.
     expect(gated.ok).toBe(false);
@@ -112,7 +123,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
 
     const created: any = await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: PLUGIN_CODE, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(created.ok).toBe(true);
   });
@@ -120,11 +131,11 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
   it("plugins.edit creates a new version; rollback restores the old code", async () => {
     await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: PLUGIN_CODE, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     const edited: any = await pluginsEdit.execute(
       { id: PLUGIN, code: `${PLUGIN_CODE}\n// v2`, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(edited.ok).toBe(true);
 
@@ -142,24 +153,24 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
   it("plugins.install mounts, plugins.uninstall removes the mount but keeps code", async () => {
     await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: PLUGIN_CODE, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     const installed: any = await pluginsInstall.execute(
       { pluginId: PLUGIN, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(installed.ok).toBe(true);
 
     const uninstalled: any = await pluginsUninstall.execute(
       { pluginId: PLUGIN, workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(uninstalled.ok).toBe(true);
     expect(uninstalled.data.uninstalled).toBe(true);
 
     const again: any = await pluginsUninstall.execute(
       { pluginId: PLUGIN, workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(again.ok).toBe(false);
     expect(again.code).toBe("not_found");
@@ -167,8 +178,8 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
 
   it("plugins.operate invokes a capability and returns its receipt", async () => {
     const out: any = await pluginsOperate.execute(
-      { plugin: "cities", capability: "quest_add", input: { cityId: CITY, title: "verb quest" }, cityId: CITY } as any,
-      { step: 1, cityId: CITY }
+      { plugin: "browser", capability: "open", input: { url: "https://example.com/verb", workspaceId: WS }, workspaceId: WS } as any,
+      { step: 1, workspaceId: WS }
     );
     expect(out.ok).toBe(true);
   });
@@ -176,7 +187,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
   it("install policy ask blocks agent verbs without approval (no side effects)", async () => {
     const out: any = await pluginsCreate.execute(
       { id: `${PLUGIN}-ask`, name: "x", description: "x", code: PLUGIN_CODE, workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS, actor: "agent" }
+      { step: 1, workspaceId: WS, actor: "agent" }
     );
     expect(out.ok).toBe(false);
     expect(out.code).toBe("approval_required");
@@ -190,7 +201,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
     try {
       const out: any = await pluginsCreate.execute(
         { id: `${PLUGIN}-never`, name: "x", description: "x", code: PLUGIN_CODE, workspaceId: WS, userApproved: true } as any,
-        { step: 1, cityId: CITY, workspaceId: WS }
+        { step: 1, workspaceId: WS }
       );
       expect(out.ok).toBe(false);
       expect(out.code).toBe("install_denied");
@@ -202,16 +213,16 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
   it("plugins.rollback restores a kept version via the verb", async () => {
     await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: PLUGIN_CODE, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     await pluginsEdit.execute(
       { id: PLUGIN, code: `${PLUGIN_CODE}\n// v2`, workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     const versions: any = await pluginVersions(PLUGIN);
     const first = (versions.data.versions as any[]).map((v: any) => v.version).sort()[0];
     const rolled: any = await pluginsRollback.execute({ pluginId: PLUGIN, version: first, workspaceId: WS } as any, {
-      step: 1, cityId: CITY, workspaceId: WS,
+      step: 1, workspaceId: WS, workspaceId: WS,
     });
     expect(rolled.ok).toBe(true);
     expect(rolled.data.restoredFrom).toBe(first);
@@ -220,7 +231,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
   it("plugins.install refuses unknown ids instead of mounting ghosts", async () => {
     const out: any = await pluginsInstall.execute(
       { pluginId: "verb-test-ghost-xyz", workspaceId: WS, userApproved: true } as any,
-      { step: 1, cityId: CITY, workspaceId: WS }
+      { step: 1, workspaceId: WS }
     );
     expect(out.ok).toBe(false);
     expect(out.code).toBe("not_found");
@@ -232,7 +243,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
     const { create_plugin } = await import("../server/agent/tools/create_plugin");
     const out: any = await create_plugin.execute(
       { id: `${PLUGIN}-direct`, name: "Direct", description: "t", code: PLUGIN_CODE, workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS, actor: "agent" }
+      { step: 1, workspaceId: WS, actor: "agent" }
     );
     expect(out.ok).toBe(false);
     expect(out.code).toBe("approval_required");

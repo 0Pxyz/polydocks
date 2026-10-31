@@ -68,7 +68,7 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
             },
           ],
         },
-        { cityId: "default" }
+        { workspaceId: "default" }
       );
 
       expect(result.success).toBe(true);
@@ -100,7 +100,7 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
           description: "Violates sandbox boundaries",
           code: maliciousCode,
         },
-        { cityId: "default" }
+        { workspaceId: "default" }
       )) as any;
       expect(result.success).toBe(false);
       expect(result.error).toContain("is not allowed in plugin code");
@@ -123,7 +123,7 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
           description: "Version 1 description",
           code: initialCode,
         },
-        { cityId: "default" }
+        { workspaceId: "default" }
       );
 
       // 2. Modify plugin in-place
@@ -140,7 +140,7 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
           code: updatedCode,
           changeSummary: "Added lime theme and updated UI heading",
         },
-        { cityId: "default" }
+        { workspaceId: "default" }
       );
 
       expect(modResult.success).toBe(true);
@@ -191,7 +191,7 @@ describe("PolyDocks V2 Agent Plugin Synthesis & Operations", () => {
           action: "add",
           args: { a: 15, b: 27 },
         },
-        { cityId: "default" }
+        { workspaceId: "default" }
       );
 
       expect(res.success).toBe(true);

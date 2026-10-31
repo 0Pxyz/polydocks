@@ -1,4 +1,4 @@
-# TinyFish Web Discovery & City Feed Architecture
+# TinyFish Web Discovery & Sources Architecture
 
 > **Status:** Architecture Reference & Specification  
 > **Source of Truth:** Verified against [docs.tinyfish.ai](https://docs.tinyfish.ai) and [docs.tinyfish.ai/for-coding-agents](https://docs.tinyfish.ai/for-coding-agents)  
@@ -8,11 +8,11 @@
 
 ## 1. Role in Polymax
 
-TinyFish provides Polymax with external web intelligence. When a user creates or enters a city (e.g., "Quantum Computing", "Distributed Systems", "Stoicism"), Polymax uses TinyFish to:
+TinyFish provides Polymax with external web intelligence. When the user asks for research, Polymax uses TinyFish to:
 1. Search authoritative sources across web, news, and academic research papers.
 2. Fetch clean markdown contents in batch via Chromium rendering.
-3. Construct a live, curated **City Feed** (`feed.json`) rendered as a beautiful **Feed Dock Tab**.
-4. Transform discovered content into learning quests and browser tabs.
+3. Save enriched items to the workspace `sources` table (dedupe + kind/title/image/site).
+4. Open the best hits in the Browser surface or the in-app Reader.
 
 ---
 
@@ -69,9 +69,9 @@ The Meta Muse agent (`muse-spark-1.3`) is equipped with the `web-research` skill
 1. `search_web`: Fast semantic discovery across research papers, news, and technical websites.
 2. `fetch_page`: Deep retrieval of full article and paper contents for extraction and summarization.
 
-### Flow Diagram: Autonomous Discovery to Dock Feed
+### Flow Diagram: Autonomous Discovery to Saved Sources
 ```
-[User prompts or enters City]
+[User asks for research]
              │
              v
    [Muse Agent Loop] ──(needs content)──> [search_web(query, domain_type)]
@@ -83,60 +83,23 @@ The Meta Muse agent (`muse-spark-1.3`) is equipped with the `web-research` skill
              v
    [Muse synthesizes findings]
              │
-             ├──> Writes workspace/<city>/feed.json (Curated items with tags & read time)
-             ├──> Saves raw markdown to workspace/<city>/sources/<hash>.json
-             └──> Emits SSE event: tray.open { tab: "feed" }
+             ├──> sources.add enriches + dedupes into the workspace sources table
+             └──> open_source shows the best hit in the Browser surface
 ```
 
 ---
 
-## 5. The Feed Dock Plugin ("Feed Tab")
+## 5. Saved Sources (Workspace Table)
 
-Discovered sources are not just raw files on disk; they power the **Feed Tab** on the Agentic Dock.
+Discovered sources live in the `sources` table, keyed by workspace
+(`UNIQUE(workspace_id, url)`), enriched server-side (kind, title, image,
+site, publish date, read time). Surfaces read from there: the Browser
+opens any URL, the in-app Reader renders articles/videos.
 
-### 5.1. UI Components of the Feed Tab:
-- **Card Grid:** Clean, dark-mode cards matching `#0A0A0C` and `#C8FF57` tokens.
-- **Badge Indicators:** Distinct badges for `Paper`, `Video`, `Guide`, `Article`, and `News`.
-- **Metadata:** Read time estimate, author/publication, and educational difficulty (`beginner`, `intermediate`, `advanced`).
-- **One-Click Actions:**
-  - **"Open in Browser"**: Calls `open_intent` to launch the Browser Dock Tab primed with the URL.
-  - **"Open in Papers"**: Launches the PDF / markdown paper viewer in the Papers Tab.
-  - **"Add to Quest"**: Converts the item into a milestone on the World Map quest line for XP rewards.
-
-### 5.2. Workspace Feed Schema (`workspace/<city>/feed.json`):
-```json
-{
-  "cityId": "distributed-systems",
-  "topic": "Distributed Consensus & State Machine Replication",
-  "updatedAt": "2026-10-27T22:30:00Z",
-  "items": [
-    {
-      "id": "feed-raft-visual",
-      "title": "The Secret Lives of Data: Raft",
-      "url": "http://thesecretlivesofdata.com/raft/",
-      "kind": "guide",
-      "summary": "An interactive step-by-step visual animation of Raft leader election and log replication.",
-      "difficulty": "beginner",
-      "readTimeMinutes": 10,
-      "tags": ["consensus", "animation", "raft"],
-      "authorOrSource": "Ben Johnson",
-      "questTitle": "Visualize Raft Election"
-    },
-    {
-      "id": "feed-raft-paper",
-      "title": "In Search of an Understandable Consensus Algorithm (Extended Version)",
-      "url": "https://raft.github.io/raft.pdf",
-      "kind": "paper",
-      "summary": "Stanford's seminal paper introducing Raft as a readable, robust alternative to Paxos.",
-      "difficulty": "intermediate",
-      "readTimeMinutes": 45,
-      "tags": ["paper", "academic", "consensus"],
-      "authorOrSource": "Diego Ongaro and John Ousterhout (Stanford University)",
-      "questTitle": "Read Foundational Raft Paper"
-    }
-  ]
-}
-```
+### 5.1. Source Kinds
+- Distinct kinds for `paper`, `video`, `guide`, `article`, and `news`.
+- Metadata: read time estimate, author/publication.
+- One-click action: **"Open in Browser"** opens the URL in the native Browser surface.
 
 ---
 

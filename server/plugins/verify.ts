@@ -52,15 +52,6 @@ export function isPluginIdTaken(id: string): { taken: boolean; namespaces: strin
     // table created lazily
   }
 
-  try {
-    const row = db
-      .query<{ count: number }, [string]>(`SELECT COUNT(*) as count FROM city_tabs WHERE id = ?`)
-      .get(normalized);
-    if (row && row.count > 0) namespaces.push("city_tabs");
-  } catch {
-    // ignore
-  }
-
   return { taken: namespaces.length > 0, namespaces };
 }
 

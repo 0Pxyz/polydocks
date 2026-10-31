@@ -60,7 +60,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
     // populated later once the srcdoc iframe mounts.
     const iframeRef: { current: { contentWindow: unknown } | null } = { current: null };
     const bridge = createHostBridge(() => (iframeRef.current?.contentWindow as Window) ?? null, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
     });
 
@@ -94,7 +94,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
     const iframeRef: { current: { contentWindow: unknown } | null } = { current: null };
     let opened = "";
     const bridge = createHostBridge(() => (iframeRef.current?.contentWindow as Window) ?? null, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onOpenContent: (url) => {
         opened = url;
@@ -122,7 +122,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
   it("ignores messages while no guest window exists yet (nothing to verify source against)", async () => {
     const iframeRef: { current: { contentWindow: unknown } | null } = { current: null };
     const bridge = createHostBridge(() => (iframeRef.current?.contentWindow as Window) ?? null, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
     });
 
@@ -140,7 +140,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
   it("ignores messages from a foreign window once mounted (opaque origin: source identity is the check)", async () => {
     const guestWin = new MockGuestWindow() as any;
     const attackerWin = new MockGuestWindow() as any;
-    const bridge = createHostBridge(() => guestWin, { cityId: "city-1", tabId: "tab-1" });
+    const bridge = createHostBridge(() => guestWin, { workspaceId: "workspace-1", tabId: "tab-1" });
 
     const handled = await bridge.handleMessage({
       source: attackerWin,
@@ -162,7 +162,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
     };
     try {
       const bridge = createHostBridge(() => guestWin as Window | null, {
-        cityId: "city-1",
+        workspaceId: "workspace-1",
         tabId: "tab-1",
         // Async getContext: the iframe can navigate away / unmount between
         // request and reply. Simulate by clearing the window mid-flight.
@@ -202,7 +202,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
     const guestWin = new MockGuestWindow() as any;
     let handled = 0;
     const opts = {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onOpenContent: () => {
         handled += 1;

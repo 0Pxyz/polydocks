@@ -1,15 +1,10 @@
 import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it } from "bun:test";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { tinyfish, TinyFishError } from "./tinyfish";
-import { generateCityFeed } from "./feedGenerator";
 import { search_web } from "../agent/tools/search_web";
 import { fetch_page } from "../agent/tools/fetch_page";
-import { readCityFile } from "../workspace/cityWorkspace";
 import { db } from "../workspace/db";
 
-const TEST_CITY = "test-tinyfish-city";
-const TEST_DIR = path.resolve(process.cwd(), "workspace", TEST_CITY);
+const TEST_WS = "test-tinyfish-workspace";
 
 const realFetch = globalThis.fetch;
 const uniq = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -40,23 +35,18 @@ function stubTinyFish(mode: "ok" | "search-down" | "fetch-down" = "ok") {
   };
 }
 
-describe("TinyFish Web Discovery & City Feed Engine", () => {
-  beforeAll(async () => {
-    await fs.mkdir(TEST_DIR, { recursive: true });
-  });
-
+describe("TinyFish Web Discovery", () => {
   beforeEach(() => {
     stubTinyFish("ok");
   });
 
   afterEach(() => {
     globalThis.fetch = realFetch;
-    db.query("DELETE FROM sources WHERE city_id = ?").run(TEST_CITY);
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(TEST_WS);
   });
 
   afterAll(async () => {
-    await fs.rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
-    db.query("DELETE FROM sources WHERE city_id = ?").run(TEST_CITY);
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(TEST_WS);
   });
 
   it("searches topics across web, news, and research papers", async () => {
@@ -119,29 +109,17 @@ describe("TinyFish Web Discovery & City Feed Engine", () => {
     expect(thrown).toBeInstanceOf(TinyFishError);
   });
 
-  it("generateCityFeed creates feed.json in city workspace", async () => {
-    const feed = await generateCityFeed(TEST_CITY, `Quantum Superposition ${uniq()}`);
-    expect(feed.cityId).toBe(TEST_CITY);
-    expect(feed.topic).toContain("Quantum Superposition");
-    expect(feed.items.length).toBeGreaterThan(0);
-
-    const savedRaw = await readCityFile(TEST_CITY, "feed.json");
-    const saved = JSON.parse(savedRaw);
-    expect(saved.cityId).toBe(TEST_CITY);
-    expect(saved.items.length).toBe(feed.items.length);
-  });
-
   it("search_web and fetch_page agent tools execute correctly", async () => {
     const searchRes = (await search_web.execute(
       { query: `Byzantine Fault Tolerance ${uniq()}`, domain_type: "research_paper", limit: 2 },
-      { cityId: TEST_CITY, step: 1 }
+      { workspaceId: TEST_WS, step: 1 }
     )) as any;
 
     expect(searchRes.count).toBeGreaterThan(0);
 
     const fetchRes = (await fetch_page.execute(
-      { urls: ["https://example.com/bft-paper"], cityId: TEST_CITY, saveToSources: true },
-      { cityId: TEST_CITY, step: 2 }
+      { urls: ["https://example.com/bft-paper"], workspaceId: TEST_WS, saveToSources: true },
+      { workspaceId: TEST_WS, step: 2 }
     )) as any;
 
     expect(fetchRes.count).toBe(1);
@@ -151,7 +129,7 @@ describe("TinyFish Web Discovery & City Feed Engine", () => {
     stubTinyFish("search-down");
     const searchRes = (await search_web.execute(
       { query: `Down Topic ${uniq()}`, domain_type: "web", limit: 2 },
-      { cityId: TEST_CITY, step: 1 }
+      { workspaceId: TEST_WS, step: 1 }
     )) as any;
     expect(searchRes.count).toBe(0);
     expect(searchRes.error || "").not.toBe("");

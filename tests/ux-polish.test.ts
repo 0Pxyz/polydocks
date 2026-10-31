@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { HOME_DOCK_TOOLS, CITY_DOCK_TOOLS } from "../src/features/dock/AgenticDock";
+import { HOME_DOCK_TOOLS } from "../src/features/dock/AgenticDock";
 import { useOnboardingStore } from "../src/lib/store/useOnboardingStore";
 import { platformStorage } from "../src/lib/platform/storage";
 
@@ -30,15 +30,10 @@ describe("Polymax UX Polish & Native Experiences", () => {
     });
   });
 
-  describe("2. Dock Tools Adaptation (Home vs City Workspace)", () => {
-    it("presents minimal clean dock on home screen (agent, plugins, settings)", () => {
+  describe("2. Dock Tools (single curated set)", () => {
+    it("presents the curated dock (agent, browser, plugins, creations, store, settings)", () => {
       const ids = HOME_DOCK_TOOLS.map((t) => t.id);
-      expect(ids).toEqual(["agent", "plugins", "settings"]);
-    });
-
-    it("presents the city tools in the dock inside a city (agent, maps, sources, notes, files, quests, flashcards, terminal, settings)", () => {
-      const ids = CITY_DOCK_TOOLS.map((t) => t.id);
-      expect(ids).toEqual(["agent", "maps", "sources", "notes", "files", "quests", "flashcards", "terminal", "settings"]);
+      expect(ids).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
     });
   });
 
@@ -66,8 +61,7 @@ describe("Polymax UX Polish & Native Experiences", () => {
 
   describe("4. Native Experiences & Design Slop Elimination", () => {
     it("ensures CORE_DOCK_TOOLS preserve backward-compatible surface definitions", () => {
-      expect(HOME_DOCK_TOOLS.length).toBe(3);
-      expect(CITY_DOCK_TOOLS.length).toBe(9);
+      expect(HOME_DOCK_TOOLS.length).toBe(6);
     });
   });
 });

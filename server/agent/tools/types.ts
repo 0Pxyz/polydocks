@@ -1,7 +1,7 @@
 import type { ZodType } from "zod";
 
 export interface ToolExecutionContext {
-  cityId?: string;
+  workspaceId?: string;
   workspaceId?: string;
   sessionId?: string;
   taskId?: string;

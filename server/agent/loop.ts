@@ -6,7 +6,6 @@ import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
 import { classifyIntent, INTENT_TOOL_DENYLIST } from "./intent";
 import { initializeFirstPartyPlugins } from "../plugins/first-party";
 import { pluginRegistry } from "../plugins/registry";
-import { appendCityMessage, getCityConversationMessages } from "../workspace/conversations";
 import {
   appendThreadMessage,
   deleteThreadMessage,
@@ -40,15 +39,12 @@ export interface AgentStepEvent {
     | "tab.created"
     | "tray.open"
     | "tab.prime"
-    | "map.changed"
-    | "map.point.added"
     | "plugin.created"
     | "plugin.updated"
     | "plugin.published"
     | "plugin.operated"
     | "browser.open"
     | "sandbox.preview"
-    | "city.enter"
     | "dock.layout"
     | "theme.apply"
     | "agent.finish"
@@ -73,7 +69,6 @@ export interface AgentLoopOptions {
   userId?: string;
   sessionId?: string;
   workspaceId?: string;
-  cityId?: string;
   origin?: "dock-add" | "chat" | "cli" | "task";
   taskId?: string;
   attachments?: ChatAttachment[];
@@ -190,22 +185,19 @@ The user's workspace is your primary operating environment: notes, files, termin
 ## Core Operating Principles:
 
 1. Workspace as Default (Intent-Driven):
-- The general workspace is your default operating environment. Knowledge Cities and World Maps are optional learning experiences, NOT the default context for every turn.
-- Never assume an active Knowledge City when none is selected or requested. Never greet the user as if they are inside a city.
-- Never suggest bootstrapping, creating, or expanding a city unless the user explicitly asks for it.
-- If a city is active in context, work within it only when the user's request pertains to it.
-- If an action requires a city to be selected and the user has not specified which one, ask a concise clarification instead of guessing or defaulting to an arbitrary city.
+- The general workspace is your default operating environment. Answer in place; build a plugin only when the user wants something to come back to.
+- Never assume an active project scope that was not selected or requested.
+- If an action requires a scope the user has not specified, ask a concise clarification instead of guessing or defaulting to an arbitrary one.
 
 2. Tool Economy & Intent-Driven Execution:
 - General conversation, greetings, and explanations (e.g. "Hey", "Explain how transformers work", "What is quantum computing?"): Answer directly, concisely, and helpfully in natural language WITHOUT calling any tools.
-- Existing workspace content: Retrieve only the specific document or resource requested (e.g. read_file, read_city_file).
-- Specific experiences & tools: Open or interact with an experience (open_tab, open_intent) only when the user asks to use it (e.g. "Open Neural Lab").
-- Content creation & notes: Create or edit notes directly (write_file, write_city_file) without requiring a Knowledge City.
+- Existing workspace content: Retrieve only the specific document or resource requested (e.g. read_file).
+- Specific experiences & tools: Open or interact with an experience (dock.open) only when the user asks to use it.
+- Content creation & notes: Create or edit notes directly with write_file.
 - Autonomous Web Research & Discovery (TinyFish): Proactively use search_web and fetch_page to find authoritative primary sources when the user asks for research, sources, papers, or documentation.
-- Knowledge City operations: Call plan_map or build_city ONLY when the user explicitly requests to create, map, or structure a Knowledge City or world territory (e.g. "Create a Knowledge City to learn neural networks").
 
 3. Zero Unsolicited Inspections:
-- NEVER run unsolicited bookkeeping tools (list_tabs, inspect_tab, get_city_context, list_maps, etc.) on greetings, general questions, or normal conversational turns.
+- NEVER run unsolicited bookkeeping tools (dock.list, etc.) on greetings, general questions, or normal conversational turns.
 - Reuse existing context and previously retrieved state. Do not repeat inspections without a concrete reason.
 
 4. Separate Internal State from User Responses:
@@ -235,9 +227,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const {
     prompt,
     userId,
-    cityId,
-    sessionId,
     workspaceId,
+    sessionId,
     taskId,
     origin = "chat",
     history = [],
@@ -291,14 +282,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   // Progressive context: skill selection runs before the first model call so
   // the turn knows up front whether it needs workspace state at all. Pure
-  // conversational turns (general/theme, no workspace skills, no city scope,
+  // conversational turns (general/theme, no workspace skills,
   // no attachments, not a dock-add build) skip the registry list, mounts and
   // memory recall entirely; find_capabilities stays available so the agent can
   // still discover anything outside the immediate context.
   const earlyDomainSkills = selectDomainSkills(prompt);
   const hasWorkspaceSignals =
     earlyDomainSkills.some((s) => s !== "theme") ||
-    Boolean(cityId) ||
+    Boolean(workspaceId) ||
     imageAttachments.length > 0 ||
     textAttachments.length > 0;
   const isFastPath =
@@ -349,18 +340,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // (userId, no session/task) keeps the thread store as its only transcript
   // and never mints ephemeral sessions.
   const isTaskPath = Boolean(taskId || sessionId);
-  const effectiveWorkspaceId =
-    workspaceId || (cityId ? `city-${cityId}` : "default");
+  const effectiveWorkspaceId = workspaceId || "default";
 
   let effectiveSessionId: string | undefined;
   if (isTaskPath) {
     effectiveSessionId = sessionId;
     if (!effectiveSessionId) {
-      if (cityId) {
-        effectiveSessionId = `city-${cityId}`;
-      } else {
-        effectiveSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      }
+      effectiveSessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
     try {
@@ -547,7 +533,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     }
 
     if (origin === "dock-add") {
-      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request Instructions (origin: dock-add)\n1. Build exactly one tool for this request using create_tab.\n2. If sources or information are needed (such as flashcards, reading list, or timeline), research first using search_web or city context.\n3. Choose a fitting catalog icon name for the tool.\n4. Call open_tab to mount and open the created tool in the workspace.\n5. In your final text response, reply with at most one sentence confirming the tool was mounted.`;
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request Instructions (origin: dock-add)\n1. Build exactly one tool for this request using create_plugin.\n2. If sources or information are needed, research first using search_web.\n3. Choose a fitting catalog icon name for the tool.\n4. Mount and open it with dock.open and pin it with dock.pin.\n5. In your final text response, reply with at most one sentence confirming the tool was mounted.`;
     }
 
     // Intent-selected domain skills (above) replaced the manifest-driven
@@ -557,7 +543,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     await emit({
       step: 0,
       type: "agent.start",
-      payload: { prompt, cityId, sessionId: effectiveSessionId, workspaceId: effectiveWorkspaceId, origin, model: effectiveModel, intent, skills: loadedSkills },
+      payload: { prompt, workspaceId: effectiveWorkspaceId, sessionId: effectiveSessionId, origin, model: effectiveModel, intent, skills: loadedSkills },
     });
 
     // Context: one bounded window per user. The thread keeps the full transcript
@@ -575,29 +561,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         role: message.role,
         content: message.content,
       }));
-    } else if (cityId && history.length === 0 && origin === "chat") {
-      // Only chat turns share the city conversation (continuity). CLI/task
-      // runs are isolated: they neither read chat history nor write into
-      // it, so parallel runs cannot bleed into each other (audit D9).
-      const persisted = getCityConversationMessages(cityId, 20);
-      effectiveHistory = persisted.map((m) => ({
-        role: m.role,
-        content: m.content,
-        ...(m.toolCalls ? { tool_calls: m.toolCalls } : {}),
-        ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
-      }));
     }
 
     if (threadUserId) {
       const threadAttachments =
         attachments.length > 0 ? (attachments as AgentThreadAttachment[]) : undefined;
       const storedUserMessage = appendThreadMessage(threadUserId, "user", prompt, {
-        cityId,
+        workspaceId,
         attachments: threadAttachments,
       });
       threadUserMessageId = storedUserMessage.id;
-    } else if (cityId && origin === "chat") {
-      appendCityMessage(cityId, "user", prompt);
     }
 
     let userMessageContent: any = prompt;
@@ -627,9 +600,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       userMessageContent = text;
     }
 
-    let finalSystemPrompt = cityId
-      ? `${activeSystemPrompt}\n\n## Active City Workspace Scope: "${cityId}"\nOperate within this city only when the user's request pertains to it. Do not assume or dump city context unless requested.`
-      : activeSystemPrompt;
+    let finalSystemPrompt = activeSystemPrompt;
 
     if (threadSummary) {
       finalSystemPrompt = `${finalSystemPrompt}\n\n---\n## Durable Conversation Memory (older turns, summarized)\nThis is the user's ongoing conversation, not a new one. Continue from it naturally and do not restate it unless asked.\n\n${threadSummary}`;
@@ -765,8 +736,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             llmClient,
             modelId: effectiveModel,
           }).catch(() => {});
-        } else if (cityId && origin === "chat") {
-          appendCityMessage(cityId, "assistant", finalText);
         }
 
         if (taskId) {
@@ -854,7 +823,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             seenCalls.add(callKey);
             try {
               toolOutput = await registeredTool.execute(parsed.data, {
-                cityId,
+                workspaceId,
                 workspaceId: effectiveWorkspaceId,
                 sessionId: effectiveSessionId,
                 taskId,
@@ -904,8 +873,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           if (threadUserId) {
             appendThreadMessage(threadUserId, "assistant", stuckText);
             assistantPersisted = true;
-          } else if (cityId && origin === "chat") {
-            appendCityMessage(cityId, "assistant", stuckText);
           }
           if (taskId) {
             try {
@@ -930,22 +897,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         }
 
         // Trigger reactive UI events when applicable
-        if (toolName === "create_tab" && toolOutput && typeof toolOutput === "object") {
-          await emit({
-            step: currentStep,
-            type: "tab.created",
-            payload: toolOutput as Record<string, unknown>,
-          });
-        }
-
-        if ((toolName === "open_tab" || toolName === "open_intent") && toolOutput && typeof toolOutput === "object") {
-          await emit({
-            step: currentStep,
-            type: "tray.open",
-            payload: toolOutput as Record<string, unknown>,
-          });
-        }
-
         // Sandbox previews must surface in the UI: sandbox_serve runs through
         // the sandbox.serve capability, so emit a preview event the same way
         // open_source emits browser.open.
@@ -980,22 +931,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
-        // Entering a city switches the UI into its workspace. Without this
-        // event the agent opens tabs in the global scope and city content
-        // shows nothing (dock marks it open, viewport stays empty).
-        if (
-          toolName === "enter_city" &&
-          toolOutput &&
-          typeof toolOutput === "object" &&
-          (toolOutput as any).action === "city.enter" &&
-          typeof (toolOutput as any).cityId === "string"
-        ) {
-          await emit({
-            step: currentStep,
-            type: "city.enter",
-            payload: toolOutput as Record<string, unknown>,
-          });
-        }
 
         // Dock layout directives: the client applies these through the shared
         // dock layer and reads the resulting state back.
@@ -1011,35 +946,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
-        if (toolName === "open_intent" && toolOutput && typeof toolOutput === "object") {
+        // Opening a tool must surface in the UI the same way on the loop
+        // path as on the facade path (which returns tray.open events).
+        if (
+          toolName === "dock.open" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).ok === true
+        ) {
           await emit({
             step: currentStep,
-            type: "tab.prime",
+            type: "tray.open",
             payload: toolOutput as Record<string, unknown>,
           });
         }
 
-        if ((toolName === "set_map" || toolName === "plan_map") && toolOutput && typeof toolOutput === "object") {
-          const spec = (toolOutput as any).spec;
-          await emit({
-            step: currentStep,
-            type: "map.changed",
-            payload: {
-              mapId: spec?.id || (toolOutput as any).mapId || "world-map",
-              name: spec?.title,
-              spec,
-              ...(toolOutput as Record<string, unknown>),
-            },
-          });
-        }
 
-        if (toolName === "place_city" && toolOutput && typeof toolOutput === "object") {
-          await emit({
-            step: currentStep,
-            type: "map.point.added",
-            payload: toolOutput as Record<string, unknown>,
-          });
-        }
+
 
         // Plugin lifecycle bridge: workspace-mounted plugins must surface in
         // the dock UI the same way synthesized tabs do. Without these events
@@ -1108,7 +1031,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         {
           role: "user",
           content:
-            "Please provide a helpful final synthesis summarizing what was accomplished (knowledge areas planned, cities constructed, notes or sources discovered) and what the user should explore next. Do not call any tools.",
+            "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
         },
       ];
 
@@ -1129,7 +1052,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     if (!fallbackText) {
       fallbackText =
-        "I've structured your knowledge territory and prepared the workspace. You can explore the cities on the map or ask me to dive into any specific concept.";
+        "I've prepared the workspace. Ask me to research, build, or organize and I'll pick it up from there.";
     }
 
     if (threadUserId) {
@@ -1140,8 +1063,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         llmClient,
         modelId: effectiveModel,
       }).catch(() => {});
-    } else if (cityId && origin === "chat") {
-      appendCityMessage(cityId, "assistant", fallbackText);
     }
 
     if (taskId) {

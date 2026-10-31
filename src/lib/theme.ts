@@ -27,7 +27,7 @@ export const THEMES: ThemeMeta[] = [
     name: "Cyber Cyan",
     accentColor: "#00E5FF",
     bgColor: "#060912",
-    description: "Night city blue with neon high-luminescence cyan",
+    description: "Night blue with neon high-luminescence cyan",
   },
   {
     id: "amber",

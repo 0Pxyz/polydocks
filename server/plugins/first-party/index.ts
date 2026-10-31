@@ -2,10 +2,8 @@ import { z } from "zod";
 import { pluginRegistry } from "../registry";
 import { capabilityBus } from "../bus";
 import { tinyfish } from "../../discovery/tinyfish";
-import { readCityFile, writeCityFile, getCityContext } from "../../workspace/cityWorkspace";
 import type { PluginManifest } from "../manifest";
 import { registerSourcesPlugin } from "../sources";
-import { registerCitiesPlugin } from "../cities";
 import { registerSandboxPlugin } from "../sandbox";
 
 /**
@@ -73,16 +71,17 @@ export const searchPluginManifest: PluginManifest = {
 export const browserPluginManifest: PluginManifest = {
   apiVersion: 1,
   id: "browser",
-  name: "Primary Source Reader",
+  name: "Browser",
   version: "1.0.0",
-  description: "Displays external primary sources and papers inside the dock reader view",
+  description: "Real Chromium browsing inside the dock",
   icon: "Globe",
   trust: "first-party",
   capabilities: [
     {
       id: "browser.open",
       title: "Open Source in Browser",
-      description: "Opens an external source URL in the active dock Browser view.",
+      description:
+        "Opens an external source URL in the native Browser surface (real Chromium via Atrium; falls back to the Reader when the worker is unavailable).",
       input: z.object({
         url: z.string().url().describe("Source URL"),
         title: z.string().optional().describe("Optional title"),
@@ -93,7 +92,7 @@ export const browserPluginManifest: PluginManifest = {
   surfaces: [
     {
       id: "browser",
-      title: "Research & Sources",
+      title: "Browser",
       icon: "Globe",
       variant: "immersive",
       entry: "SourcesView",
@@ -108,103 +107,12 @@ export const browserPluginManifest: PluginManifest = {
 };
 
 /**
- * 3. Writing Plugin
- */
-export const writingPluginManifest: PluginManifest = {
-  apiVersion: 1,
-  id: "writing",
-  name: "Notes & Synthesis",
-  version: "1.0.0",
-  description: "Workspace markdown note reader and synthesizer",
-  icon: "NotePencil",
-  trust: "first-party",
-  capabilities: [
-    {
-      id: "writing.read_file",
-      title: "Read Workspace File",
-      description: "Reads file content safely from within the active city workspace.",
-      input: z.object({
-        path: z.string().min(1).describe("Relative path within city workspace"),
-      }),
-      risk: "read",
-    },
-    {
-      id: "writing.write_file",
-      title: "Write Workspace File",
-      description: "Writes content to a file within the active city workspace.",
-      input: z.object({
-        path: z.string().min(1).describe("Relative path within city workspace"),
-        content: z.string().describe("Text or markdown content"),
-      }),
-      risk: "write",
-    },
-  ],
-  surfaces: [
-    {
-      id: "notes",
-      title: "Notes",
-      icon: "NotePencil",
-      variant: "immersive",
-      entry: "NotesView",
-    },
-  ],
-  permissions: [
-    {
-      type: "fs",
-      scope: "city",
-      mode: "write",
-    },
-  ],
-};
-
-/**
- * 4. Workspace Plugin
- */
-export const workspacePluginManifest: PluginManifest = {
-  apiVersion: 1,
-  id: "workspace",
-  name: "City Workspace Inventory",
-  version: "1.0.0",
-  description: "Inspects city workspace files, artifacts, and context",
-  icon: "Folder",
-  trust: "first-party",
-  capabilities: [
-    {
-      id: "workspace.get_context",
-      title: "Get City Context",
-      description: "Retrieves complete city inventory of notes, sources, and dynamic tabs.",
-      input: z.object({
-        cityId: z.string().optional().describe("Target city slug identifier"),
-      }),
-      risk: "read",
-    },
-    {
-      id: "workspace.list_artifacts",
-      title: "List Workspace Artifacts",
-      description: "Lists generated notes, tabs, and curated feeds in the city.",
-      input: z.object({
-        cityId: z.string().optional(),
-      }),
-      risk: "read",
-    },
-  ],
-  permissions: [
-    {
-      type: "fs",
-      scope: "city",
-      mode: "read",
-    },
-  ],
-};
-
-/**
  * Register all first-party plugins and their executable handlers.
  */
 export function initializeFirstPartyPlugins(): void {
-  // Contract plugins (sources, cities): single definitions that generate
+  // Contract plugins (sources, sandbox): single definitions that generate
   // the bus registration, HTTP route and CLI command.
   registerSourcesPlugin();
-  registerCitiesPlugin();
   registerSandboxPlugin();
 
   // 1. Search Plugin
@@ -226,37 +134,5 @@ export function initializeFirstPartyPlugins(): void {
       });
     }
     return { action: "browser.open", url: input.url, title: input.title || input.url };
-  });
-
-  // 3. Writing Plugin
-  pluginRegistry.install(writingPluginManifest);
-  capabilityBus.register("writing", writingPluginManifest.capabilities[0], async (input, ctx) => {
-    const cityId = ctx.cityId || "global";
-    const content = await readCityFile(cityId, input.path);
-    return { path: input.path, content };
-  });
-  capabilityBus.register("writing", writingPluginManifest.capabilities[1], async (input, ctx) => {
-    const cityId = ctx.cityId || "global";
-    await writeCityFile(cityId, input.path, input.content);
-    return { success: true, path: input.path, cityId };
-  });
-
-  // 4. Workspace Plugin
-  pluginRegistry.install(workspacePluginManifest);
-  capabilityBus.register("workspace", workspacePluginManifest.capabilities[0], async (input, ctx) => {
-    const targetCity = input.cityId || ctx.cityId || "global";
-    return await getCityContext(targetCity);
-  });
-  capabilityBus.register("workspace", workspacePluginManifest.capabilities[1], async (input, ctx) => {
-    const targetCity = input.cityId || ctx.cityId || "global";
-    const context = await getCityContext(targetCity);
-    return {
-      cityId: targetCity,
-      artifacts: [
-        ...context.notes.map((n) => ({ type: "note", path: n })),
-        ...context.sources.map((s) => ({ type: "source", url: s.url, title: s.title })),
-        ...context.dynamicTabs.map((t) => ({ type: "tab", id: t.id, title: t.title })),
-      ],
-    };
   });
 }

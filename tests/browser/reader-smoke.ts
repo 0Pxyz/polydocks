@@ -59,7 +59,7 @@ async function main() {
       "../../server/agent/tools/gtm-feed.fixture.tsx"
     );
     const code = await fs.readFile(fixturePath, "utf-8");
-    const ctx = { cityId: "default", workspaceId: "default", step: 1 };
+    const ctx = { workspaceId: "default", workspaceId: "default", step: 1 };
     const current = feed;
     if (!current) {
       const created = (await create_plugin.execute(
@@ -160,11 +160,13 @@ async function main() {
       const openFeed = async () => {
         // Dock search (Ctrl/Cmd+Shift+P) hydrates workspace plugins and
         // lists the installed feed; open it into the sandbox iframe.
+        // Scoped to the palette options: the dock bar tooltips repeat the
+        // same label text (opacity-0), which a global text query matches.
         await page.keyboard.press("Control+Shift+P");
         const search = page.getByPlaceholder(/search|tools|plugins/i);
         await search.waitFor({ timeout: 15_000 });
         await search.fill("GTM App Feed");
-        const row = page.getByText("GTM App Feed", { exact: false }).first();
+        const row = page.getByRole("option", { name: /GTM App Feed/i }).first();
         await row.waitFor({ timeout: 15_000 });
         await row.click();
       };
@@ -232,7 +234,15 @@ async function main() {
         await page.reload({ waitUntil: "domcontentloaded" });
         const skip = page.getByRole("button", { name: "Skip" });
         if (await skip.isVisible({ timeout: 5_000 }).catch(() => false)) await skip.click();
-        await openFeed();
+        // The dock restores the open tool on boot; only reopen when the
+        // restore did not bring the sandbox back (reopening would toggle).
+        const feedFrame = page.locator('iframe[title="GTM App Feed"], iframe[title="plugin-gtm-app-feed"]');
+        try {
+          await feedFrame.first().waitFor({ state: "attached", timeout: 10_000 });
+        } catch {
+          await openFeed();
+        }
+        await frame().getByRole("tab", { name: "Articles" }).click();
         await frame().getByRole("button", { name: "Mark unread" }).first().waitFor({ timeout: 20_000 });
         await shot("04-still-read-after-reload.png");
       });

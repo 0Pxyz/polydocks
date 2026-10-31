@@ -56,7 +56,7 @@ export interface ContractCapabilityDef {
   name: string;
   title: string;
   description: string;
-  scope: "global" | "city";
+  scope: "global" | "workspace";
   input: z.ZodTypeAny;
   output?: z.ZodTypeAny;
   /** SSE event types the framework emits after a successful run. */
@@ -132,13 +132,13 @@ export function defineCapability(def: ContractCapabilityDef): string {
       recorded.push(evt);
     };
 
-    // City scope requires a city context; fail fast instead of writing
-    // to the wrong scope.
-    const cityId = (isRecord(input) && typeof input.cityId === "string" && input.cityId) || ctx.cityId;
-    if (def.scope === "city" && !cityId) {
+    // Workspace scope requires a workspace context; fail fast instead of
+    // writing to the wrong scope.
+    const workspaceId = (isRecord(input) && typeof input.workspaceId === "string" && input.workspaceId) || ctx.workspaceId;
+    if (def.scope === "workspace" && !workspaceId) {
       return {
         ok: false as const,
-        error: `Capability "${fullId}" requires city scope: pass cityId.`,
+        error: `Capability "${fullId}" requires workspace scope: pass workspaceId.`,
         retryable: false as const,
         events: recorded,
       };

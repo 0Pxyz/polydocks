@@ -6,10 +6,8 @@ import {
   X,
   CircleNotch,
   Storefront,
-  Compass,
 } from "@phosphor-icons/react";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
-import { useDockStore } from "@/lib/store/useDockStore";
 import { cn } from "@/lib/cn";
 import { resolveIcon } from "@/components/icons";
 
@@ -36,7 +34,7 @@ interface PluginStoreViewProps {
  * tags and download count stay behind the catalog data for a details view.
  */
 export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProps) {
-  const { activeWorkspaceId, workspacePlugins, fetchWorkspaces, fetchWorkspacePlugins } = useWorkspaceStore();
+  const { workspacePlugins, fetchWorkspaces, fetchWorkspacePlugins } = useWorkspaceStore();
   const [plugins, setPlugins] = useState<RegistryPluginCard[]>([]);
   const [search, setSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState<string>("All");
@@ -186,10 +184,6 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
       </div>
 
       {/* Catalog */}
-      <BuiltInExperiences
-        activeWorkspaceId={activeWorkspaceId}
-        onOpenPlugin={onOpenPlugin}
-      />
       {installError && (
         <div className="w-full px-3.5 py-2.5 rounded-xl bg-red-500/[0.08] border border-red-500/20 text-xs text-red-200/90 font-sans">
           {installError}
@@ -309,134 +303,6 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
             })}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Built-in experiences: real product surfaces with honest availability.
- * Polymax (world map) installs/uninstalls by pinning through the persisted
- * dock API. City-context tools (notes, sources, files, quests, flashcards,
- * terminal) work inside cities and are labeled as such — no fake install.
- * Anything without an implementation is not listed at all.
- */
-const CITY_EXPERIENCES = [
-  { id: "notes", name: "Notes", description: "Workspace notes, per city" },
-  { id: "sources", name: "Sources", description: "Saved research, per city" },
-  { id: "files", name: "City Files", description: "Workspace files, per city" },
-  { id: "quests", name: "Quests", description: "Mastery quests, per city" },
-  { id: "flashcards", name: "Flashcards", description: "Study decks, per city" },
-  { id: "terminal", name: "Terminal", description: "Local workspace console, per city" },
-];
-
-function BuiltInExperiences({
-  activeWorkspaceId,
-  onOpenPlugin,
-}: {
-  activeWorkspaceId: string;
-  onOpenPlugin?: (pluginId: string) => void;
-}) {
-  const { pinnedToolIds, pinTool, unpinTool } = useDockStore();
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [errorId, setErrorId] = useState<string | null>(null);
-  const polymaxInstalled = pinnedToolIds.includes("maps");
-
-  const setPinned = async (id: string, pin: boolean) => {
-    setBusyId(id);
-    setErrorId(null);
-    try {
-      const res = await fetch("/api/dock/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          op: pin ? "tabs.pin" : "tabs.unpin",
-          id,
-          workspaceId: activeWorkspaceId,
-        }),
-      });
-      if (!res.ok) throw new Error(`server responded ${res.status}`);
-      if (pin) pinTool(id);
-      else unpinTool(id);
-    } catch {
-      setErrorId(id);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  return (
-    <div className="w-full">
-      <div className="flex items-baseline justify-between mb-2 mt-1">
-        <h3 className="text-xs font-medium uppercase tracking-widest text-[var(--text-dim)]">
-          Built-in experiences
-        </h3>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
-        {/* Polymax: real installable experience (pin = install) */}
-        <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.02]">
-          <div className="w-11 h-11 rounded-[14px] bg-white/[0.06] flex items-center justify-center text-[var(--text-main)] shrink-0">
-            <Compass size={22} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-medium text-white/95 truncate">Polymax</h3>
-            <p className="text-xs text-[var(--text-muted)] truncate mt-0.5 font-sans">
-              Knowledge worlds map{polymaxInstalled ? " · installed" : ""}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={busyId === "maps"}
-            onClick={() => {
-              if (polymaxInstalled) {
-                onOpenPlugin?.("maps");
-              } else {
-                void setPinned("maps", true).then(() => onOpenPlugin?.("maps"));
-              }
-            }}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium shrink-0 transition-colors bg-white/[0.04] text-[var(--text-muted)] hover:bg-[var(--accent-lime)]/10 hover:text-[var(--accent-lime)] cursor-pointer"
-          >
-            {polymaxInstalled ? "Open" : "Install"}
-          </button>
-          {polymaxInstalled && (
-            <button
-              type="button"
-              disabled={busyId === "maps"}
-              onClick={() => void setPinned("maps", false)}
-              className="text-[11px] text-white/40 hover:text-red-300 cursor-pointer shrink-0"
-            >
-              Uninstall
-            </button>
-          )}
-        </div>
-        {errorId === "maps" && (
-          <p className="text-xs text-red-300/90 md:col-span-2">
-            Couldn&apos;t update Polymax. Try again.
-          </p>
-        )}
-        {/* City-context experiences: honest availability, no fake install */}
-        {CITY_EXPERIENCES.map((exp) => {
-          const IconComp = resolveIcon(exp.id);
-          return (
-            <div
-              key={exp.id}
-              className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-white/[0.02] opacity-90"
-            >
-              <div className="w-11 h-11 rounded-[14px] bg-white/[0.06] flex items-center justify-center text-[var(--text-main)] shrink-0">
-                <IconComp size={22} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-white/95 truncate">{exp.name}</h3>
-                <p className="text-xs text-[var(--text-muted)] truncate mt-0.5 font-sans">
-                  {exp.description}
-                </p>
-              </div>
-              <span className="text-[11px] text-[var(--text-dim)] shrink-0 font-sans">
-                In cities
-              </span>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

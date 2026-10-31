@@ -23,7 +23,7 @@ describe("Issue #166 — Modal sandbox slices (no mocks, real provider)", () => 
 
   it("workspace resource names are Modal-safe and stable", () => {
     expect(sandboxNameFor("default")).toBe("ws-default");
-    expect(sandboxNameFor("City: São Paulo!")).toMatch(/^ws-[a-z0-9-]+$/);
+    expect(sandboxNameFor("São Paulo!")).toMatch(/^ws-[a-z0-9-]+$/);
     expect(volumeNameFor("default")).toBe("polydocks-ws-default");
     expect(sandboxNameFor("x").length).toBeLessThanOrEqual(64);
     expect(sandboxNameFor("default")).toBe(sandboxNameFor("default"));
@@ -33,7 +33,7 @@ describe("Issue #166 — Modal sandbox slices (no mocks, real provider)", () => 
     const { initializeFirstPartyPlugins } = await import("../server/plugins/first-party/index");
     initializeFirstPartyPlugins();
     const { capabilityBus } = await import("../server/plugins/bus");
-    const res = await capabilityBus.invoke("sandbox.exec", { command: "echo hi", workspaceId: WS_A }, { actor: "agent", cityId: WS_A });
+    const res = await capabilityBus.invoke("sandbox.exec", { command: "echo hi", workspaceId: WS_A }, { actor: "agent", workspaceId: WS_A });
     expect(res.success).toBe(true); // bus call itself succeeded
     const envelope = res.data as any;
     expect(envelope?.ok).toBe(false); // capability envelope denies

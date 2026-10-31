@@ -15,7 +15,7 @@ export const agentRouter = new Hono();
 function ctxFrom(c: { req: { query: (k: string) => string | undefined } }, body: any): FacadeContext {
   return {
     actor: "user",
-    cityId: body?.cityId || c.req.query("cityId"),
+    workspaceId: body?.workspaceId || c.req.query("workspaceId"),
     workspaceId: body?.workspaceId || c.req.query("workspaceId"),
     sessionId: body?.sessionId || c.req.query("sessionId"),
   };

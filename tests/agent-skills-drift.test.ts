@@ -159,7 +159,7 @@ describe("Skill drift guard: tools, tables, identifiers", () => {
     const byName = new Map<string, string>();
     for (const { file, text } of await strippedSkills()) byName.set(file, text);
     // The plugin/tab skills are the ones that must document the helpers.
-    for (const name of ["plugins.md", "dock-and-tabs.md"]) {
+    for (const name of ["plugins.md", "dock.md"]) {
       const text = byName.get(name) ?? "";
       expect(text, `${name} skill must document openContent`).toContain("openContent");
       expect(text, `${name} skill must document useCapability`).toContain("useCapability");
@@ -229,12 +229,11 @@ describe("Skill drift guard: intent to skills mapping (PT+EN)", () => {
     { prompt: "open in reader doesn't work", expected: ["plugins"] },
     { prompt: "find articles about go to market", expected: ["content-and-reader"] },
     { prompt: "pesquise artigos sobre go to market", expected: ["content-and-reader"] },
-    { prompt: "cria uma cidade sobre estoicismo", expected: ["world-and-cities"] },
-    { prompt: "crie uma cidade sobre física quântica", expected: ["world-and-cities"] },
-    { prompt: "close the flashcards tab", expected: ["dock-and-tabs"] },
-    { prompt: "fechar a aba de flashcards", expected: ["dock-and-tabs"] },
-    { prompt: "what tabs do I have", expected: ["dock-and-tabs"] },
-    { prompt: "quais abas eu tenho", expected: ["dock-and-tabs"] },
+
+    { prompt: "close the flashcards tab", expected: ["dock"] },
+    { prompt: "fechar a aba de flashcards", expected: ["dock"] },
+    { prompt: "what tabs do I have", expected: ["dock"] },
+    { prompt: "quais abas eu tenho", expected: ["dock"] },
     // Theme backend exists (apply_theme tool + theme.md skill): theme asks
     // select the theme skill so the protocol is injected on demand.
     { prompt: "add this background to my theme", expected: ["theme"] },

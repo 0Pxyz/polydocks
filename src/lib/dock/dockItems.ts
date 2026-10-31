@@ -5,7 +5,7 @@
  *   { id, pluginId, contextId, state, order, panel }
  *
  * - contextId is opaque (null = global). The core never interprets it;
- *   the city plugin passes its city id when opening.
+ *   a plugin passes its workspace id when opening.
  * - state: closed | background | open | focused
  *   - background keeps running (video, agent stream) without occupying space.
  *   - open is visible in a panel. focused is the panel receiving keyboard.
@@ -39,7 +39,7 @@ export interface DockItemsSnapshot {
   order: string[];
   focusedId: string | null;
   activeContextId: string | null;
-  /** Per-context focus memory so map -> city restores the same focus. */
+  /** Per-context focus memory so returning to a context restores the same focus. */
   focusedByContext: Record<string, string | null>;
   seq: number;
 }
@@ -131,10 +131,10 @@ export function openItem(
   const record = next.items[id];
   // Adopt the opener context when the record was global but opened in a scope.
   // Records never migrate between contexts once scoped: that would leak a
-  // city item into the map bar (symptom 2).
+  // other-context item into the bar (symptom 2).
   if (record.contextId === null && contextId !== undefined && contextId !== null) {
-    // Keep global builtins global; scope only unknown ids opened from a city.
-    // The caller decides: pass contextId only for city-scoped plugins.
+    // Keep global builtins global; scope only unknown ids opened from a workspace.
+    // The caller decides: pass contextId only for workspace-scoped plugins.
   }
   const items = {
     ...next.items,
@@ -224,7 +224,7 @@ export function backgroundItem(snapshot: DockItemsSnapshot, id?: string): DockIt
 /**
  * Switch the active context (opaque to the core). All records persist;
  * only visibility changes. Focus is remembered per context so returning
- * to a city restores the same focused item with no reorder.
+ * to a context restores the same focused item with no reorder.
  */
 export function setActiveContext(
   snapshot: DockItemsSnapshot,
@@ -246,7 +246,7 @@ export function setActiveContext(
     // withFocus(null) demotes any stale focused flag to open.
     next = withFocus(next, null);
     // Re-focus the remembered item only when it becomes visible again;
-    // otherwise leave focus empty (map shows no city focus).
+    // otherwise leave focus empty (nothing visible to focus).
   }
   return { ...next, focusedByContext };
 }
@@ -268,7 +268,7 @@ export interface DockShortcutSpec {
 }
 
 export interface DockActionDef {
-  id: "tabs.focus" | "tabs.next" | "tabs.prev" | "tabs.close" | "tabs.background" | "chat.toggle";
+  id: "tabs.focus" | "tabs.next" | "tabs.prev" | "tabs.close" | "tabs.background" | "chat.toggle" | "sidebar.beside";
   description: string;
   shortcut: DockShortcutSpec;
   /** Human label for tooltips (shortcut number only shows on hover/focus). */
@@ -319,6 +319,13 @@ export const DOCK_ACTIONS: DockActionDef[] = [
     hint: "Ctrl+Shift+0",
     alternative: "Alt+0",
   },
+  {
+    id: "sidebar.beside",
+    description: "Open the current tool beside the main view (toggle).",
+    shortcut: { code: "KeyS", ctrl: true, shift: true },
+    hint: "Ctrl+Shift+S",
+    alternative: "Alt+S",
+  },
 ];
 
 /** Digit1…Digit9 map to tabs.focus index 0…8 (same action, nth slot). */
@@ -343,6 +350,10 @@ export function matchDockShortcut(event: {
       if (event.code === "ArrowLeft") return { action: DOCK_ACTIONS[2] };
       if (event.code === "KeyW") return { action: DOCK_ACTIONS[3] };
       if (event.code === "KeyH") return { action: DOCK_ACTIONS[4] };
+      if (event.code === "KeyS") {
+        const beside = DOCK_ACTIONS.find((action) => action.id === "sidebar.beside");
+        if (beside) return { action: beside };
+      }
     }
     return null;
   }
@@ -357,8 +368,84 @@ export function matchDockShortcut(event: {
   return { action: found };
 }
 
+/**
+ * Esc belongs to media when the event starts inside a media element or a
+ * fullscreen session is active (the browser consumes Esc to exit
+ * fullscreen). Panels must not collapse/clear or move focus in that case,
+ * or video playback loses its context.
+ */
+export function shouldYieldEscToMedia(target: EventTarget | null, fullscreenElement: Element | null): boolean {
+  if (fullscreenElement) return true;
+  const el = target as Element | null;
+  if (!el || typeof el.closest !== "function") return false;
+  return !!el.closest("video, audio, [data-media-player]");
+}
+
 /** Two panels fit at or above this viewport width (px). */
 export const TWO_PANEL_MIN_WIDTH = 1100;
+
+/** Beside-panel width bounds (mirror the chat panel: same feel, same room). */
+export const BESIDE_WIDTH_MIN = 340;
+export const BESIDE_WIDTH_MAX = 560;
+export const BESIDE_WIDTH_DEFAULT = 400;
+
+export interface PanelLayout {
+  /** Chat panel is docked to the side (its own open rule already applied). */
+  chatSide: boolean;
+  /** Beside panel is docked to the right (needs full width). */
+  besideSide: boolean;
+  /** Beside panel floats over the content (narrow viewport). */
+  besideOverlay: boolean;
+  /** Left margin the content area must reserve for the chat panel. */
+  mainMarginLeft: number;
+  /** Right margin the content area must reserve for the beside panel. */
+  mainMarginRight: number;
+}
+
+/**
+ * One layout rule for all three regions (content | beside | chat), applied
+ * to both panels. The chat keeps its own open/close behavior; this only
+ * positions. Docked order is fixed: chat left, content center, beside
+ * right. Below the two-panel width the beside panel overlays under the
+ * chat (lower z-order) so each stays independently closable with no space
+ * fight. Pure: covered by tests/tool-sidebar.test.ts.
+ */
+export function panelLayout(args: {
+  chatSideOpen: boolean;
+  besideCount: number;
+  viewportWidth: number;
+  sideWidth: number;
+  besideWidth: number;
+}): PanelLayout {
+  const wide = args.viewportWidth >= TWO_PANEL_MIN_WIDTH;
+  const chatSide = args.chatSideOpen;
+  const besideSide = args.besideCount > 0 && wide;
+  const besideOverlay = args.besideCount > 0 && !wide;
+  return {
+    chatSide,
+    besideSide,
+    besideOverlay,
+    mainMarginLeft: chatSide ? args.sideWidth : 0,
+    mainMarginRight: besideSide ? args.besideWidth : 0,
+  };
+}
+
+/**
+ * Dock items allowed beside the main view. Built-in tool panels plus
+ * workspace/session plugins passed in as dynamic ids. The browser stays
+ * main-only: one remote Chromium session per key, a second live instance
+ * would fork it. The agent has its own panel; the map its own surface.
+ */
+const BESIDE_STATIC_IDS = new Set(["settings", "theme", "plugins", "creations", "store"]);
+
+export function isBesideEligible(id: string | null | undefined, dynamicIds: Iterable<string>): boolean {
+  if (!id || id === "agent" || id === "maps") return false;
+  if (BESIDE_STATIC_IDS.has(id)) return true;
+  for (const dyn of dynamicIds) {
+    if (dyn === id) return true;
+  }
+  return false;
+}
 
 /**
  * Panel assignment: focused + most recent open side by side when wide

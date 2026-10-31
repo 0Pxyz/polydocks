@@ -5,7 +5,6 @@ import { dockAction, pluginLifecycle, invokeCapability, agentSession, agentTask,
 import { initializeFirstPartyPlugins } from "../server/plugins/first-party";
 
 const WS = "test-facade-parity-ws";
-const CITY = "test-facade-parity-city";
 
 /**
  * Issue #164 parity harness: legacy routes and facade ops must agree on
@@ -22,28 +21,28 @@ describe("Issue #164 — facade parity harness", () => {
     const probe = new Hono().route("/api/dock", dockRouter);
 
     // Shared handler is the source of truth.
-    const shared: any = await dockAction("tabs.list", { cityId: CITY }, { actor: "user", cityId: CITY });
+    const shared: any = await dockAction("tabs.list", { workspaceId: WS }, { actor: "user", workspaceId: WS });
     expect(shared.ok).toBe(true);
 
     // HTTP route over the same handler.
     const httpRes = await probe.request("/api/dock/action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "tabs.list", cityId: CITY }),
+      body: JSON.stringify({ op: "tabs.list", workspaceId: WS }),
     });
     const httpOut: any = await httpRes.json();
     expect(httpRes.status).toBe(200);
     expect(httpOut.ok).toBe(true);
-    expect(JSON.stringify(httpOut.data?.builtin ?? null)).toBe(JSON.stringify(shared.data?.builtin ?? null));
+    expect(JSON.stringify(httpOut.data?.dockItems ?? null)).toBe(JSON.stringify(shared.data?.dockItems ?? null));
 
     // Verb tool delegates in-process (no fetch to product routes).
     const { dockList } = await import("../server/agent/tools/verbs/dock");
-    const toolOut: any = await dockList.execute({ cityId: CITY } as any, { step: 1, cityId: CITY });
+    const toolOut: any = await dockList.execute({ workspaceId: WS } as any, { step: 1, workspaceId: WS });
     expect(toolOut.ok).toBe(true);
-    expect(Array.isArray(toolOut.data.builtin)).toBe(true);
+    expect(Array.isArray(toolOut.data.dockItems)).toBe(true);
 
     // Dock open emits tray.open on the shared path.
-    const opened: any = await dockAction("tabs.open", { tabId: "notes", cityId: CITY }, { actor: "user", cityId: CITY });
+    const opened: any = await dockAction("tabs.open", { tabId: "browser", workspaceId: WS }, { actor: "user", workspaceId: WS });
     expect(opened.ok).toBe(true);
     expect(opened.events.map((e: any) => e.type)).toContain("tray.open");
   });
@@ -67,13 +66,13 @@ describe("Issue #164 — facade parity harness", () => {
     const httpRes = await app.request("/api/plugins/browser/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: { url: "https://example.com/parity", cityId: CITY } }),
+      body: JSON.stringify({ input: { url: "https://example.com/parity", workspaceId: WS } }),
     });
     const httpOut: any = await httpRes.json();
     expect(httpRes.status).toBe(200);
     expect(httpOut.ok).toBe(true);
 
-    const shared: any = await invokeCapability("browser", "open", { url: "https://example.com/parity", cityId: CITY }, { actor: "user", cityId: CITY });
+    const shared: any = await invokeCapability("browser", "open", { url: "https://example.com/parity", workspaceId: WS }, { actor: "user", workspaceId: WS });
     expect(shared.ok).toBe(true);
   });
 
@@ -128,27 +127,27 @@ describe("Issue #164 — facade parity harness", () => {
     // Unknown install fails closed with not_found (no ghost mounts).
     const badInstall: any = await install_plugin.execute(
       { pluginId: "parity-ghost-xyz", workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS, actor: "agent" } as any
+      { step: 1, workspaceId: WS, actor: "agent" } as any
     );
     expect(badInstall.ok).toBe(false);
 
     // Rollback of an unknown version fails closed.
     const badRollback: any = await rollback_plugin.execute(
       { pluginId: "parity-ghost-xyz", version: "0.0.0", workspaceId: WS } as any,
-      { step: 1, cityId: CITY, workspaceId: WS, actor: "agent" } as any
+      { step: 1, workspaceId: WS, actor: "agent" } as any
     );
     expect(badRollback.ok).toBe(false);
 
     // Read-only inspection tools work through the facade.
-    const sessions: any = await list_sessions.execute({}, { step: 1, cityId: CITY, workspaceId: WS } as any);
+    const sessions: any = await list_sessions.execute({}, { step: 1, workspaceId: WS } as any);
     expect(sessions.ok).toBe(true);
-    const tasks: any = await list_tasks.execute({ status: "running" } as any, { step: 1, cityId: CITY, workspaceId: WS } as any);
+    const tasks: any = await list_tasks.execute({ status: "running" } as any, { step: 1, workspaceId: WS } as any);
     expect(tasks.ok).toBe(true);
-    const artifacts: any = await list_artifacts.execute({ workspaceId: WS } as any, { step: 1, cityId: CITY, workspaceId: WS } as any);
+    const artifacts: any = await list_artifacts.execute({ workspaceId: WS } as any, { step: 1, workspaceId: WS } as any);
     expect(artifacts.ok).toBe(true);
 
     // inspect_session and read_artifact fail closed on unknown ids.
-    const badSession: any = await inspect_session.execute({ sessionId: "no-such-session" } as any, { step: 1, cityId: CITY } as any);
+    const badSession: any = await inspect_session.execute({ sessionId: "no-such-session" } as any, { step: 1, workspaceId: WS } as any);
     expect(badSession.ok).toBe(false);
     const badArtifact: any = await read_artifact.execute({ artifactId: "no-such-artifact" } as any, { step: 1 } as any);
     expect(badArtifact.ok).toBe(false);
@@ -162,8 +161,8 @@ describe("Issue #164 — facade parity harness", () => {
       body: JSON.stringify({ op: "uninstall", pluginId: "nope", workspaceId: WS }),
     });
     expect([200, 400]).toContain(res.status);
-    // Facade dock + agent routes mounted by default.
-    expect((await app.request("/api/dock/tabs")).status).toBe(200);
+    // Facade dock + agent routes mounted by default; retired routes stay gone.
+    expect((await app.request("/api/dock/tabs")).status).toBe(404);
     expect((await app.request("/api/agent/status")).status).toBe(200);
   });
 });
