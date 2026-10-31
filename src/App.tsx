@@ -48,6 +48,7 @@ export default function App() {
     abortStream,
     retryLast,
     hydrateThread,
+    requestVoiceStart,
   } = useConversationStore();
 
   const {
@@ -655,6 +656,8 @@ export default function App() {
                     setActiveToolId("agent");
                     setDockActiveTool("agent");
                     setLayoutState(isWide ? "side" : "sheet");
+                    // The home orb is the voice button: open and start listening.
+                    requestVoiceStart();
                   }}
                   panelOpen={layoutState !== "closed"}
                 />

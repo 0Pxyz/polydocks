@@ -110,6 +110,10 @@ interface ConversationStoreState {
   selectedEffort: ReasoningEffort;
   setSelectedEffort: (effort: ReasoningEffort) => void;
   toggleAgent: (currentActiveToolId?: string) => void;
+  /** One-shot request: start voice input once the panel is up (home orb). */
+  pendingVoiceStart: boolean;
+  requestVoiceStart: () => void;
+  consumeVoiceStart: () => void;
   sendMessage: (
     prompt?: string,
     cityId?: string,
@@ -241,8 +245,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   oldestMessageSeq: null,
   activeModel: null,
   activeIntent: null,
+  pendingVoiceStart: false,
 
   setLayoutState: (layoutState) => set({ layoutState }),
+  requestVoiceStart: () => set({ pendingVoiceStart: true }),
+  consumeVoiceStart: () => set({ pendingVoiceStart: false }),
 
   hydrateThread: async () => {
     if (get().messages.length > 0) return;
