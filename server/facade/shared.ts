@@ -414,6 +414,20 @@ export async function pluginSetActive(
     if (active) pluginRegistry.enable(pluginId);
     else pluginRegistry.disable(pluginId);
     const updated = pluginRegistry.get(pluginId);
+    if (!active) {
+      // Deactivating closes it in the dock (state kept, pins and stored
+      // data untouched) so a disabled plugin disappears from the UI the
+      // same way its capabilities leave the agent catalog. Reactivating
+      // brings data back; the agent or user re-opens the view.
+      try {
+        const { closeDockItem, listDockItems } = await import("../workspace/dockItems");
+        for (const item of listDockItems()) {
+          if (item.pluginId === pluginId) closeDockItem(item.id);
+        }
+      } catch {
+        // Non-fatal: the registry flag is the source of truth.
+      }
+    }
     return {
       ok: true,
       data: { pluginId, active: updated?.enabled ?? active, version: updated?.version },
