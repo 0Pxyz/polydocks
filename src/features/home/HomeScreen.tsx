@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
-import { useActiveJobs } from "./ThoughtStream";
+import { ThoughtStream, useActiveJobs } from "./ThoughtStream";
 import { feedThoughtEvent, pushThought } from "@/lib/agent/thoughtStream";
+import { useConversationStore } from "@/lib/agent/conversationStore";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
 
@@ -78,6 +79,9 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
   };
 
   const activeJobs = useActiveJobs();
+  // Thoughts stay anchored above the home orb spot, but only show while
+  // the compact bottom sheet is open (sidebar/full keep the transcript).
+  const sheetOpen = useConversationStore((s) => s.layoutState) === "sheet";
 
   // Dev-only fake emitter (?thought-demo=1): two parallel fake jobs drive
   // the stream without any backend. Never fires in production builds.
@@ -110,6 +114,9 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
         className
       )}
     >
+      {/* Living-agent thoughts: same spot above the orb, visible only
+          while the compact bottom sheet is open. */}
+      {sheetOpen && <ThoughtStream />}
       <AnimatePresence mode="wait" initial={false}>
         {!panelOpen && (
           <motion.div

@@ -22,7 +22,6 @@ import {
 import { cn } from "@/lib/cn";
 import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import { Orb } from "./Orb";
-import { ThoughtStream } from "@/features/home/ThoughtStream";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
 import { useConversationStore } from "@/lib/agent/conversationStore";
@@ -502,9 +501,6 @@ export function AgentConversation({
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
-          {/* Living-agent thoughts drift up from the sheet and fade out.
-              Sheet-only: sidebar/full keep the transcript, no stream. */}
-          <ThoughtStream className="mb-2" />
           <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col max-h-[calc(100dvh-120px)]">
             {/* Header: status on left, mute/expand/close on right (no Orb here — single Orb lives in the composer) */}
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
