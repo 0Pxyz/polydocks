@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { ThoughtStream } from "./ThoughtStream";
 import { pushThought } from "@/lib/agent/thoughtStream";
 import { useConversationStore } from "@/lib/agent/conversationStore";
+import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
 
@@ -81,6 +82,8 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
   // keep the transcript only.
   const layoutState = useConversationStore((s) => s.layoutState);
   const showThoughts = layoutState === "sheet" || layoutState === "closed";
+  const isOnboardingOpen = useOnboardingStore((s) => s.isOpen);
+  const currentStep = useOnboardingStore((s) => s.currentStep);
 
   // Dev-only fake emitter (?thought-demo=1): two parallel fake jobs drive
   // the stream without any backend. Never fires in production builds.
@@ -133,11 +136,39 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
               transition={isReduced ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
               className="group relative rounded-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent-lime)]"
             >
-              <Orb state="idle" size={isCoarse ? "xl" : "sm"} />
+              <Orb
+                state={
+                  isOnboardingOpen && currentStep !== "idle"
+                    ? currentStep === "research" || currentStep === "tools"
+                      ? "thinking"
+                      : currentStep === "intro"
+                      ? "listening"
+                      : "idle"
+                    : "idle"
+                }
+                size={isCoarse ? "xl" : "sm"}
+              />
             </motion.button>
 
-            {/* Quiet hint: Ctrl K on desktop, tap on touch. Never a second prompt box. */}
-            {!hintDismissed ? (
+            {/* Live Onboarding Narration or Quiet Hint / Rotating Tip */}
+            {isOnboardingOpen && currentStep !== "idle" ? (
+              <motion.div
+                key={`onboarding-narration-${currentStep}`}
+                initial={isReduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={isReduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.28 }}
+                className="mt-6 max-w-md px-4 text-center"
+              >
+                <p className="text-sm text-[var(--text-main)] font-sans font-medium leading-relaxed tracking-normal">
+                  {currentStep === "intro" && "“Welcome to your new workspace. Let me show you what we can do together.”"}
+                  {currentStep === "research" && "“Watch the dock: querying primary sources via TinyFish…”"}
+                  {currentStep === "workspace" && "“Opening real Chromium browser and research notes side by side…”"}
+                  {currentStep === "tools" && "“Building and mounting interactive tools into your dock…”"}
+                  {currentStep === "handoff" && "“This is your workspace. Tell me what you want to build next.”"}
+                </p>
+              </motion.div>
+            ) : !hintDismissed ? (
               <div
                 className={cn(
                   "mt-6 h-5 text-xs text-[var(--text-muted)] font-sans transition-opacity duration-500",
