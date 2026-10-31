@@ -45,6 +45,22 @@ export function validateSlop(code: string, opts?: { strict?: boolean }): SlopRep
     errors.push("gradients: flat surfaces in theme tokens, no gradient washes");
   }
 
+  // Opaque static boxes: Tailwind named scales (bg-black, bg-white,
+  // bg-zinc-*, bg-neutral-*, bg-slate-*, bg-gray-*, bg-stone-*, with optional
+  // /opacity) and background(-color): black|white. Surfaces must inherit
+  // theme tokens (bg-card, bg-muted, bg-background) so a theme switch
+  // reflects instantly; transparent is not a background.
+  const opaqueBg =
+    src.match(/\bbg-(?:black|white|zinc-\d+|neutral-\d+|slate-\d+|gray-\d+|stone-\d+)(?:\/[\d.]+|\/\[[\d.]+\])?(?![\w-])/g) ??
+    [];
+  const opaqueStyle = src.match(/background(?:-color)?\s*:\s*(?:black|white)\b/gi) ?? [];
+  const opaqueHits = [...opaqueBg, ...opaqueStyle];
+  if (opaqueHits.length > 0) {
+    const msg = `opaque static background(s) (${opaqueHits.slice(0, 4).join(", ")}): use theme tokens (bg-card, bg-muted, bg-background), never fixed fills`;
+    if (strict) errors.push(msg);
+    else warnings.push(msg);
+  }
+
   if (/@import\s+url\(|@import\s+["']https?:|<link[^>]+stylesheet|url\(\s*["']?https?:/i.test(src)) {
     errors.push("external sources: no remote stylesheets, fonts or images; the sandbox CSP blocks them");
   }
