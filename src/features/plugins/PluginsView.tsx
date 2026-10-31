@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   PlugsConnected,
   Plus,
@@ -13,8 +13,9 @@ import {
   Circle,
   ToggleLeft,
   ToggleRight,
-  Link,
   ShieldWarning,
+  MagnifyingGlass,
+  Storefront,
 } from "@phosphor-icons/react";
 import { resolveSurfaceIcon } from "../dock/surfaceResolver";
 import { PluginStoreView } from "./PluginStoreView";
@@ -50,6 +51,249 @@ interface PluginsViewProps {
   onOpenPlugin?: (pluginId: string) => void;
 }
 
+interface InstalledListProps {
+  plugins: PluginItem[];
+  loading: boolean;
+  executions: Record<string, ExecutionRecord[]>;
+  selectedId: string | null;
+  onSelect: (plugin: PluginItem) => void;
+  onToggle: (pluginId: string) => void;
+  onUninstall: (pluginId: string) => void;
+  onOpenPlugin?: (pluginId: string) => void;
+}
+
+const TRUST_SECTIONS: Array<{ trust: PluginItem["trust"]; title: string }> = [
+  { trust: "core", title: "Built-in" },
+  { trust: "first-party", title: "First-party" },
+  { trust: "generated", title: "Generated" },
+  { trust: "external", title: "MCP servers" },
+];
+
+/**
+ * Installed list: the same row language as Discover (icon, name, one-line
+ * purpose, one quiet action). Grouped by origin instead of a mixed grid;
+ * version and capability detail live in the detail sheet, not the row.
+ * MCP servers surface here with tool count and live status.
+ */
+function InstalledPluginList({
+  plugins,
+  loading,
+  executions,
+  selectedId,
+  onSelect,
+  onToggle,
+  onUninstall,
+  onOpenPlugin,
+}: InstalledListProps) {
+  const [search, setSearch] = useState("");
+  const [group, setGroup] = useState<string>("All");
+
+  const groups = useMemo(() => {
+    const present = new Set(plugins.map((p) => p.trust));
+    return TRUST_SECTIONS.filter((s) => present.has(s.trust as PluginItem["trust"]));
+  }, [plugins]);
+
+  const matches = (p: PluginItem) => {
+    if (group !== "All") {
+      const section = TRUST_SECTIONS.find((s) => s.title === group);
+      if (!section || p.trust !== section.trust) return false;
+    }
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q) ||
+      p.id.toLowerCase().includes(q)
+    );
+  };
+
+  return (
+    <div className="w-full flex flex-col gap-4">
+      {/* Search + group filter (same controls as Discover) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <MagnifyingGlass
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search plugins…"
+            className="w-full bg-white/[0.04] border border-[var(--border-subtle)] rounded-full pl-9 pr-4 py-1.5 text-xs text-white placeholder-[var(--text-dim)] focus:outline-none focus:border-[var(--border-hover)] transition-colors font-sans"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 rounded-full bg-white/[0.04] border border-[var(--border-subtle)] p-0.5">
+          {["All", ...groups.map((g) => g.title)].map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setGroup(label)}
+              className={`px-3 py-1 rounded-full text-xs transition-colors cursor-pointer whitespace-nowrap ${
+                group === label
+                  ? "bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] font-medium"
+                  : "text-[var(--text-muted)] hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[76px] rounded-2xl bg-white/[0.02] animate-pulse"
+            />
+          ))}
+        </div>
+      ) : plugins.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Storefront size={28} className="text-[var(--text-dim)]" />
+          <p className="text-xs text-[var(--text-muted)] max-w-xs mt-2">
+            No plugins installed yet. Ask the agent to build one, then publish it.
+          </p>
+        </div>
+      ) : (
+        TRUST_SECTIONS.map((section) => {
+          const items = plugins.filter((p) => p.trust === section.trust && matches(p));
+          if (items.length === 0) return null;
+          return (
+            <div key={section.trust} className="w-full">
+              <h3 className="text-xs font-medium uppercase tracking-widest text-[var(--text-dim)] mb-2">
+                {section.title}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                {items.map((plugin) => {
+                  const Icon = resolveSurfaceIcon(plugin.icon);
+                  const isSelected = selectedId === plugin.id;
+                  const isMcp = plugin.trust === "external";
+                  const lastRun = (executions[plugin.id] || [])[0];
+                  const mcpStatus = !plugin.enabled
+                    ? "Disabled"
+                    : lastRun?.status === "failed"
+                      ? "Needs attention"
+                      : "Connected";
+
+                  return (
+                    <div
+                      key={plugin.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelect(plugin)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelect(plugin);
+                        }
+                      }}
+                      className={`group flex items-center gap-3.5 p-3.5 rounded-2xl outline-none transition-colors duration-150 cursor-pointer focus-visible:ring-1 focus-visible:ring-[var(--accent-lime)]/40 ${
+                        isSelected
+                          ? "bg-emerald-500/[0.06] ring-1 ring-emerald-500/40"
+                          : "bg-white/[0.02] hover:bg-white/[0.04]"
+                      } ${!plugin.enabled ? "opacity-50" : ""}`}
+                    >
+                      {/* Icon */}
+                      <div className="w-11 h-11 rounded-[14px] bg-white/[0.06] flex items-center justify-center text-[var(--text-main)] shrink-0">
+                        <Icon className="w-[22px] h-[22px]" />
+                      </div>
+
+                      {/* Name and one-line purpose */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-white/95 truncate">
+                          {plugin.name}
+                        </h3>
+                        <p className="text-xs text-[var(--text-muted)] truncate mt-0.5 font-sans">
+                          {plugin.description || "No description provided."}
+                        </p>
+                        {isMcp && (
+                          <p className="text-[11px] text-[var(--text-dim)] truncate mt-0.5 font-sans">
+                            {plugin.capabilitiesCount} tools · {mcpStatus}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Quiet action + discrete controls */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {plugin.enabled ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenPlugin?.(plugin.id);
+                            }}
+                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-[var(--accent-lime)]/10 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/20 transition-colors cursor-pointer"
+                          >
+                            Open
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggle(plugin.id);
+                            }}
+                            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/[0.04] text-[var(--text-muted)] hover:bg-[var(--accent-lime)]/10 hover:text-[var(--accent-lime)] transition-colors cursor-pointer"
+                          >
+                            Enable
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={plugin.enabled ? `Disable ${plugin.name}` : `Enable ${plugin.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle(plugin.id);
+                          }}
+                          className="p-1.5 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          {plugin.enabled ? (
+                            <ToggleRight className="w-5 h-5 text-emerald-400" weight="fill" />
+                          ) : (
+                            <ToggleLeft className="w-5 h-5 text-white/30" />
+                          )}
+                        </button>
+                        {plugin.trust !== "core" && (
+                          <button
+                            type="button"
+                            aria-label={`Uninstall ${plugin.name}`}
+                            title={`Uninstall ${plugin.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onUninstall(plugin.id);
+                            }}
+                            className="p-1.5 rounded-full text-white/40 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      {!loading && plugins.length > 0 && TRUST_SECTIONS.every((s) => plugins.filter((p) => p.trust === s.trust && matches(p)).length === 0) && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Storefront size={28} className="text-[var(--text-dim)]" />
+          <p className="text-xs text-[var(--text-muted)] max-w-xs mt-2">
+            No plugins match this filter.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PluginsView({ onDismiss, className = "", initialTab = "installed", onOpenPlugin }: PluginsViewProps) {
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,13 +307,30 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [connectingMcp, setConnectingMcp] = useState(false);
   const [mcpWarning, setMcpWarning] = useState<string | null>(null);
+  const [mcpAcknowledged, setMcpAcknowledged] = useState(false);
 
-  // Install from Manifest URL state
-  const [showInstallUrlModal, setShowInstallUrlModal] = useState(false);
-  const [manifestUrl, setManifestUrl] = useState("");
-  const [installUrlLoading, setInstallUrlLoading] = useState(false);
-  const [installUrlError, setInstallUrlError] = useState<string | null>(null);
-  const [pendingManifest, setPendingManifest] = useState<any | null>(null);
+  // Client-side preview of exactly what connecting will grant (mirrors the
+  // server install: net:hostname, mcp:server, plus a stored secret when a
+  // token is given). Shown before connecting so the grant is explicit and
+  // reviewable; revocation happens per-plugin via Uninstall.
+  const mcpPreviewPermissions = (() => {
+    try {
+      const host = new URL(mcpUrl.trim()).hostname || mcpUrl.trim();
+      if (!mcpUrl.trim()) return [];
+      const perms: Array<{ type: string; label: string }> = [
+        { type: "net", label: `Hosts: ${host}` },
+        { type: "mcp", label: `Server: ${mcpUrl.trim()}` },
+      ];
+      if (mcpToken.trim()) perms.push({ type: "secret", label: "Secret: stored token" });
+      return perms;
+    } catch {
+      return mcpUrl.trim() ? [{ type: "mcp", label: `Server: ${mcpUrl.trim()}` }] : [];
+    }
+  })();
+
+  // Install from Manifest URL state — removed: remote-URL install is no longer
+  // offered (security: unverified remote code must never execute in the
+  // workspace). Plugins come from the curated store or the agent.
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchPlugins = async () => {
@@ -170,6 +431,10 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
       setMcpError("Name and server URL are required.");
       return;
     }
+    if (!mcpAcknowledged) {
+      setMcpError("Review the requested permissions below and confirm to connect.");
+      return;
+    }
 
     setConnectingMcp(true);
     setMcpError(null);
@@ -195,6 +460,7 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
       }
 
       setShowMcpModal(false);
+      setMcpAcknowledged(false);
       setMcpName("");
       setMcpUrl("");
       setMcpToken("");
@@ -207,124 +473,6 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
     } finally {
       setConnectingMcp(false);
     }
-  };
-
-  const handleInspectUrl = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manifestUrl.trim()) {
-      setInstallUrlError("Manifest URL is required.");
-      return;
-    }
-
-    setInstallUrlLoading(true);
-    setInstallUrlError(null);
-
-    try {
-      const res = await fetch("/api/plugins/install-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: manifestUrl.trim(),
-          permissionsConfirmed: false,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setInstallUrlError(data.error || "Failed to inspect remote manifest.");
-        return;
-      }
-
-      if (data.requiresConfirmation) {
-        setPendingManifest(data.manifest);
-      } else if (data.success) {
-        setShowInstallUrlModal(false);
-        setManifestUrl("");
-        setPendingManifest(null);
-        await fetchPlugins();
-      }
-    } catch (err: any) {
-      setInstallUrlError(err.message || "Network error fetching manifest.");
-    } finally {
-      setInstallUrlLoading(false);
-    }
-  };
-
-  const handleConfirmInstallUrl = async () => {
-    setInstallUrlLoading(true);
-    setInstallUrlError(null);
-
-    try {
-      const res = await fetch("/api/plugins/install-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: manifestUrl.trim(),
-          permissionsConfirmed: true,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setInstallUrlError(data.error || "Failed to install plugin.");
-        return;
-      }
-
-      setShowInstallUrlModal(false);
-      setManifestUrl("");
-      setPendingManifest(null);
-      await fetchPlugins();
-    } catch (err: any) {
-      setInstallUrlError(err.message || "Network error installing plugin.");
-    } finally {
-      setInstallUrlLoading(false);
-    }
-  };
-
-  const renderStatusDots = (pluginId: string) => {
-    const list = executions[pluginId] || [];
-    const dots = Array.from({ length: 5 }).map((_, i) => list[i] || null);
-
-    return (
-      <div className="flex items-center gap-1">
-        {dots.map((item, idx) => {
-          if (!item) {
-            return (
-              <Circle
-                key={`empty-${idx}`}
-                className="w-2 h-2 text-white/10"
-                weight="fill"
-              />
-            );
-          }
-          if (item.status === "success") {
-            return (
-              <Circle
-                key={item.executionId}
-                className="w-2 h-2 text-emerald-400"
-                weight="fill"
-              />
-            );
-          }
-          if (item.status === "failed") {
-            return (
-              <Circle
-                key={item.executionId}
-                className="w-2 h-2 text-red-400"
-                weight="fill"
-              />
-            );
-          }
-          return (
-            <Circle
-              key={item.executionId}
-              className="w-2 h-2 text-amber-400"
-              weight="fill"
-            />
-          );
-        })}
-      </div>
-    );
   };
 
   return (
@@ -362,19 +510,10 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
           <button
             type="button"
             onClick={() => {
-              setPendingManifest(null);
-              setInstallUrlError(null);
-              setShowInstallUrlModal(true);
+              setMcpError(null);
+              setMcpAcknowledged(false);
+              setShowMcpModal(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border border-sky-500/30 active:scale-95 transition-all"
-          >
-            <Link className="w-3.5 h-3.5" weight="bold" />
-            <span>Install URL</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowMcpModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 hover:bg-white/15 text-white active:scale-95 transition-all"
           >
             <Plus className="w-3.5 h-3.5" weight="bold" />
@@ -420,99 +559,16 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
       {activeTab === "discover" ? (
         <PluginStoreView onOpenPlugin={onOpenPlugin} />
       ) : (
-      <>
-      {/* Grid of Installed Plugins */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-32 rounded-xl border border-white/5 bg-white/[0.02] animate-pulse"
-            />
-          ))}
-        </div>
-      ) : plugins.length === 0 ? (
-        <div className="p-12 text-center border border-dashed border-white/10 rounded-2xl text-white/40 text-sm">
-          No plugins registered.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {plugins.map((plugin) => {
-            const Icon = resolveSurfaceIcon(plugin.icon);
-            const isSelected = selectedPlugin?.id === plugin.id;
-
-            return (
-              <div
-                key={plugin.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedPlugin(plugin)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    setSelectedPlugin(plugin);
-                  }
-                }}
-                className={`relative p-4 rounded-xl border text-left cursor-pointer transition-all duration-150 flex flex-col justify-between gap-3 ${
-                  isSelected
-                    ? "border-emerald-500/50 bg-emerald-500/[0.04] shadow-lg shadow-emerald-950/20"
-                    : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/20"
-                } ${!plugin.enabled ? "opacity-50 grayscale" : ""}`}
-              >
-                {/* Header row */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-white/[0.06] border border-white/5">
-                      <Icon className="w-4 h-4 text-white/80" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium text-white/95">
-                          {plugin.name}
-                        </span>
-                        <span className="text-[10px] text-white/40 font-mono">
-                          v{plugin.version}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-white/40 font-mono uppercase tracking-wider">
-                        {plugin.trust}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Enable Toggle Button */}
-                  <button
-                    type="button"
-                    aria-label={`Toggle ${plugin.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggle(plugin.id);
-                    }}
-                    className="text-white/60 hover:text-white transition-colors"
-                  >
-                    {plugin.enabled ? (
-                      <ToggleRight className="w-6 h-6 text-emerald-400" weight="fill" />
-                    ) : (
-                      <ToggleLeft className="w-6 h-6 text-white/30" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Description */}
-                <p className="text-xs text-white/60 line-clamp-2 leading-relaxed">
-                  {plugin.description || "No description provided."}
-                </p>
-
-                {/* Footer with status dots & capability count */}
-                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px] text-white/50">
-                  <span>{plugin.capabilitiesCount} capabilities</span>
-                  {renderStatusDots(plugin.id)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      </>
+        <InstalledPluginList
+          plugins={plugins}
+          loading={loading}
+          executions={executions}
+          selectedId={selectedPlugin?.id ?? null}
+          onSelect={setSelectedPlugin}
+          onToggle={handleToggle}
+          onUninstall={handleUninstall}
+          onOpenPlugin={onOpenPlugin}
+        />
       )}
 
       {/* Floating Detail Sheet */}
@@ -704,17 +760,56 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
                 />
               </div>
 
+              {/* Permission preview: the exact grant, before connecting */}
+              {mcpPreviewPermissions.length > 0 && (
+                <div className="flex flex-col gap-2 p-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/20">
+                  <span className="text-xs font-medium text-amber-200/90">
+                    This server will be granted:
+                  </span>
+                  <div className="flex flex-col gap-1.5">
+                    {mcpPreviewPermissions.map((perm) => (
+                      <span
+                        key={perm.type}
+                        className="inline-flex items-center gap-1.5 text-xs text-white/80 font-mono"
+                      >
+                        <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {perm.type}
+                        </span>
+                        <span className="text-[11px] text-white/60 truncate">
+                          {perm.label}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                  <label className="flex items-start gap-2 text-xs text-white/70 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mcpAcknowledged}
+                      onChange={(e) => setMcpAcknowledged(e.target.checked)}
+                      className="mt-0.5 accent-emerald-400"
+                    />
+                    <span>
+                      I understand these permissions. I can revoke them anytime by uninstalling this server below.
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
                 <button
                   type="button"
-                  onClick={() => setShowMcpModal(false)}
+                  onClick={() => {
+                    setShowMcpModal(false);
+                    setMcpAcknowledged(false);
+                  }}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={connectingMcp}
+                  disabled={connectingMcp || !mcpAcknowledged}
+                  title={!mcpAcknowledged ? "Review and confirm the permissions above first" : undefined}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-black font-semibold disabled:opacity-50 transition-all"
                 >
                   <Check className="w-3.5 h-3.5" weight="bold" />
@@ -726,132 +821,6 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
         </div>
       )}
 
-      {/* Install Plugin from Manifest URL Modal */}
-      {showInstallUrlModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-lg p-5 rounded-2xl bg-[#0c0e14] border border-white/15 shadow-2xl flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <Link className="w-5 h-5 text-sky-400" />
-                <h3 className="text-sm font-semibold text-white">Install Plugin from Manifest URL</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowInstallUrlModal(false);
-                  setPendingManifest(null);
-                }}
-                className="p-1 rounded-md text-white/50 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {installUrlError && (
-              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
-                {installUrlError}
-              </div>
-            )}
-
-            {!pendingManifest ? (
-              <form onSubmit={handleInspectUrl} className="flex flex-col gap-3">
-                <p className="text-xs text-white/60">
-                  Enter the URL of a remote <code className="text-sky-300">plugin.json</code> manifest. The runtime will validate its schema and prompt you to inspect requested permissions before installing.
-                </p>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-white/70">Manifest URL</label>
-                  <input
-                    type="url"
-                    placeholder="https://example.com/plugins/my-tool/plugin.json"
-                    value={manifestUrl}
-                    onChange={(e) => setManifestUrl(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-sky-500/50"
-                    required
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setShowInstallUrlModal(false)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={installUrlLoading}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500 hover:bg-sky-600 text-black font-semibold disabled:opacity-50 transition-all"
-                  >
-                    <span>{installUrlLoading ? "Inspecting…" : "Inspect Manifest"}</span>
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-white">{pendingManifest.name}</span>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/10 text-white/70">v{pendingManifest.version}</span>
-                  </div>
-                  <p className="text-xs text-white/60">{pendingManifest.description}</p>
-                  <div className="text-[11px] text-white/40 font-mono mt-1">
-                    ID: {pendingManifest.id} • Capabilities: {pendingManifest.capabilities?.length || 0}
-                  </div>
-                </div>
-
-                {/* Permissions Confirmation List */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
-                    <ShieldWarning className="w-4 h-4 text-amber-400" weight="bold" />
-                    <span>Requested Permissions</span>
-                  </div>
-                  {pendingManifest.permissions && pendingManifest.permissions.length > 0 ? (
-                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20 max-h-40 overflow-y-auto">
-                      {pendingManifest.permissions.map((perm: any, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs text-white/80 font-mono">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            {perm.type}
-                          </span>
-                          <span className="text-[11px] text-white/60 truncate">
-                            {perm.type === "net" && `Hosts: ${perm.hosts?.join(", ")}`}
-                            {perm.type === "exec" && `Commands: ${perm.commands?.join(", ")}`}
-                            {perm.type === "fs" && `Scope: ${perm.scope} (${perm.mode})`}
-                            {perm.type === "mcp" && `Server: ${perm.server}`}
-                            {perm.type === "secret" && `Secret: ${perm.name}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-emerald-400/80 italic">No special permissions requested.</span>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setPendingManifest(null)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmInstallUrl}
-                    disabled={installUrlLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-black font-semibold disabled:opacity-50 transition-all"
-                  >
-                    <Check className="w-3.5 h-3.5" weight="bold" />
-                    <span>{installUrlLoading ? "Installing…" : "Grant & Install"}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

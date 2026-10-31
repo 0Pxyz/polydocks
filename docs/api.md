@@ -31,7 +31,7 @@ Product routes delegate to one shared layer (`server/facade/shared.ts`); the HTT
 | `GET /api/maps*`, `GET /api/world*` | plugins | Map/city data backing dock views |
 | `GET /api/reader` | plugins | First-party reader backend (SSRF-guarded) |
 | `POST /api/mcp` | plugins | External agents drive capabilities over MCP |
-| `POST /api/plugins/mcp/connect`, `POST /install-url` | plugins | Lifecycle transports |
+| `POST /api/plugins/mcp/connect` | plugins | MCP server connect (explicit user confirmation) |
 | `GET /api/cities/:id/tabs`, `/:id/tabs/:tabId/srcdoc`, `/:id/features/:tabId` | dock | Tabs mounted in the dock |
 | `GET /api/workspaces*` (incl. `:id/plugins` + `pinned[]`, `:id/pins` POST/DELETE, `srcdoc`) | dock | Workspace = dock scope; mounts per workspace; server pin record merged by the UI |
 | `POST /api/dock/action`, `GET /api/dock/tabs`, `POST /api/dock/scope`, `POST /api/dock/appearance` | dock | Facade (`PRODUCT_SURFACE=facade`); delegates to existing tab/enter/theme executors |
