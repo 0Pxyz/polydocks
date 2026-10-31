@@ -24,7 +24,8 @@ export type BridgeAction =
   | "task.done"
   | "runtime.error"
   | "runtime.ready"
-  | "ui.ready";
+  | "ui.ready"
+  | "theme.get";
 
 export type BridgeTaskStatus = "running" | "done" | "error";
 
