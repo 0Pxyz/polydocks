@@ -83,3 +83,4 @@
 | 2026-10-31 | Thought stream + non-blocking agent UI (#185): fading ThoughtStream above the home orb, provider-agnostic event contract + adapter, orb job indicator with cancel, dev fake-job emitter, queue/adapter unit tests |
 | 2026-10-31 | ThoughtStream sheet-only (#185 follow-up): thoughts render above the bottom sheet instead of the home orb; sidebar/full keep transcript only |
 | 2026-10-31 | Native tool search replaces custom find_capabilities (#222): deferred namespaces + single tool_search on Responses path, capability bus stays the execution backend; Chat fallback keeps flat catalog; eval 18/18 identical to baseline | [#227](https://github.com/0Pxyz/polymax/pull/227) |
+| 2026-10-31 | Unified full/minimal tool catalogs into canonicalCatalog with surface filters (#204): derived views, plugins.install on every surface, MIGRATION.md Slice 1 reference fixed | [#228](https://github.com/0Pxyz/polymax/pull/228) |

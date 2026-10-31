@@ -21,9 +21,10 @@ import {
   createResponsesTurn,
   hasResponsesSurface,
   normalizeCallId,
+  toResponsesName,
   toResponsesUserContent,
 } from "./responses";
-import { buildResponsesTools, resolveResponsesToolName } from "./namespaces";
+import { buildResponsesTools, hasReservedWebSearchCollision, resolveResponsesToolName } from "./namespaces";
 import {
   getSession,
   createSession,
@@ -290,6 +291,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const baseTools = tools === defaultTools ? resolveTools(tools) : tools;
   const scopedTools = baseTools.filter((tool) => !deniedTools.has(tool.name));
 
+  // Built-in search grounding (#223) rides the Responses request when the
+  // intent may research (the custom search_web alias is not denied) and
+  // no offered Responses function collides with the reserved browser.*
+  // names (checked on the sanitized names the API actually sees). The
+  // model decides whether to search; enabling never forces one.
+  // Defined here so both the system prompt and the turn parameters agree.
+  const builtinWebSearch =
+    !deniedTools.has("search_web") &&
+    !hasReservedWebSearchCollision(scopedTools.map((t) => toResponsesName(t.name)));
+
   // Progressive context: skill selection runs before the first model call so
   // the turn knows up front whether it needs workspace state at all. Pure
   // conversational turns (general/theme, no workspace skills,
@@ -314,19 +325,28 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // check (the final answer may only claim what an ok:true envelope shows).
   const turnReceipts: Array<{ tool: string; args: Record<string, unknown>; output: unknown }> = [];
 
-  // Measured cost accounting: every Chat Completions response carries
-  // `usage`, accumulated here and reported in `agent.finish`.
+  // Measured cost accounting: every response carries `usage`,
+  // accumulated here and reported in `agent.finish` (#223 adds the
+  // prefix-cache hit count alongside the token totals).
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalCachedTokens = 0;
   const noteUsage = (response: unknown) => {
     const u = extractUsage(response);
     totalInputTokens += u.inputTokens;
     totalOutputTokens += u.outputTokens;
+    totalCachedTokens += u.cachedTokens;
   };
+  // Citations from built-in search grounding (#223): url_citation
+  // annotations arrive on the answer text; the model text is kept
+  // untouched and the cited sources ride the finish payload.
+  const turnCitations: Array<{ url: string; title: string }> = [];
+  const seenCitationUrls = new Set<string>();
   const finishPayload = async (text: string) => {
     const { turn, daily } = await recordTurnUsage({
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
+      cachedTokens: totalCachedTokens,
       steps: currentStep,
       skills: loadedSkills,
     });
@@ -337,10 +357,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       skills: loadedSkills,
       inputTokens: turn.inputTokens,
       outputTokens: turn.outputTokens,
+      cachedTokens: turn.cachedTokens,
+      citations: turnCitations,
       costUsd: turn.costUsd,
       dailyTurns: daily.turns,
       dailyInputTokens: daily.inputTokens,
       dailyOutputTokens: daily.outputTokens,
+      dailyCachedTokens: daily.cachedTokens,
       dailyCostUsd: daily.costUsd,
     };
   };
@@ -497,6 +520,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
     }
 
+    // Built-in search grounding note (#223): on the Responses path with
+    // grounding enabled, the model searches by reasoning — not by calling
+    // a tool. Name the route so skill text that says "call search_web"
+    // never sends it hunting for a tool that is not offered.
+    if (hasResponsesSurface(llmClient) && builtinWebSearch) {
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Web Search (built-in, this turn)\nServer-side grounding is enabled: ask research questions in natural language and cited results arrive automatically. Do NOT look for a search_web tool (not offered on this path). For full-page reads use fetch_page (it saves to workspace sources); to show a link in the Browser surface use open_source.`;
+    }
     // Per-turn workspace mount state: id, version, enabled. The agent
     // organizes and integrates mounted tools; it does not redesign them.
     // Skipped on the fast path (no workspace signals this turn).
@@ -652,10 +682,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     // Responses input tools: the scoped set grouped into deferred
     // namespaces with native tool search (#222). Coverage stays 1:1 with
-    // the scoped Chat tools minus the superseded `find_capabilities` root;
+    // the scoped Chat tools minus the superseded roots (custom
+    // find_capabilities, custom search_web — the built-ins are the route);
     // denylists are already applied to `scopedTools`, and the bus
-    // re-checks policy at invoke time.
-    const builtResponses = buildResponsesTools(scopedTools);
+    // re-checks policy at invoke time. `builtinWebSearch` (defined above
+    // with scopedTools) decides grounding for the same request.
+    const builtResponses = buildResponsesTools(scopedTools, { builtinWebSearch });
     const responsesTools = builtResponses.tools;
     const responsesNameToOriginal = builtResponses.nameMap;
 
@@ -749,6 +781,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           inputItems: responsesInput,
           tools: responsesTools,
           effort: options.reasoningEffort,
+          webSearch: builtinWebSearch ? { enabled: true } : undefined,
           signal,
           onTextDelta: (delta) =>
             emit({
@@ -767,10 +800,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         }));
         // Record model outputs in the stateless input so the next turn
         // replays the full conversation: hosted tool_search handshake
-        // items first (keeps the loaded set stable), then each
-        // function_call paired with the function_call_output appended
-        // after execution.
+        // items first (keeps the loaded set stable), then server-side
+        // web_search calls, then each function_call paired with the
+        // function_call_output appended after execution.
         for (const ts of turn.toolSearchItems) responsesInput.push(ts);
+        for (const ws of turn.webSearchItems) responsesInput.push(ws);
+        for (const cite of turn.citations) {
+          if (!seenCitationUrls.has(cite.url)) {
+            seenCitationUrls.add(cite.url);
+            turnCitations.push(cite);
+          }
+        }
         for (const c of normalizedCalls) {
           responsesInput.push({
             type: "function_call",
@@ -1181,6 +1221,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           ],
           tools: [],
           effort: options.reasoningEffort,
+          webSearch: builtinWebSearch ? { enabled: true } : undefined,
           signal,
           onTextDelta: () => {},
         });

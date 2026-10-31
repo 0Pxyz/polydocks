@@ -123,4 +123,153 @@ describe("Agent loop over Responses API", () => {
       expect(flatNames).toContain("invoke_capability");
     }
   });
+
+  it("grounds research turns with built-in web_search and retires the custom alias", async () => {
+    let seenTools: any[] = [];
+    let seenInclude: any[] = [];
+    const mockClient: any = {
+      responses: {
+        create: async (params: any) => {
+          seenTools = params.tools ?? [];
+          seenInclude = params.include ?? [];
+          return {
+            id: "resp_ws_loop",
+            usage: { input_tokens: 10, output_tokens: 5 },
+            output: [{ type: "message", content: [{ type: "output_text", text: "Grounded answer." }] }],
+          };
+        },
+      },
+    };
+    const searchAlias: AgentTool = {
+      name: "search_web",
+      description: "custom search",
+      schema: z.object({ query: z.string() }),
+      execute: async () => ({ results: [] }),
+    };
+    const fetchAlias: AgentTool = {
+      name: "fetch_page",
+      description: "custom fetch",
+      schema: z.object({ urls: z.array(z.string()) }),
+      execute: async () => ({ pages: [] }),
+    };
+    const result = await runAgentLoop({
+      prompt: "Who won the most recent Formula 1 race?",
+      tools: [searchAlias, fetchAlias],
+      llmClient: mockClient,
+      onEvent: () => {},
+    });
+    expect(result.status).toBe("completed");
+    const kinds = seenTools.map((t) => t.type);
+    expect(kinds).toContain("web_search");
+    expect(kinds).toContain("tool_search");
+    const flatNames: string[] = [];
+    for (const t of seenTools) {
+      if (t.type === "namespace") for (const fn of t.tools) flatNames.push(fn.name);
+      else if (t.type === "function") flatNames.push(t.name);
+    }
+    expect(flatNames).not.toContain("search_web");
+    expect(seenInclude).toContain("web_search_call.results");
+  });
+
+  it("disables grounding when the intent denies research", async () => {
+    let seenTools: any[] = [];
+    const mockClient: any = {
+      responses: {
+        create: async (params: any) => {
+          seenTools = params.tools ?? [];
+          return {
+            id: "resp_ws_theme",
+            usage: { input_tokens: 10, output_tokens: 5 },
+            output: [{ type: "message", content: [{ type: "output_text", text: "Theme applied." }] }],
+          };
+        },
+      },
+    };
+    const result = await runAgentLoop({
+      prompt: "Change my theme to dark wallpaper",
+      llmClient: mockClient,
+      onEvent: () => {},
+    });
+    expect(result.status).toBe("completed");
+    expect(seenTools.map((t) => t.type)).not.toContain("web_search");
+  });
+
+  it("disables grounding on reserved-name collision and keeps the custom alias", async () => {
+    let seenTools: any[] = [];
+    const mockClient: any = {
+      responses: {
+        create: async (params: any) => {
+          seenTools = params.tools ?? [];
+          return {
+            id: "resp_ws_denied",
+            usage: { input_tokens: 10, output_tokens: 5 },
+            output: [{ type: "message", content: [{ type: "output_text", text: "Theme applied." }] }],
+          };
+        },
+      },
+    };
+    const searchAlias: AgentTool = {
+      name: "search_web",
+      description: "custom search",
+      schema: z.object({ query: z.string() }),
+      execute: async () => ({ results: [] }),
+    };
+    const collidingAlias: AgentTool = {
+      name: "browser.open",
+      description: "reserved-name stand-in",
+      schema: z.object({ url: z.string() }),
+      execute: async () => ({ ok: true }),
+    };
+    const result = await runAgentLoop({
+      prompt: "Who won the most recent Formula 1 race?",
+      tools: [searchAlias, collidingAlias],
+      llmClient: mockClient,
+      onEvent: () => {},
+    });
+    expect(result.status).toBe("completed");
+    expect(seenTools.map((t) => t.type)).not.toContain("web_search");
+    // Fallback: the custom alias stays namespaced so the turn keeps a route.
+    const flatNames: string[] = [];
+    for (const t of seenTools) {
+      if (t.type === "namespace") for (const fn of t.tools) flatNames.push(fn.name);
+    }
+    expect(flatNames).toContain("search_web");
+  });
+
+  it("carries url_citations into the finish payload", async () => {
+    const events: AgentStepEvent[] = [];
+    let calls = 0;
+    const mockClient: any = {
+      responses: {
+        create: async () => {
+          calls++;
+          return {
+            id: `resp_cite_${calls}`,
+            usage: { input_tokens: 10, output_tokens: 5 },
+            output: [
+              { type: "web_search_call", id: "ws_c1", status: "completed" },
+              {
+                type: "message",
+                content: [
+                  {
+                    type: "output_text",
+                    text: "Spark launched in April.",
+                    annotations: [{ type: "url_citation", url: "https://example.com/spark", title: "Spark" }],
+                  },
+                ],
+              },
+            ],
+          };
+        },
+      },
+    };
+    const result = await runAgentLoop({
+      prompt: "When was Muse Spark announced?",
+      llmClient: mockClient,
+      onEvent: (e) => events.push(e),
+    });
+    expect(result.status).toBe("completed");
+    const finish = events.find((e) => e.type === "agent.finish");
+    expect(finish?.payload?.citations).toEqual([{ url: "https://example.com/spark", title: "Spark" }]);
+  });
 });

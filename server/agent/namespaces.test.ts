@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { z } from "zod";
-import { buildResponsesTools, resolveResponsesToolName } from "./namespaces";
+import { buildResponsesTools, hasReservedWebSearchCollision, resolveResponsesToolName } from "./namespaces";
 import { fullTools, minimalTools } from "./tools";
 import { INTENT_TOOL_DENYLIST } from "./intent";
 import type { AgentTool } from "./tools/types";
@@ -16,7 +16,7 @@ function fakeTool(name: string): AgentTool {
 
 /** Native tool search replaces custom discovery (#222). */
 describe("Responses namespace builder", () => {
-  it("covers the full catalog 1:1 minus the superseded find_capabilities root", () => {
+  it("covers the full catalog 1:1 minus the superseded custom roots", () => {
     const { tools, nameMap } = buildResponsesTools(fullTools);
     const offered = new Set<string>();
     for (const t of tools) {
@@ -24,17 +24,35 @@ describe("Responses namespace builder", () => {
       else if (t.type === "function") offered.add(t.name);
     }
     for (const t of fullTools) {
-      if (t.name === "find_capabilities") {
-        expect(nameMap.has("find_capabilities")).toBe(false);
+      if (t.name === "find_capabilities" || t.name === "search_web") {
+        expect(nameMap.has(t.name)).toBe(false);
         continue;
       }
-      const sanitized = t.name.replaceAll(".", "_");
       const dots = (t.name.match(/\./g) ?? []).length;
-      const key = dots <= 1 ? t.name : sanitized;
+      const key = dots <= 1 ? t.name : t.name.replaceAll(".", "_");
       expect(nameMap.get(key)).toBe(t.name);
     }
     // Every non-superseded tool is offered exactly once.
-    expect(offered.size).toBe(fullTools.length - 1);
+    expect(offered.size).toBe(fullTools.length - 2);
+  });
+
+  it("keeps the custom search alias when grounding is unavailable", () => {
+    const { tools, nameMap } = buildResponsesTools(fullTools, { builtinWebSearch: false });
+    const offered: string[] = [];
+    for (const t of tools) {
+      if (t.type === "namespace") for (const fn of t.tools) offered.push(fn.name);
+      else if (t.type === "function") offered.push(t.name);
+    }
+    expect(offered).toContain("search_web");
+    expect(offered).not.toContain("find_capabilities");
+    expect(nameMap.get("search_web")).toBe("search_web");
+    expect(offered.length).toBe(fullTools.length - 1);
+  });
+
+  it("rejects reserved browser.* names for grounding", () => {
+    expect(hasReservedWebSearchCollision(["dock_search", "cap_browser_open"])).toBe(false);
+    expect(hasReservedWebSearchCollision(["browser.open"])).toBe(true);
+    expect(hasReservedWebSearchCollision(["browser.search", "dock_search"])).toBe(true);
   });
 
   it("covers the minimal verb catalog the same way", () => {

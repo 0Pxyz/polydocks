@@ -36,9 +36,16 @@ describe("Turn usage accounting (measured, not estimated)", () => {
     expect(extractUsage({ usage: { prompt_tokens: 1200, completion_tokens: 300 } })).toEqual({
       inputTokens: 1200,
       outputTokens: 300,
+      cachedTokens: 0,
     });
-    expect(extractUsage({ choices: [] })).toEqual({ inputTokens: 0, outputTokens: 0 });
-    expect(extractUsage(null)).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(extractUsage({ choices: [] })).toEqual({ inputTokens: 0, outputTokens: 0, cachedTokens: 0 });
+    expect(extractUsage(null)).toEqual({ inputTokens: 0, outputTokens: 0, cachedTokens: 0 });
+  });
+
+  it("extracts prefix-cache hits from Responses usage details", () => {
+    expect(
+      extractUsage({ usage: { input_tokens: 5000, output_tokens: 100, input_tokens_details: { cached_tokens: 4200 } } })
+    ).toEqual({ inputTokens: 5000, outputTokens: 100, cachedTokens: 4200 });
   });
 
   it("cost stays 0 without configured rates, uses env rates when set", () => {
