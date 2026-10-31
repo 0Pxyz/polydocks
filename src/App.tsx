@@ -14,7 +14,6 @@ import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { ToolSurface } from "@/features/dock/ToolSurface";
 import { BesidePanel, type BesideTab } from "@/features/dock/BesidePanel";
-import { LiveOnboardingOverlay } from "@/features/onboarding/LiveOnboardingOverlay";
 import {
   matchDockShortcut,
   panelLayout,
@@ -818,9 +817,6 @@ export default function App() {
               </DockSurface>
             )}
           </main>
-
-          {/* Live Onboarding Tour Floating Guide (Bottom Pill) */}
-          <LiveOnboardingOverlay />
         </div>
       </RootLayout>
     </AppProviders>
