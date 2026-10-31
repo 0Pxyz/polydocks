@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
-import { getToolBrand } from "@/lib/agent/events";
+import { getToolBrand, getToolBrandByLabel } from "@/lib/agent/events";
 import {
   pushLine,
   riseDurationMs,
@@ -52,7 +52,7 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
     >
       <style>{THOUGHT_STREAM_CSS}</style>
       {visible.map((line, i) => {
-        const brand = getToolBrand(line.tool);
+        const brand = getToolBrand(line.tool) ?? getToolBrand(line.capability) ?? getToolBrandByLabel(line.text);
         return (
         <div
           key={line.id}

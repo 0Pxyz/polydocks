@@ -23,8 +23,10 @@ export interface ThoughtLine {
   text: string;
   jobId?: string;
   level?: "dispatcher" | "worker";
-  /** Tool that produced the line; drives the TinyFish brand mark. */
+  /** Tool that produced the line; drives the brand mark. */
   tool?: string;
+  /** Capability id when routed via invoke_capability; also drives the mark. */
+  capability?: string;
   at: number;
 }
 
@@ -44,7 +46,7 @@ let nextId = 1;
 
 export function makeThoughtLine(
   text: string,
-  opts?: { jobId?: string; level?: "dispatcher" | "worker"; tool?: string; at?: number }
+  opts?: { jobId?: string; level?: "dispatcher" | "worker"; tool?: string; capability?: string; at?: number }
 ): ThoughtLine {
   return {
     id: nextId++,
@@ -52,6 +54,7 @@ export function makeThoughtLine(
     jobId: opts?.jobId,
     level: opts?.level,
     tool: opts?.tool,
+    capability: opts?.capability,
     at: opts?.at ?? Date.now(),
   };
 }
@@ -87,6 +90,7 @@ export interface UIThoughtSource {
   goal?: string;
   level?: "dispatcher" | "worker";
   tool?: string;
+  capability?: string;
 }
 
 /**
@@ -124,7 +128,7 @@ export function adaptToThought(event: AgentEvent | UIThoughtSource): ThoughtLine
       // (reply deltas, finals, errors) stays in the sheet.
       const src = event as UIThoughtSource;
       if (src.type === "tool.started" && src.statusLabel) {
-        return makeThoughtLine(src.statusLabel, { jobId: src.jobId, tool: src.tool });
+        return makeThoughtLine(src.statusLabel, { jobId: src.jobId, tool: src.tool, capability: src.capability });
       }
       return null;
     }
@@ -175,7 +179,7 @@ function broadcast(line: ThoughtLine): void {
 }
 
 /** Dev + agent API: push a short status line into the stream. */
-export function pushThought(text: string, opts?: { jobId?: string; level?: "dispatcher" | "worker" }): void {
+export function pushThought(text: string, opts?: { jobId?: string; level?: "dispatcher" | "worker"; tool?: string; capability?: string }): void {
   if (!text.trim()) return;
   broadcast(makeThoughtLine(text, opts));
 }
