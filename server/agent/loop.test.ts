@@ -26,7 +26,7 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
 
     const result = await runAgentLoop({
       prompt: "Where am I?",
-      cityId: "quantum-computing",
+      workspaceId: "quantum-computing",
       llmClient: mockLlmClient,
       onEvent: (event) => events.push(event),
     });
@@ -260,7 +260,7 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
                 {
                   message: {
                     role: "assistant",
-                    content: "Synthesized overview of newly founded territory with immediate next steps.",
+                    content: "Synthesized overview with immediate next steps.",
                   },
                 },
               ],
@@ -278,13 +278,13 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
     });
 
     expect(result.status).toBe("max_steps_reached");
-    expect(result.text).toBe("Synthesized overview of newly founded territory with immediate next steps.");
+    expect(result.text).toBe("Synthesized overview with immediate next steps.");
     expect(events[events.length - 1].payload?.text).toBe(
-      "Synthesized overview of newly founded territory with immediate next steps."
+      "Synthesized overview with immediate next steps."
     );
   });
 
-  it("should emit map.changed when plan_map is executed", async () => {
+  it("should emit plugin.created when create_plugin succeeds", async () => {
     const events: AgentStepEvent[] = [];
     let callCount = 0;
 
@@ -301,11 +301,17 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
                       role: "assistant",
                       tool_calls: [
                         {
-                          id: "call_plan_1",
+                          id: "call_create_1",
                           type: "function",
                           function: {
-                            name: "plan_map",
-                            arguments: JSON.stringify({ interests: ["Neuroscience"] }),
+                            name: "create_plugin",
+                            arguments: JSON.stringify({
+                              id: "test-loop-plugin",
+                              name: "Loop Plugin",
+                              userApproved: true,
+                              description: "Created by the loop test",
+                              code: "import { Button } from \"@/components/ui/button\";\nimport { createRoot } from \"react-dom/client\";\nfunction App() { return <Button>hi</Button>; }\ncreateRoot(document.getElementById(\"app\")).render(<App />);",
+                            }),
                           },
                         },
                       ],
@@ -319,7 +325,7 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
                 {
                   message: {
                     role: "assistant",
-                    content: "Neuroscience region charted on the world map.",
+                    content: "Plugin mounted.",
                   },
                 },
               ],
@@ -330,15 +336,14 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
     };
 
     const result = await runAgentLoop({
-      prompt: "Add Neuroscience to the world map",
+      prompt: "Build me a small plugin",
       llmClient: mockLlmClient,
       onEvent: (event) => events.push(event),
     });
 
     expect(result.status).toBe("completed");
-    const mapChangedEvent = events.find((e) => e.type === "map.changed");
-    expect(mapChangedEvent).toBeDefined();
-    expect((mapChangedEvent?.payload as any)?.spec?.regions?.some((r: any) => r.title === "Neuroscience")).toBe(true);
+    const createdEvent = events.find((e) => e.type === "plugin.created");
+    expect(createdEvent).toBeDefined();
   });
 
   it("should catch errors and emit error event", async () => {

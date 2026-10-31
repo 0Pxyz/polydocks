@@ -1,11 +1,5 @@
-import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
-import {
-  resolveSafeCityPath,
-  readCityFile,
-  deleteCityFile,
-} from "./cityWorkspace";
 import { recordAudit } from "../services/audit";
 import {
   upsertPluginFile,
@@ -422,7 +416,7 @@ export function escapeInlineScript(js: string): string {
  * on redeploy while registry rows survive. DB rows survive with the volume.
  */
 export async function writeFeature(
-  cityId: string,
+  workspaceId: string,
   featureId: string,
   options: {
     manifest: FeatureManifest;
@@ -464,7 +458,7 @@ export async function writeFeature(
 
   // Single source of truth: SQLite plugin_files. No filesystem mirroring.
   upsertPluginFile({
-    workspaceId: cityId,
+    workspaceId: workspaceId,
     pluginId: featureId,
     version: (manifestData as { version?: string }).version || "1.0.0",
     manifest: manifestData,
@@ -472,7 +466,7 @@ export async function writeFeature(
     srcdoc,
   });
 
-  recordAudit({ action: "create_feature", targetId: featureId, cityId, details: {
+  recordAudit({ action: "create_feature", targetId: featureId, workspaceId, details: {
     featureId,
     title: manifestData.title,
     scope: manifestData.scope,
@@ -489,7 +483,7 @@ export async function writeFeature(
  * Used by create_tab/update_tab legacy paths.
  */
 export async function writeLegacyFeature(
-  cityId: string,
+  workspaceId: string,
   featureId: string,
   manifest: FeatureManifest,
   html: string
@@ -500,13 +494,13 @@ export async function writeLegacyFeature(
     updatedAt: new Date().toISOString(),
   };
   upsertPluginFile({
-    workspaceId: cityId,
+    workspaceId: workspaceId,
     pluginId: featureId,
     version: (manifestData as { version?: string }).version || "1.0.0",
     manifest: manifestData,
     srcdoc: html,
   });
-  recordAudit({ action: "create_feature", targetId: featureId, cityId, details: {
+  recordAudit({ action: "create_feature", targetId: featureId, workspaceId, details: {
     featureId,
     title: manifestData.title,
     scope: manifestData.scope,
@@ -514,140 +508,37 @@ export async function writeLegacyFeature(
 }
 
 /**
- * Reads a feature from SQLite first, falling back to the filesystem only
- * during the migration window (workspaces not yet imported into the DB).
+ * Reads a feature from SQLite, the single source of truth.
  */
-export async function readFeature(cityId: string, featureId: string): Promise<FeatureData> {
-  // 1. SQLite single source of truth (exact workspace, then any workspace).
-  try {
-    const row = getPluginFile(featureId, cityId);
-    if (row) {
-      return {
-        manifest: row.manifest,
-        code: row.code,
-        srcdoc: row.srcdoc,
-        format: row.code ? "feature-ts" : "legacy-html",
-      };
-    }
-  } catch {
-    // Fall through to filesystem migration fallback.
-  }
-
-  // 2. Filesystem fallback during migration only.
-  try {
-    const manifestRaw = await readCityFile(cityId, `features/${featureId}/manifest.json`);
-    const manifest = JSON.parse(manifestRaw) as FeatureManifest;
-
-    let code: string | undefined;
-    try {
-      code = await readCityFile(cityId, `features/${featureId}/feature.ts`);
-    } catch {
-      // Code file optional if only srcdoc exists
-    }
-
-    let srcdoc: string;
-    try {
-      srcdoc = await readCityFile(cityId, `features/${featureId}/index.html`);
-    } catch {
-      if (code) {
-        if (codeHasImports(code)) {
-          const { bundleFeatureCode, compileGuestCss, getKitJs, getKitCss, getKitTokens, PLUGIN_CSP } =
-            await import("./reactKit");
-          srcdoc = buildReactSrcdoc(bundleFeatureCode(code), await compileGuestCss(code), manifest, {
-            js: getKitJs(),
-            css: getKitCss(),
-            tokens: getKitTokens(),
-            csp: PLUGIN_CSP,
-          });
-        } else {
-          const js = transpileFeatureCode(code);
-          srcdoc = buildFeatureSrcdoc(js, manifest);
-        }
-      } else {
-        throw new Error(`Feature "${featureId}" is missing compiled srcdoc.`);
-      }
-    }
-
+export async function readFeature(workspaceId: string, featureId: string): Promise<FeatureData> {
+  const row = getPluginFile(featureId, workspaceId);
+  if (row) {
     return {
-      manifest,
-      code,
-      srcdoc,
-      format: "feature-ts",
-    };
-  } catch {
-    // 2. Fall back to legacy tab blob
-    const manifestRaw = await readCityFile(cityId, `tabs/${featureId}/manifest.json`);
-    const manifest = JSON.parse(manifestRaw) as FeatureManifest;
-    const srcdoc = await readCityFile(cityId, `tabs/${featureId}/index.html`);
-
-    return {
-      manifest,
-      srcdoc,
-      format: "legacy-html",
+      manifest: row.manifest,
+      code: row.code,
+      srcdoc: row.srcdoc,
+      format: row.code ? "feature-ts" : "legacy-html",
     };
   }
+  throw new Error(`Feature "${featureId}" not found in workspace "${workspaceId}".`);
 }
 
 /**
- * Lists all registered features and tabs: SQLite first, filesystem fallback
- * merged in during the migration window.
+ * Lists all registered features from SQLite, the single source of truth.
  */
 export async function listFeatures(
-  cityId: string
+  workspaceId: string
 ): Promise<Array<FeatureManifest & { format: "feature-ts" | "legacy-html" }>> {
-  const resultsMap = new Map<string, FeatureManifest & { format: "feature-ts" | "legacy-html" }>();
-
-  // SQLite single source of truth first.
-  try {
-    for (const entry of listPluginFiles(cityId)) {
-      try {
-        const feat = await readFeature(cityId, entry.pluginId);
-        resultsMap.set(entry.pluginId, { ...feat.manifest, format: feat.format });
-      } catch {
-        // Skip invalid row
-      }
+  const results: Array<FeatureManifest & { format: "feature-ts" | "legacy-html" }> = [];
+  for (const entry of listPluginFiles(workspaceId)) {
+    try {
+      const feat = await readFeature(workspaceId, entry.pluginId);
+      results.push({ ...feat.manifest, format: feat.format });
+    } catch {
+      // Skip invalid row
     }
-  } catch {
-    // Table may not exist yet in very old flows; fall through to FS.
   }
-
-  const cityRoot = await resolveSafeCityPath(cityId, ".");
-
-  // Scan modern features/ directory
-  try {
-    const featuresDir = path.join(cityRoot, "features");
-    const entries = await fs.readdir(featuresDir);
-    for (const id of entries) {
-      if (id.startsWith(".")) continue;
-      try {
-        const feat = await readFeature(cityId, id);
-        resultsMap.set(id, { ...feat.manifest, format: feat.format });
-      } catch {
-        // Skip invalid directory
-      }
-    }
-  } catch {
-    // features/ directory may not exist yet
-  }
-
-  // Scan legacy tabs/ directory for any not in features/
-  try {
-    const tabsDir = path.join(cityRoot, "tabs");
-    const entries = await fs.readdir(tabsDir);
-    for (const id of entries) {
-      if (id.startsWith(".") || resultsMap.has(id)) continue;
-      try {
-        const feat = await readFeature(cityId, id);
-        resultsMap.set(id, { ...feat.manifest, format: feat.format });
-      } catch {
-        // Skip invalid directory
-      }
-    }
-  } catch {
-    // tabs/ directory may not exist yet
-  }
-
-  return Array.from(resultsMap.values());
+  return results;
 }
 
 /**
@@ -657,13 +548,13 @@ export async function listFeatures(
  * so create -> delete -> create lifecycles keep working. Version history in
  * plugin_versions is preserved for audit.
  */
-export async function deleteFeature(cityId: string, featureId: string): Promise<void> {
+export async function deleteFeature(workspaceId: string, featureId: string): Promise<void> {
   try {
     const { ensurePluginFilesTable } = await import("./pluginFiles");
     ensurePluginFilesTable();
     const { db } = await import("./db");
-    db.query("DELETE FROM plugin_files WHERE workspace_id = ? AND plugin_id = ?").run(cityId, featureId);
-    db.query("DELETE FROM workspace_plugins WHERE workspace_id = ? AND plugin_id = ?").run(cityId, featureId);
+    db.query("DELETE FROM plugin_files WHERE workspace_id = ? AND plugin_id = ?").run(workspaceId, featureId);
+    db.query("DELETE FROM workspace_plugins WHERE workspace_id = ? AND plugin_id = ?").run(workspaceId, featureId);
     const mountsLeft = (
       db.query("SELECT COUNT(*) as c FROM workspace_plugins WHERE plugin_id = ?").get(featureId) as any
     )?.c as number;
@@ -677,42 +568,8 @@ export async function deleteFeature(cityId: string, featureId: string): Promise<
       }
     }
   } catch {
-    // Non-fatal: filesystem cleanup below still runs.
+    // Non-fatal: record audit still runs.
   }
 
-  const errors: any[] = [];
-
-  try {
-    await deleteCityFile(cityId, `features/${featureId}/feature.ts`);
-  } catch (e) {
-    errors.push(e);
-  }
-  try {
-    await deleteCityFile(cityId, `features/${featureId}/manifest.json`);
-  } catch (e) {
-    errors.push(e);
-  }
-  try {
-    await deleteCityFile(cityId, `features/${featureId}/index.html`);
-  } catch (e) {
-    errors.push(e);
-  }
-
-  try {
-    await deleteCityFile(cityId, `tabs/${featureId}/manifest.json`);
-  } catch (e) {
-    errors.push(e);
-  }
-  try {
-    await deleteCityFile(cityId, `tabs/${featureId}/index.html`);
-  } catch (e) {
-    errors.push(e);
-  }
-
-  // Clean up directory if empty
-  const cityRoot = await resolveSafeCityPath(cityId, ".");
-  await fs.rm(path.join(cityRoot, "features", featureId), { recursive: true, force: true }).catch(() => {});
-  await fs.rm(path.join(cityRoot, "tabs", featureId), { recursive: true, force: true }).catch(() => {});
-
-  recordAudit({ action: "delete_feature", targetId: featureId, cityId, details: { featureId } });
+  recordAudit({ action: "delete_feature", targetId: featureId, workspaceId, details: { featureId } });
 }

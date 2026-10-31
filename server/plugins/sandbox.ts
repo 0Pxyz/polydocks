@@ -141,8 +141,7 @@ export function registerSandboxPlugin(): void {
         }
         const { userApproved: _dropped, ...rest } = (input || {}) as Record<string, unknown>;
         void _dropped;
-        const cityId = (rest as any).cityId || ctx.cityId || "default";
-        const workspaceId = (rest as any).workspaceId || cityId;
+        const workspaceId = (rest as any).workspaceId || ctx.workspaceId || "default";
         return await handler({ ...rest, workspaceId }, ctx);
       }
     );

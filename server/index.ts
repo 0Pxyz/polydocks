@@ -7,9 +7,6 @@ import path from "node:path";
 import { config } from "./config";
 import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { mcpRouter } from "./api/mcp";
-import { citiesRouter } from "./routes/cities";
-import { mapsRouter } from "./routes/maps";
-import { worldRouter } from "./routes/world";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
@@ -57,7 +54,7 @@ if (config.NODE_ENV !== "test") {
     console.error("[Polymax Server] Plugin migration failed (non-fatal):", err);
   }
   // Reversible backfills (no destructive DDL): plugin version rows mirrored
-  // into plugin_files, city rows ensured as kind='city' workspaces.
+  // into plugin_files.
   try {
     const { backfillPluginVersionsToFiles } = await import("./plugins/versions");
     const { copied } = backfillPluginVersionsToFiles();
@@ -66,15 +63,6 @@ if (config.NODE_ENV !== "test") {
     }
   } catch (err) {
     console.error("[Polymax Server] Plugin versions backfill failed (non-fatal):", err);
-  }
-  try {
-    const { ensureCityWorkspaces } = await import("./workspace/workspaces");
-    const { ensured } = ensureCityWorkspaces();
-    if (ensured > 0) {
-      console.log(`[Polymax Server] City workspaces backfill: ${ensured} city workspaces ensured.`);
-    }
-  } catch (err) {
-    console.error("[Polymax Server] City workspaces backfill failed (non-fatal):", err);
   }
 }
 
@@ -166,9 +154,6 @@ app.route("/api/workspaces", workspacesRouter);
 // Mount PolyDocks V2 Community Plugin Registry router
 app.route("/api/registry", registryRouter);
 
-// Mount Cities & Workspaces router
-app.route("/api/cities", citiesRouter);
-
 // Mount Agent Durable Memory router
 app.route("/api/agent/memory", memoryRouter);
 
@@ -198,25 +183,19 @@ if (config.PRODUCT_SURFACE === "facade") {
   app.route("/api/agent/tasks", tasksRouter);
 }
 
-// Mount World Maps & Cartography router (Maps v2)
-app.route("/api/maps", mapsRouter);
-
-// Mount Knowledge World router (cities + conceptual links for the particle map)
-app.route("/api/world", worldRouter);
-
 // Experience runtime error reporting endpoints
 app.post("/api/experiences/:id/errors", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
-  const { cityId, error } = body;
-  const recorded = recordExperienceError(id, cityId || "global", error || {});
+  const { workspaceId, error } = body;
+  const recorded = recordExperienceError(id, workspaceId || "global", error || {});
   return c.json({ success: true, error: recorded });
 });
 
 app.get("/api/experiences/:id/errors", (c) => {
   const id = c.req.param("id");
-  const cityId = c.req.query("cityId");
-  const errors = getExperienceErrors(id, cityId);
+  const workspaceId = c.req.query("workspaceId");
+  const errors = getExperienceErrors(id, workspaceId);
   return c.json({ errors });
 });
 
@@ -273,7 +252,7 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Invalid JSON request body" }, 400);
   }
 
-  const { prompt, cityId, history, origin, sessionId, workspaceId, taskId, modelId, model, reasoningEffort, attachments, retry } = body;
+  const { prompt, workspaceId, history, origin, sessionId, taskId, modelId, model, reasoningEffort, attachments, retry } = body;
 
   if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
@@ -304,9 +283,8 @@ app.post("/api/agent", async (c) => {
     await runAgentLoop({
       prompt: prompt.trim(),
       userId,
-      cityId: typeof cityId === "string" ? cityId : undefined,
-      sessionId: typeof sessionId === "string" ? sessionId : undefined,
       workspaceId: typeof workspaceId === "string" ? workspaceId : undefined,
+      sessionId: typeof sessionId === "string" ? sessionId : undefined,
       taskId: typeof taskId === "string" ? taskId : undefined,
       origin: origin === "dock-add" ? "dock-add" : "chat",
       modelId: requestedModel,

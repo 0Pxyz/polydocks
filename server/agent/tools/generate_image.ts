@@ -6,7 +6,7 @@ export const generate_image: AgentTool<{
   prompt: string;
   size?: string;
   outputFormat?: "webp" | "png" | "jpeg";
-  kind?: "cover" | "city-art" | "share-card";
+  kind?: "cover" | "share-card";
   name?: string;
 }> = {
   name: "generate_image",
@@ -16,7 +16,7 @@ export const generate_image: AgentTool<{
     prompt: z.string().min(1).max(4000).describe("Image prompt (e.g. 'flat dark cover art for a city about Stoicism, lime accent')"),
     size: z.string().default("1024x1024").describe("Aspect ratio WxH, e.g. 1024x1024 or 1536x1024"),
     outputFormat: z.enum(["webp", "png", "jpeg"]).default("webp"),
-    kind: z.enum(["cover", "city-art", "share-card"]).default("cover").describe("What the image is for (artifact type hint)"),
+    kind: z.enum(["cover", "share-card"]).default("cover").describe("What the image is for (artifact type hint)"),
     name: z.string().max(120).optional().describe("Artifact name (defaults to the first 60 chars of the prompt)"),
   }),
   modelRole: "image",

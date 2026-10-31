@@ -21,7 +21,6 @@ export type FacadeEnvelope = FacadeOk | FacadeFail;
 
 export interface FacadeContext {
   actor?: "user" | "agent" | "cli";
-  cityId?: string;
   workspaceId?: string;
   sessionId?: string;
 }
@@ -47,16 +46,16 @@ export async function invokeCapability(
       code: "unknown_capability",
     };
   }
-  const cityId =
-    ctx.cityId ||
-    (input && typeof (input as any).cityId === "string" ? (input as any).cityId : undefined);
-  if (cityId && input && typeof (input as any).cityId !== "string") {
-    input = { ...input, cityId };
+  const workspaceId =
+    ctx.workspaceId ||
+    (input && typeof (input as any).workspaceId === "string" ? (input as any).workspaceId : undefined);
+  if (workspaceId && input && typeof (input as any).workspaceId !== "string") {
+    input = { ...input, workspaceId };
   }
   const emitted: Array<{ type: string; payload: Record<string, unknown> }> = [];
   const result = await capabilityBus.invoke(`${pluginId}.${capability}`, input, {
     actor: ctx.actor || "user",
-    cityId,
+    workspaceId,
     onEvent: async (e) => {
       if (e.type !== "tool.start" && e.type !== "tool.done") {
         emitted.push({ type: e.type, payload: e.payload as Record<string, unknown> });
@@ -75,9 +74,9 @@ export async function invokeCapability(
 
 // ---------------------------------------------------------------------------
 // dock.* — state and control of the dock. Delegates to the existing tool
-// executors (list_tabs, open_tab, dock_pin/unpin/close, enter_city,
-// get_city_context, apply_theme): no logic rewritten, only wrapped in the
-// product envelope so routes, CLI and thin tools share one path.
+// executors (dock_pin/unpin/close, apply_theme) and the server dock record
+// layer: no logic rewritten, only wrapped in the product envelope so
+// routes, CLI and thin tools share one path.
 // ---------------------------------------------------------------------------
 
 export const DOCK_OPS = [
@@ -91,10 +90,6 @@ export const DOCK_OPS = [
   "tabs.prev",
   "tabs.background",
   "chat.toggle",
-  "tabs.create",
-  "tabs.update",
-  "scope.enter",
-  "scope.get",
   "appearance.apply",
 ] as const;
 
@@ -102,7 +97,6 @@ export type DockOp = (typeof DOCK_OPS)[number];
 
 async function runTool<T>(tool: AgentTool<T>, args: T, ctx: FacadeContext): Promise<unknown> {
   return tool.execute(args, {
-    cityId: ctx.cityId,
     workspaceId: ctx.workspaceId,
     sessionId: ctx.sessionId,
     step: 1,
@@ -126,33 +120,22 @@ export async function dockAction(
   try {
     switch (op as DockOp) {
       case "tabs.list": {
-        const { list_tabs } = await import("../agent/tools/list_tabs");
-        const data = await runTool(list_tabs, { cityId: params.cityId as string | undefined } as any, {
-          ...ctx,
-          cityId: (params.cityId as string) || ctx.cityId,
-        });
         const { DOCK_ACTIONS, visibleDockItems } = await import("../workspace/dockItems");
-        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const contextId = (params.workspaceId as string) || ctx.workspaceId || null;
         return {
           ok: true,
-          data: { ...(data as object), actions: DOCK_ACTIONS, dockItems: visibleDockItems(contextId) },
+          data: { actions: DOCK_ACTIONS, dockItems: visibleDockItems(contextId) },
           events: [],
         };
       }
       case "tabs.open": {
-        const { open_tab } = await import("../agent/tools/open_tab");
         if (typeof params.tabId !== "string" || !params.tabId) {
           return { ok: false, error: "tabs.open needs { tabId }.", retryable: false, code: "invalid_input" };
         }
-        const data = await runTool(
-          open_tab,
-          { tabId: params.tabId, cityId: params.cityId } as any,
-          { ...ctx, cityId: (params.cityId as string) || ctx.cityId }
-        );
         const { openDockItem } = await import("../workspace/dockItems");
-        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const contextId = (params.workspaceId as string) || ctx.workspaceId || null;
         const record = openDockItem(params.tabId, contextId);
-        return { ok: true, data: { ...(data as object), dockItem: record }, events: [{ type: "tray.open", payload: params }] };
+        return { ok: true, data: { dockItem: record }, events: [{ type: "tray.open", payload: params }] };
       }
       case "tabs.pin":
       case "tabs.unpin": {
@@ -161,9 +144,9 @@ export async function dockAction(
         if (typeof params.id !== "string" || !params.id) {
           return { ok: false, error: `${op} needs { id }.`, retryable: false, code: "invalid_input" };
         }
-        const data = await runTool(tool, { id: params.id, cityId: params.cityId } as any, {
+        const data = await runTool(tool, { id: params.id, workspaceId: params.workspaceId } as any, {
           ...ctx,
-          cityId: (params.cityId as string) || ctx.cityId,
+          workspaceId: (params.workspaceId as string) || ctx.workspaceId,
         });
         return { ok: true, data, events: [] };
       }
@@ -172,9 +155,9 @@ export async function dockAction(
         if (typeof params.id !== "string" || !params.id) {
           return { ok: false, error: "tabs.close needs { id }.", retryable: false, code: "invalid_input" };
         }
-        const data = await runTool(dock_close, { id: params.id, cityId: params.cityId } as any, {
+        const data = await runTool(dock_close, { id: params.id, workspaceId: params.workspaceId } as any, {
           ...ctx,
-          cityId: (params.cityId as string) || ctx.cityId,
+          workspaceId: (params.workspaceId as string) || ctx.workspaceId,
         });
         const { closeDockItem } = await import("../workspace/dockItems");
         const record = closeDockItem(params.id);
@@ -182,7 +165,7 @@ export async function dockAction(
       }
       case "tabs.focus": {
         const { visibleDockItems, openDockItem } = await import("../workspace/dockItems");
-        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const contextId = (params.workspaceId as string) || ctx.workspaceId || null;
         const visible = visibleDockItems(contextId);
         const index = typeof params.index === "number" ? params.index : 0;
         const target = visible[index];
@@ -195,7 +178,7 @@ export async function dockAction(
       case "tabs.next":
       case "tabs.prev": {
         const { visibleDockItems, openDockItem } = await import("../workspace/dockItems");
-        const contextId = (params.cityId as string) || ctx.cityId || null;
+        const contextId = (params.workspaceId as string) || ctx.workspaceId || null;
         const visible = visibleDockItems(contextId);
         if (visible.length === 0) {
           return { ok: false, error: `${op}: nothing to focus.`, retryable: false, code: "not_found" };
@@ -226,39 +209,6 @@ export async function dockAction(
         }
         const record = openDockItem("agent", null);
         return { ok: true, data: { id: "agent", dockItem: record }, events: [{ type: "chat.focused", payload: {} }] };
-      }
-      case "tabs.create": {
-        const { create_tab } = await import("../agent/tools/create_tab");
-        const data = await runTool(create_tab, (params ?? {}) as any, {
-          ...ctx,
-          cityId: (params.cityId as string) || ctx.cityId,
-        });
-        return { ok: true, data, events: [{ type: "tab.created", payload: (params ?? {}) as Record<string, unknown> }] };
-      }
-      case "tabs.update": {
-        const { update_tab } = await import("../agent/tools/update_tab");
-        const data = await runTool(update_tab, (params ?? {}) as any, {
-          ...ctx,
-          cityId: (params.cityId as string) || ctx.cityId,
-        });
-        return { ok: true, data, events: [] };
-      }
-      case "scope.enter": {
-        const { enter_city } = await import("../agent/tools/enter_city");
-        if (typeof params.cityId !== "string" || !params.cityId) {
-          return { ok: false, error: "scope.enter needs { cityId }.", retryable: false, code: "invalid_input" };
-        }
-        const data = await runTool(enter_city, { cityId: params.cityId } as any, ctx);
-        return { ok: true, data, events: [{ type: "map.changed", payload: { cityId: params.cityId } }] };
-      }
-      case "scope.get": {
-        const { get_city_context } = await import("../agent/tools/get_city_context");
-        const data = await runTool(
-          get_city_context,
-          { cityId: params.cityId } as any,
-          { ...ctx, cityId: (params.cityId as string) || ctx.cityId }
-        );
-        return { ok: true, data, events: [] };
       }
       case "appearance.apply": {
         const { apply_theme } = await import("../agent/tools/apply_theme");

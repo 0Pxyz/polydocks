@@ -32,7 +32,7 @@ function cacheKey(prompt: string, size: string, outputFormat: string): string {
 }
 
 /**
- * Generate a cover / city-art / share-card image with Muse Image.
+ * Generate a cover / share-card image with Muse Image.
  * Endpoint: POST {baseURL}/images/generations (OpenAI Images compatible).
  * Never returns success without a verified file on disk (exists + size > 0).
  * Async callers should run this as a background task; it can take 10-60s.

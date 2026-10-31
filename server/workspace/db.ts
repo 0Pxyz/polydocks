@@ -51,8 +51,8 @@ try {
   for (const table of ["sources", "audit_log", "executions", "experience_errors", "agent_thread_messages"]) {
     if (!tables.has(table)) continue;
     const cols = columnsOf(table);
-    if (cols.has("city_id") && !cols.has("workspace_id")) {
-      db.exec(`ALTER TABLE "${table}" RENAME COLUMN "city_id" TO "workspace_id"`);
+    if (cols.has("workspace_id") && !cols.has("workspace_id")) {
+      db.exec(`ALTER TABLE "${table}" RENAME COLUMN "workspace_id" TO "workspace_id"`);
     }
   }
   for (const table of [
