@@ -295,7 +295,22 @@ export async function pluginLifecycle(
         if (!(installed as any)?.success) {
           return { ok: false, error: (installed as any)?.error || "Registry install failed.", retryable: true };
         }
-        return { ok: true, data: { pluginId, workspaceId, via: "registry" }, events: [{ type: eventName, payload: { pluginId } }] };
+        const { describePermission } = await import("../plugins/risk");
+        const declared = inRegistry.manifest?.permissions ?? [];
+        // Install-time display (#180): what the plugin may do + why, in
+        // the same honest style as the MCP pre-connect preview. Low-risk
+        // items stay quiet downstream; the data is here when UI asks.
+        return {
+          ok: true,
+          data: {
+            pluginId,
+            workspaceId,
+            via: "registry",
+            permissions: declared,
+            permissionLines: declared.map(describePermission),
+          },
+          events: [{ type: eventName, payload: { pluginId } }],
+        };
       }
       const mounted = WorkspaceService.addPluginToWorkspace(workspaceId, pluginId, {}, 0, ctx.actor || "user");
       return { ok: true, data: { pluginId, workspaceId, via: "workspace", mounted }, events: [{ type: eventName, payload: { pluginId } }] };

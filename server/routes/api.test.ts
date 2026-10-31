@@ -27,6 +27,30 @@ describe("Polymax REST API Endpoints", () => {
     expect(res.status).toBe(404);
   });
 
+  it("grants are visible and revocable per permission", async () => {
+    const { pluginRegistry } = await import("../plugins/registry");
+    const grant = pluginRegistry.recordGrant("test-grant-plugin", "external", "workspace:ws-1", "allow_once");
+    try {
+      const listed = await app.fetch(new Request("http://localhost:3000/api/plugins/test-grant-plugin/grants"));
+      expect(listed.status).toBe(200);
+      const body = (await listed.json()) as any;
+      expect(body.grants.some((g: any) => g.grantId === grant.grantId)).toBe(true);
+
+      const revoked = await app.fetch(
+        new Request(`http://localhost:3000/api/plugins/grants/${grant.grantId}/revoke`, { method: "POST" })
+      );
+      expect(revoked.status).toBe(200);
+      expect(pluginRegistry.getGrants("test-grant-plugin")).toHaveLength(0);
+
+      const missing = await app.fetch(
+        new Request("http://localhost:3000/api/plugins/grants/no-such-grant/revoke", { method: "POST" })
+      );
+      expect(missing.status).toBe(404);
+    } finally {
+      pluginRegistry.revokeGrant(grant.grantId);
+    }
+  });
+
   it("activate/deactivate flips the persisted flag and reports {id, active, version}", async () => {
     const { pluginRegistry } = await import("../plugins/registry");
     const manifest = {
