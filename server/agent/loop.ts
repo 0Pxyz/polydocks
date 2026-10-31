@@ -946,6 +946,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           });
         }
 
+        // Opening a tool must surface in the UI the same way on the loop
+        // path as on the facade path (which returns tray.open events).
+        if (
+          toolName === "dock.open" &&
+          toolOutput &&
+          typeof toolOutput === "object" &&
+          (toolOutput as any).ok === true
+        ) {
+          await emit({
+            step: currentStep,
+            type: "tray.open",
+            payload: toolOutput as Record<string, unknown>,
+          });
+        }
+
 
 
 

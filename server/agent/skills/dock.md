@@ -8,7 +8,7 @@
 
 ## Receipts
 
-Report only what the tool envelopes return: ids, versions, events (`tab.created`, `tray.open`, `plugin.created`, `plugin.updated`). A failed envelope (`ok:false`) is the answer — never claim success, never invent an install or an approval.
+Report only what the tool envelopes return: ids, versions, events (`tray.open`, `plugin.created`, `plugin.updated`, `plugin.published`). A failed envelope (`ok:false`) is the answer — never claim success, never invent an install or an approval.
 
 ## Look
 
