@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { llm, MODEL_ID } from "./llm";
-import { defaultTools } from "./tools";
+import { defaultTools, resolveTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
 import { classifyIntent, INTENT_TOOL_DENYLIST } from "./intent";
@@ -276,9 +276,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // Intent routing runs BEFORE tools are offered: classify the request,
   // then hide every tool the intent must never touch. Misrouting is
   // prevented at the catalog level, not by editing progress text later.
+  // Capability-derived tools resolve per turn so newly registered
+  // capabilities are exposed with no catalog file edit.
   const intent = classifyIntent(prompt, { hasImageAttachments: imageAttachments.length > 0 });
   const deniedTools = new Set(INTENT_TOOL_DENYLIST[intent] ?? []);
-  const scopedTools = tools.filter((tool) => !deniedTools.has(tool.name));
+  const baseTools = tools === defaultTools ? resolveTools(tools) : tools;
+  const scopedTools = baseTools.filter((tool) => !deniedTools.has(tool.name));
 
   // Progressive context: skill selection runs before the first model call so
   // the turn knows up front whether it needs workspace state at all. Pure

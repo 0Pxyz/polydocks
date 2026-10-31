@@ -50,6 +50,7 @@ import {
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
 import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback } from "./verbs/plugins";
 import { config } from "../../config";
+import { buildDynamicCapabilityTools } from "./catalog";
 
 export * from "./types";
 export {
@@ -190,3 +191,26 @@ export const minimalTools: AgentTool[] = [
 export const fullTools: AgentTool[] = fullToolsList;
 export const defaultTools: AgentTool[] =
   config.AGENT_SURFACE === "minimal" ? minimalTools : fullToolsList;
+
+export { buildDynamicCapabilityTools, capabilityToolName, generatedCatalogSnapshot } from "./catalog";
+
+/**
+ * Runtime resolution: static base plus any capability-derived tools not
+ * already present. Registering a new capability exposes its tool with no
+ * edit to a catalog file; the loop calls this per turn.
+ */
+export function resolveTools(base: AgentTool[] = defaultTools): AgentTool[] {
+  const names = new Set(base.map((t) => t.name));
+  const out = [...base];
+  try {
+    for (const t of buildDynamicCapabilityTools()) {
+      if (!names.has(t.name)) {
+        names.add(t.name);
+        out.push(t);
+      }
+    }
+  } catch {
+    // Non-fatal: static catalog still works.
+  }
+  return out;
+}
