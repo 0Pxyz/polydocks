@@ -25,6 +25,12 @@ const envSchema = z.object({
   // closed with a setup hint; the rest of the app keeps working.
   MODAL_TOKEN_ID: z.string().optional().default(""),
   MODAL_TOKEN_SECRET: z.string().optional().default(""),
+  // Atrium remote browser (first-party Browser surface). The worker runs
+  // Chromium; this process only relays short-lived viewer tokens. Unset
+  // ATRIUM_WORKER_SECRET means the browser surface degrades to the Reader
+  // fallback and /api/browser/* returns browser_unavailable.
+  ATRIUM_WORKER_DIAL_BASE: z.string().default("ws://127.0.0.1:7070"),
+  ATRIUM_WORKER_SECRET: z.string().optional().default(""),
   // Product surface: three APIs (/api/plugins, /api/dock, /api/agent).
   // facade = also mounts the thin facade routers (old routes stay untouched).
   PRODUCT_SURFACE: z.enum(["legacy", "facade"]).default("facade"),
@@ -35,7 +41,7 @@ const envSchema = z.object({
   // publish): ask = needs { userApproved: true } (default), auto = proceed,
   // never = always deny. actor=user|cli means an explicit human action.
   INSTALL_POLICY: z.enum(["ask", "auto", "never"]).default("ask"),
-  // Spending guard for generated images (covers, share cards, city art).
+  // Spending guard for generated images (covers, city art, share cards).
   // Counted per UTC day in SQLite (image_spend); requests beyond the cap
   // fail with budget_exceeded instead of spending.
   IMAGE_MAX_PER_DAY: z.coerce.number().int().min(0).default(25),
