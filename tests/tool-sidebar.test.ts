@@ -4,6 +4,7 @@ import {
   matchDockShortcut,
   panelLayout,
   isBesideEligible,
+  shouldYieldEscToMedia,
   BESIDE_WIDTH_DEFAULT,
   BESIDE_WIDTH_MAX,
   BESIDE_WIDTH_MIN,
@@ -61,14 +62,38 @@ describe("beside open state", () => {
     expect(store.besideWidth).toBe(BESIDE_WIDTH_DEFAULT);
     store.openBeside("notes");
     expect(useDockStore.getState().besideIds).toEqual(["notes"]);
-    expect(platformStorage.getItem<{ ids?: string[]; width?: number }>(BESIDE_KEY)).toEqual({
+    expect(platformStorage.getItem(BESIDE_KEY)).toEqual({
       ids: ["notes"],
       width: BESIDE_WIDTH_DEFAULT,
+      collapsed: false,
+      selected: null,
     });
     // Reload equivalent: the store loader resolves the persisted set.
-    expect(loadBeside()).toEqual({ ids: ["notes"], width: BESIDE_WIDTH_DEFAULT });
+    expect(loadBeside()).toEqual({ ids: ["notes"], width: BESIDE_WIDTH_DEFAULT, collapsed: false, selected: null });
     useDockStore.getState().clearBeside();
     expect(loadBeside().ids).toEqual([]);
+  });
+
+  it("persists beside ui (collapsed, selected) without touching ids", () => {
+    useDockStore.getState().openBeside("notes");
+    useDockStore.getState().persistBesideUi({ collapsed: true, selected: "notes" });
+    expect(loadBeside()).toEqual({
+      ids: ["notes"],
+      width: BESIDE_WIDTH_DEFAULT,
+      collapsed: true,
+      selected: "notes",
+    });
+    // Id writes preserve the ui fields.
+    useDockStore.getState().openBeside("plugins");
+    expect(loadBeside()).toEqual({
+      ids: ["notes", "plugins"],
+      width: BESIDE_WIDTH_DEFAULT,
+      collapsed: true,
+      selected: "notes",
+    });
+    // Clearing the set drops the stale selection on load (validated).
+    useDockStore.getState().clearBeside();
+    expect(loadBeside()).toEqual({ ids: [], width: BESIDE_WIDTH_DEFAULT, collapsed: true, selected: null });
   });
 
   it("opening the focused tool beside frees the main view without stealing focus", () => {
@@ -138,10 +163,12 @@ describe("beside open state", () => {
   it("resetDock clears the beside set to the fresh default", () => {
     useDockStore.getState().openBeside("notes");
     useDockStore.getState().setBesideWidth(BESIDE_WIDTH_MAX);
+    useDockStore.getState().persistBesideUi({ collapsed: true, selected: "notes" });
     useDockStore.getState().resetDock();
     const state = useDockStore.getState();
     expect(state.besideIds).toEqual([]);
     expect(state.besideWidth).toBe(BESIDE_WIDTH_DEFAULT);
+    expect(loadBeside()).toEqual({ ids: [], width: BESIDE_WIDTH_DEFAULT, collapsed: false, selected: null });
   });
 });
 
@@ -191,5 +218,35 @@ describe("three-region placement rule", () => {
     expect(layout.mainMarginLeft).toBe(0);
     expect(layout.mainMarginRight).toBe(0);
     expect(layout.besideOverlay).toBe(false);
+  });
+
+  it("narrow overlay with chat side keeps the left margin (no slide-under)", () => {
+    expect(
+      panelLayout({ chatSideOpen: true, besideCount: 1, viewportWidth: NARROW, sideWidth: SIDE, besideWidth: BESIDE })
+    ).toEqual({
+      chatSide: true,
+      besideSide: false,
+      besideOverlay: true,
+      mainMarginLeft: SIDE,
+      mainMarginRight: 0,
+    });
+  });
+});
+
+describe("esc yields to media", () => {
+  const mediaTarget = (match: boolean) => ({ closest: () => (match ? {} : null) }) as unknown as EventTarget;
+
+  it("yields while fullscreen, even from a plain target", () => {
+    expect(shouldYieldEscToMedia(null, {} as Element)).toBe(true);
+    expect(shouldYieldEscToMedia(mediaTarget(false), {} as Element)).toBe(true);
+  });
+
+  it("yields from inside video, audio, or media players", () => {
+    expect(shouldYieldEscToMedia(mediaTarget(true), null)).toBe(true);
+  });
+
+  it("handles the panel when focus is in plain content", () => {
+    expect(shouldYieldEscToMedia(null, null)).toBe(false);
+    expect(shouldYieldEscToMedia(mediaTarget(false), null)).toBe(false);
   });
 });

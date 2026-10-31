@@ -59,21 +59,38 @@ const BESIDE_KEY = "polymax-tool-sidebar";
 interface BesidePersisted {
   ids?: string[];
   width?: number;
+  /** Panel collapsed (hidden, tools kept mounted). Defaults to false. */
+  collapsed?: boolean;
+  /** Last selected beside tab. Validated against ids on load. */
+  selected?: string | null;
 }
 
 /** Reads persisted beside state (used at store creation; exported for tests). */
-export function loadBeside(): { ids: string[]; width: number } {
+export function loadBeside(): { ids: string[]; width: number; collapsed: boolean; selected: string | null } {
   const stored = platformStorage.getItem<BesidePersisted>(BESIDE_KEY);
   const ids = Array.isArray(stored?.ids) ? stored.ids.filter((id) => typeof id === "string" && id) : [];
   const width =
     typeof stored?.width === "number" && stored.width >= BESIDE_WIDTH_MIN && stored.width <= BESIDE_WIDTH_MAX
       ? stored.width
       : BESIDE_WIDTH_DEFAULT;
-  return { ids, width };
+  const collapsed = stored?.collapsed === true;
+  const selected = typeof stored?.selected === "string" && ids.includes(stored.selected) ? stored.selected : null;
+  return { ids, width, collapsed, selected };
 }
 
-function persistBeside(ids: string[], width: number): void {
-  platformStorage.setItem(BESIDE_KEY, { ids, width });
+function persistBeside(ids: string[], width: number, ui?: { collapsed: boolean; selected: string | null }): void {
+  if (ui) {
+    platformStorage.setItem<BesidePersisted>(BESIDE_KEY, { ids, width, ...ui });
+    return;
+  }
+  // Id/width writes preserve the UI fields (selection, collapsed).
+  const prev = platformStorage.getItem<BesidePersisted>(BESIDE_KEY);
+  platformStorage.setItem<BesidePersisted>(BESIDE_KEY, {
+    ids,
+    width,
+    collapsed: prev?.collapsed === true,
+    selected: typeof prev?.selected === "string" ? prev.selected : null,
+  });
 }
 
 /** Legacy mirrors derived from the single source (read-cache for old UI). */
@@ -105,6 +122,8 @@ export interface DockState {
   /** Empty the beside panel. */
   clearBeside: () => void;
   setBesideWidth: (width: number) => void;
+  /** Persist beside UI (collapsed/selected) without touching ids/width. */
+  persistBesideUi: (ui: { collapsed?: boolean; selected?: string | null }) => void;
   setActiveTool: (toolId: string | null) => void;
   toggleExpanded: () => void;
   setExpanded: (expanded: boolean) => void;
@@ -208,6 +227,18 @@ export const useDockStore = create<DockState>((set, get) => {
         if (clamped === state.besideWidth) return state;
         persistBeside(state.besideIds, clamped);
         return { besideWidth: clamped };
+      }),
+
+    persistBesideUi: (ui) =>
+      set((state) => {
+        const prev = platformStorage.getItem<BesidePersisted>(BESIDE_KEY);
+        platformStorage.setItem<BesidePersisted>(BESIDE_KEY, {
+          ids: state.besideIds,
+          width: state.besideWidth,
+          collapsed: ui.collapsed ?? prev?.collapsed === true,
+          selected: ui.selected !== undefined ? ui.selected : typeof prev?.selected === "string" ? prev.selected : null,
+        });
+        return state;
       }),
 
     setActiveTool: (toolId) =>
@@ -455,7 +486,7 @@ export const useDockStore = create<DockState>((set, get) => {
 
     resetDock: () => {
       persistPinnedIds([...DEFAULT_PINNED_IDS]);
-      persistBeside([], BESIDE_WIDTH_DEFAULT);
+      persistBeside([], BESIDE_WIDTH_DEFAULT, { collapsed: false, selected: null });
       const dock = emptyDock();
       persistDockSnapshot(dock);
       set({

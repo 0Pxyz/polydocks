@@ -31,6 +31,8 @@ interface BesidePanelProps {
   overlay: boolean;
   /** Shared panel width. */
   width: number;
+  /** Left offset for the overlay sheet (chat side width): never slides under chat. */
+  offsetLeft?: number;
   onWidthChange: (width: number) => void;
   tabs: BesideTab[];
   selectedId: string | null;
@@ -56,6 +58,7 @@ export function BesidePanel({
   hasTools,
   overlay,
   width,
+  offsetLeft = 0,
   onWidthChange,
   tabs,
   selectedId,
@@ -97,7 +100,7 @@ export function BesidePanel({
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       hidden={!visible}
       aria-hidden={!visible}
-      style={!overlay ? { width: `${width}px` } : undefined}
+      style={overlay ? (offsetLeft > 0 ? { left: `${offsetLeft}px` } : undefined) : { width: `${width}px` }}
       className={cn(
         "flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
         overlay

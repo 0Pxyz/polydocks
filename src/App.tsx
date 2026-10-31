@@ -10,7 +10,7 @@ import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
-import { useDockStore } from "@/lib/store/useDockStore";
+import { useDockStore, loadBeside } from "@/lib/store/useDockStore";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { ToolSurface } from "@/features/dock/ToolSurface";
@@ -19,6 +19,7 @@ import {
   matchDockShortcut,
   panelLayout,
   isBesideEligible,
+  shouldYieldEscToMedia,
 } from "@/lib/dock/dockItems";
 import { DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
 import { cn } from "@/lib/cn";
@@ -33,8 +34,18 @@ export default function App() {
   const hostTasks = useTabHostStore((s) => s.tasks);
   const besideIds = useDockStore((s) => s.besideIds);
   const besideWidth = useDockStore((s) => s.besideWidth);
-  const [besideCollapsed, setBesideCollapsed] = useState(false);
-  const [besideSelected, setBesideSelected] = useState<string | null>(null);
+  // Reload restores the panel exactly: persisted selection and collapsed
+  // state survive a boot (ids/width live in the store itself).
+  const persistedBesideUi = useMemo(loadBeside, []);
+  const [besideCollapsed, setBesideCollapsed] = useState(persistedBesideUi.collapsed);
+  const [besideSelected, setBesideSelected] = useState<string | null>(() =>
+    persistedBesideUi.selected && persistedBesideUi.ids.includes(persistedBesideUi.selected)
+      ? persistedBesideUi.selected
+      : null
+  );
+  useEffect(() => {
+    useDockStore.getState().persistBesideUi({ collapsed: besideCollapsed, selected: besideSelected });
+  }, [besideCollapsed, besideSelected]);
 
   const {
     layoutState,
@@ -183,6 +194,12 @@ export default function App() {
         .map(sandboxTabEntry),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeExtraTools, hostTabs, besideIds]
+  );
+  // Dynamic beside ids that still need a tab-host entry (boot restore).
+  const besideDynamicMountIds = useMemo(
+    () => besideTabs.map((t) => t.id).filter((id) => activeExtraTools.some((t) => t.id === id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [besideTabs, activeExtraTools]
   );
 
   // Open beside: mounts (or keeps) the tool in the beside panel without
@@ -393,7 +410,14 @@ export default function App() {
     ) {
       useTabHostStore.getState().openTab(activeToolId, "plugin");
     }
-  }, [activeToolId, activeExtraTools, hostTabs]);
+    // Beside tools mount the same way: after a reload the persisted beside
+    // set returns, and its dynamic tabs must remount or the panel is empty.
+    for (const id of besideDynamicMountIds) {
+      if (hostTabs[id]?.status !== "live") {
+        useTabHostStore.getState().openTab(id, "plugin");
+      }
+    }
+  }, [activeToolId, activeExtraTools, hostTabs, besideDynamicMountIds]);
 
   // Keep the local focus mirror in sync when the dock changes underneath
   // (keyboard, REST, CLI, agent verbs share the same registry).
@@ -507,17 +531,20 @@ export default function App() {
         } else if (activeToolId === "theme" || activeToolId === "settings") {
           handleDismissTool(activeToolId);
         } else {
-          // Chat is closed here. Esc collapses the beside panel (focus
-          // stays where it is unless it started inside); a second Esc
-          // clears the beside set entirely.
+          // Chat is closed here. Media owns Esc while fullscreen or focused
+          // inside a player: exiting fullscreen must not collapse the panel
+          // or steal focus from the video.
+          if (shouldYieldEscToMedia(e.target, document.fullscreenElement)) return;
+          // First Esc collapses the beside panel, second Esc clears it.
+          // Focus returns to the main tool only when it started inside the
+          // panel; a main-view video never loses focus.
           const st = useDockStore.getState();
           const hasBeside = st.besideIds.some((id) => {
             const record = st.dock.items[id];
             return record && record.state !== "closed" && id !== st.dock.focusedId;
           });
           if (hasBeside && !besideCollapsed) {
-            collapseBesidePanel(false);
-            if (focusInsideBeside()) focusMainTool();
+            collapseBesidePanel();
           } else if (hasBeside) {
             st.clearBeside();
             setBesideSelected(null);
@@ -568,6 +595,15 @@ export default function App() {
       }),
     [layoutState, besideTabs.length, viewportWidth, sideWidth, besideWidth]
   );
+
+  // Beside docked wide reserves the right region: chat must dock left
+  // (side), never overlay it. Sheet is the implicit overlay state, so it
+  // upgrades; an explicit full-screen maximize stays untouched.
+  useEffect(() => {
+    if (layout.besideSide && layoutState === "sheet") {
+      setLayoutState("side");
+    }
+  }, [layout.besideSide, layoutState, setLayoutState]);
 
   return (
     <AppProviders>
@@ -708,6 +744,7 @@ export default function App() {
             hasTools={besideTabs.length > 0}
             overlay={layout.besideOverlay}
             width={besideWidth}
+            offsetLeft={layout.mainMarginLeft}
             onWidthChange={(w) => useDockStore.getState().setBesideWidth(w)}
             tabs={besideTabs}
             selectedId={besideSelectedId}
@@ -726,8 +763,16 @@ export default function App() {
                 moveBesideToMain(pluginId);
                 setActiveToolId(pluginId);
                 setDockActiveTool(pluginId);
+                // Overlay sheet concludes: the tool moved to the main view,
+                // so the sheet gets out of the way.
+                if (layout.besideOverlay) setBesideCollapsed(true);
               }}
-              onSelectTool={(id) => handleSelectTool(id)}
+              onSelectTool={(id) => {
+                handleSelectTool(id);
+                // Overlay sheet concludes: selecting from the sheet opens in
+                // the main view, so the sheet gets out of the way.
+                if (layout.besideOverlay) setBesideCollapsed(true);
+              }}
               pluginsInitialTab={pluginsInitialTab}
             />
           </BesidePanel>

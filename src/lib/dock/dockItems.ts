@@ -368,6 +368,19 @@ export function matchDockShortcut(event: {
   return { action: found };
 }
 
+/**
+ * Esc belongs to media when the event starts inside a media element or a
+ * fullscreen session is active (the browser consumes Esc to exit
+ * fullscreen). Panels must not collapse/clear or move focus in that case,
+ * or video playback loses its context.
+ */
+export function shouldYieldEscToMedia(target: EventTarget | null, fullscreenElement: Element | null): boolean {
+  if (fullscreenElement) return true;
+  const el = target as Element | null;
+  if (!el || typeof el.closest !== "function") return false;
+  return !!el.closest("video, audio, [data-media-player]");
+}
+
 /** Two panels fit at or above this viewport width (px). */
 export const TWO_PANEL_MIN_WIDTH = 1100;
 
