@@ -897,22 +897,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         }
 
         // Trigger reactive UI events when applicable
-        if (toolName === "create_tab" && toolOutput && typeof toolOutput === "object") {
-          await emit({
-            step: currentStep,
-            type: "tab.created",
-            payload: toolOutput as Record<string, unknown>,
-          });
-        }
-
-        if ((toolName === "open_tab" || toolName === "open_intent") && toolOutput && typeof toolOutput === "object") {
-          await emit({
-            step: currentStep,
-            type: "tray.open",
-            payload: toolOutput as Record<string, unknown>,
-          });
-        }
-
         // Sandbox previews must surface in the UI: sandbox_serve runs through
         // the sandbox.serve capability, so emit a preview event the same way
         // open_source emits browser.open.

@@ -216,10 +216,6 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     }
     case "fetch_page":
       return "Reading primary sources via TinyFish…";
-    case "create_tab": {
-      const title = typeof args?.title === "string" ? args.title : "";
-      return title ? `Building "${title}"…` : "Building the interactive experience…";
-    }
     case "create_plugin": {
       const name = typeof args?.name === "string" ? args.name : "";
       return name ? `Building tool "${name}"…` : "Building the tool…";
@@ -252,12 +248,6 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     case "publish_plugin":
     case "promote_to_plugin":
       return "Publishing the tool…";
-    case "update_tab":
-      return "Updating the interactive experience…";
-    case "delete_tab": {
-      const id = typeof args?.id === "string" ? args.id : "";
-      return id ? `Removing experience "${id}"…` : "Removing experience…";
-    }
     case "read_file":
     case "read_file_safe":
       return "Reading your notes…";
