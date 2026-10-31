@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
+import { ThoughtStream, useActiveJobs } from "./ThoughtStream";
+import { feedThoughtEvent, pushThought } from "@/lib/agent/thoughtStream";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
 
@@ -22,6 +24,8 @@ export interface HomeScreenProps {
   /** Open the agent chat panel (same panel as Ctrl K / dock agent icon). */
   onOpenAgent: () => void;
   panelOpen: boolean;
+  /** Abort in-flight work when the user taps the job indicator. */
+  onCancelJobs?: () => void;
   className?: string;
 }
 
@@ -32,7 +36,7 @@ export interface HomeScreenProps {
  * The prompt box, plugin tiles and placeholders were removed: everything
  * runs through the agent panel, and plugins live in the dock.
  */
-export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScreenProps) {
+export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "" }: HomeScreenProps) {
   const [hintVisible, setHintVisible] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
   const [hintDismissed, setHintDismissed] = useState(() => {
@@ -73,6 +77,32 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
     onOpenAgent();
   };
 
+  const activeJobs = useActiveJobs();
+
+  // Dev-only fake emitter (?thought-demo=1): two parallel fake jobs drive
+  // the stream without any backend. Never fires in production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    try {
+      (window as unknown as { __pushThought?: unknown }).__pushThought = pushThought;
+      (window as unknown as { __thoughtDemo?: unknown }).__thoughtDemo = () => {
+        void import("@/lib/agent/thoughtDev").then((m) => m.emitFakeThoughtDemo());
+      };
+      if (window.location.search.includes("thought-demo=1")) {
+        void import("@/lib/agent/thoughtDev").then((m) => m.emitFakeThoughtDemo());
+      }
+    } catch {
+      // Dev hooks must never break the home screen.
+    }
+  }, []);
+
+  const cancelJobs = () => {
+    for (const id of activeJobs) {
+      feedThoughtEvent({ type: "job.cancelled", id });
+    }
+    onCancelJobs?.();
+  };
+
   return (
     <div
       className={cn(
@@ -89,6 +119,10 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
             transition={{ duration: 0.22, ease: "easeIn" }}
             className="flex flex-col items-center w-full"
           >
+            {/* Living-agent thoughts drift up from the orb and fade out.
+                Nothing when idle: the resting state is orb + Ctrl K. */}
+            {!panelOpen && <ThoughtStream />}
+
             {/* The one orb: the same Orb component as the chat panel,
                 breathing when idle, still under reduced motion. */}
             <motion.button
@@ -127,6 +161,28 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
                 {ROTATING_TIPS[tipIndex]}
               </div>
             )}
+
+            {/* Job indicator: quiet count + soft pulse while jobs run.
+                Tapping cancels in-flight work. Empty slot when idle. */}
+            <div className="mt-2 h-5 flex items-center justify-center" aria-live="polite">
+              {activeJobs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={cancelJobs}
+                  title="Cancel running jobs"
+                  aria-label={`Cancel ${activeJobs.length} running job${activeJobs.length === 1 ? "" : "s"}`}
+                  className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-sans text-[var(--text-muted)] hover:text-white transition-colors cursor-pointer"
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent-lime)]",
+                      !isReduced && "animate-pulse"
+                    )}
+                  />
+                  {activeJobs.length} working · tap to cancel
+                </button>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

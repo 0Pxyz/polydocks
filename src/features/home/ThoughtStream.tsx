@@ -1,0 +1,91 @@
+import { useEffect, useState } from "react";
+import { prefersReducedMotion } from "@/lib/motion";
+import { cn } from "@/lib/cn";
+import {
+  pushLine,
+  riseDurationMs,
+  jobOpacity,
+  subscribeThoughts,
+  subscribeJobs,
+  type ThoughtLine,
+} from "@/lib/agent/thoughtStream";
+
+/**
+ * Living-agent stream: short status lines rise from the orb and fade out
+ * at the top. No bubbles, no box, no history — lines leaving the viewport
+ * are pruned from state (and the DOM). Theme tokens only; opacity falls
+ * as lines rise. Reduced motion: latest line fades, nothing moves.
+ */
+export function useThoughtStream(): ThoughtLine[] {
+  const [lines, setLines] = useState<ThoughtLine[]>([]);
+  useEffect(() => subscribeThoughts((line) => setLines((prev) => pushLine(prev, line))), []);
+  return lines;
+}
+
+export function useActiveJobs(): string[] {
+  const [ids, setIds] = useState<string[]>([]);
+  useEffect(() => subscribeJobs(setIds), []);
+  return ids;
+}
+
+export function ThoughtStream({ className = "" }: { className?: string }) {
+  const lines = useThoughtStream();
+  const reduced = prefersReducedMotion();
+  const visible = reduced ? lines.slice(-1) : lines;
+  const duration = riseDurationMs(lines.length);
+  if (visible.length === 0) return null;
+
+  return (
+    <div
+      className={cn("pointer-events-none flex w-full max-w-md flex-col justify-end overflow-hidden", className)}
+      style={{
+        height: 88,
+        maskImage: "linear-gradient(to bottom, transparent, black 40%)",
+        WebkitMaskImage: "linear-gradient(to bottom, transparent, black 40%)",
+        perspective: 320,
+      }}
+      aria-live="polite"
+      aria-label="Agent activity"
+    >
+      <style>{THOUGHT_STREAM_CSS}</style>
+      {visible.map((line, i) => (
+        <div
+          key={line.id}
+          className="thought-line text-center font-sans text-[13px] leading-[22px] text-[var(--text-muted)]"
+          style={{
+            opacity: reduced ? 1 : Math.max(0.35, 1 - (visible.length - 1 - i) * 0.22) * jobOpacity(line.jobId),
+            animationDuration: `${duration}ms`,
+            transform: reduced ? undefined : "rotateX(8deg)",
+          }}
+          data-thought-line={line.id}
+        >
+          {line.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const THOUGHT_STREAM_CSS = `
+.thought-line {
+  animation-name: thought-rise;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
+}
+@keyframes thought-rise {
+  0% { transform: translateY(14px) rotateX(8deg); opacity: 0; }
+  12% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translateY(-58px) rotateX(8deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thought-line { animation: thought-fade 1.2s ease forwards; transform: none; }
+  @keyframes thought-fade {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+`;
