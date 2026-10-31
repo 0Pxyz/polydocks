@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool } from "../../types";
-import { dockAction, invokeCapability, pluginLifecycle, pluginRollback } from "../../../facade/shared";
+import { dockAction, invokeCapability, pluginLifecycle, pluginRollback, pluginSetActive } from "../../../facade/shared";
 
 function actorCtx(ctx: { workspaceId?: string; sessionId?: string }) {
   return { actor: "agent" as const, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId };
@@ -102,4 +102,24 @@ export const pluginsRollback: AgentTool<{ pluginId: string; version: string; wor
     workspaceId: z.string().optional(),
   }),
   execute: (args, ctx) => pluginRollback(args.pluginId, args.version, args.workspaceId || ctx.workspaceId),
+};
+
+export const pluginsActivate: AgentTool<{ pluginId: string }> = {
+  name: "plugins.activate",
+  description:
+    "Activate an installed plugin: its capabilities return to the agent catalog, stored data untouched. Same handler as POST /api/plugins/:id/activate and the CLI.",
+  schema: z.object({
+    pluginId: z.string().min(1).describe("Installed plugin id"),
+  }),
+  execute: (args, ctx) => pluginSetActive(args.pluginId, true, actorCtx(ctx)),
+};
+
+export const pluginsDeactivate: AgentTool<{ pluginId: string }> = {
+  name: "plugins.deactivate",
+  description:
+    "Deactivate an installed plugin: its capabilities leave the agent catalog, stored data kept for reactivation. Same handler as POST /api/plugins/:id/deactivate and the CLI.",
+  schema: z.object({
+    pluginId: z.string().min(1).describe("Installed plugin id"),
+  }),
+  execute: (args, ctx) => pluginSetActive(args.pluginId, false, actorCtx(ctx)),
 };

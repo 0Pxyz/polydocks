@@ -391,6 +391,40 @@ export async function pluginVersions(pluginId: string): Promise<FacadeEnvelope> 
 }
 
 /**
+ * Activate/deactivate a plugin (#153 task 1): one canonical path for the
+ * HTTP routes, the CLI and the thin agent verbs. Flips the persisted
+ * registry flag (survives restart); deactivation hides the plugin's
+ * capabilities from the agent catalog (enabledOnly) without touching
+ * stored data, so reactivating brings everything back intact.
+ */
+export async function pluginSetActive(
+  pluginId: string,
+  active: boolean,
+  _ctx: FacadeContext = {}
+): Promise<FacadeEnvelope> {
+  if (!pluginId) {
+    return { ok: false, error: "activate needs { pluginId }.", retryable: false, code: "invalid_input" };
+  }
+  try {
+    const { pluginRegistry } = await import("../plugins/registry");
+    const existing = pluginRegistry.get(pluginId);
+    if (!existing) {
+      return { ok: false, error: `Plugin "${pluginId}" is not installed.`, retryable: false, code: "not_found" };
+    }
+    if (active) pluginRegistry.enable(pluginId);
+    else pluginRegistry.disable(pluginId);
+    const updated = pluginRegistry.get(pluginId);
+    return {
+      ok: true,
+      data: { pluginId, active: updated?.enabled ?? active, version: updated?.version },
+      events: [{ type: active ? "plugin.activated" : "plugin.deactivated", payload: { pluginId } }],
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Activate lookup failed.", retryable: false };
+  }
+}
+
+/**
  * Roll back a plugin to a kept version. Workspace plugins: append a new
  * version row with the old content (history is append-only, nothing is
  * overwritten or deleted). Registry-tracked plugins: reactivate via the

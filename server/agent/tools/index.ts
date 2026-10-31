@@ -48,7 +48,7 @@ import {
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
-import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback } from "./verbs/plugins";
+import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback, pluginsActivate, pluginsDeactivate } from "./verbs/plugins";
 import { config } from "../../config";
 import { buildDynamicCapabilityTools } from "./catalog";
 
@@ -114,6 +114,8 @@ export {
   pluginsUninstall,
   pluginsOperate,
   pluginsRollback,
+  pluginsActivate,
+  pluginsDeactivate,
 };
 
 export type AgentSurface = "full" | "minimal";
@@ -190,6 +192,8 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: pluginsUninstall, surfaces: ["minimal"] },
   { tool: pluginsOperate, surfaces: ["minimal"] },
   { tool: pluginsRollback, surfaces: ["minimal"] },
+  { tool: pluginsActivate, surfaces: ["minimal"] },
+  { tool: pluginsDeactivate, surfaces: ["minimal"] },
 ];
 
 function toolsFor(surface: AgentSurface): AgentTool[] {
