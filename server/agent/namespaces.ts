@@ -110,6 +110,8 @@ const STATIC_NAMESPACE: Record<string, string> = {
   "plugins.uninstall": "plugins",
   "plugins.operate": "plugins",
   "plugins.rollback": "plugins",
+  "plugins.activate": "plugins",
+  "plugins.deactivate": "plugins",
   create_plugin: "plugins",
   modify_plugin: "plugins",
   operate_plugin: "plugins",

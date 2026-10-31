@@ -91,7 +91,9 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "dock.prev",
         "dock.unpin",
         "find_capabilities",
+        "plugins.activate",
         "plugins.create",
+        "plugins.deactivate",
         "plugins.edit",
         "plugins.install",
         "plugins.operate",
@@ -123,7 +125,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     // Derived views partition the canonical list (find_capabilities is
     // the only tool offered on both surfaces).
     expect(fullNames.size).toBe(43);
-    expect(minimalNames.size).toBe(17);
+    expect(minimalNames.size).toBe(19);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
     }

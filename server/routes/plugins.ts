@@ -23,6 +23,7 @@ pluginsRouter.get("/", (c) => {
       icon: p.manifest.icon,
       trust: p.trust,
       enabled: p.enabled,
+      active: p.enabled,
       capabilitiesCount: p.manifest.capabilities?.length || 0,
       surfaces: p.manifest.surfaces || [],
       permissions: p.manifest.permissions || [],
@@ -50,6 +51,32 @@ pluginsRouter.post("/:id/toggle", (c) => {
 
   const updated = pluginRegistry.get(id);
   return c.json({ success: true, id, enabled: updated?.enabled });
+});
+
+/**
+ * POST /api/plugins/:id/activate - Enable a plugin (persisted; capabilities
+ * return to the agent catalog, stored data untouched).
+ */
+pluginsRouter.post("/:id/activate", async (c) => {
+  const { pluginSetActive } = await import("../facade/shared");
+  const out = await pluginSetActive(c.req.param("id"), true, { actor: "user" });
+  if (!out.ok) {
+    return c.json({ error: out.error, code: out.code }, out.code === "not_found" ? 404 : 400);
+  }
+  return c.json({ success: true, ...(out.data as Record<string, unknown>) });
+});
+
+/**
+ * POST /api/plugins/:id/deactivate - Disable a plugin (persisted; its
+ * capabilities leave the agent catalog, stored data kept for reactivation).
+ */
+pluginsRouter.post("/:id/deactivate", async (c) => {
+  const { pluginSetActive } = await import("../facade/shared");
+  const out = await pluginSetActive(c.req.param("id"), false, { actor: "user" });
+  if (!out.ok) {
+    return c.json({ error: out.error, code: out.code }, out.code === "not_found" ? 404 : 400);
+  }
+  return c.json({ success: true, ...(out.data as Record<string, unknown>) });
 });
 
 /**

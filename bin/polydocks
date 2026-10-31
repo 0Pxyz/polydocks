@@ -75,6 +75,8 @@ COMMANDS:
   plugins list [--workspace <id>]      List installed plugins
   plugins inspect <pluginId>           Inspect plugin manifest and capabilities
   plugins install <pluginId>           Install plugin into active workspace
+  plugins activate <pluginId>          Activate an installed plugin (capabilities return to the agent catalog)
+  plugins deactivate <pluginId>        Deactivate a plugin (catalog hides it; stored data kept)
   plugins invoke <plugin> <capability> [--k v] [--workspace <id>]
                                        Same handler as POST /api/plugins/:id/:capability
   plugins lifecycle --op <create|modify|publish|install|uninstall> [--k v]
@@ -346,7 +348,28 @@ async function handlePlugins(
     process.exit(1);
   }
 
-  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", "install", "invoke", "lifecycle", "versions", or "rollback".`);
+  if (subcommand === "activate" || subcommand === "deactivate") {
+    const pluginId = posArgs[0];
+    if (!pluginId) {
+      console.error(`Error: Missing required pluginId for 'plugins ${subcommand} <pluginId>'`);
+      process.exit(1);
+    }
+    const active = subcommand === "activate";
+    const { pluginSetActive } = await import("../server/facade/shared");
+    const out = await pluginSetActive(pluginId, active, { actor: "cli" });
+    if (options.json) {
+      console.log(JSON.stringify(out.ok ? { success: true, ...(out as any).data } : out, null, 2));
+      process.exit(out.ok ? 0 : 1);
+    }
+    if (out.ok) {
+      console.log(`Plugin "${pluginId}" ${active ? "activated" : "deactivated"}.`);
+      return;
+    }
+    console.error(`Error: ${(out as any).error || "Failed."}`);
+    process.exit(1);
+  }
+
+  console.error(`Unknown plugins subcommand "${subcommand}". Use "list", "inspect", "install", "activate", "deactivate", "invoke", "lifecycle", "versions", or "rollback".`);
   process.exit(1);
 }
 

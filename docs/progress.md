@@ -86,3 +86,4 @@
 | 2026-10-31 | Unified full/minimal tool catalogs into canonicalCatalog with surface filters (#204): derived views, plugins.install on every surface, MIGRATION.md Slice 1 reference fixed | [#228](https://github.com/0Pxyz/polymax/pull/228) |
 | 2026-10-31 | Agent as first-party plugin under same policy (#207): AGENT_MANIFEST with explicit fs permissions, loop-level fail-closed gate before validation/execution, revocation blocks + duplicate-breaker safety | [#230](https://github.com/0Pxyz/polymax/pull/230) |
 | 2026-10-31 | Core de-city slice A (#153): dynamic catalog honors enabled plugins, cityId/list_tabs vocabulary fixed, core vocabulary boundary test | [#231](https://github.com/0Pxyz/polymax/pull/231) |
+| 2026-10-31 | Activate/deactivate slice B (#153): persisted registry flag via shared facade, explicit API routes, agent verbs, CLI commands, route round-trip test | [#232](https://github.com/0Pxyz/polymax/pull/232) |
