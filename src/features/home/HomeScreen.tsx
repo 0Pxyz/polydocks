@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
-import { ThoughtStream, useActiveJobs } from "./ThoughtStream";
-import { feedThoughtEvent, pushThought } from "@/lib/agent/thoughtStream";
+import { ThoughtStream } from "./ThoughtStream";
+import { pushThought } from "@/lib/agent/thoughtStream";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
@@ -25,8 +25,6 @@ export interface HomeScreenProps {
   /** Open the agent chat panel (same panel as Ctrl K / dock agent icon). */
   onOpenAgent: () => void;
   panelOpen: boolean;
-  /** Abort in-flight work when the user taps the job indicator. */
-  onCancelJobs?: () => void;
   className?: string;
 }
 
@@ -37,7 +35,7 @@ export interface HomeScreenProps {
  * The prompt box, plugin tiles and placeholders were removed: everything
  * runs through the agent panel, and plugins live in the dock.
  */
-export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "" }: HomeScreenProps) {
+export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScreenProps) {
   const [hintVisible, setHintVisible] = useState(false);
   const [tipIndex, setTipIndex] = useState(0);
   const [hintDismissed, setHintDismissed] = useState(() => {
@@ -78,10 +76,11 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
     onOpenAgent();
   };
 
-  const activeJobs = useActiveJobs();
-  // Thoughts stay anchored above the home orb spot, but only show while
-  // the compact bottom sheet is open (sidebar/full keep the transcript).
-  const sheetOpen = useConversationStore((s) => s.layoutState) === "sheet";
+  // Thoughts stay anchored above the home orb spot. Shown in both quiet
+  // modes: idle home (orb only) and compact bottom sheet. Sidebar/full
+  // keep the transcript only.
+  const layoutState = useConversationStore((s) => s.layoutState);
+  const showThoughts = layoutState === "sheet" || layoutState === "closed";
 
   // Dev-only fake emitter (?thought-demo=1): two parallel fake jobs drive
   // the stream without any backend. Never fires in production builds.
@@ -103,13 +102,6 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
     }
   }, []);
 
-  const cancelJobs = () => {
-    for (const id of activeJobs) {
-      feedThoughtEvent({ type: "job.cancelled", id });
-    }
-    onCancelJobs?.();
-  };
-
   return (
     <div
       className={cn(
@@ -119,7 +111,7 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
     >
       {/* Living-agent thoughts: same spot above the orb, visible only
           while the compact bottom sheet is open. */}
-      {sheetOpen && <ThoughtStream />}
+      {showThoughts && <ThoughtStream />}
       <AnimatePresence mode="wait" initial={false}>
         {!panelOpen && (
           <motion.div
@@ -167,28 +159,6 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
                 {ROTATING_TIPS[tipIndex]}
               </div>
             )}
-
-            {/* Job indicator: quiet count + soft pulse while jobs run.
-                Tapping cancels in-flight work. Empty slot when idle. */}
-            <div className="mt-2 h-5 flex items-center justify-center" aria-live="polite">
-              {activeJobs.length > 0 && (
-                <button
-                  type="button"
-                  onClick={cancelJobs}
-                  title="Cancel running jobs"
-                  aria-label={`Cancel ${activeJobs.length} running job${activeJobs.length === 1 ? "" : "s"}`}
-                  className="flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-sans text-[var(--text-muted)] hover:text-white transition-colors cursor-pointer"
-                >
-                  <span
-                    className={cn(
-                      "inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent-lime)]",
-                      !isReduced && "animate-pulse"
-                    )}
-                  />
-                  {activeJobs.length} working · tap to cancel
-                </button>
-              )}
-            </div>
           </motion.div>
         )}
       </AnimatePresence>

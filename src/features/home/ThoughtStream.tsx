@@ -33,7 +33,9 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
   const reduced = prefersReducedMotion();
   const visible = reduced ? lines.slice(-1) : lines;
   const duration = riseDurationMs(lines.length);
-  if (visible.length === 0) return null;
+
+  // The space is always reserved so lines have somewhere to rise into;
+  // empty when idle (orb + hint own the resting state).
 
   return (
     <div
