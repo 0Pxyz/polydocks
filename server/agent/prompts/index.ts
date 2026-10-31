@@ -36,7 +36,21 @@ export function getMainPrompt(): MainPrompt {
   return cached;
 }
 
+const promptCache = new Map<string, MainPrompt>();
+
+/** Read-once loader for any versioned prompt file in this directory. */
+export function getPrompt(name: string): MainPrompt {
+  const hit = promptCache.get(name);
+  if (hit) return hit;
+  const raw = fs.readFileSync(path.join(import.meta.dir, `${name}.md`), "utf-8");
+  const parsed = parseMainPrompt(raw);
+  if (!parsed.text) throw new Error(`Prompt is empty: ${name}.md`);
+  promptCache.set(name, parsed);
+  return parsed;
+}
+
 /** Testing seam: reset the cached prompt. */
 export function resetMainPromptCache(): void {
   cached = null;
+  promptCache.clear();
 }

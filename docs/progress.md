@@ -93,3 +93,4 @@
 | 2026-10-31 | On-demand skills (#209): read_skill/skills.read loader, app map behind dock-add or model pull, pinned tests updated | [#236](https://github.com/0Pxyz/polymax/pull/236) |
 | 2026-10-31 | Provider-agnostic role config (#210): orchestrator role, canonical ORCHESTRATOR_MODEL/AGENT_MODEL names, per-role effort map, env docs | [#237](https://github.com/0Pxyz/polymax/pull/237) |
 | 2026-10-31 | Escalation contract (#212): handoff payload, heavy runner with relayed events, escalate tool, orchestrator-to-heavy e2e | [#238](https://github.com/0Pxyz/polymax/pull/238) |
+| 2026-10-31 | Orchestrator loop (#211): fast-model triage on dock verbs plus escalate, own prompt file, missed-escalation build gate | [#239](https://github.com/0Pxyz/polymax/pull/239) |

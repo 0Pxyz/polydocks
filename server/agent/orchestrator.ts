@@ -1,5 +1,39 @@
-import { runAgentLoop, type AgentStepEvent } from "./loop";
+import { runAgentLoop, type AgentStepEvent, type AgentLoopOptions } from "./loop";
 import { getClientForRole, roleReasoningEffort } from "./modelRegistry";
+import {
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  dockFocus,
+  dockNext,
+  dockPrev,
+  dockBackground,
+  chatToggle,
+} from "./tools/verbs/dock";
+import { escalate } from "./tools/verbs/escalate";
+import type { AgentTool } from "./tools/types";
+
+/**
+ * Orchestrator surface (#211): plain function tools ONLY — dock verbs
+ * plus escalate. No tool search, no build tools, no discovery roots.
+ * Anything outside this list escalates by construction (the model
+ * cannot call what it is not offered).
+ */
+export const ORCHESTRATOR_TOOLS: AgentTool[] = [
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  dockFocus,
+  dockNext,
+  dockPrev,
+  dockBackground,
+  chatToggle,
+  escalate,
+];
 
 /**
  * Escalation contract (#212): the handoff from the orchestrator loop
@@ -51,6 +85,53 @@ export function setHeavyRunnerForTest(fn?: typeof escalateToHeavyAgent): void {
 
 export function getHeavyRunner(): typeof escalateToHeavyAgent {
   return heavyRunner;
+}
+
+export interface OrchestratorOptions {
+  prompt: string;
+  workspaceId?: string;
+  history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+  /** Injectable fast-model client (tests); production resolves the orchestrator role. */
+  llmClient?: AgentLoopOptions["llmClient"];
+  modelId?: string;
+  onEvent?: AgentLoopOptions["onEvent"];
+  maxSteps?: number;
+}
+
+/**
+ * Orchestrator loop (#211): the shared agent loop restricted to the
+ * orchestrator surface on the small fast model with low reasoning
+ * effort. Quick dock requests resolve directly without touching the
+ * heavy agent; everything else escalates through the contract (#212).
+ * Escalation cannot be forced by the API (tool_choice is auto-only) —
+ * it is enforced by the tool description, the orchestrator prompt, and
+ * the missed-escalation build gate.
+ */
+export async function runOrchestratorLoop(options: OrchestratorOptions) {
+  const resolved = options.llmClient
+    ? { llmClient: options.llmClient, ...(options.modelId ? { modelId: options.modelId } : {}) }
+    : (() => {
+        const { client, modelId } = getClientForRole("orchestrator");
+        return { llmClient: client as any, modelId: options.modelId ?? modelId };
+      })();
+  const { getPrompt } = await import("./prompts/index");
+  let systemPrompt: string | undefined;
+  try {
+    systemPrompt = getPrompt("orchestrator").text;
+  } catch {
+    systemPrompt = undefined;
+  }
+  return runAgentLoop({
+    prompt: options.prompt,
+    workspaceId: options.workspaceId,
+    history: options.history,
+    tools: ORCHESTRATOR_TOOLS,
+    ...resolved,
+    reasoningEffort: roleReasoningEffort("orchestrator"),
+    ...(systemPrompt ? { systemPrompt } : {}),
+    onEvent: options.onEvent ?? (() => {}),
+    ...(typeof options.maxSteps === "number" ? { maxSteps: options.maxSteps } : {}),
+  });
 }
 
 /**
