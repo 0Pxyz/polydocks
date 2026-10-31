@@ -499,3 +499,7 @@ export const useDockStore = create<DockState>((set, get) => {
     },
   };
 });
+
+if (typeof window !== "undefined") {
+  (window as any).__dockStore = useDockStore;
+}
