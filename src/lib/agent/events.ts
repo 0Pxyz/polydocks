@@ -203,12 +203,27 @@ export interface ToolBrand {
 const TOOL_BRANDS: Record<string, ToolBrand> = {
   search_web: { logoSrc: TINYFISH_LOGO_SRC, label: "TinyFish" },
   fetch_page: { logoSrc: TINYFISH_LOGO_SRC, label: "TinyFish" },
+  "search.web": { logoSrc: TINYFISH_LOGO_SRC, label: "TinyFish" },
+  "search.fetch": { logoSrc: TINYFISH_LOGO_SRC, label: "TinyFish" },
 };
 
 /** Brand mark for a tool, or null when it has none. */
 export function getToolBrand(toolName?: string | null): ToolBrand | null {
   if (!toolName) return null;
   return TOOL_BRANDS[toolName] ?? null;
+}
+
+/**
+ * Brand fallback by label text, driven by the same registry: matches when
+ * the status line names a registered brand (e.g. a capability path whose
+ * tool name differs from the integration). No per-vendor checks at render.
+ */
+export function getToolBrandByLabel(text?: string | null): ToolBrand | null {
+  if (!text) return null;
+  for (const brand of Object.values(TOOL_BRANDS)) {
+    if (brand.label && text.includes(brand.label)) return brand;
+  }
+  return null;
 }
 
 /**
@@ -303,7 +318,6 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     case "place_city":
     case "open_source":
     case "find_capabilities":
-    case "invoke_capability":
     case "inspect_experience":
     case "inspect_execution":
     case "list_recent_executions":
@@ -312,6 +326,20 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     case "recall_memory":
     case "record_memory":
       return null;
+    case "invoke_capability": {
+      // Same integrations as their direct tools (search.web == search_web):
+      // surface the same line so capability-routed turns read identically.
+      const cap = typeof args?.id === "string" ? args.id : "";
+      const inner = (args?.input ?? {}) as Record<string, unknown>;
+      if (cap === "search.web") {
+        const q = typeof inner.query === "string" ? inner.query : "";
+        return q ? `Searching the web via TinyFish for "${q}"…` : "Searching the web via TinyFish…";
+      }
+      if (cap === "search.fetch") {
+        return "Reading primary sources via TinyFish…";
+      }
+      return null;
+    }
     default:
       return null;
   }

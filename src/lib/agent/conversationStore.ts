@@ -574,7 +574,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
               }));
               // Living-agent stream: status lines drift up and fade; the
               // sheet keeps the persistent activity rows.
-              feedThoughtEvent({ type: event.type, statusLabel: event.statusLabel, tool: event.name });
+              feedThoughtEvent({ type: event.type, statusLabel: event.statusLabel, tool: event.name, capability: (event.args as Record<string, unknown> | undefined)?.id as string | undefined });
             }
             break;
 

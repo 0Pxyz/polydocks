@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { getToolBrand } from "../src/lib/agent/events";
+import { getFriendlyToolStatus, getToolBrand, getToolBrandByLabel } from "../src/lib/agent/events";
 import {
   adaptToThought,
   feedThoughtEvent,
@@ -98,6 +98,20 @@ describe("thought adapter: stream fades, finals persist", () => {
     expect(getToolBrand("some_future_tool")).toBeNull();
     expect(getToolBrand()).toBeNull();
     expect(getToolBrand("")).toBeNull();
+  });
+
+  it("capability-routed research reads identically and brands via capability or label", () => {
+    const web = getFriendlyToolStatus("invoke_capability", { id: "search.web", input: { query: "raft" } });
+    expect(web).toContain("TinyFish");
+    expect(web).toContain("raft");
+    expect(getFriendlyToolStatus("invoke_capability", { id: "search.fetch", input: {} })).toContain("TinyFish");
+    expect(getFriendlyToolStatus("invoke_capability", { id: "other.thing", input: {} })).toBeNull();
+    const t = adaptToThought({ type: "tool.started", statusLabel: web, tool: "invoke_capability", capability: "search.web" });
+    expect(t?.capability).toBe("search.web");
+    expect(getToolBrand(t?.capability)).not.toBeNull();
+    // Label fallback: any path whose text names a registered brand resolves.
+    expect(getToolBrandByLabel("Reading via TinyFish…")?.label).toBe("TinyFish");
+    expect(getToolBrandByLabel("Just thinking")).toBeNull();
   });
 
   it("carries the tool so the UI can show the TinyFish mark", () => {
