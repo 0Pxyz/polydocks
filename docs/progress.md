@@ -107,3 +107,5 @@
 | 2026-10-31 | Docker sandbox smoke (#254): pinned multi-stage image, fixed-owner local mode, 25/25 packaging/persistence/isolation checks + README local-run section | [#254](https://github.com/0Pxyz/polymax/pull/254) |
 | 2026-11-01 | Live onboarding dock tab + authentic marketing assets (#250): first-party plugin, overlay choreography, capture script, media | [#250](https://github.com/0Pxyz/polymax/pull/250) |
 | 2026-11-01 | Onboarding dock-first lifecycle (#256): every entry opens the dock tab, close removes + persists no-reopen, agent bridge, creative copy/UI untouched | [#256](https://github.com/0Pxyz/polymax/pull/256) |
+| 2026-11-01 | Onboarding takeover-pause (#259): manual dock switch pauses the tour instead of focus-stealing, ghost-thought cleanup, tested predicate | [#259](https://github.com/0Pxyz/polymax/pull/259) |
+| 2026-11-01 | Cinematic onboarding tab, video flow (#260): orb + live thought + narration auto-play in the dock tab, overlay unmounted, creative copy/UI intact | [#260](https://github.com/0Pxyz/polymax/pull/260) |
