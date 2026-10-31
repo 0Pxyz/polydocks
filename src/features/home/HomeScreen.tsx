@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -85,14 +85,17 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
 
   // Dev-only fake emitter (?thought-demo=1): two parallel fake jobs drive
   // the stream without any backend. Never fires in production builds.
+  // Guarded against StrictMode double-effects (dev only).
+  const demoFiredRef = useRef(false);
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env.DEV || demoFiredRef.current) return;
     try {
       (window as unknown as { __pushThought?: unknown }).__pushThought = pushThought;
       (window as unknown as { __thoughtDemo?: unknown }).__thoughtDemo = () => {
         void import("@/lib/agent/thoughtDev").then((m) => m.emitFakeThoughtDemo());
       };
       if (window.location.search.includes("thought-demo=1")) {
+        demoFiredRef.current = true;
         void import("@/lib/agent/thoughtDev").then((m) => m.emitFakeThoughtDemo());
       }
     } catch {
