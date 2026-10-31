@@ -75,3 +75,4 @@
 | 2026-10-30 | Single PR to main: Polydocks-first home + TinyFish branding (supersedes #159, #160; Closes #158) |
 | 2026-10-30 | Dev synced with main: product stack + polydocks home + tinyfish branding merged (10 files), follow-up dedupe fix |
 | 2026-10-30 | Agent runtime consolidation (#162/#163/#164/#165/#166): one install-policy gate for all executable-code paths, duplicated natives as bus aliases, facade default with parity harness, progressive context with chat fast path, one persistence SoT with reversible backfills (docs/persistence.md), live-verified Modal sandboxes (docs/sandbox.md) | [#168](https://github.com/0Pxyz/polymax/pull/168) |
+| 2026-10-31 | Native plugin UI kit + agent reliability: optimistic dock install/uninstall, Pomodoro mode fix, open-vs-build routing, vanilla px kit, theme-aware sandboxes, kit instructions in plugins skill, Bitcoin validation via real modify path | [#169](https://github.com/0Pxyz/polymax/pull/169) |
