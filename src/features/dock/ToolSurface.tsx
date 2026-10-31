@@ -5,6 +5,7 @@ import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { DeepWorkFlashcardsView } from "@/features/dock/DeepWorkFlashcardsView";
+import { OnboardingPluginView } from "@/features/onboarding/OnboardingPluginView";
 
 export interface SurfaceSandboxTab {
   id: string;
@@ -91,6 +92,13 @@ export function ToolSurface({
     return (
       <DockSurface frameless>
         <DeepWorkFlashcardsView onDismiss={() => onDismiss("deep-work-flashcards")} />
+      </DockSurface>
+    );
+  }
+  if (toolId === "onboarding") {
+    return (
+      <DockSurface frameless>
+        <OnboardingPluginView onDismiss={() => onDismiss("onboarding")} />
       </DockSurface>
     );
   }

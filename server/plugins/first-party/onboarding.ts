@@ -9,7 +9,7 @@ export const onboardingPluginManifest: PluginManifest = {
   name: "Live Onboarding Demo",
   version: "1.0.0",
   description: "Autonomous live product walkthrough orchestrated directly by Poly",
-  icon: "Sparkle",
+  icon: "PlayCircle",
   trust: "first-party",
   capabilities: [
     {
@@ -50,7 +50,7 @@ export const onboardingPluginManifest: PluginManifest = {
     {
       id: "onboarding",
       title: "Product Walkthrough",
-      icon: "Sparkle",
+      icon: "PlayCircle",
       variant: "immersive",
       entry: "LiveOnboarding",
     },
