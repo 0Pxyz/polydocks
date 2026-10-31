@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { resolveUserId } from "../identity";
+import { resolveUserIdForMode } from "../identity";
+import { config } from "../config";
 import {
   clearAgentThread,
   getAgentThreadSnapshot,
@@ -32,10 +33,13 @@ function parseLimit(raw: string | undefined, fallback: number): number {
  * Latest page of the user's single persistent conversation, oldest first.
  */
 threadRouter.get("/", (c) => {
-  const userId = resolveUserId({
-    header: c.req.header("x-polymax-user"),
-    query: c.req.query("userId"),
-  });
+  const userId = resolveUserIdForMode(
+    {
+      header: c.req.header("x-polymax-user"),
+      query: c.req.query("userId"),
+    },
+    config.DEPLOY_MODE
+  );
   const limit = parseLimit(c.req.query("limit"), 60);
 
   const { thread, page } = getAgentThreadSnapshot(userId, { limit });
@@ -60,10 +64,13 @@ threadRouter.get("/", (c) => {
  * Older page for scroll-back inside the same thread. Never creates a section.
  */
 threadRouter.get("/messages", (c) => {
-  const userId = resolveUserId({
-    header: c.req.header("x-polymax-user"),
-    query: c.req.query("userId"),
-  });
+  const userId = resolveUserIdForMode(
+    {
+      header: c.req.header("x-polymax-user"),
+      query: c.req.query("userId"),
+    },
+    config.DEPLOY_MODE
+  );
   const before = Number.parseInt(c.req.query("before") || "", 10);
   if (!Number.isFinite(before) || before <= 0) {
     return c.json({ error: "Missing or invalid 'before' cursor" }, 400);
@@ -84,10 +91,13 @@ threadRouter.get("/messages", (c) => {
  * Clears the transcript inside the same thread. No new thread is created.
  */
 threadRouter.delete("/", (c) => {
-  const userId = resolveUserId({
-    header: c.req.header("x-polymax-user"),
-    query: c.req.query("userId"),
-  });
+  const userId = resolveUserIdForMode(
+    {
+      header: c.req.header("x-polymax-user"),
+      query: c.req.query("userId"),
+    },
+    config.DEPLOY_MODE
+  );
 
   const cleared = clearAgentThread(userId);
   return c.json({ success: cleared, userId });

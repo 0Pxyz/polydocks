@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { config } from "./config";
+import { config, isLoopbackHost } from "./config";
 import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
@@ -12,7 +12,7 @@ import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
 import { threadRouter } from "./routes/thread";
 import { readerRouter } from "./reader/route";
-import { resolveUserId } from "./identity";
+import { resolveUserIdForMode } from "./identity";
 import { sessionsRouter } from "./routes/sessions";
 import { tasksRouter } from "./routes/tasks";
 import { artifactsRouter } from "./routes/artifacts";
@@ -127,6 +127,7 @@ app.get("/api/health", (c) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     env: config.NODE_ENV,
+    mode: config.DEPLOY_MODE,
     model: {
       id: config.MODEL_ID,
       configured: Boolean(config.MODEL_API_KEY && config.MODEL_API_KEY.trim().length > 0),
@@ -254,10 +255,13 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
   }
 
-  const userId = resolveUserId({
-    header: c.req.header("x-polymax-user"),
-    body: body.userId,
-  });
+  const userId = resolveUserIdForMode(
+    {
+      header: c.req.header("x-polymax-user"),
+      body: body.userId,
+    },
+    config.DEPLOY_MODE
+  );
 
   const requestedModel =
     typeof modelId === "string" && modelId.trim().length > 0
@@ -374,6 +378,17 @@ if (import.meta.main) {
   }
 
   console.log(
-    `[Polymax Server] Running on http://localhost:${config.PORT} (env: ${config.NODE_ENV})`
+    `[Polymax Server] Running on http://localhost:${config.PORT} (env: ${config.NODE_ENV}, mode: ${config.DEPLOY_MODE})`
   );
+
+  // Demo guard (#191 slice 1, ADR 0002): local mode never serves a
+  // non-loopback HOST without an explicit override. The README warning
+  // becomes an enforced rule; cloud behavior is fork-only.
+  if (config.DEPLOY_MODE === "local" && !isLoopbackHost(config.HOST)) {
+    console.error(
+      `[FATAL] Refusing to serve DEPLOY_MODE=local on non-loopback HOST="${config.HOST}". ` +
+        `Bind loopback or run the cloud fork (ADR 0002).`
+    );
+    process.exit(1);
+  }
 }
