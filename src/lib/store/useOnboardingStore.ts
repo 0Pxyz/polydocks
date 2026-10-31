@@ -22,6 +22,8 @@ export const ONBOARDING_STEPS: {
   id: OnboardingStep;
   title: string;
   subtitle: string;
+  /** Center-stage narration line (the video flow). Shown under the orb. */
+  narration: string;
   dockTarget?: string;
   durationMs: number;
 }[] = [
@@ -29,6 +31,7 @@ export const ONBOARDING_STEPS: {
     id: "intro",
     title: "Welcome to PolyDocks",
     subtitle: "Your personal workspace operated by an autonomous agent.",
+    narration: "Welcome to your new workspace. Let me show you what we can do together.",
     dockTarget: "agent",
     durationMs: 7000,
   },
@@ -36,6 +39,7 @@ export const ONBOARDING_STEPS: {
     id: "research",
     title: "Agents That Do Real Work",
     subtitle: "Poly searches and synthesizes primary sources via TinyFish.",
+    narration: "Watch the dock: querying primary sources via TinyFish…",
     dockTarget: "browser",
     durationMs: 9000,
   },
@@ -43,6 +47,7 @@ export const ONBOARDING_STEPS: {
     id: "workspace",
     title: "Your Workspace Comes Alive",
     subtitle: "Real Chromium browser and research sources mounted in parallel.",
+    narration: "Opening real Chromium browser and research notes side by side…",
     dockTarget: "browser",
     durationMs: 8000,
   },
@@ -50,6 +55,7 @@ export const ONBOARDING_STEPS: {
     id: "tools",
     title: "Your Dock, Your Tools",
     subtitle: "Poly builds and mounts custom tools directly into the dock.",
+    narration: "Building and mounting interactive tools into your dock…",
     dockTarget: "deep-work-flashcards",
     durationMs: 9000,
   },
@@ -57,6 +63,7 @@ export const ONBOARDING_STEPS: {
     id: "handoff",
     title: "Your Workspace, Your Rules",
     subtitle: "This is your workspace. Tell me what you want to build next.",
+    narration: "This is your workspace. Tell me what you want to build next.",
     dockTarget: "agent",
     durationMs: 6000,
   },
