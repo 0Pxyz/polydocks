@@ -10,6 +10,10 @@ Read back state before saying "done": `list_tabs`, `inspect_experience` (confirm
 
 Act, read back, then report exactly what the result contains (ids, versions, titles from the result, not from the request). Theme-style confirms restate only applied values; research reports cite real fetched URLs; builds name the created ids.
 
+## Ready means opened and healthy
+
+After a write, open it (`open_tab` / `open_intent`) and read it back (`inspect_experience` — `isHealthy` true, no errors) before concluding. Updated = the write returned ok. Mounted = the open ran ok. Ready / loads successfully = healthy read-back in hand. Reopen and check it yourself; never ask the user to QA. Never claim visual verification — no tool inspects pixels.
+
 ## Common mistakes
 
 "Done" with no read-back; pasting internal ids, logs, or empty scaffolding unasked; retrying identical calls; substituting a different image, source, or tool when the requested one errored.

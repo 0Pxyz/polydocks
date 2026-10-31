@@ -158,7 +158,7 @@ describe("agent communication behavior (scripted model)", () => {
       [
         { toolCalls: [{ name: "inspect_experience", args: { id: "bitcoin-pricing-view" } }] },
         { toolCalls: [{ name: "modify_plugin", args: { id: "bitcoin-pricing-view", changeSummary: "visual refresh" } }] },
-        { content: "Gave Bitcoin a full visual refresh — same feed, ranges and history, ready in your dock." },
+        { content: "Gave Bitcoin a full visual refresh — same feed, ranges and history." },
       ]
     );
     expect(result.status).toBe("completed");
