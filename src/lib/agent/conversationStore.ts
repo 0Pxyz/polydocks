@@ -16,6 +16,8 @@ import {
 import { platformStorage } from "@/lib/platform/storage";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
+import { onboardingIntentFromTool } from "./onboardingBridge";
 import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
 import type { OrbState } from "@/features/agent/Orb";
 
@@ -521,6 +523,24 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "tool.started":
             set({ orbState: "thinking" });
+            // Agent entry path for the walkthrough: the capability-side
+            // events never reach SSE, so the client opens the dock tab
+            // from the tool call itself (invoke_capability or cap.*).
+            try {
+              const intent = onboardingIntentFromTool(
+                event.name || "",
+                (event.args ?? {}) as Record<string, unknown>
+              );
+              if (intent) {
+                const onboarding = useOnboardingStore.getState();
+                if (intent.action === "start") onboarding.startDemo(intent.replay);
+                else if (intent.action === "step") onboarding.setStep(intent.step);
+                else if (intent.action === "replay") onboarding.startDemo(true);
+                else onboarding.skipDemo();
+              }
+            } catch {
+              // Never break the turn on a walkthrough sync failure.
+            }
             if (event.statusLabel) {
               set({ statusText: event.statusLabel });
               set((state) => ({
