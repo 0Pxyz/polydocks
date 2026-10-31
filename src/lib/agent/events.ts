@@ -22,7 +22,6 @@ export type UIEvent =
       type: "agent.started";
       step: number;
       prompt: string;
-      cityId?: string;
       /** Effective model handling this turn (may differ from the selected one). */
       model?: string;
       /** Deterministic intent the turn was routed under. */
@@ -69,21 +68,6 @@ export type UIEvent =
       payload?: Record<string, unknown>;
     }
   | {
-      type: "map.changed";
-      step: number;
-      mapId: string;
-      name?: string;
-    }
-  | {
-      type: "map.point.added";
-      step: number;
-      cityId: string;
-      title: string;
-      x: number;
-      y: number;
-      mapId: string;
-    }
-  | {
       type: "plugin.created";
       step: number;
       plugin: ExperienceManifest;
@@ -120,7 +104,6 @@ export type UIEvent =
       /** URL (external fallback only; in-UI modes never auto-open tabs). */
       url: string;
       title?: string;
-      cityId?: string;
       site?: string;
       image?: string | null;
       /** Open mode decided server-side. */
@@ -169,12 +152,6 @@ export type UIEvent =
       /** One streamed text fragment (append to the provisional reply). */
       delta: string;
     }
-  | {
-      type: "city.entered";
-      step: number;
-      /** City workspace id to switch the view into. */
-      cityId: string;
-    };
 
 /**
  * Tools powered by TinyFish web discovery. Only these show TinyFish branding.
@@ -280,26 +257,13 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       const id = typeof args?.id === "string" ? args.id : "";
       return id ? `Removing experience "${id}"…` : "Removing experience…";
     }
-    case "read_city_file":
     case "read_file":
     case "read_file_safe":
       return "Reading your notes…";
-    case "write_city_file":
     case "write_file":
     case "write_file_safe":
     case "edit_file":
       return "Writing your notes…";
-    case "plan_map":
-      return "Planning knowledge territories on the world map…";
-    case "build_city": {
-      const topic = typeof args?.topic === "string" ? args.topic : "";
-      return topic ? `Constructing and researching "${topic}"…` : "Constructing learning environment & quests…";
-    }
-    case "open_tab":
-    case "open_intent": {
-      const tabId = typeof args?.tabId === "string" ? args.tabId : typeof args?.id === "string" ? args.id : "";
-      return tabId ? `Opening ${tabId}…` : "Opening experience in workspace…";
-    }
     case "dock_pin":
     case "dock_unpin":
     case "dock_close": {
@@ -309,13 +273,6 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
       return id ? `Closing ${id}…` : "Closing…";
     }
     // Trivial bookkeeping, internal inspections, and instant queries are silent
-    case "list_tabs":
-    case "inspect_tab":
-    case "get_city_context":
-    case "close_tray":
-    case "list_maps":
-    case "set_map":
-    case "place_city":
     case "open_source":
     case "find_capabilities":
     case "inspect_experience":
@@ -362,7 +319,6 @@ export function adaptBackendEvent(raw: {
         type: "agent.started",
         step,
         prompt: String(payload.prompt || ""),
-        cityId: payload.cityId ? String(payload.cityId) : undefined,
         model: payload.model ? String(payload.model) : undefined,
         intent: payload.intent ? String(payload.intent) : undefined,
       };
@@ -503,25 +459,6 @@ export function adaptBackendEvent(raw: {
       };
     }
 
-    case "map.changed":
-      return {
-        type: "map.changed",
-        step,
-        mapId: String(payload.mapId || ""),
-        name: payload.name ? String(payload.name) : undefined,
-      };
-
-    case "map.point.added":
-      return {
-        type: "map.point.added",
-        step,
-        cityId: String(payload.cityId || ""),
-        title: String(payload.title || ""),
-        x: Number(payload.x || 0),
-        y: Number(payload.y || 0),
-        mapId: String(payload.mapId || ""),
-      };
-
     case "agent.finish":
       return {
         type: "agent.finished",
@@ -548,12 +485,6 @@ export function adaptBackendEvent(raw: {
         delta: typeof payload.delta === "string" ? payload.delta : "",
       };
 
-    case "city.enter":
-      return {
-        type: "city.entered",
-        step,
-        cityId: String(payload.cityId || ""),
-      };
 
     case "reader.open": {
       const url = typeof payload.url === "string" ? payload.url : "";
@@ -566,7 +497,6 @@ export function adaptBackendEvent(raw: {
         url,
         id: pick("id"),
         title: pick("title"),
-        cityId: pick("cityId"),
         site: pick("site"),
         image: (payload.image as string | null) ?? undefined,
         mode: mode === "video" || mode === "reader" || mode === "embed" || mode === "external" ? mode : undefined,
@@ -585,7 +515,6 @@ export function adaptBackendEvent(raw: {
         url,
         id: undefined,
         title: typeof payload.title === "string" ? payload.title : undefined,
-        cityId: typeof payload.cityId === "string" ? payload.cityId : undefined,
         site: undefined,
         image: undefined,
         mode: undefined,
@@ -607,7 +536,6 @@ export function adaptBackendEvent(raw: {
           typeof payload.port !== "undefined"
             ? `Sandbox preview :${String(payload.port)}`
             : "Sandbox preview",
-        cityId: undefined,
         site: undefined,
         image: undefined,
         mode: undefined,

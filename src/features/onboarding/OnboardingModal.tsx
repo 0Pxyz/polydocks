@@ -42,9 +42,9 @@ const STEPS: OnboardingStep[] = [
     actionText: "Next",
   },
   {
-    title: "Plugins, including Polymax",
+    title: "Plugins",
     description:
-      "Polymax knowledge worlds is one installed plugin among many. Discover, install, or ask the agent to create new ones.",
+      "Tools live here as interactive panels. Discover, install, or ask the agent to create new ones.",
     icon: Storefront,
     actionText: "Start working",
   },

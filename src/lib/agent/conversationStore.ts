@@ -73,7 +73,6 @@ interface ConversationStoreState {
     mode: "video" | "reader" | "embed" | "external";
     title: string;
     url: string;
-    cityId?: string;
     site?: string;
     image?: string | null;
     markdown?: string;
@@ -117,7 +116,6 @@ interface ConversationStoreState {
   consumeVoiceStart: () => void;
   sendMessage: (
     prompt?: string,
-    cityId?: string,
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
@@ -129,7 +127,6 @@ interface ConversationStoreState {
     }
   ) => Promise<void>;
   retryLast: (
-    cityId?: string,
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
@@ -139,11 +136,8 @@ interface ConversationStoreState {
   abortStream: () => void;
   openReader: (view: NonNullable<ConversationStoreState["readerView"]>) => void;
   closeReader: () => void;
-  /** Promotes the open source to a city quest via the cities contract (no agent round-trip). */
-  promoteReaderToQuest: () => Promise<void>;
   handleApproval: (
     approved: boolean,
-    cityId?: string,
     callbacks?: {
       onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
       onOpenExperience?: (expId: string) => void;
@@ -419,38 +413,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   closeReader: () => set({ readerView: null }),
 
-  promoteReaderToQuest: async () => {
-    const view = get().readerView;
-    if (!view?.sourceId || !view.cityId) {
-      set({ statusText: "Open a saved source first — only feed items become quests." });
-      return;
-    }
-    set({ statusText: `Saving "${view.title}" as a quest…` });
-    try {
-      const res = await fetch("/api/plugins/cities/quest_add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: {
-            cityId: view.cityId,
-            title: `Explore: ${view.title}`,
-            description: `Read and summarize: ${view.title} (${view.url})`,
-            xpReward: 50,
-          },
-        }),
-      });
-      const json = (await res.json().catch(() => null)) as any;
-      if (json?.ok) {
-        set({ statusText: `Saved as quest "${view.title}".` });
-      } else {
-        set({ statusText: `Couldn't save the quest: ${json?.error || `HTTP ${res.status}`}` });
-      }
-    } catch (err: any) {
-      set({ statusText: `Couldn't save the quest: ${err?.message || "connection failed"}` });
-    }
-  },
-
-  sendMessage: async (promptToSend, cityId, callbacks, options) => {
+  sendMessage: async (promptToSend, callbacks, options) => {
     const rawPrompt = (promptToSend ?? get().draft).trim();
     // Drop stale image previews without stored payloads: they render as
     // placeholders in the transcript and must never be re-sent to the model.
@@ -504,7 +467,6 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
     await streamAgentLoop({
       prompt,
-      cityId,
       userId: getAgentUserId(),
       modelId: get().selectedModel,
       reasoningEffort: get().selectedEffort,
@@ -690,41 +652,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
-          case "map.changed":
-          case "map.point.added": {
-            // The world view refreshes on this DOM signal (poll/focus
-            // alone left new cities invisible for 30s or more).
-            if (typeof window !== "undefined") {
-              const detail =
-                event.type === "map.point.added"
-                  ? { cityId: (event as any).cityId, title: (event as any).title }
-                  : undefined;
-              window.dispatchEvent(new CustomEvent("polymax:cities-changed", { detail }));
-            }
-            set({
-              statusText:
-                event.type === "map.point.added" && event.title
-                  ? `Mapped "${event.title}".`
-                  : "Map updated.",
-            });
-            break;
-          }
 
           case "reader.open":
             applyReaderOpened(event);
             break;
 
-          case "city.entered": {            try {
-              const { useNavigationStore } = await import("@/lib/store/useNavigationStore");
-              if (event.cityId) useNavigationStore.getState().enterCity(event.cityId);
-            } catch {
-              // Non-fatal: status text below still tells the user where to go.
-            }
-            set({
-              statusText: event.cityId ? `Entered "${event.cityId}".` : "Entered the city.",
-            });
-            break;
-          }
 
           case "approval.required":
             set({
@@ -949,7 +881,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     activeAbortController = null;
   },
 
-  retryLast: async (cityId, callbacks) => {
+  retryLast: async (callbacks) => {
     const { messages, isStreaming } = get();
     if (isStreaming) {
       set({ statusText: "Still working on the previous request — wait for it or stop it first." });
@@ -974,13 +906,13 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       messages: prunedMessages,
       stagedAttachments: lastAttachments ? [...lastAttachments] : [],
     });
-    await get().sendMessage(lastUserMsg.content, cityId, callbacks, {
+    await get().sendMessage(lastUserMsg.content, callbacks, {
       origin: lastOrigin,
       retry: true,
     });
   },
 
-  handleApproval: async (approved, cityId, callbacks) => {
+  handleApproval: async (approved, callbacks) => {
     const { activeApproval } = get();
     if (!activeApproval) return;
     set({ activeApproval: null });
@@ -988,7 +920,6 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     if (approved) {
       await get().sendMessage(
         `Confirmed: proceed with ${activeApproval.toolName} for ${activeApproval.experienceId}`,
-        cityId,
         callbacks
       );
     } else {
@@ -1007,7 +938,6 @@ export function applyReaderOpened(event: {
   mode?: "video" | "reader" | "embed" | "external";
   title?: string;
   url: string;
-  cityId?: string;
   site?: string;
   image?: string | null;
   markdown?: string;
@@ -1019,7 +949,6 @@ export function applyReaderOpened(event: {
     mode: event.mode || "external",
     title: event.title || event.url,
     url: event.url,
-    cityId: event.cityId,
     site: event.site,
     image: event.image ?? undefined,
     markdown: event.markdown,

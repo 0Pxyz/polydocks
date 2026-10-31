@@ -17,7 +17,6 @@ export interface ThreadMessageRecord {
   seq: number;
   role: "user" | "assistant" | "system";
   content: string;
-  cityId?: string;
   attachments?: ChatAttachment[];
   createdAt: string;
 }

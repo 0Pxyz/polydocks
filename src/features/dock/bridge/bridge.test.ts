@@ -57,7 +57,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     const targetWin = new MockTargetWindow() as any;
     let readerUrl = "";
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onOpenContent: (url) => {
         readerUrl = url;
@@ -91,7 +91,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     const fallbackWin = new MockTargetWindow() as any;
     let openedUrl = "";
     const fallback = createHostBridge(fallbackWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onOpenUrl: (url) => {
         openedUrl = url;
@@ -108,14 +108,14 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     expect(openedUrl).toBe("https://example.com/video");
   });
 
-  it("persists data with strict per-city and per-tab isolation", async () => {
+  it("persists data with strict per-workspace and per-tab isolation", async () => {
     const targetWin1 = new MockTargetWindow() as any;
     const targetWin2 = new MockTargetWindow() as any;
 
-    const bridge1 = createHostBridge(targetWin1, { cityId: "city-alpha", tabId: "flashcards" });
-    const bridge2 = createHostBridge(targetWin2, { cityId: "city-beta", tabId: "flashcards" });
+    const bridge1 = createHostBridge(targetWin1, { workspaceId: "workspace-alpha", tabId: "flashcards" });
+    const bridge2 = createHostBridge(targetWin2, { workspaceId: "workspace-beta", tabId: "flashcards" });
 
-    // 1. Tab 1 sets a value in city-alpha
+    // 1. Tab 1 sets a value in workspace-alpha
     await bridge1.handleMessage({
       source: targetWin1,
       data: {
@@ -148,7 +148,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
       error: undefined,
     });
 
-    // 3. Tab 2 in city-beta reads 'score' — must be null (isolated!)
+    // 3. Tab 2 in workspace-beta reads 'score' — must be null (isolated!)
     await bridge2.handleMessage({
       source: targetWin2,
       data: {
@@ -165,10 +165,10 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     });
   });
 
-  it("provides contextual city data through getContext", async () => {
+  it("provides contextual workspace data through getContext", async () => {
     const targetWin = new MockTargetWindow() as any;
     const bridge = createHostBridge(targetWin, {
-      cityId: "athens-stoicism",
+      workspaceId: "athens-stoicism",
       tabId: "matrix",
       getContext: () => ({ topic: "Stoic Philosophy", notesCount: 5 }),
     });
@@ -193,7 +193,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     const targetWin = new MockTargetWindow() as any;
     let openedUrl = "";
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onOpenUrl: (url) => {
         openedUrl = url;
@@ -232,7 +232,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     let submittedCmd = "";
 
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onExpand: () => {
         expanded = true;
@@ -270,7 +270,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     const targetWin = new MockTargetWindow() as any;
     const events: any[] = [];
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       onTaskEvent: (e) => {
         events.push(e);
@@ -318,7 +318,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     const attackerWin = new MockTargetWindow() as any;
 
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
     });
 
@@ -340,7 +340,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
   it("carries the active theme in the ui.ready ack and answers theme.get", async () => {
     const targetWin = new MockTargetWindow() as any;
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       getTheme: () => "cyber",
     });
@@ -361,7 +361,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
   it("defaults to the void theme without a theme provider", async () => {
     const targetWin = new MockTargetWindow() as any;
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
     });
 
@@ -375,7 +375,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
   it("pushes live theme changes into the guest window", () => {
     const targetWin = new MockTargetWindow() as any;
     const bridge = createHostBridge(targetWin, {
-      cityId: "city-1",
+      workspaceId: "workspace-1",
       tabId: "tab-1",
       getTheme: () => "amber",
     });

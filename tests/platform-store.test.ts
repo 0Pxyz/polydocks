@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { platformStorage } from "../src/lib/platform/storage";
 import { openExternalUrl } from "../src/lib/platform/window";
-import { useNavigationStore } from "../src/lib/store/useNavigationStore";
 import { useProfileStore } from "../src/lib/store/useProfileStore";
 import { useDockStore } from "../src/lib/store/useDockStore";
 
@@ -60,32 +59,8 @@ describe("Platform Abstraction Layer & Storage", () => {
 
 describe("Foundational Zustand Stores", () => {
   beforeEach(() => {
-    useNavigationStore.getState().exitToWorld();
-    useNavigationStore.getState().resetCamera();
     useProfileStore.getState().resetProfile();
     useDockStore.getState().resetDock();
-  });
-
-  it("manages view navigation and camera state with useNavigationStore", () => {
-    const nav = useNavigationStore.getState();
-    expect(nav.viewMode).toBe("world");
-    expect(nav.activeCityId).toBeNull();
-
-    // Enter city
-    useNavigationStore.getState().enterCity("athens-stoicism");
-    expect(useNavigationStore.getState().viewMode).toBe("city");
-    expect(useNavigationStore.getState().activeCityId).toBe("athens-stoicism");
-
-    // Pan & zoom camera
-    useNavigationStore.getState().setCamera({ x: 250, zoom: 1.5 });
-    const cam = useNavigationStore.getState().camera;
-    expect(cam.x).toBe(250);
-    expect(cam.zoom).toBe(1.5);
-
-    // Return to world
-    useNavigationStore.getState().exitToWorld();
-    expect(useNavigationStore.getState().viewMode).toBe("world");
-    expect(useNavigationStore.getState().activeCityId).toBeNull();
   });
 
   it("tracks level, XP progression, and quest completions with useProfileStore", () => {

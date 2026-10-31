@@ -113,9 +113,9 @@ export function buildDockSections(args: {
 
   return [
     { id: "docked", title: "In your dock", items: docked },
-    { id: "yours", title: "Your tools", items: yours },
-    { id: "store", title: "Store", items: storeItems },
-    { id: "create", title: "Create with agent", items: create },
+    { id: "yours", title: "Tools", items: yours },
+    { id: "store", title: "Library", items: storeItems },
+    { id: "create", title: "Creations", items: create },
   ];
 }
 
@@ -150,29 +150,18 @@ export function createItemsForQuery(query: string): DockItem[] {
 }
 
 /**
- * Static "create with agent" rows for an empty query, mirroring the original
- * suggestions: city-aware when a city context exists, generic otherwise.
+ * Static "create with agent" rows for an empty query.
  */
-export function getStaticCreateRows(cityName?: string): DockItem[] {
-  const city = cityName?.trim();
-  const labels = city
-    ? [`Flashcards for ${city}`, `Compare two sources on ${city}`, `A timeline of ${city}`]
-    : ["Flashcards", "A reading list", "A timeline"];
-  const descriptions = city
-    ? [
-        `Ask the agent to build flashcards for ${city}`,
-        `Ask the agent to compare two sources on ${city}`,
-        `Ask the agent to build a timeline of ${city}`,
-      ]
-    : [
-        "Ask the agent to build flashcards",
-        "Ask the agent to build a reading list",
-        "Ask the agent to build a timeline",
-      ];
-  return labels.map((label, i) => ({
-    id: `create:static:${i}${city ? `:${city}` : ""}`,
+export function getStaticCreateRows(): DockItem[] {
+  const rows: Array<[string, string]> = [
+    ["Flashcards", "Ask the agent to build flashcards"],
+    ["A reading list", "Ask the agent to build a reading list"],
+    ["A timeline", "Ask the agent to build a timeline"],
+  ];
+  return rows.map(([label, description], i) => ({
+    id: `create:static:${i}`,
     label,
-    description: descriptions[i],
+    description,
     icon: "cards",
     kind: "create" as const,
   }));
@@ -203,86 +192,8 @@ export function sliceEmptyQueryRows(args: {
 }
 
 /**
- * The city's contextual tools. Shown in the dock while inside a city, never
- * pinned globally. Icons resolve through the shared icon adapter.
- */
-export const CITY_TOOL_IDS = [
-  "sources",
-  "notes",
-  "files",
-  "quests",
-  "flashcards",
-  "terminal",
-  "browser",
-] as const;
-
-export type CityToolId = (typeof CITY_TOOL_IDS)[number];
-
-export interface CityToolCounts {
-  sources: number;
-  notes: number;
-  quests: number;
-  doneQuests: number;
-}
-
-/**
- * Builds the city dock set with live badges and tooltip details from real
- * workspace counts. No badge is invented: tools without backing data
- * (files, terminal) render badge-free.
- */
-export function buildCityDockTools(summary?: CityToolCounts): DockItem[] {
-  const questsDetail =
-    summary && summary.quests > 0
-      ? summary.doneQuests >= summary.quests
-        ? `${summary.quests} ${summary.quests === 1 ? "quest" : "quests"} done`
-        : `${summary.doneQuests} of ${summary.quests} quests`
-      : undefined;
-  return [
-    { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin", system: true },
-    { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
-    {
-      id: "sources",
-      label: "Sources",
-      description: "Saved sources",
-      icon: "sources",
-      kind: "builtin",
-      badge: summary && summary.sources > 0 ? summary.sources : undefined,
-    },
-    {
-      id: "notes",
-      label: "Notes",
-      description: "Synthesized notes",
-      icon: "notes",
-      kind: "builtin",
-      badge: summary && summary.notes > 0 ? summary.notes : undefined,
-    },
-    { id: "files", label: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
-    {
-      id: "quests",
-      label: "Quests",
-      description: "Mastery quests and progress",
-      icon: "quests",
-      kind: "builtin",
-      badge: summary && summary.quests > 0 ? summary.quests : undefined,
-      tooltipDetail: questsDetail,
-    },
-    {
-      id: "flashcards",
-      label: "Flashcards",
-      description: "Interactive flashcards",
-      icon: "flashcards",
-      kind: "builtin",
-      tooltipDetail:
-        summary && summary.sources > 0 ? "Ready" : summary ? "Add sources to synthesize" : undefined,
-    },
-    { id: "terminal", label: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
-    { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
-  ];
-}
-
-/**
  * Display order for the bar: pinned first (bar stays curated), then
- * contextual city tools, then open unpinned items. Unknown ids drop out;
+ * contextual tools, then open unpinned items. Unknown ids drop out;
  * the caller slices to the width-derived cap.
  */
 export function orderVisibleIds(args: {
@@ -397,21 +308,13 @@ export function applyDockDirective(
  * Kept here (not scattered across components) so every surface agrees.
  */
 export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
-  agent: "Talk to the dock agent",
-  maps: "Travel the knowledge map",
+  agent: "Poly: your agent",
   browser: "Browse the web with a real browser",
-  notes: "Synthesized notes",
-  files: "City workspace files",
-  papers: "Reading list and papers",
-  sources: "Saved sources",
-  quests: "Mastery quests and progress",
-  flashcards: "Interactive flashcards",
-  terminal: "City terminal",
   settings: "Dock appearance and theme",
   theme: "Dock appearance and theme",
-  store: "Community plugin store",
-  plugins: "Installed plugins",
-  city: "Current city workspace",
+  store: "Library: discover what others have built",
+  plugins: "Tools: your capabilities",
+  creations: "Creations: your personal software",
 };
 
 /**
@@ -419,20 +322,12 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
  * Mirrors the server builtin list (server/agent/tools/dockCatalog.ts).
  */
 export const DOCK_CORE_CATALOG: DockItem[] = [
-  { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin", system: true },
-  { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
+  { id: "agent", label: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin", system: true },
   { id: "browser", label: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
-  { id: "notes", label: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
-  { id: "files", label: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
-  { id: "papers", label: "Papers", description: "Reading list and papers", icon: "papers", kind: "builtin" },
-  { id: "sources", label: "Sources", description: "Saved sources", icon: "sources", kind: "builtin" },
-  { id: "quests", label: "Quests", description: "Mastery quests and progress", icon: "quests", kind: "builtin" },
-  { id: "flashcards", label: "Flashcards", description: "Interactive flashcards", icon: "flashcards", kind: "builtin" },
-  { id: "terminal", label: "Terminal", description: "City terminal", icon: "terminal", kind: "builtin" },
+  { id: "plugins", label: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
+  { id: "creations", label: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },
+  { id: "store", label: "Library", description: "Library: discover what others have built", icon: "store", kind: "builtin" },
   { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
-  // No store entry: the Plugin Store is not a dock item. Store plugins are
-  // reachable only through dock search, which installs and opens them.
-  { id: "plugins", label: "Plugins", description: "Installed plugins", icon: "plugins", kind: "builtin" },
 ];
 
 /**

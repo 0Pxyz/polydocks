@@ -32,9 +32,9 @@ export function createHostBridge(
   targetWindowOrGetter: HostBridgeWindowSource,
   options: HostBridgeOptions
 ) {
-  const cityId = options.cityId || options.workspaceId || "global";
+  const workspaceId = options.workspaceId || "global";
   const tabId = options.tabId || options.pluginId || "default";
-  const effectiveScope = options.workspaceId || options.cityId || "global";
+  const effectiveScope = options.workspaceId || "global";
   const effectiveEntityId = options.pluginId || options.tabId || "default";
   const storagePrefix = options.storagePrefix || (options.workspaceId ? "polydocks" : "polymax");
 
@@ -113,9 +113,8 @@ export function createHostBridge(
 
         case "getContext": {
           let ctx: Record<string, unknown> = {
-            cityId: effectiveScope,
+            workspaceId: effectiveScope,
             tabId: effectiveEntityId,
-            workspaceId: options.workspaceId,
             pluginId: options.pluginId,
             timestamp: new Date().toISOString(),
           };
@@ -222,7 +221,7 @@ export function createHostBridge(
             const apiRes = await fetch("/api/capabilities/invoke", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ capabilityId: capId, input: data.input, cityId }),
+              body: JSON.stringify({ capabilityId: capId, input: data.input, workspaceId }),
             });
             const apiData = await apiRes.json();
             if (apiData.success) {
@@ -313,7 +312,7 @@ export function createHostBridge(
             fetch(`/api/experiences/${encodeURIComponent(tabId)}/errors`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ cityId, error: data.error }),
+              body: JSON.stringify({ workspaceId, error: data.error }),
             }).catch(() => {});
           }
           return true;

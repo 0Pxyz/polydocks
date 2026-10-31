@@ -10,29 +10,22 @@ import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { HomeScreen } from "@/features/home/HomeScreen";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { OnboardingModal } from "@/features/onboarding/OnboardingModal";
-import { WorldView } from "@/features/views/WorldView";
-import { CityView } from "@/features/views/CityView";
 import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
 import { resolveIcon } from "@/components/icons";
-import { useNavigationStore } from "@/lib/store/useNavigationStore";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { TabHost } from "@/features/dock/TabHost";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
-import { buildCityDockTools } from "@/lib/dock/dockModel";
-import { matchDockShortcut, TWO_PANEL_MIN_WIDTH } from "@/lib/dock/dockItems";
-import { useCitySummaryStore } from "@/lib/store/useCitySummaryStore";
+import { matchDockShortcut } from "@/lib/dock/dockItems";
 import { cn } from "@/lib/cn";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
   const [pluginsInitialTab] = useState<"installed" | "discover">("installed");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
-  const [selectedCity, setSelectedCity] = useState<string | undefined>(undefined);
 
-  const { viewMode, activeCityId, enterCity, exitToWorld } = useNavigationStore();
   const { setActiveTool: setDockActiveTool } = useDockStore();
   const hostTabs = useTabHostStore((s) => s.tabs);
 
@@ -133,6 +126,11 @@ export default function App() {
   };
 
   const handleSelectTool = (toolId: string) => {
+    if (!toolId) {
+      setActiveToolId("");
+      setDockActiveTool("");
+      return;
+    }
     if (toolId === "agent") {
       // Single source of truth for the glyph: the dock icon is active
       // exactly while the panel is open. Never leave a stale "agent"
@@ -146,32 +144,10 @@ export default function App() {
       return;
     }
 
-    if (toolId === "world" || toolId === "maps") {
-      if (viewMode === "city") {
-        exitToWorld();
-        setActiveToolId("maps");
-        setDockActiveTool("maps");
-        return;
-      }
-      const nextTool = activeToolId === "maps" ? "" : "maps";
-      setActiveToolId(nextTool);
-      setDockActiveTool(nextTool);
-      return;
-    }
-
     if (toolId === "settings" || toolId === "theme") {
       const nextTool = activeToolId === "settings" || activeToolId === "theme" ? "" : "settings";
       setActiveToolId(nextTool);
       setDockActiveTool(nextTool);
-      return;
-    }
-
-    if (toolId === "city") {
-      if (selectedCity) {
-        enterCity(selectedCity);
-      }
-      // Focus follows the context switch (per-context memory restores the
-      // city's tool); never blank the store here.
       return;
     }
 
@@ -203,12 +179,8 @@ export default function App() {
   };
 
   const handleToolPromptSubmit = (prompt: string, meta?: Record<string, unknown>) => {
-    const isFlashcards = prompt.toLowerCase().includes("flashcard");
-    const targetCity = viewMode === "city" ? (activeCityId || selectedCity) : undefined;
-
     sendMessage(
       prompt,
-      targetCity,
       {
         onExperienceCreated: (exp) => {
           setExtraTools((prev) => {
@@ -233,26 +205,6 @@ export default function App() {
       },
       meta || { origin: "dock-add" }
     );
-
-    if (isFlashcards) {
-      setTimeout(() => {
-        setExtraTools((prev) => {
-          if (prev.some((t) => t.id === "flashcards")) return prev;
-          return [
-            ...prev,
-            {
-              id: "flashcards",
-              label: `${targetCity} Flashcards`,
-              type: "icon",
-              icon: resolveIcon("cards"),
-              iconKey: "cards",
-            },
-          ];
-        });
-        setActiveToolId("flashcards");
-        setDockActiveTool("flashcards");
-      }, 600);
-    }
   };
 
 
@@ -277,16 +229,6 @@ export default function App() {
     }
   }, [activeToolId, activeExtraTools, hostTabs]);
 
-  const cityId = viewMode === "city" ? activeCityId || selectedCity : undefined;
-  const citySummary = useCitySummaryStore((s) => (cityId ? s.summaries[cityId] : undefined));
-
-  // Active context is opaque to the core: city id or null (map). Records
-  // persist across switches; visibility filters globals + active context.
-  // Focus is remembered per context, so map -> city restores order + focus.
-  useEffect(() => {
-    useDockStore.getState().setActiveContext(cityId ?? null);
-  }, [cityId]);
-
   // Keep the local focus mirror in sync when the dock changes underneath
   // (keyboard, REST, CLI, agent verbs share the same registry).
   const dockFocusedId = useDockStore((s) => s.dock.focusedId);
@@ -295,26 +237,6 @@ export default function App() {
       setActiveToolId(dockFocusedId ?? "");
     }
   }, [dockFocusedId]);
-
-  // City tools live in the dock while inside a city (contextual, never
-  // pinned globally) with live badges from real workspace counts.
-  // No per-view duplicate state: the dock record is the source; the
-  // per-city focus memory restores the same tool on return.
-  const cityTools: DockToolItem[] = useMemo(
-    () =>
-      buildCityDockTools(citySummary).map(
-        (item): DockToolItem => ({
-          id: item.id,
-          label: item.label,
-          type: "icon",
-          iconKey: item.icon,
-          badge: item.badge,
-          tooltipDetail: item.tooltipDetail,
-        })
-      ),
-    [citySummary]
-  );
-  const cityToolIds = useMemo(() => cityTools.map((t) => t.id), [cityTools]);
 
   useEffect(() => {
     // Restore the single persistent thread once per session. Layout changes
@@ -333,6 +255,9 @@ export default function App() {
         altKey: e.altKey,
       });
       if (matched) {
+        // Never steal keys while typing: chat inputs own their keys.
+        // Escape below is unaffected.
+        if (isTypingTarget(e.target)) return;
         const dock = useDockStore.getState();
         if (matched.action.id === "tabs.focus") {
           e.preventDefault();
@@ -350,10 +275,6 @@ export default function App() {
           return;
         }
         if (matched.action.id === "tabs.close") {
-          // Never close the chat via W when typing inside it: the chat
-          // owns its own keys; the dock shortcut applies outside inputs.
-          const target = (e.target as HTMLElement | null)?.tagName;
-          if (target === "INPUT" || target === "TEXTAREA") return;
           e.preventDefault();
           dock.runDockAction("tabs.close");
           return;
@@ -402,9 +323,6 @@ export default function App() {
           }
         } else if (activeToolId === "theme" || activeToolId === "settings") {
           handleDismissTool(activeToolId);
-        } else if (activeToolId === "maps") {
-          setActiveToolId("");
-          setDockActiveTool("");
         }
       }
     };
@@ -413,42 +331,6 @@ export default function App() {
   }, [layoutState, activeToolId, setLayoutState]);
 
   const isSideLayout = layoutState === "side";
-  const isCityMode = viewMode === "city";
-  const isMapsOpen = !isCityMode && activeToolId === "maps";
-
-  // Two panels side by side at sufficient width; otherwise single panel.
-  // Nothing unmounts: the host keeps every record mounted, hidden via CSS.
-  const [viewportWidth, setViewportWidth] = useState<number>(
-    typeof window !== "undefined" ? window.innerWidth : 1280
-  );
-  useEffect(() => {
-    const update = () => setViewportWidth(window.innerWidth);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  const dockSnapshot = useDockStore((s) => s.dock);
-  const secondaryToolId = useMemo(() => {
-    if (!isCityMode || viewportWidth < TWO_PANEL_MIN_WIDTH) return null;
-    const visible = dockSnapshot.order.filter((id) => {
-      const record = dockSnapshot.items[id];
-      return (
-        record &&
-        (record.contextId === null || record.contextId === dockSnapshot.activeContextId) &&
-        (record.state === "open" || record.state === "focused")
-      );
-    });
-    if (visible.length < 2) return null;
-    const focused = dockSnapshot.focusedId && visible.includes(dockSnapshot.focusedId)
-      ? dockSnapshot.focusedId
-      : visible[0];
-    const others = visible.filter((id) => id !== focused);
-    others.sort((a, b) => (dockSnapshot.items[b]?.updatedAt ?? 0) - (dockSnapshot.items[a]?.updatedAt ?? 0));
-    return others[0] ?? null;
-  }, [isCityMode, viewportWidth, dockSnapshot]);
-  useEffect(() => {
-    useDockStore.getState().layoutPanels(viewportWidth);
-  }, [viewportWidth, dockSnapshot.focusedId, dockSnapshot.activeContextId]);
 
   return (
     <AppProviders>
@@ -484,14 +366,11 @@ export default function App() {
 
           {/* Pinned Agentic Dock at the top edge */}
           <AgenticDock
-            cityName={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             activeToolId={activeToolId}
             isAgentSheetOpen={layoutState !== "closed"}
             isAgentWorking={isStreaming}
             extraTools={activeExtraTools}
             sessionTools={extraTools}
-            tools={isCityMode ? cityTools : undefined}
-            contextualIds={isCityMode ? cityToolIds : undefined}
             onSelectTool={handleSelectTool}
             onCloseItem={(toolId) => {
               if (toolId === "agent") {
@@ -526,7 +405,7 @@ export default function App() {
             statusText={statusText}
             onStopBuilding={abortStream}
             onRetryBuilding={() =>
-              retryLast(viewMode === "city" ? (activeCityId || selectedCity) : undefined, {
+              retryLast({
                 onExperienceCreated: (exp) => {
                   setExtraTools((prev) => {
                     if (prev.some((t) => t.id === exp.id)) return prev;
@@ -556,7 +435,6 @@ export default function App() {
 
           {/* Single Agent Conversation Instance */}
           <AgentConversation
-            cityId={viewMode === "city" ? (activeCityId || selectedCity) : undefined}
             onExperienceCreated={(exp) => {
               setExtraTools((prev) => {
                 if (prev.some((t) => t.id === exp.id)) return prev;
@@ -638,24 +516,13 @@ export default function App() {
                     }))}
                 />
               </DockSurface>
-            ) : isCityMode ? (
-              <DockSurface frameless className={activeToolId === "browser" ? "pb-0" : undefined}>
-                <div className="w-full">
-                  <CityView
-                    cityName={activeCityId || selectedCity || "workspace"}
-                    activeToolId={!activeToolId ? "" : activeToolId}
-                    secondaryToolId={secondaryToolId}
-                    onSelectTool={handleSelectTool}
-                  />
-                </div>
-              </DockSurface>
-            ) : activeToolId === "browser" && !isCityMode ? (
+            ) : activeToolId === "browser" ? (
               <DockSurface frameless className="pb-0">
                 <div className="w-full flex-1 min-w-0 flex flex-col min-h-0">
                   <NativeBrowserView workspaceKey="home" />
                 </div>
               </DockSurface>
-            ) : !isMapsOpen ? (
+            ) : (
               <DockSurface frameless>
                 <HomeScreen
                   onOpenAgent={() => {
@@ -669,27 +536,17 @@ export default function App() {
                   panelOpen={layoutState !== "closed"}
                 />
               </DockSurface>
-            ) : null}
-
-            {/* Living World Map */}
-            {isMapsOpen && (
-              <div className="fixed inset-0 z-0 w-full h-full animate-in fade-in duration-300">
-                <WorldView
-                  activeCityId={undefined}
-                  onEnterCity={(cityName, cityId) => {
-                    const id = cityId || cityName;
-                    setSelectedCity(id);
-                    enterCity(id);
-                  }}
-                  onFoundCityTopic={(_topic) => {
-                    setLayoutState("sheet");
-                  }}
-                />
-              </div>
             )}
           </main>
         </div>
       </RootLayout>
     </AppProviders>
   );
+}
+
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || typeof (el as HTMLElement).tagName !== "string") return false;
+  const tag = (el as HTMLElement).tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || (el as HTMLElement).isContentEditable === true;
 }

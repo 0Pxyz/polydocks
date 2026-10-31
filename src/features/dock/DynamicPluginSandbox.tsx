@@ -85,9 +85,8 @@ export function DynamicPluginSandbox({
   // is dropped). Rebinding on srcdoc change keeps exactly one listener.
   useEffect(() => {
     const bridge = createHostBridge(() => iframeRef.current?.contentWindow ?? null, {
-      cityId: workspaceId,
-      tabId: pluginId,
       workspaceId,
+      tabId: pluginId,
       pluginId,
       storagePrefix: "polydocks",
       onCollapse: onDismiss,

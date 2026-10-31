@@ -5,7 +5,7 @@
  *   { id, pluginId, contextId, state, order, panel }
  *
  * - contextId is opaque (null = global). The core never interprets it;
- *   the city plugin passes its city id when opening.
+ *   a plugin passes its workspace id when opening.
  * - state: closed | background | open | focused
  *   - background keeps running (video, agent stream) without occupying space.
  *   - open is visible in a panel. focused is the panel receiving keyboard.
@@ -39,7 +39,7 @@ export interface DockItemsSnapshot {
   order: string[];
   focusedId: string | null;
   activeContextId: string | null;
-  /** Per-context focus memory so map -> city restores the same focus. */
+  /** Per-context focus memory so returning to a context restores the same focus. */
   focusedByContext: Record<string, string | null>;
   seq: number;
 }
@@ -131,10 +131,10 @@ export function openItem(
   const record = next.items[id];
   // Adopt the opener context when the record was global but opened in a scope.
   // Records never migrate between contexts once scoped: that would leak a
-  // city item into the map bar (symptom 2).
+  // other-context item into the bar (symptom 2).
   if (record.contextId === null && contextId !== undefined && contextId !== null) {
-    // Keep global builtins global; scope only unknown ids opened from a city.
-    // The caller decides: pass contextId only for city-scoped plugins.
+    // Keep global builtins global; scope only unknown ids opened from a workspace.
+    // The caller decides: pass contextId only for workspace-scoped plugins.
   }
   const items = {
     ...next.items,
@@ -224,7 +224,7 @@ export function backgroundItem(snapshot: DockItemsSnapshot, id?: string): DockIt
 /**
  * Switch the active context (opaque to the core). All records persist;
  * only visibility changes. Focus is remembered per context so returning
- * to a city restores the same focused item with no reorder.
+ * to a context restores the same focused item with no reorder.
  */
 export function setActiveContext(
   snapshot: DockItemsSnapshot,
@@ -246,7 +246,7 @@ export function setActiveContext(
     // withFocus(null) demotes any stale focused flag to open.
     next = withFocus(next, null);
     // Re-focus the remembered item only when it becomes visible again;
-    // otherwise leave focus empty (map shows no city focus).
+    // otherwise leave focus empty (nothing visible to focus).
   }
   return { ...next, focusedByContext };
 }
