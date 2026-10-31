@@ -27,7 +27,7 @@ import { cn } from "@/lib/cn";
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
-  const [pluginsInitialTab, setPluginsInitialTab] = useState<"installed" | "discover">("installed");
+  const [pluginsInitialTab] = useState<"installed" | "discover">("installed");
   const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
   const [selectedCity, setSelectedCity] = useState<string | undefined>(undefined);
 
@@ -65,21 +65,6 @@ export default function App() {
   useEffect(() => {
     void fetchWorkspaces();
   }, [fetchWorkspaces]);
-
-  // Installed workspace plugins only. Polymax (maps) is an optional plugin
-  // installed via Discover — it is never injected into the home grid.
-  const homePlugins = useMemo(
-    () =>
-      workspacePlugins
-        .filter((wp) => wp.enabled && wp.plugin)
-        .map((wp) => ({
-          id: wp.pluginId,
-          label: wp.plugin?.name || wp.pluginId,
-          detail: wp.plugin?.description,
-          iconKey: wp.plugin?.icon,
-        })),
-    [workspacePlugins]
-  );
 
   // Memoized: fresh arrays every render would retrigger the tab-host
   // registration effect below and loop openTab -> rerender forever.
@@ -380,16 +365,26 @@ export default function App() {
         }
       }
       if (e.key === "Escape") {
+        // Return focus to the home orb when the chat panel closes, so
+        // keyboard users land back where they started (no-op when home
+        // is not mounted).
+        const returnFocusToOrb = () => {
+          requestAnimationFrame(() => {
+            document.querySelector<HTMLElement>("[data-home-orb]")?.focus();
+          });
+        };
         if (layoutState === "full") {
           setLayoutState("sheet");
         } else if (layoutState === "sheet") {
           setLayoutState("closed");
+          returnFocusToOrb();
         } else if (layoutState === "side") {
           if (activeToolId) {
             setActiveToolId("");
             setLayoutState("full");
           } else {
             setLayoutState("closed");
+            returnFocusToOrb();
           }
         } else if (activeToolId === "theme" || activeToolId === "settings") {
           handleDismissTool(activeToolId);
@@ -643,18 +638,13 @@ export default function App() {
             ) : !isMapsOpen ? (
               <DockSurface frameless>
                 <HomeScreen
-                  onSendMessage={(prompt, meta) => {
-                    handleToolPromptSubmit(prompt, meta);
+                  onOpenAgent={() => {
                     const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+                    setActiveToolId("agent");
+                    setDockActiveTool("agent");
                     setLayoutState(isWide ? "side" : "sheet");
                   }}
-                  installedPlugins={homePlugins}
-                  onOpenPlugin={(pluginId) => handleSelectTool(pluginId)}
-                  onOpenStore={() => {
-                    setPluginsInitialTab("discover");
-                    setActiveToolId("plugins");
-                    setDockActiveTool("plugins");
-                  }}
+                  panelOpen={layoutState !== "closed"}
                 />
               </DockSurface>
             ) : null}
