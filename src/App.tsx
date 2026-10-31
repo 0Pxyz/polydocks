@@ -667,7 +667,6 @@ export default function App() {
                     requestVoiceStart();
                   }}
                   panelOpen={layoutState !== "closed"}
-                  onCancelJobs={abortStream}
                 />
               </DockSurface>
             ) : null}
