@@ -3,8 +3,6 @@ import { pluginRegistry } from "../plugins/registry";
 import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import { connectMcpServer } from "../plugins/adapters/mcp";
-import { validateUrlForSsrf } from "../plugins/ssrf";
-import { validatePluginManifest } from "../plugins/manifest";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -213,82 +211,6 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     ...(discoveryWarning ? { discoveryWarning } : {}),
   }, 201);
 });
-
-/**
- * POST /api/plugins/install-url - Install a plugin from a remote manifest URL
- */
-pluginsRouter.post("/install-url", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const { url, permissionsConfirmed } = body;
-  if (!url || typeof url !== "string") {
-    return c.json({ error: "Manifest URL is required." }, 400);
-  }
-
-  // 1. SSRF Guard
-  const ssrfCheck = validateUrlForSsrf(url);
-  if (!ssrfCheck.safe || !ssrfCheck.url) {
-    return c.json({ error: `SSRF Guard Blocked: ${ssrfCheck.reason || "Forbidden URL"}` }, 400);
-  }
-
-  // 2. Fetch remote manifest
-  let rawManifest: unknown;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(ssrfCheck.url.toString(), {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-    clearTimeout(timer);
-
-    if (!res.ok) {
-      return c.json({ error: `Failed to fetch manifest: HTTP ${res.status} ${res.statusText}` }, 400);
-    }
-    const text = await res.text();
-    if (Buffer.byteLength(text, "utf-8") > 512 * 1024) {
-      return c.json({ error: "Manifest payload exceeds maximum allowed size of 512KB" }, 400);
-    }
-    rawManifest = JSON.parse(text);
-  } catch (err: any) {
-    return c.json({ error: `Failed to fetch or parse remote manifest: ${err.message}` }, 400);
-  }
-
-  // 3. Validate schema
-  const validation = validatePluginManifest(rawManifest);
-  if (!validation.success || !validation.data) {
-    return c.json({ error: `Invalid plugin manifest: ${validation.error}` }, 400);
-  }
-
-  const manifest = validation.data;
-
-  // 4. If permissions not yet confirmed by user, prompt with manifest and required permissions
-  if (!permissionsConfirmed) {
-    return c.json({
-      success: false,
-      requiresConfirmation: true,
-      manifest,
-      permissions: manifest.permissions || [],
-    });
-  }
-
-  // 5. Install plugin and register capabilities
-  const installed = pluginRegistry.install(manifest);
-  if (!installed.success || !installed.plugin) {
-    return c.json({ error: installed.error || "Failed to install plugin." }, 400);
-  }
-
-  // Auto-grant declared permissions upon explicit user confirmation
-  for (const perm of manifest.permissions || []) {
-    pluginRegistry.recordGrant(manifest.id, perm.type, "*", "allow_always");
-  }
-
-  for (const cap of manifest.capabilities || []) {
-    capabilityBus.register(manifest.id, cap);
-  }
-
-  return c.json({ success: true, plugin: installed.plugin }, 201);
-});
-
 /**
  * POST /api/plugins/lifecycle - Plugin synthesis lifecycle
  * { op: create|modify|publish|install, ...params }.
@@ -339,7 +261,7 @@ pluginsRouter.post("/:id/rollback", async (c) => {
  * here with the same envelope the agent and CLI receive.
  * Registered AFTER all specific POST routes: Hono matches routes in
  * registration order, so this two-parameter route must not shadow
- * literals like /mcp/connect or /install-url.
+ * literals like /mcp/connect.
  */
 pluginsRouter.post("/:pluginId/:capability", async (c) => {
   const pluginId = c.req.param("pluginId");

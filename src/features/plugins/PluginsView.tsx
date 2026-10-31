@@ -13,7 +13,6 @@ import {
   Circle,
   ToggleLeft,
   ToggleRight,
-  Link,
   ShieldWarning,
 } from "@phosphor-icons/react";
 import { resolveSurfaceIcon } from "../dock/surfaceResolver";
@@ -64,12 +63,9 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   const [connectingMcp, setConnectingMcp] = useState(false);
   const [mcpWarning, setMcpWarning] = useState<string | null>(null);
 
-  // Install from Manifest URL state
-  const [showInstallUrlModal, setShowInstallUrlModal] = useState(false);
-  const [manifestUrl, setManifestUrl] = useState("");
-  const [installUrlLoading, setInstallUrlLoading] = useState(false);
-  const [installUrlError, setInstallUrlError] = useState<string | null>(null);
-  const [pendingManifest, setPendingManifest] = useState<any | null>(null);
+  // Install from Manifest URL state — removed: remote-URL install is no longer
+  // offered (security: unverified remote code must never execute in the
+  // workspace). Plugins come from the curated store or the agent.
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchPlugins = async () => {
@@ -209,78 +205,6 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
     }
   };
 
-  const handleInspectUrl = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manifestUrl.trim()) {
-      setInstallUrlError("Manifest URL is required.");
-      return;
-    }
-
-    setInstallUrlLoading(true);
-    setInstallUrlError(null);
-
-    try {
-      const res = await fetch("/api/plugins/install-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: manifestUrl.trim(),
-          permissionsConfirmed: false,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setInstallUrlError(data.error || "Failed to inspect remote manifest.");
-        return;
-      }
-
-      if (data.requiresConfirmation) {
-        setPendingManifest(data.manifest);
-      } else if (data.success) {
-        setShowInstallUrlModal(false);
-        setManifestUrl("");
-        setPendingManifest(null);
-        await fetchPlugins();
-      }
-    } catch (err: any) {
-      setInstallUrlError(err.message || "Network error fetching manifest.");
-    } finally {
-      setInstallUrlLoading(false);
-    }
-  };
-
-  const handleConfirmInstallUrl = async () => {
-    setInstallUrlLoading(true);
-    setInstallUrlError(null);
-
-    try {
-      const res = await fetch("/api/plugins/install-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: manifestUrl.trim(),
-          permissionsConfirmed: true,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setInstallUrlError(data.error || "Failed to install plugin.");
-        return;
-      }
-
-      setShowInstallUrlModal(false);
-      setManifestUrl("");
-      setPendingManifest(null);
-      await fetchPlugins();
-    } catch (err: any) {
-      setInstallUrlError(err.message || "Network error installing plugin.");
-    } finally {
-      setInstallUrlLoading(false);
-    }
-  };
-
   const renderStatusDots = (pluginId: string) => {
     const list = executions[pluginId] || [];
     const dots = Array.from({ length: 5 }).map((_, i) => list[i] || null);
@@ -359,19 +283,6 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setPendingManifest(null);
-              setInstallUrlError(null);
-              setShowInstallUrlModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border border-sky-500/30 active:scale-95 transition-all"
-          >
-            <Link className="w-3.5 h-3.5" weight="bold" />
-            <span>Install URL</span>
-          </button>
-
           <button
             type="button"
             onClick={() => setShowMcpModal(true)}
@@ -726,132 +637,6 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
         </div>
       )}
 
-      {/* Install Plugin from Manifest URL Modal */}
-      {showInstallUrlModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-lg p-5 rounded-2xl bg-[#0c0e14] border border-white/15 shadow-2xl flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <Link className="w-5 h-5 text-sky-400" />
-                <h3 className="text-sm font-semibold text-white">Install Plugin from Manifest URL</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowInstallUrlModal(false);
-                  setPendingManifest(null);
-                }}
-                className="p-1 rounded-md text-white/50 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {installUrlError && (
-              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
-                {installUrlError}
-              </div>
-            )}
-
-            {!pendingManifest ? (
-              <form onSubmit={handleInspectUrl} className="flex flex-col gap-3">
-                <p className="text-xs text-white/60">
-                  Enter the URL of a remote <code className="text-sky-300">plugin.json</code> manifest. The runtime will validate its schema and prompt you to inspect requested permissions before installing.
-                </p>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-white/70">Manifest URL</label>
-                  <input
-                    type="url"
-                    placeholder="https://example.com/plugins/my-tool/plugin.json"
-                    value={manifestUrl}
-                    onChange={(e) => setManifestUrl(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder-white/30 focus:outline-none focus:border-sky-500/50"
-                    required
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setShowInstallUrlModal(false)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={installUrlLoading}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-500 hover:bg-sky-600 text-black font-semibold disabled:opacity-50 transition-all"
-                  >
-                    <span>{installUrlLoading ? "Inspecting…" : "Inspect Manifest"}</span>
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex flex-col gap-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-white">{pendingManifest.name}</span>
-                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/10 text-white/70">v{pendingManifest.version}</span>
-                  </div>
-                  <p className="text-xs text-white/60">{pendingManifest.description}</p>
-                  <div className="text-[11px] text-white/40 font-mono mt-1">
-                    ID: {pendingManifest.id} • Capabilities: {pendingManifest.capabilities?.length || 0}
-                  </div>
-                </div>
-
-                {/* Permissions Confirmation List */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
-                    <ShieldWarning className="w-4 h-4 text-amber-400" weight="bold" />
-                    <span>Requested Permissions</span>
-                  </div>
-                  {pendingManifest.permissions && pendingManifest.permissions.length > 0 ? (
-                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20 max-h-40 overflow-y-auto">
-                      {pendingManifest.permissions.map((perm: any, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs text-white/80 font-mono">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            {perm.type}
-                          </span>
-                          <span className="text-[11px] text-white/60 truncate">
-                            {perm.type === "net" && `Hosts: ${perm.hosts?.join(", ")}`}
-                            {perm.type === "exec" && `Commands: ${perm.commands?.join(", ")}`}
-                            {perm.type === "fs" && `Scope: ${perm.scope} (${perm.mode})`}
-                            {perm.type === "mcp" && `Server: ${perm.server}`}
-                            {perm.type === "secret" && `Secret: ${perm.name}`}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-emerald-400/80 italic">No special permissions requested.</span>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                  <button
-                    type="button"
-                    onClick={() => setPendingManifest(null)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmInstallUrl}
-                    disabled={installUrlLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500 hover:bg-emerald-600 text-black font-semibold disabled:opacity-50 transition-all"
-                  >
-                    <Check className="w-3.5 h-3.5" weight="bold" />
-                    <span>{installUrlLoading ? "Installing…" : "Grant & Install"}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
