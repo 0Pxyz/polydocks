@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
-import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
+import { getToolBrand } from "@/lib/agent/events";
 import {
   pushLine,
   riseDurationMs,
@@ -51,7 +51,9 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
       aria-label="Agent activity"
     >
       <style>{THOUGHT_STREAM_CSS}</style>
-      {visible.map((line, i) => (
+      {visible.map((line, i) => {
+        const brand = getToolBrand(line.tool);
+        return (
         <div
           key={line.id}
           className="thought-line text-center"
@@ -64,12 +66,13 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
         >
           {/* Blurred chip: readable over any wallpaper or theme, no box —
             just enough backdrop to lift the text off the background.
-            Same TinyFish mark the chat uses, when a discovery tool speaks. */}
+            Brand mark resolves generically: any tool with a registered
+            brand shows its logo, no per-vendor checks here. */}
         <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-black/30 px-3 font-sans text-[13px] leading-[22px] text-white backdrop-blur-md [text-shadow:0_1px_8px_rgba(0,0,0,0.65)]">
-          {line.tool && isTinyFishTool(line.tool) && (
+          {brand && (
             <img
-              src={TINYFISH_LOGO_SRC}
-              alt="TinyFish"
+              src={brand.logoSrc}
+              alt={brand.label}
               width={14}
               height={14}
               className="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
@@ -78,7 +81,8 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
           <span className="truncate">{line.text}</span>
         </span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

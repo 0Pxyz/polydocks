@@ -189,6 +189,28 @@ export function isTinyFishTool(toolName: string): boolean {
   return (TINYFISH_TOOLS as readonly string[]).includes(toolName);
 }
 
+export interface ToolBrand {
+  logoSrc: string;
+  label: string;
+}
+
+/**
+ * Generic brand registry: any tool with a registered mark shows it through
+ * the same UI path (thought stream today, chat tomorrow). Adding a new
+ * integration is one entry here — no UI code changes, no per-vendor checks
+ * at render time.
+ */
+const TOOL_BRANDS: Record<string, ToolBrand> = {
+  search_web: { logoSrc: TINYFISH_LOGO_SRC, label: "TinyFish" },
+  fetch_page: { logoSrc: TINYFISH_LOGO_SRC, label: "TinyFish" },
+};
+
+/** Brand mark for a tool, or null when it has none. */
+export function getToolBrand(toolName?: string | null): ToolBrand | null {
+  if (!toolName) return null;
+  return TOOL_BRANDS[toolName] ?? null;
+}
+
 /**
  * Human-friendly status line mapping for substantive tools.
  * Internal bookkeeping, inspections, and instant queries return null to suppress noisy progress updates.
