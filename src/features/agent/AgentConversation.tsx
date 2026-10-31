@@ -98,6 +98,7 @@ export function AgentConversation({
     currentPhase,
     streamingText,
     activeApproval,
+    pendingVoiceStart,
     activeModel,
     soundEnabled,
     audioLevel,
@@ -120,6 +121,7 @@ export function AgentConversation({
     handleApproval,
     loadOlderMessages,
     clearConversation,
+    consumeVoiceStart,
   } = useConversationStore();
 
   const { dockPosition } = useThemeStore();
@@ -386,6 +388,14 @@ export function AgentConversation({
       setStatusText("Microphone permission denied.");
     }
   }, [cityId, onExperienceCreated, onOpenExperience, onCloseExperience, sendMessage, setAudioLevel, setDraft, setOrbState, setStatusText]);
+
+  // Home orb entry: the orb click opens the panel and asks for voice.
+  // Start listening once (never stop an active session from here).
+  useEffect(() => {
+    if (!pendingVoiceStart) return;
+    consumeVoiceStart();
+    if (!realtimeRef.current) void toggleVoice();
+  }, [pendingVoiceStart, consumeVoiceStart, toggleVoice]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

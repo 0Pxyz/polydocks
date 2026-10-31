@@ -96,8 +96,8 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
               layoutId="agent-orb-shared"
               onClick={openAgent}
               data-home-orb
-              aria-label="Talk to your agent (Ctrl K)"
-              title="Talk to your agent (Ctrl K)"
+              aria-label="Talk to your agent — starts voice mode"
+              title="Talk to your agent — starts voice mode"
               transition={isReduced ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
               className="group relative rounded-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent-lime)]"
             >
