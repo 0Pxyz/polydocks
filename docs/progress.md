@@ -89,3 +89,4 @@
 | 2026-10-31 | Activate/deactivate slice B (#153): persisted registry flag via shared facade, explicit API routes, agent verbs, CLI commands, route round-trip test | [#232](https://github.com/0Pxyz/polymax/pull/232) |
 | 2026-10-31 | Activation acceptance slice C (#153): deactivate closes dock views, skill teaches activate-first flow, facade-level acceptance test | [#233](https://github.com/0Pxyz/polymax/pull/233) |
 | 2026-10-31 | Agent runtime audit (#155): memory/guidelines/compaction/usage probes green, no soul file needed, no dead code, doc agrees with code | [#234](https://github.com/0Pxyz/polymax/pull/234) |
+| 2026-10-31 | Principle-based system prompt (#208): versioned prompts/main.md (identity, mental model, invariants, decision style, economy), no procedures, pinned tests updated | [#235](https://github.com/0Pxyz/polymax/pull/235) |

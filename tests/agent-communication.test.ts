@@ -206,8 +206,8 @@ describe("agent communication behavior (scripted model)", () => {
 
   it("the shared system prompt carries the product-voice rule", async () => {
     const { readFileSync } = await import("node:fs");
-    const loop = readFileSync("server/agent/loop.ts", "utf-8");
-    expect(loop).toContain("Talk Like a Product, Not a Debugger");
-    expect(loop).toContain("never mention tool names, permission flags, execution codes");
+    const prompt = readFileSync("server/agent/prompts/main.md", "utf-8");
+    expect(prompt).toContain("Speak about outcomes, never mechanisms");
+    expect(prompt).toContain("no tool names, permission flags, or execution codes");
   });
 });
