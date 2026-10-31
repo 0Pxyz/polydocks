@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { getToolBrand } from "../src/lib/agent/events";
 import {
   adaptToThought,
   feedThoughtEvent,
@@ -89,6 +90,14 @@ describe("thought adapter: stream fades, finals persist", () => {
     expect(adaptToThought({ type: "agent.text_delta", step: 1, delta: "hi" } as never)).toBeNull();
     expect(adaptToThought({ type: "agent.finished", step: 1 } as never)).toBeNull();
     expect(adaptToThought({ type: "agent.error", step: 1, message: "x" } as never)).toBeNull();
+  });
+
+  it("brand registry is generic: known tools resolve, others do not", () => {
+    expect(getToolBrand("search_web")?.label).toBe("TinyFish");
+    expect(getToolBrand("fetch_page")?.logoSrc).toBe("/tinyfish-logo.png");
+    expect(getToolBrand("some_future_tool")).toBeNull();
+    expect(getToolBrand()).toBeNull();
+    expect(getToolBrand("")).toBeNull();
   });
 
   it("carries the tool so the UI can show the TinyFish mark", () => {
