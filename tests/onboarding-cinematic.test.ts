@@ -20,11 +20,17 @@ describe("cinematic onboarding tab", () => {
     expect(source).toContain("<Orb");
   });
 
-  test("auto-advances and narrates every step (no Next required)", () => {
-    expect(source).toContain("setTimeout");
-    expect(source).toContain("stepDef.durationMs");
-    expect(source).toContain("pushThought");
-    expect(source).toContain("TinyFish");
+  test("stage auto-plays without mandatory clicks (engine owns the runtime)", () => {
+    const enginePath = resolve(__dirname, "../src/features/onboarding/LiveOnboarding.tsx");
+    const engine = readFileSync(enginePath, "utf-8");
+    expect(engine).toContain("setTimeout");
+    expect(engine).toContain("stepDef.durationMs");
+    expect(engine).toContain("pushThought");
+    expect(engine).toContain("TinyFish");
+    // The tab itself carries no timers or choreography — pure stage.
+    expect(source).not.toContain("setTimeout");
+    expect(source).not.toContain("pushThought");
+    expect(source).not.toContain("shouldPauseTourOnTakeover");
   });
 
   test("has no card grid, no Start Walkthrough gate", () => {
@@ -33,8 +39,11 @@ describe("cinematic onboarding tab", () => {
     expect(source).not.toContain("Live Tool Synthesis");
   });
 
-  test("pauses on user takeover instead of stealing focus", () => {
-    expect(source).toContain("shouldPauseTourOnTakeover");
+  test("pauses on user takeover in the engine, not the tab (survives focus switches)", () => {
+    const enginePath = resolve(__dirname, "../src/features/onboarding/LiveOnboarding.tsx");
+    const engine = readFileSync(enginePath, "utf-8");
+    expect(engine).toContain("shouldPauseTourOnTakeover");
+    expect(source).not.toContain("shouldPauseTourOnTakeover");
   });
 
   test("the tour lives in the tab only (no floating overlay mounted)", () => {

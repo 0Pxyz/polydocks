@@ -24,6 +24,7 @@ describe("onboarding dock lifecycle", () => {
       isPlaying: false,
       currentStep: "idle",
       currentStepIndex: 0,
+      paused: false,
     });
   });
 
@@ -61,6 +62,14 @@ describe("onboarding dock lifecycle", () => {
     expect(useDockStore.getState().openIds).toContain(ONBOARDING_TAB_ID);
   });
 
+  it("pause is store-owned: replay unpauses a fresh run", () => {
+    useOnboardingStore.getState().skipDemo();
+    useOnboardingStore.getState().setPaused(true);
+    expect(useOnboardingStore.getState().paused).toBe(true);
+    useOnboardingStore.getState().startDemo(true);
+    expect(useOnboardingStore.getState().paused).toBe(false);
+  });
+
   it("tour steps keep creative's choreography (TinyFish research, flashcards demo)", () => {
     const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]));
     expect(byId.get("research")?.dockTarget).toBe("browser");
@@ -69,6 +78,7 @@ describe("onboarding dock lifecycle", () => {
     for (const step of ONBOARDING_STEPS) {
       expect(step.title.length).toBeGreaterThan(0);
       expect(step.subtitle.length).toBeGreaterThan(0);
+      expect(step.narration.length).toBeGreaterThan(0);
     }
   });
 });

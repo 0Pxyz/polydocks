@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import {
   X,
@@ -21,6 +21,8 @@ export function LiveOnboarding() {
   const {
     isOpen,
     isPlaying,
+    paused,
+    setPaused,
     currentStep,
     currentStepIndex,
     nextStep,
@@ -29,7 +31,6 @@ export function LiveOnboarding() {
     completeDemo,
   } = useOnboardingStore();
 
-  const [paused, setPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const thoughtTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   // Last tool the tour itself force-focused (null = none yet). Lets the
@@ -165,13 +166,13 @@ export function LiveOnboarding() {
         prevStep();
       } else if (e.key === " ") {
         e.preventDefault();
-        setPaused((p) => !p);
+        setPaused(!paused);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, skipDemo, nextStep, prevStep]);
+  }, [isOpen, paused, skipDemo, nextStep, prevStep]);
 
   if (!isOpen || currentStep === "idle") return null;
 
@@ -218,7 +219,7 @@ export function LiveOnboarding() {
           {/* Pause / Play */}
           <button
             type="button"
-            onClick={() => setPaused((p) => !p)}
+            onClick={() => setPaused(!paused)}
             className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors cursor-pointer"
             title={paused ? "Resume demo (Space)" : "Pause demo (Space)"}
             aria-label={paused ? "Resume demo" : "Pause demo"}
