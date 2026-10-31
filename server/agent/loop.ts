@@ -456,13 +456,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Context-aware dynamic skill injection and progressive disclosure
     let activeSystemPrompt = systemPrompt;
 
-    // App map: always loaded, hard budget ~700 tokens. Domain skills add detail.
-    try {
-      const overview = stripSkillMetadata(await loadSkill("app-overview"));
-      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
-      loadedSkills.push("app-overview");
-    } catch {
-      // Non-fatal
+    // App map (#209): no longer always loaded. Dock-add builds need the
+    // one-page map up front; every other turn pulls it through read_skill
+    // only when the model decides it needs it.
+    if (origin === "dock-add") {
+      try {
+        const overview = stripSkillMetadata(await loadSkill("app-overview"));
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
+        loadedSkills.push("app-overview");
+      } catch {
+        // Non-fatal
+      }
     }
 
     // Runtime extract of the operating guidelines (AGENTS.md). The full file
