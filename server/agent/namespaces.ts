@@ -33,8 +33,29 @@ import { toResponsesName, toResponsesTools } from "./responses";
  *   chunked (`<ns>`, `<ns>_2`, …) so the constraint holds structurally.
  */
 
-/** `find_capabilities` is superseded by native search on this path. */
-export const SUPERSEDED_BY_TOOL_SEARCH = new Set(["find_capabilities"]);
+/** Custom discovery/search roots retired on the Responses path, where the
+ *  native built-ins take over: `find_capabilities` (#222, native tool
+ *  search) and `search_web` (#223, built-in server-side grounding). The
+ *  Chat fallback keeps the flat catalog with both. `fetch_page` stays —
+ *  it does what grounding does not: capped full-page reads persisted to
+ *  workspace sources. Domain-typed capability search (`cap_search_*`,
+ *  `cap_browser_*`) stays deferred in the research namespace for power
+ *  use the built-in's plain grounding does not cover. */
+export const RESPONSES_SUPERSEDED = new Set(["find_capabilities", "search_web"]);
+
+/** Names the built-in `web_search` tool reserves server-side. A developer
+ *  function with one of these names in the same request is HTTP 400, so
+ *  the loop checks before enabling grounding (see #223). */
+export const WEB_SEARCH_RESERVED_NAMES = new Set(["browser.search", "browser.open", "browser.find"]);
+
+/** True when an offered Responses function name collides with a name the
+ *  built-in `web_search` reserves — grounding must stay off that turn. */
+export function hasReservedWebSearchCollision(responseNames: Iterable<string>): boolean {
+  for (const name of responseNames) {
+    if (WEB_SEARCH_RESERVED_NAMES.has(name)) return true;
+  }
+  return false;
+}
 
 /** `invoke_capability` stays immediate: skills name capability ids
  *  directly (e.g. `sources.add via invoke_capability`), so the escape
@@ -152,8 +173,14 @@ function capabilityNamespaceFor(originalName: string): string {
   return CAPABILITY_PLUGIN_NAMESPACE[pluginId] ?? pluginId;
 }
 
-function namespaceFor(originalName: string): string | null {
-  if (SUPERSEDED_BY_TOOL_SEARCH.has(originalName)) return null;
+function namespaceFor(originalName: string, opts?: { builtinWebSearch?: boolean }): string | null {
+  // find_capabilities is always retired (native tool search is the route).
+  // Custom search_web is retired only when built-in grounding is on;
+  // otherwise it stays namespaced as the fallback search route.
+  if (originalName === "search_web" && opts?.builtinWebSearch === false) {
+    return "research";
+  }
+  if (RESPONSES_SUPERSEDED.has(originalName)) return null;
   if (IMMEDIATE_TOOLS.has(originalName)) return null;
   const staticNs = STATIC_NAMESPACE[originalName];
   if (staticNs) return staticNs;
@@ -188,25 +215,38 @@ export interface BuiltResponsesTools {
 /**
  * Group the intent-scoped tools into deferred namespaces for the
  * Responses path. Coverage stays 1:1 with the input minus the superseded
- * `find_capabilities` root; denylist enforcement happens before this
- * builder (the input `scopedTools` is already filtered), and the bus
- * re-checks policy at invoke time — so whole-tool and per-action
- * denylists stay enforced.
+ * roots (`find_capabilities`, custom `search_web`); denylist enforcement
+ * happens before this builder (the input `scopedTools` is already
+ * filtered), and the bus re-checks policy at invoke time — so whole-tool
+ * and per-action denylists stay enforced.
+ *
+ * Set `builtinWebSearch: false` when grounding is unavailable that turn
+ * (reserved-name collision): the custom `search_web` alias is kept
+ * namespaced instead of retired so the turn still has a search route.
  */
-export function buildResponsesTools(scopedTools: AgentTool[]): BuiltResponsesTools {
+export function buildResponsesTools(
+  scopedTools: AgentTool[],
+  opts?: { builtinWebSearch?: boolean }
+): BuiltResponsesTools {
+  const builtinWebSearch = opts?.builtinWebSearch !== false;
   const nameMap = new Map<string, string>();
   const grouped = new Map<string, AgentTool[]>();
   const immediate: AgentTool[] = [];
 
   for (const tool of scopedTools) {
-    const ns = namespaceFor(tool.name);
+    if (builtinWebSearch && RESPONSES_SUPERSEDED.has(tool.name)) {
+      // Retired: the native built-in is the route — not offered, not
+      // resolvable, so the model never reaches for the custom alias.
+      continue;
+    }
+    // Fallback: keep the custom alias namespaced when grounding is off
+    // (namespaceFor routes it to research when builtinWebSearch is false).
+    const ns = namespaceFor(tool.name, { builtinWebSearch });
     if (ns === null) {
       if (IMMEDIATE_TOOLS.has(tool.name)) {
         nameMap.set(toResponsesName(tool.name), tool.name);
         immediate.push(tool);
       }
-      // Superseded roots (find_capabilities) are dropped entirely: not
-      // offered, not resolvable — native search is the route.
       continue;
     }
     nameMap.set(toResponsesName(tool.name), tool.name);

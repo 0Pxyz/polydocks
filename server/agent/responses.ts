@@ -28,6 +28,11 @@ export interface ResponsesFunctionCall {
   argsText: string;
 }
 
+export interface ResponsesCitation {
+  url: string;
+  title: string;
+}
+
 export interface ResponsesTurn {
   text: string;
   functionCalls: ResponsesFunctionCall[];
@@ -35,6 +40,11 @@ export interface ResponsesTurn {
    *  order, replayed into the stateless input so the loaded set stays
    *  stable across turns. Informational only — never executed. */
   toolSearchItems: any[];
+  /** Server-side `web_search_call` items (results opt-in), replayed the
+   *  same way. Informational only — never executed. */
+  webSearchItems: any[];
+  /** `url_citation` annotations attached to this turn's answer text. */
+  citations: ResponsesCitation[];
   usage: unknown;
   responseId?: string;
   encryptedReasoning?: string[];
@@ -150,6 +160,32 @@ function extractToolSearchFromOutput(output: any[]): any[] {
   );
 }
 
+/** Server-side web_search calls, preserved in output order. */
+function extractWebSearchFromOutput(output: any[]): any[] {
+  return (output ?? []).filter((item) => item?.type === "web_search_call");
+}
+
+/** `url_citation` annotations on this turn's answer text. */
+function extractCitationsFromOutput(output: any[]): ResponsesCitation[] {
+  const out: ResponsesCitation[] = [];
+  const seen = new Set<string>();
+  for (const item of output ?? []) {
+    const content = item?.type === "message" && Array.isArray(item.content) ? item.content : [];
+    for (const part of content) {
+      for (const ann of part?.annotations ?? []) {
+        if (ann?.type === "url_citation" && typeof ann.url === "string" && !seen.has(ann.url)) {
+          seen.add(ann.url);
+          out.push({
+            url: ann.url,
+            title: typeof ann.title === "string" ? ann.title : ann.url,
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
 function extractReasoningFromOutput(output: any[]): string[] {
   const out: string[] = [];
   for (const item of output ?? []) {
@@ -171,6 +207,17 @@ function extractReasoningFromOutput(output: any[]): string[] {
  * `instructions`, `tools` and `reasoning.effort` are resent every turn —
  * Responses does not persist them across turns.
  */
+export interface ResponsesWebSearch {
+  /** Offer the built-in server-side `web_search` tool (Responses only).
+   *  The model decides whether to search; enabling never forces one. */
+  enabled: boolean;
+  /** Retrieved-context size; "medium" is the documented default. */
+  contextSize?: "low" | "medium" | "high";
+  /** Return raw hits behind each `web_search_call` (default true: the loop
+   *  needs them to save sources and offer follow-up reads). */
+  includeResults?: boolean;
+}
+
 export async function createResponsesTurn(input: {
   client: any;
   model: string;
@@ -178,10 +225,11 @@ export async function createResponsesTurn(input: {
   inputItems: any[];
   tools: any[];
   effort?: string;
+  webSearch?: ResponsesWebSearch;
   signal?: AbortSignal;
   onTextDelta: (delta: string) => void | Promise<void>;
 }): Promise<ResponsesTurn> {
-  const { client, model, instructions, inputItems, tools, effort, signal, onTextDelta } = input;
+  const { client, model, instructions, inputItems, tools, effort, webSearch, signal, onTextDelta } = input;
   const params: any = {
     model,
     instructions,
@@ -189,8 +237,22 @@ export async function createResponsesTurn(input: {
     store: false,
     include: ["reasoning.encrypted_content"],
   };
-  if (tools.length > 0) {
-    params.tools = tools;
+  const requestTools = [...(tools ?? [])];
+  // Built-in search grounding (#223): server-side, Responses-only. Shares
+  // the request with namespaced function tools; the reserved names
+  // browser.search/browser.open/browser.find must not collide (guarded by
+  // hasReservedWebSearchCollision before this call).
+  if (webSearch?.enabled && !requestTools.some((t) => t?.type === "web_search")) {
+    requestTools.push({
+      type: "web_search",
+      search_context_size: webSearch.contextSize ?? "medium",
+    });
+  }
+  if (webSearch?.enabled && webSearch?.includeResults !== false) {
+    params.include = [...params.include, "web_search_call.results"];
+  }
+  if (requestTools.length > 0) {
+    params.tools = requestTools;
     params.tool_choice = "auto";
   }
   const nestedEffort = responsesEffort(effort);
@@ -213,6 +275,8 @@ export async function createResponsesTurn(input: {
   const callAcc = new Map<number, { callId: string; name: string; namespace?: string; args: string }>();
   const toolSearchItems: any[] = [];
   const seenToolSearchIds = new Set<string>();
+  const webSearchItems: any[] = [];
+  const seenWebSearchIds = new Set<string>();
   const pushToolSearchItem = (item: any) => {
     if (!item || typeof item !== "object") return;
     const key = typeof item.id === "string" ? item.id : JSON.stringify(item);
@@ -220,10 +284,22 @@ export async function createResponsesTurn(input: {
     seenToolSearchIds.add(key);
     toolSearchItems.push(item);
   };
+  const pushWebSearchItem = (item: any) => {
+    if (!item || typeof item !== "object") return;
+    // Replaying web_search_call items: `id` is optional — the server
+    // auto-assigns before validation — so dedupe falls back to content.
+    const key = typeof item.id === "string" ? item.id : JSON.stringify(item);
+    if (seenWebSearchIds.has(key)) return;
+    seenWebSearchIds.add(key);
+    webSearchItems.push(item);
+  };
   let usage: unknown = {};
   let responseId: string | undefined;
   const encryptedReasoning: string[] = [];
   let outputIndex = 0;
+  // Authoritative output of the final completed response: deltas carry no
+  // annotations, so citations are extracted from here at return time.
+  let completedOutput: any[] = [];
 
   for await (const event of streamed as AsyncIterable<any>) {
     if (event?.response?.id && !responseId) responseId = event.response.id;
@@ -282,6 +358,9 @@ export async function createResponsesTurn(input: {
         item?.type === "tool_search_output"
       ) {
         pushToolSearchItem(item);
+      } else if (item?.type === "web_search_call") {
+        // Server-side grounding handshake: replay for history, never execute.
+        pushWebSearchItem(item);
       } else if (item?.type === "reasoning" && typeof item.encrypted_content === "string") {
         encryptedReasoning.push(item.encrypted_content);
       } else if (item?.type === "message" && Array.isArray(item.content)) {
@@ -301,6 +380,7 @@ export async function createResponsesTurn(input: {
       if (response?.id) responseId = response.id;
       if (response?.usage) usage = response.usage;
       const output = response?.output ?? [];
+      completedOutput = output;
       const fullText = extractTextFromOutput(output);
       if (fullText && !text) text = fullText;
       const fullCalls = extractCallsFromOutput(output);
@@ -309,6 +389,7 @@ export async function createResponsesTurn(input: {
         if (!existing) callAcc.set(callAcc.size + 1000, c);
       }
       for (const ts of extractToolSearchFromOutput(output)) pushToolSearchItem(ts);
+      for (const ws of extractWebSearchFromOutput(output)) pushWebSearchItem(ws);
       for (const e of extractReasoningFromOutput(output)) {
         if (!encryptedReasoning.includes(e)) encryptedReasoning.push(e);
       }
@@ -326,7 +407,7 @@ export async function createResponsesTurn(input: {
       argsText: v.args,
     }));
 
-  return { text, functionCalls, toolSearchItems, usage, responseId, encryptedReasoning };
+  return { text, functionCalls, toolSearchItems, webSearchItems, citations: extractCitationsFromOutput(completedOutput), usage, responseId, encryptedReasoning };
 }
 
 /** Normalize a plain (non-streaming) Responses object to a turn. */
@@ -336,6 +417,8 @@ export function normalizeResponsesObject(response: any): ResponsesTurn {
     text: extractTextFromOutput(output) || response?.output_text || "",
     functionCalls: extractCallsFromOutput(output),
     toolSearchItems: extractToolSearchFromOutput(output),
+    webSearchItems: extractWebSearchFromOutput(output),
+    citations: extractCitationsFromOutput(output),
     usage: response?.usage ?? {},
     responseId: response?.id,
     encryptedReasoning: extractReasoningFromOutput(output),

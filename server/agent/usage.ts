@@ -13,6 +13,9 @@ import path from "node:path";
 export interface TurnUsage {
   inputTokens: number;
   outputTokens: number;
+  /** Prefix-cache hits this turn (`usage.input_tokens_details.cached_tokens`,
+   *  #223). Zero when the provider reports none (mocks, Chat fallback). */
+  cachedTokens: number;
   steps: number;
   skills: string[];
   costUsd: number;
@@ -23,6 +26,7 @@ export interface DailyUsage {
   turns: number;
   inputTokens: number;
   outputTokens: number;
+  cachedTokens: number;
   costUsd: number;
 }
 
@@ -48,14 +52,20 @@ export function priceTurn(inputTokens: number, outputTokens: number): number {
 }
 
 /** Pull `{ prompt_tokens, completion_tokens }` out of a completions response. */
-export function extractUsage(response: unknown): { inputTokens: number; outputTokens: number } {
+export function extractUsage(response: unknown): {
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+} {
   const usage = (response as any)?.usage;
   const inputTokens = Number(usage?.prompt_tokens ?? usage?.input_tokens ?? 0);
   const outputTokens = Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0);
-  return {
-    inputTokens: Number.isFinite(inputTokens) && inputTokens > 0 ? inputTokens : 0,
-    outputTokens: Number.isFinite(outputTokens) && outputTokens > 0 ? outputTokens : 0,
-  };
+  // Automatic prefix caching (#223): stable prompt + tool prefix first,
+  // variable content last, loaded tool set stable — hits land here.
+  const details = usage?.input_tokens_details ?? usage?.prompt_tokens_details ?? {};
+  const cachedTokens = Number(details?.cached_tokens ?? 0);
+  const num = (n: number) => (Number.isFinite(n) && n > 0 ? n : 0);
+  return { inputTokens: num(inputTokens), outputTokens: num(outputTokens), cachedTokens: num(cachedTokens) };
 }
 
 export function usageDir(): string {
@@ -69,18 +79,21 @@ export function usageDir(): string {
 export async function recordTurnUsage(entry: {
   inputTokens: number;
   outputTokens: number;
+  cachedTokens?: number;
   steps: number;
   skills: string[];
 }): Promise<{ turn: TurnUsage; daily: DailyUsage }> {
   const date = utcDate();
+  const cachedTokens = entry.cachedTokens ?? 0;
   const costUsd = priceTurn(entry.inputTokens, entry.outputTokens);
-  const turn: TurnUsage = { ...entry, costUsd };
-  const prev = dailyTotals.get(date) ?? { date, turns: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  const turn: TurnUsage = { ...entry, cachedTokens, costUsd };
+  const prev = dailyTotals.get(date) ?? { date, turns: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, costUsd: 0 };
   const daily: DailyUsage = {
     date,
     turns: prev.turns + 1,
     inputTokens: prev.inputTokens + entry.inputTokens,
     outputTokens: prev.outputTokens + entry.outputTokens,
+    cachedTokens: prev.cachedTokens + cachedTokens,
     costUsd: prev.costUsd + costUsd,
   };
   dailyTotals.set(date, daily);

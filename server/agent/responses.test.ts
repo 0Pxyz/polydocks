@@ -130,8 +130,7 @@ describe("Responses adapter (#221)", () => {
     expect(turn.functionCalls[0].name).toBe("dock.open");
   });
 
-  it("captures namespaced function calls and hosted tool_search items", async () => {
-    const turn = normalizeResponsesObject({
+  it("captures namespaced function calls and hosted tool_search items", async () => {    const turn = normalizeResponsesObject({
       id: "resp_ts",
       usage: {},
       output: [
@@ -184,5 +183,57 @@ describe("Responses adapter (#221)", () => {
     expect(turn.toolSearchItems).toHaveLength(2);
     expect(turn.functionCalls).toHaveLength(1);
     expect(turn.functionCalls[0]).toMatchObject({ namespace: "dock", name: "dock_search" });
+  });
+
+  it("sends built-in web_search with results opt-in when enabled", async () => {
+    let seen: any = null;
+    const client = {
+      responses: {
+        create: async (params: any) => {
+          seen = params;
+          return { id: "resp_ws", usage: {}, output: [] };
+        },
+      },
+    };
+    await createResponsesTurn({
+      client: client as any,
+      model: "muse-spark-1.3",
+      instructions: "sys",
+      inputItems: [{ role: "user", content: "hi" }],
+      tools: [{ type: "namespace", name: "research", description: "r", tools: [] }],
+      webSearch: { enabled: true },
+      onTextDelta: () => {},
+    });
+    const web = seen.tools.filter((t: any) => t.type === "web_search");
+    expect(web).toHaveLength(1);
+    expect(web[0].search_context_size).toBe("medium");
+    expect(seen.include).toContain("web_search_call.results");
+    expect(seen.tool_choice).toBe("auto");
+  });
+
+  it("extracts web_search calls and url_citation annotations", async () => {
+    const turn = normalizeResponsesObject({
+      id: "resp_wsc",
+      usage: {},
+      output: [
+        { type: "web_search_call", id: "ws_1", status: "completed" },
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: "Spark was announced in April.",
+              annotations: [
+                { type: "url_citation", url: "https://example.com/a", title: "Example A", start_index: 0, end_index: 5 },
+                { type: "url_citation", url: "https://example.com/a", title: "Example A", start_index: 0, end_index: 5 },
+                { type: "other", url: "https://example.com/b" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(turn.webSearchItems).toHaveLength(1);
+    expect(turn.citations).toEqual([{ url: "https://example.com/a", title: "Example A" }]);
   });
 });
