@@ -75,6 +75,9 @@ interface OnboardingStoreState {
   isPlaying: boolean;
   currentStep: OnboardingStep;
   currentStepIndex: number;
+  /** User-paused (pill or tab controls). Stops auto-advance, keeps the tour open. */
+  paused: boolean;
+  setPaused: (paused: boolean) => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
   startDemo: (replay?: boolean) => void;
@@ -96,6 +99,11 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
   isPlaying: !loadInitialStatus(),
   currentStep: loadInitialStatus() ? "idle" : "intro",
   currentStepIndex: 0,
+  paused: false,
+
+  setPaused: (paused: boolean) => {
+    set({ paused });
+  },
 
   openOnboarding: () => {
     get().startDemo(true);
@@ -115,6 +123,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       currentStep: "intro",
       currentStepIndex: 0,
       hasCompleted: false,
+      paused: false,
     });
     // The walkthrough is a standard dock tab on every entry path
     // (first launch, agent, replay, settings): opening here covers them all.
@@ -189,6 +198,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       currentStep: "intro",
       currentStepIndex: 0,
       hasCompleted: false,
+      paused: false,
     });
     useDockStore.getState().openTool(ONBOARDING_TAB_ID);
   },

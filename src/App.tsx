@@ -14,6 +14,7 @@ import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { ToolSurface } from "@/features/dock/ToolSurface";
 import { BesidePanel, type BesideTab } from "@/features/dock/BesidePanel";
+import { LiveOnboarding } from "@/features/onboarding/LiveOnboarding";
 import {
   matchDockShortcut,
   panelLayout,
@@ -817,6 +818,11 @@ export default function App() {
               </DockSurface>
             )}
           </main>
+
+          {/* Onboarding tour engine (auto-advance, dock choreography, takeover
+              pause). Renders its own pill; the cinematic stage lives in the
+              onboarding dock tab. */}
+          <LiveOnboarding />
         </div>
       </RootLayout>
     </AppProviders>
