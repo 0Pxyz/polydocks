@@ -66,6 +66,41 @@ export function floatToPcm16LE(input: Float32Array): ArrayBuffer {
   return buf;
 }
 
+/** Running counters for mic frames leaving the tab (#177 diagnosis). */
+export interface MicFrameStats {
+  frames: number;
+  bytes: number;
+  silentFrames: number;
+}
+
+export function emptyMicFrameStats(): MicFrameStats {
+  return { frames: 0, bytes: 0, silentFrames: 0 };
+}
+
+/**
+ * True when a 16-bit PCM frame carries no audible signal. Early-exits on
+ * the first sample above threshold, so the per-frame cost is ~zero for
+ * live audio and one scan for silence. Silence here means either a muted
+ * mic or a stalled capture path — both are "mic light on, zero evidence"
+ * cases the status line cannot distinguish without this check.
+ */
+export function isSilentPcm16LE(buf: ArrayBuffer, threshold = 64): boolean {
+  if (buf.byteLength % 2 !== 0 || buf.byteLength === 0) return true;
+  const view = new DataView(buf);
+  for (let offset = 0; offset < buf.byteLength; offset += 2) {
+    if (Math.abs(view.getInt16(offset, true)) > threshold) return false;
+  }
+  return true;
+}
+
+/** Fold one emitted PCM frame into the running counters (mutates, returns). */
+export function noteMicFrame(stats: MicFrameStats, buf: ArrayBuffer): MicFrameStats {
+  stats.frames += 1;
+  stats.bytes += buf.byteLength;
+  if (isSilentPcm16LE(buf)) stats.silentFrames += 1;
+  return stats;
+}
+
 export interface RealtimeVoiceHandle {
   sessionId: string;
   endUtterance: () => void;
@@ -177,7 +212,8 @@ export interface MicPcmStreamer {
  */
 export async function createMicPcmStreamer(
   onFrame: (pcm: ArrayBuffer) => void,
-  onLevel?: (level: number) => void
+  onLevel?: (level: number) => void,
+  onStats?: (stats: MicFrameStats) => void
 ): Promise<MicPcmStreamer> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -211,6 +247,11 @@ export async function createMicPcmStreamer(
   silentGain.gain.value = 0;
   const freq = new Uint8Array(analyser.frequencyBinCount);
   let carry = new Float32Array(0);
+  // #177: counters for "Listening… but zero frames" diagnosis. Reported
+  // through onStats every ~2s; the UI can tell mic-blocked (no callback at
+  // all — constructor threw), silent-capture (all silent), and socket-dead
+  // (frames counted here, none relayed server-side) apart.
+  const stats = emptyMicFrameStats();
 
   processor.onaudioprocess = (event) => {
     const inputRate = ctx.sampleRate;
@@ -223,7 +264,10 @@ export async function createMicPcmStreamer(
     let offset = 0;
     while (offset + REALTIME_FRAME_SAMPLES <= merged.length) {
       const frame = merged.slice(offset, offset + REALTIME_FRAME_SAMPLES);
-      onFrame(floatToPcm16LE(frame));
+      const pcm = floatToPcm16LE(frame);
+      noteMicFrame(stats, pcm);
+      onFrame(pcm);
+      if (onStats && stats.frames % 25 === 0) onStats({ ...stats });
       offset += REALTIME_FRAME_SAMPLES;
     }
     carry = merged.slice(offset);
