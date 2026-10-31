@@ -96,3 +96,4 @@
 | 2026-10-31 | Orchestrator loop (#211): fast-model triage on dock verbs plus escalate, own prompt file, missed-escalation build gate | [#239](https://github.com/0Pxyz/polymax/pull/239) |
 | 2026-10-31 | Routing policy (#213): documented return-control thresholds, partial synthesis returns ok, trigger tests | [#240](https://github.com/0Pxyz/polymax/pull/240) |
 | 2026-10-31 | Routing metrics (#214): orchestrator-vs-heavy eval harness with escalation rate and mismatch gate | [#241](https://github.com/0Pxyz/polymax/pull/241) |
+| 2026-10-31 | Risk ladder server slice (#180): stated tiers, install envelope permissions, grant list/revoke routes, tiering tests | [#242](https://github.com/0Pxyz/polymax/pull/242) |

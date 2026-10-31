@@ -98,6 +98,24 @@ pluginsRouter.delete("/:id", (c) => {
 });
 
 /**
+ * GET /api/plugins/:id/grants - granted permissions, visible and revocable (#180).
+ */
+pluginsRouter.get("/:id/grants", (c) => {
+  const grants = pluginRegistry.getGrants(c.req.param("id"));
+  return c.json({ pluginId: c.req.param("id"), grants });
+});
+
+/**
+ * POST /api/plugins/grants/:grantId/revoke - revoke one grant.
+ * Uninstall removes all of a plugin's grants; this is the per-permission path.
+ */
+pluginsRouter.post("/grants/:grantId/revoke", (c) => {
+  const ok = pluginRegistry.revokeGrant(c.req.param("grantId"));
+  if (!ok) return c.json({ error: "Grant not found.", code: "not_found" }, 404);
+  return c.json({ success: true, grantId: c.req.param("grantId"), revoked: true });
+});
+
+/**
  * GET /api/plugins/:id/executions - Get recent executions for status dots
  */
 pluginsRouter.get("/:id/executions", (c) => {
