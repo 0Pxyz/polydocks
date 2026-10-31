@@ -1,75 +1,84 @@
-# PolyDocks
+# PolyDocks — the Agentic Dock
 
-> **One agent and its dock.** Everything you see is a plugin opened in it — browser, notes, sources, quests, files, terminal, and the tools the agent builds for you. The agent is the operator: it opens, closes, orders, operates, and modifies; it never duplicates what already exists.
-
-PolyDocks is a microkernel workspace: the core stays minimal (dock + capability bus + plugin lifecycle/policy + sandbox bridge) and every capability is a plugin — including, as target, the agent itself as a privileged first-party plugin. Full picture: [`VISION.md`](VISION.md), [`ARCHITECTURE.md`](ARCHITECTURE.md) (Today / Target / Gaps, with code evidence), [`MIGRATION.md`](MIGRATION.md).
+> **One agent and its dock.** Everything you see is a plugin opened in it — a real browser, notes, sources, quests, files, terminals, and the tools the agent builds for you on the spot. The agent is the operator: it opens, closes, orders, operates, and modifies; it never duplicates what already exists.
 
 [![Meta Model API](https://img.shields.io/badge/Meta_Model_API-muse--spark--1.3-blue?style=flat-square)](https://dev.meta.ai/docs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
----
-
-## Not a chatbot
-
-Learning is scattered across browser tabs, documentation, videos, and local files. Chatbots respond with isolated walls of text inside a transient chat stream.
-
-PolyDocks gives you an agent that builds the environment you learn in. Instead of answering and disappearing, it structures your workspace, surfaces primary sources, and mounts dedicated tools for your goals.
+Chatbots answer and disappear. PolyDocks gives you an agent that **builds the environment you think in** — it researches the web, mounts a real browser, synthesizes tools into your dock, runs code in isolated sandboxes, and narrates its work as a living thought stream instead of a chat log.
 
 ---
 
-## How it works
+## Watch it work (60 seconds)
 
-- **Explore:** Choose any discipline to generate an interactive world map where subjects become explorable contexts.
-- **Delegate:** Task the agent with researching topics, fetching papers, and organizing workspace files.
-- **Learn & Build:** The agent builds custom tools, flashcards, and quests directly into your dock as you advance.
+1. Open the app, hit the orb, ask: **"Research transformers and open the best paper"**
+2. Thoughts drift up from the orb — *Searching the web… Reading primary sources…* — with the source's brand mark inline
+3. The agent opens the paper **in a real Chromium tab inside the dock** — no proxy, no reader-mode mangling
+4. Ask **"build flashcards for this"** → a native flashcards tool mounts in the dock, themed like the rest of the app
 
----
-
-## The dock
-
-The Dock is the central interface. No infinite canvas, no floating window sprawl, no chat-bubble feed. Pinned to the top of the screen, the dock holds active plugin surfaces and expands them into your workspace.
-
-The agent actively controls the dock. When a topic requires a custom comparison, an interactive practice session, or live research, the agent synthesizes that tool on the fly and mounts it into your dock — sandboxed, bridge-only, no direct DOM access to the host.
-
-### What you can ask the agent
-
-- **"Build flashcards for Stoicism"** → The agent generates an interactive flashcard tool and mounts it in the dock.
-- **"Compare these two research papers"** → The agent fetches the papers via TinyFish and builds a side-by-side analysis tool.
-- **"Turn this topic into learning quests"** → The agent parses key concepts into structured quests with XP progression.
-
-### Plugin vs core
-
-What stays core (never a plugin): the runtime and routes, the agent loop, the permission and approval engine, persistence, the sandbox bridge, secrets and keys. Everything else — including every tool the agent builds — is a plugin: a single file with a manifest, running sandboxed, talking to the app only through the bridge.
-
-The store is local for now: publishing shares a plugin to the community registry on your own machine, with version history and one-click install into any workspace. Review, signing, and remote sharing are post-demo work.
+No mocks, no storyboard. That is the product.
 
 ---
 
-## Powered by Meta AI
+## What the agent can do
 
-One model per job. Plugins declare a `modelRole`; `server/agent/modelRegistry.ts` resolves the provider from env only.
+| Capability | How it feels | Under the hood |
+|---|---|---|
+| **Native browser** | Real Chromium tabs in the dock: URL bar, back/forward, lateral tabs, blank-start, edge-to-edge canvas. Frame-blockers open fine. | Atrium remote-browser worker + Bun-native WS relay (`server/browser/`). Per-workspace sessions, short-lived viewer tokens, worker secret never leaves the server. [docs/browser.md](docs/browser.md) |
+| **Thought stream** | Short status lines rise from the orb and fade — never a chat log. Finals land as cards, never in the stream. | Provider-agnostic event contract (`say`/`thought`/`job.*`), pure capped queue, CSS-only animation, reduced-motion aware. |
+| **Research engine** | "Compare these two papers" → TinyFish web/news/papers search + full-text fetch, saved as workspace sources with brand marks. | Server-side TinyFish adapter (`server/discovery/tinyfish.ts`); keys never reach the front. |
+| **Voice** | Tap the orb and talk: live transcription streams back, hands-free dock operation. | Meta realtime proxy over `wss /api/voice/realtime`; API key stays server-side. |
+| **Code execution** | The agent runs shell, files and dev servers in isolated per-workspace sandboxes; previews come back as tunnel URLs. | Modal sandboxes (`node:22-slim`, per-workspace volume). `MODAL_TOKEN_*` in `.env`. [docs/sandbox.md](docs/sandbox.md) |
+| **Generative media** | Covers, share cards and city art generated on request, cached, daily-budget guarded. | Muse Image (`muse-image-1.0`) + `image_spend` ledger. |
+| **Plugin OS** | The agent **creates, installs, operates, rolls back** tools — and its output is gated: no opaque boxes, no hardcoded colors, theme tokens only, or the build is refused with the rule name. | Single-file plugins + manifest, sandboxed iframes, capability bus with risk policy, slop validator (`server/plugins/slop.ts`). |
+| **Dock verbs** | `dock.open/close/pin/unpin/list/focus/next/prev/background` — the agent curates the bar instead of duplicating tools. | One action layer shared by UI, REST, CLI and agent (`src/lib/dock/dockModel.ts`). |
 
-| Role | Model | Status |
-| :--- | :--- | :--- |
-| Agent | `muse-spark-1.3` default, `muse-wonder-1.0` via the chat selector | Running — tool loop `server/agent/loop.ts`, SSE `POST /api/agent` |
-| Voice input | `muse-voice-transcribe-1.0` | Running — mic orb → `wss /api/voice/realtime` proxy, key stays server-side |
-| Image | `muse-image-1.0` | Running — `generate_image` on chat request, verified file cache under `DATA_DIR/image-cache`, saved to the user's artifacts |
-| Open-weight agent | configurable via `AGENT_PROVIDER=openweight` + `OPENWEIGHT_*` in `.env` | Toggle — no plugin changes needed |
-| Segmentation | Service present (`server/media/segmentation.ts`) | Service present, agent tool not wired yet |
+### Example prompts
 
-Every model failure returns a structured `{ ok: false, error: { code, message, retryable, role } }` — never a fake success. Details in [docs/meta-model-api.md](docs/meta-model-api.md).
+- **"Build flashcards for Stoicism"** → interactive flashcards tool, mounted and themed.
+- **"Open youtube.com and find a UI design talk"** → real browser tab, navigated by the agent.
+- **"Turn this topic into learning quests"** → structured quests with XP progression.
+- **"Change my background / apply a cyber theme"** → theme applies everywhere, including agent-built plugins.
 
-## Powered by Modal (agent code execution)
+---
 
-Isolated per-workspace sandboxes run shell commands, files and dev servers; previews come back as tunnel URLs. Runs on Modal (`node:22-slim` image, per-workspace volume at `/repo`); configure with `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` in `.env` or `modal setup`. Details in [docs/sandbox.md](docs/sandbox.md).
+## Architecture (microkernel, for real)
+
+```
+┌─────────────────────────────────────────────────┐
+│  Agentic Dock (pinned control surface)          │
+│  browser · notes · sources · quests · files ·   │
+│  terminal · agent-built tools (sandboxed)       │
+├─────────────────────────────────────────────────┤
+│  Privileged services (first-party, host-owned)  │
+│  agent loop · browser relay · voice proxy ·     │
+│  reader · TinyFish · sandbox bridge             │
+├─────────────────────────────────────────────────┤
+│  Core (never a plugin)                          │
+│  runtime+routes · permission/approval engine ·  │
+│  persistence (SQLite) · secrets/keys            │
+└─────────────────────────────────────────────────┘
+```
+
+What stays core: runtime and routes, the agent loop, the permission and approval engine, persistence, the sandbox bridge, secrets and keys. **Everything else is a plugin** — a single file with a manifest, running sandboxed (`<iframe sandbox="allow-scripts" srcdoc>`), talking to the app only through the `window.polymax` bridge. The core never understands domain concepts: plugins own state, the core passes an opaque `contextId`.
+
+Full picture with code evidence: [`VISION.md`](VISION.md), [`ARCHITECTURE.md`](ARCHITECTURE.md) (Today / Target / Gaps), [`MIGRATION.md`](MIGRATION.md).
+
+---
+
+## Stack
+
+Vite + React + TypeScript, Tailwind v4, shadcn/ui, zustand · Bun + Hono + SQLite (`bun:sqlite`), one process serves API + built front · Docker single image.
+
+One model per job (`server/agent/modelRegistry.ts`, env only, no hardcoded ids): agent `muse-spark-1.3` (selector offers `muse-wonder-1.0` for hard tasks), voice `muse-voice-transcribe-1.0`, image `muse-image-1.0`, open-weight toggle via `AGENT_PROVIDER=openweight`. Model failures return structured `{ ok: false, error: { code, message, retryable } }` — never a fake success. Details: [docs/meta-model-api.md](docs/meta-model-api.md).
 
 ---
 
 ## Current status (honest)
 
-- **Runs today:** single-user local runtime. `bun run dev` or `docker compose up`. You bring `MODEL_API_KEY`; without it the agent answers `model_unauthorized`.
+- **Runs today:** single-user local runtime. `bun run dev` (+ `npx atrium-worker` for the browser) or `docker compose up`. You bring `MODEL_API_KEY` (+ `TINYFISH_API_KEY`, `MODAL_*` for the full show); without a model key the agent answers `model_unauthorized`.
 - **Not built yet:** per-user sandboxes, auth/multi-tenancy, remote plugin store. Until those ship, do not expose the server beyond localhost.
-- **In migration:** city/world views are still hardcoded core imports; they become plugins under issue #153 (see `MIGRATION.md` Slice 2). The `maps` dock entry is an explicit migration shim, not the target.
+- **In migration:** city/world views are still hardcoded core imports; they become plugins under issue #153 (see `MIGRATION.md`).
 
 ---
 
@@ -80,14 +89,15 @@ Prerequisites: [Bun](https://bun.sh) (v1.1+)
 ```bash
 git clone https://github.com/0Pxyz/polymax.git
 cd polymax
-cp .env.example .env # Add your MODEL_API_KEY
+cp .env.example .env # Add MODEL_API_KEY (+ TINYFISH_API_KEY for research)
 bun install
-bun run dev
+bun run dev          # app on http://localhost:5173 (API :3000)
+# Browser surface needs real Chromium next to it:
+ATRIUM_WORKER_SECRET=dev-secret-change-me npx atrium-worker
 ```
 
-Open [http://localhost:3000](http://localhost:3000). For Docker instructions and contributor rules, see [AGENTS.md](AGENTS.md).
+For Docker instructions and contributor rules, see [AGENTS.md](AGENTS.md).
 
 ---
 
 Built for the **Meta Global AI Developer Hackathon** (Indie Track). Distributed under the [MIT License](LICENSE).
-Architecture guidelines and contributor rules are documented in [**AGENTS.md**](AGENTS.md).
