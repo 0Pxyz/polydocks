@@ -16,7 +16,7 @@ Every capability declares `risk: read|write|destructive|external` (`server/plugi
 
 ## Wiring data sources
 
-Remote systems join as MCP servers (`POST /api/plugins/mcp/connect`) or install URLs; their tools appear as `mcp.<server>.<tool>` capabilities with `external` risk. HTTP and CLI adapters exist for fixed endpoints. The agent never fetches credentials or endpoints directly; it invokes the capability and passes `input` matching its schema.
+Remote systems join as user-connected MCP servers (`POST /api/plugins/mcp/connect`, explicit permission grant in the Plugins UI); their tools appear as `mcp.<server>.<tool>` capabilities with `external` risk. HTTP and CLI adapters exist for fixed endpoints. The agent never connects servers itself and never fetches credentials or endpoints directly; it invokes the capability and passes `input` matching its schema.
 
 ## Common mistakes
 
