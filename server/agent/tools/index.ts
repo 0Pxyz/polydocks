@@ -167,7 +167,9 @@ const fullToolsList: AgentTool[] = [
 
 /**
  * Minimal verb catalog (AGENT_SURFACE=minimal): dock.open/close/pin/unpin/
- * list/focus/next/prev/background + chat.toggle + plugins.create/edit/install/uninstall/operate.
+ * list/focus/next/prev/background + chat.toggle + plugins.create/edit/install/uninstall/operate
+ * + find_capabilities (progressive disclosure root: intent loads more).
+ * plugins.install ships on every surface.
  */
 export const minimalTools: AgentTool[] = [
   dockOpen,
@@ -180,6 +182,7 @@ export const minimalTools: AgentTool[] = [
   dockPrev,
   dockBackground,
   chatToggle,
+  find_capabilities,
   pluginsCreate,
   pluginsEdit,
   pluginsInstall,
