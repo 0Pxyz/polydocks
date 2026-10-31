@@ -303,5 +303,14 @@ export function resolveResponsesToolName(
     const underscored = nameMap.get(`${namespace}_${rawName}`);
     if (underscored) return underscored;
   }
+  // Namespace-prefixed guess for a flat function ("media.apply_theme"):
+  // the model treats the namespace as a prefix, semantically identical to
+  // (namespace, bare name). Resolve the remainder so a natural guess does
+  // not hard-fail as "not registered in catalog".
+  const dot = rawName.indexOf(".");
+  if (dot > 0) {
+    const suffix = nameMap.get(rawName.slice(dot + 1));
+    if (suffix) return suffix;
+  }
   return rawName;
 }
