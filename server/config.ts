@@ -28,6 +28,11 @@ const envSchema = z.object({
   OPENWEIGHT_BASE_URL: z.string().optional().default(""),
   OPENWEIGHT_API_KEY: z.string().optional().default(""),
   OPENWEIGHT_MODEL_ID: z.string().default("meta-models/muse-spark-open-1026"),
+  // Deploy mode (ADR 0002, #191 slice 1): local stays single-user with a
+  // fixed owner and no auth; cloud is fork-only and requires a session.
+  // Demo guard: local refuses a non-loopback HOST (see server/index.ts).
+  DEPLOY_MODE: z.enum(["local", "cloud"]).default("local"),
+  HOST: z.string().optional().default(""),
   TINYFISH_API_KEY: z.string().optional().default(""),
   // Modal Sandboxes (agent code execution). The JS SDK reads MODAL_TOKEN_ID /
   // MODAL_TOKEN_SECRET from env, falling back to ~/.modal.toml (`modal setup`).
@@ -76,3 +81,10 @@ function loadConfig() {
 
 export const config = loadConfig();
 export type Config = z.infer<typeof envSchema>;
+export type DeployMode = Config["DEPLOY_MODE"];
+
+/** Loopback allow-list for the local-mode serve guard (#191 slice 1). */
+export function isLoopbackHost(host: string | undefined | null): boolean {
+  const normalized = (host ?? "").trim().toLowerCase();
+  return normalized === "" || normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "::ffff:127.0.0.1";
+}
