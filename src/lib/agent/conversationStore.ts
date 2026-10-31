@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { streamAgentLoop } from "./client";
-import { type UIEvent, type ApprovalRequest } from "./events";
-import { feedThoughtEvent } from "./thoughtStream";
+import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus } from "./events";
+import { feedThoughtEvent, pushThought, shouldNudge } from "./thoughtStream";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
@@ -197,6 +197,8 @@ function getInitialLayoutState(): LayoutState {
 
 let activeAbortController: AbortController | null = null;
 let hydrationPromise: Promise<void> | null = null;
+/** One honest nudge per turn once heartbeats go quiet past the threshold. */
+let heartbeatNudged = false;
 
 function toConversationMessage(message: ThreadMessageRecord): ConversationMessage {
   const parsed = Date.parse(message.createdAt);
@@ -523,6 +525,17 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                   ? `Running ${event.tool}`
                   : "Thinking",
             });
+            // Real-data nudge: one honest line the first time a turn goes
+            // quiet past the threshold (never prompt/code/args, only the
+            // phase the backend already reports).
+            if (shouldNudge(event.elapsedMs, heartbeatNudged)) {
+              heartbeatNudged = true;
+              const label =
+                event.phase === "running_tool" && event.tool
+                  ? getFriendlyToolStatus(event.tool)
+                  : null;
+              pushThought(label ? `Still working — ${label.toLowerCase()}` : "Still working…");
+            }
             break;
 
           case "agent.text_delta":
@@ -532,6 +545,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
 
           case "agent.started":
+            heartbeatNudged = false;
             set({
               orbState: "thinking",
               activeModel: event.model || null,
@@ -723,6 +737,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
           case "agent.finished": {
             const replyText = event.text || "Done.";
             sawTerminalEvent = true;
+            heartbeatNudged = false;
             set((state) => ({
               isStreaming: false,
               isBuildingTool: false,
@@ -758,6 +773,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
           }
 
           case "agent.error": {
+            heartbeatNudged = false;
             const isUnauthorized = event.code === "model_unauthorized";
             sawTerminalEvent = true;
             const errorObj = {
