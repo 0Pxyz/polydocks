@@ -97,3 +97,4 @@
 | 2026-10-31 | Routing policy (#213): documented return-control thresholds, partial synthesis returns ok, trigger tests | [#240](https://github.com/0Pxyz/polymax/pull/240) |
 | 2026-10-31 | Routing metrics (#214): orchestrator-vs-heavy eval harness with escalation rate and mismatch gate | [#241](https://github.com/0Pxyz/polymax/pull/241) |
 | 2026-10-31 | Risk ladder server slice (#180): stated tiers, install envelope permissions, grant list/revoke routes, tiering tests | [#242](https://github.com/0Pxyz/polymax/pull/242) |
+| 2026-10-31 | Sandbox trust tiers doc (#183): stated model with verified enforcement pointers, doc-rot guard | [#244](https://github.com/0Pxyz/polymax/pull/244) |
