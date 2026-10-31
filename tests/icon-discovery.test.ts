@@ -12,7 +12,7 @@ import { list_icon_categories } from "../server/agent/tools/list_icon_categories
 import { create_plugin } from "../server/agent/tools/create_plugin";
 import { modify_plugin } from "../server/agent/tools/modify_plugin";
 import { runAgentLoop } from "../server/agent/loop";
-import { defaultTools } from "../server/agent/tools";
+import { fullTools } from "../server/agent/tools";
 import { readFeature } from "../server/workspace/features";
 
 describe("icon catalog (server/icons/catalog.ts)", () => {
@@ -248,7 +248,7 @@ describe("agent discovers and uses icons end-to-end", () => {
       prompt: "Build a science lab tool with a fitting icon",
       workspaceId: TEST_WS,
       origin: "chat",
-      tools: [...defaultTools],
+      tools: [...fullTools],
       llmClient: mockLlm,
       onEvent: (ev: any) => {
         if (ev.type === "tool.start") started.push(ev.payload?.name ?? ev.name);

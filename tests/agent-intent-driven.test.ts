@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { runAgentLoop, type AgentStepEvent } from "../server/agent/loop";
-import { defaultTools } from "../server/agent/tools";
+import { fullTools } from "../server/agent/tools";
 import { getFriendlyToolStatus } from "../src/lib/agent/events";
 
 describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () => {
@@ -140,7 +140,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
     const result = await runAgentLoop({
       prompt: "Build me a small plugin.",
-      tools: defaultTools,
+      tools: fullTools,
       llmClient: mockLlm,
       onEvent: (ev) => {
         emittedEvents.push(ev);
@@ -232,7 +232,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
     const result = await runAgentLoop({
       prompt: "Research the latest developments in agentic coding and summarize the findings in a Markdown note.",
-      tools: defaultTools,
+      tools: fullTools,
       llmClient: mockLlm,
       onEvent: (ev) => {
         if (ev.type === "tool.start") {

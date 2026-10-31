@@ -9,17 +9,17 @@ The workspace sandbox is disposable compute on Modal; product data (notes,
 plugins, sources) stays in the PolyDocks workspace. One sandbox per
 workspace, files survive replacement via the workspace volume.
 
-## Protocol
+## Principles
 
-1. Discover first: `find_capabilities` for `sandbox.*` (never guess ids).
-2. Write files with `sandbox_write_file`, run with `sandbox_exec`.
-   Mutating calls need the user's yes first (`userApproved: true`);
-   without it they fail closed — ask, then retry.
-3. Serve with `sandbox_serve` (`command` + `port` 3000/5173/8080): it waits
-   for readiness and returns `previewUrl`. Report exactly that URL.
-4. Inspect with `sandbox_logs` (server output) and `sandbox_status`
-   (lifecycle + preview). Never claim success without an `ok:true` receipt;
-   never invent output, exit codes or URLs.
+- Discover before acting: `find_capabilities` for `sandbox.*` — never guess ids.
+- Write with `sandbox_write_file`, run with `sandbox_exec`. Mutating calls
+  need the user's yes first (`userApproved: true`); without it they fail
+  closed — ask, then retry. The policy gate enforces this, not politeness.
+- Serve with `sandbox_serve` (`command` + `port` 3000/5173/8080): it waits
+  for readiness and returns `previewUrl`. Report exactly that URL.
+- Observe with `sandbox_logs` (server output) and `sandbox_status`
+  (lifecycle + preview). Receipts are truth: never claim success without
+  an `ok:true` receipt; never invent output, exit codes or URLs.
 
 ## Hard Rules
 

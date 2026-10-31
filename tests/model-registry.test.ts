@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { getModelForRole, getClientForRole } from "../server/agent/modelRegistry";
-import { defaultTools } from "../server/agent/tools";
+import { fullTools } from "../server/agent/tools";
 
 describe("Model registry resolves one model per role from env", () => {
   it("agent defaults to muse-spark-1.3 on the Meta provider", () => {
@@ -36,13 +36,13 @@ describe("Model registry resolves one model per role from env", () => {
     expect(modelId).toBe(getModelForRole("agent").modelId);
   });
 
-  it("swapping the agent provider never changes the plugin catalog", () => {    const names = defaultTools.map((t) => t.name).sort();
+  it("swapping the agent provider never changes the plugin catalog", () => {    const names = fullTools.map((t) => t.name).sort();
     expect(names).toContain("generate_image");
     expect(names).toContain("search_web");
     expect(names).toContain("create_plugin");
     // The catalog is static: provider routing lives in the registry,
     // no tool knows or branches on AGENT_PROVIDER.
-    const withRoles = defaultTools.filter((t) => (t as any).modelRole);
+    const withRoles = fullTools.filter((t) => (t as any).modelRole);
     for (const t of withRoles) {
       expect(["agent", "fast", "vision", "voice", "image", "segmentation"]).toContain((t as any).modelRole);
     }
@@ -67,7 +67,7 @@ describe("Model registry resolves one model per role from env", () => {
       // No key in this environment: honest unconfigured, never fake success.
       expect(routed.configured).toBe(false);
       // The catalog does not change with the provider.
-      expect(defaultTools.map((t) => t.name)).toContain("generate_image");
+      expect(fullTools.map((t) => t.name)).toContain("generate_image");
     } finally {
       (config as any).AGENT_PROVIDER = saved.provider;
       (config as any).OPENWEIGHT_BASE_URL = saved.base;

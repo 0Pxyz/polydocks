@@ -1,15 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
-  defaultTools,
   fullTools,
   minimalTools,
   open_source,
 } from "./index";
 
 describe("Agent Tool Catalog & Security Guards", () => {
-  it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(43);
-    const names = defaultTools.map((t) => t.name);
+  it("should export all canonical tools in fullTools catalog", () => {
+    expect(fullTools.length).toBe(43);
+    const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
     expect(names).toContain("dock_unpin");
@@ -90,6 +89,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "dock.pin",
         "dock.prev",
         "dock.unpin",
+        "find_capabilities",
         "plugins.create",
         "plugins.edit",
         "plugins.install",
