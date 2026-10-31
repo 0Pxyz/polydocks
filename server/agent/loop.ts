@@ -25,6 +25,8 @@ import {
   toResponsesUserContent,
 } from "./responses";
 import { buildResponsesTools, hasReservedWebSearchCollision, resolveResponsesToolName } from "./namespaces";
+import { AGENT_MANIFEST, checkAgentPermission } from "./manifest";
+import type { PluginManifest } from "../plugins/manifest";
 import {
   getSession,
   createSession,
@@ -97,6 +99,9 @@ export interface AgentLoopOptions {
   signal?: AbortSignal;
   /** Rewind the last completed turn before appending the same prompt again. */
   retryLast?: boolean;
+  /** Agent manifest override for the permission gate (#207). Defaults to
+   *  AGENT_MANIFEST; tests pass a revoked copy to prove the gate blocks. */
+  agentManifest?: PluginManifest;
 }
 
 export interface AgentLoopResult {
@@ -290,6 +295,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const deniedTools = new Set(INTENT_TOOL_DENYLIST[intent] ?? []);
   const baseTools = tools === defaultTools ? resolveTools(tools) : tools;
   const scopedTools = baseTools.filter((tool) => !deniedTools.has(tool.name));
+  const agentManifest = options.agentManifest ?? AGENT_MANIFEST;
 
   // Built-in search grounding (#223) rides the Responses request when the
   // intent may research (the custom search_web alias is not denied) and
@@ -965,12 +971,24 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         const registeredTool = toolMap.get(toolName);
         let toolOutput: unknown;
 
+        // Agent-manifest gate (#207): the agent is a first-party plugin
+        // with explicit permissions. Direct tools are checked here,
+        // fail-closed, before validation and execution; capability-backed
+        // tools are additionally gated by the bus policy at invoke time.
+        const agentPolicy = checkAgentPermission(toolName, agentManifest);
+
         const callKey = `${toolName}:${JSON.stringify(rawArgs)}`;
         if (seenCalls.has(callKey)) {
           toolOutput = {
             error: `Duplicate tool call: "${toolName}" already ran this turn with the same arguments. Stop and change approach instead of retrying it.`,
             duplicate: true,
           };
+        } else if (!agentPolicy.allowed) {
+          // Fail-closed like every other refusal. Record the key so a
+          // stubborn retry hits the duplicate circuit breaker instead of
+          // spinning on the same denied call for the rest of the turn.
+          seenCalls.add(callKey);
+          toolOutput = { error: agentPolicy.reason, policyDenied: true };
         } else if (!registeredTool) {
           toolOutput = { error: `Tool "${toolName}" is not registered in catalog.` };
         } else {

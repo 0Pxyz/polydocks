@@ -84,3 +84,4 @@
 | 2026-10-31 | ThoughtStream sheet-only (#185 follow-up): thoughts render above the bottom sheet instead of the home orb; sidebar/full keep transcript only |
 | 2026-10-31 | Native tool search replaces custom find_capabilities (#222): deferred namespaces + single tool_search on Responses path, capability bus stays the execution backend; Chat fallback keeps flat catalog; eval 18/18 identical to baseline | [#227](https://github.com/0Pxyz/polymax/pull/227) |
 | 2026-10-31 | Unified full/minimal tool catalogs into canonicalCatalog with surface filters (#204): derived views, plugins.install on every surface, MIGRATION.md Slice 1 reference fixed | [#228](https://github.com/0Pxyz/polymax/pull/228) |
+| 2026-10-31 | Agent as first-party plugin under same policy (#207): AGENT_MANIFEST with explicit fs permissions, loop-level fail-closed gate before validation/execution, revocation blocks + duplicate-breaker safety | [#230](https://github.com/0Pxyz/polymax/pull/230) |
