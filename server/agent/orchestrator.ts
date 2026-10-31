@@ -76,6 +76,34 @@ export interface HeavyRunnerOptions {
   agentManifest?: import("../plugins/manifest").PluginManifest;
 }
 
+/**
+ * Routing policy (#213): when a heavy turn returns control to the
+ * orchestrator, and why. Enforced where noted; documented here so the
+ * thresholds have one home and the tests pin them.
+ *
+ * - Tool error: zod validation retries twice, then the tool fails for
+ *   the turn (loop.ts). A failing heavy turn returns ok:false with the
+ *   error text — the orchestrator relays the failure, never retries
+ *   the same handoff blindly.
+ * - No progress: the same tool with identical arguments is refused as
+ *   a duplicate; three consecutive refusals end the turn gracefully
+ *   with a stuck message (loop.ts). The stuck text returns ok:true —
+ *   it names the next action, which the orchestrator can relay or
+ *   re-scope, instead of burning more steps.
+ * - Step bound: constraints.maxSteps caps the heavy turn; the fallback
+ *   synthesis still produces a partial answer, which returns ok:true
+ *   with steps (partial beats nothing).
+ * - Timeout/cancel: aborts propagate as errors and return ok:false.
+ * - Low confidence: the receipt check appends a verify-before-relying
+ *   note inside the heavy text; the result still returns ok:true.
+ */
+export const ROUTING_POLICY = {
+  validationRetries: 2,
+  duplicateRefusalsToStuck: 3,
+  errorReturnsControl: true,
+  stuckReturnsControl: true,
+} as const;
+
 /** Injectable runner so the escalate tool is testable without a live key. */
 let heavyRunner: typeof escalateToHeavyAgent = escalateToHeavyAgent;
 
@@ -175,6 +203,10 @@ export async function escalateToHeavyAgent(
     onEvent: relay,
   });
   if (result.status === "completed") {
+    return { ok: true, text: result.text ?? "", steps: result.steps, citations };
+  }
+  if (result.status === "max_steps_reached" && (result.text ?? "").trim()) {
+    // Partial synthesis still answers: return control with the text.
     return { ok: true, text: result.text ?? "", steps: result.steps, citations };
   }
   return {

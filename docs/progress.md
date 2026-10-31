@@ -94,3 +94,4 @@
 | 2026-10-31 | Provider-agnostic role config (#210): orchestrator role, canonical ORCHESTRATOR_MODEL/AGENT_MODEL names, per-role effort map, env docs | [#237](https://github.com/0Pxyz/polymax/pull/237) |
 | 2026-10-31 | Escalation contract (#212): handoff payload, heavy runner with relayed events, escalate tool, orchestrator-to-heavy e2e | [#238](https://github.com/0Pxyz/polymax/pull/238) |
 | 2026-10-31 | Orchestrator loop (#211): fast-model triage on dock verbs plus escalate, own prompt file, missed-escalation build gate | [#239](https://github.com/0Pxyz/polymax/pull/239) |
+| 2026-10-31 | Routing policy (#213): documented return-control thresholds, partial synthesis returns ok, trigger tests | [#240](https://github.com/0Pxyz/polymax/pull/240) |

@@ -112,4 +112,92 @@ describe("escalation contract", () => {
     expect(out.text).toBe("Relayed.");
     expect(out.steps).toBe(2);
   });
+
+  it("documents the routing thresholds in one place", async () => {
+    const { ROUTING_POLICY } = await import("../server/agent/orchestrator");
+    expect(ROUTING_POLICY.validationRetries).toBe(2);
+    expect(ROUTING_POLICY.duplicateRefusalsToStuck).toBe(3);
+  });
+
+  it("returns control with the error when the heavy turn fails", async () => {
+    const failing: any = {
+      chat: { completions: { create: async () => { throw new Error("model exploded"); } } },
+      responses: { create: async () => { throw new Error("model exploded"); } },
+    };
+    const result = await escalateToHeavyAgent(
+      { prompt: "Doomed", workspaceId: "ws-1" },
+      { llmClient: failing }
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("model exploded");
+  });
+
+  it("returns control with the stuck message after repeated no-progress calls", async () => {
+    const looping: any = {
+      chat: {
+        completions: {
+          create: async (params: any) => {
+            if (params.stream) {
+              return {
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        { id: "call_loop_1", type: "function", function: { name: "dock.list", arguments: "{}" } },
+                      ],
+                    },
+                  },
+                ],
+              };
+            }
+            return { choices: [{ message: { role: "assistant", content: "Done." } }] };
+          },
+        },
+      },
+    };
+    const result = await escalateToHeavyAgent(
+      { prompt: "List the dock forever", workspaceId: "ws-1" },
+      { llmClient: looping }
+    );
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain("stuck");
+  });
+
+  it("returns control with the partial synthesis when the step bound hits", async () => {
+    let calls = 0;
+    const bounded: any = {
+      chat: {
+        completions: {
+          create: async (params: any) => {
+            calls++;
+            // Odd calls demand work; even calls (the fallback synthesis) answer.
+            if (params.stream && calls % 2 === 1) {
+              return {
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        { id: `call_bound_${calls}`, type: "function", function: { name: "dock.list", arguments: "{}" } },
+                      ],
+                    },
+                  },
+                ],
+              };
+            }
+            return { choices: [{ message: { role: "assistant", content: "Partial synthesis." } }] };
+          },
+        },
+      },
+    };
+    const result = await escalateToHeavyAgent(
+      { prompt: "List everything", workspaceId: "ws-1", constraints: { maxSteps: 1 } },
+      { llmClient: bounded }
+    );
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain("Partial synthesis");
+  });
 });
