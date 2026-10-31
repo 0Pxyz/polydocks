@@ -38,7 +38,7 @@ describe("orchestrator loop", () => {
 
   it("resolves simple requests directly without touching the heavy agent", async () => {
     let heavyCalls = 0;
-    setHeavyRunnerForTest(async () => ((heavyCalls++), { ok: true, text: "heavy", steps: 1, citations: [] }));
+    setHeavyRunnerForTest(async () => ((heavyCalls++), { ok: true, text: "heavy", steps: 1, citations: [], heavyInputTokens: 0, heavyOutputTokens: 0 }));
     const mockClient: any = {
       chat: {
         completions: {
@@ -80,7 +80,7 @@ describe("orchestrator loop", () => {
     const seen: string[] = [];
     setHeavyRunnerForTest(async (handoff) => {
       seen.push(handoff.prompt);
-      return { ok: true, text: "Heavy answer relayed.", steps: 3, citations: [] };
+      return { ok: true, text: "Heavy answer relayed.", steps: 3, citations: [], heavyInputTokens: 0, heavyOutputTokens: 0 };
     });
     let calls = 0;
     const mockClient: any = {
