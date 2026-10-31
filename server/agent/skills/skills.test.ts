@@ -286,6 +286,9 @@ describe("agent.start logs loaded skills", () => {
     expect(start?.payload?.model).toBeDefined();
     const skills = start?.payload?.skills as string[];
     expect(Array.isArray(skills)).toBe(true);
-    expect(skills).toContain("app-overview");
+    // Research intent pulls the research protocol up front; the app map
+    // loads on demand through read_skill (#209).
+    expect(skills).toContain("content-and-reader");
+    expect(skills).not.toContain("app-overview");
   });
 });

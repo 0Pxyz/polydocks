@@ -8,7 +8,7 @@ import {
 
 describe("Agent Tool Catalog & Security Guards", () => {
   it("should export all canonical tools in fullTools catalog", () => {
-    expect(fullTools.length).toBe(43);
+    expect(fullTools.length).toBe(44);
     const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
@@ -34,6 +34,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("search_files");
     expect(names).toContain("recall_memory");
     expect(names).toContain("record_memory");
+    expect(names).toContain("read_skill");
     expect(names).toContain("apply_theme");
     expect(names).toContain("generate_image");
     expect(names).toContain("install_plugin");
@@ -99,9 +100,10 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "plugins.operate",
         "plugins.rollback",
         "plugins.uninstall",
+        "skills.read",
       ].sort()
     );
-    expect(fullTools.length).toBe(43);
+    expect(fullTools.length).toBe(44);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
@@ -124,8 +126,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
     const minimalNames = new Set(minimalTools.map((t) => t.name));
     // Derived views partition the canonical list (find_capabilities is
     // the only tool offered on both surfaces).
-    expect(fullNames.size).toBe(43);
-    expect(minimalNames.size).toBe(19);
+    expect(fullNames.size).toBe(44);
+    expect(minimalNames.size).toBe(20);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
     }

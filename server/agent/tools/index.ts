@@ -20,6 +20,7 @@ import { edit_file } from "./edit_file";
 import { search_files } from "./search_files";
 import { recall_memory } from "./recall_memory";
 import { record_memory } from "./record_memory";
+import { read_skill } from "./read_skill";
 import { dock_search } from "./dock_search";
 import { search_icons } from "./search_icons";
 import { list_icon_categories } from "./list_icon_categories";
@@ -49,6 +50,7 @@ import {
 // current executors via the shared facade layer.
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
 import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback, pluginsActivate, pluginsDeactivate } from "./verbs/plugins";
+import { skillsRead } from "./verbs/skills";
 import { config } from "../../config";
 import { buildDynamicCapabilityTools } from "./catalog";
 
@@ -81,6 +83,7 @@ export {
   search_files,
   recall_memory,
   record_memory,
+  read_skill,
   generate_image,
   install_plugin,
   rollback_plugin,
@@ -116,6 +119,7 @@ export {
   pluginsRollback,
   pluginsActivate,
   pluginsDeactivate,
+  skillsRead,
 };
 
 export type AgentSurface = "full" | "minimal";
@@ -160,6 +164,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: search_files, surfaces: ["full"] },
   { tool: recall_memory, surfaces: ["full"] },
   { tool: record_memory, surfaces: ["full"] },
+  { tool: read_skill, surfaces: ["full"] },
   { tool: generate_image, surfaces: ["full"] },
   { tool: install_plugin, surfaces: ["full"] },
   { tool: rollback_plugin, surfaces: ["full"] },
@@ -194,6 +199,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: pluginsRollback, surfaces: ["minimal"] },
   { tool: pluginsActivate, surfaces: ["minimal"] },
   { tool: pluginsDeactivate, surfaces: ["minimal"] },
+  { tool: skillsRead, surfaces: ["minimal"] },
 ];
 
 function toolsFor(surface: AgentSurface): AgentTool[] {

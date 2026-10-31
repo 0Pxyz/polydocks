@@ -325,12 +325,13 @@ export type DomainSkillName =
   | "verify-and-report";
 
 /**
- * Priority-ordered domain skill selection. Returns at most two skill names;
- * callers always add app-overview on top. Repair and verify-on-artifact come
- * first so a fix request reaches `plugins`, never a recreate path; a matched
- * capability invocation suppresses the research protocol; an explicit
- * open/close/list tab verb suppresses tool-synthesis matching on nouns like
- * "flashcard".
+ * Priority-ordered domain skill selection. Returns at most two skill names.
+ * The app map is NOT added here: dock-add turns load it up front in the
+ * loop, everything else pulls it through read_skill on demand (#209).
+ * Repair and verify-on-artifact come first so a fix request reaches
+ * `plugins`, never a recreate path; a matched capability invocation
+ * suppresses the research protocol; an explicit open/close/list tab verb
+ * suppresses tool-synthesis matching on nouns like "flashcard".
  */
 export function selectDomainSkills(prompt: string): DomainSkillName[] {
   const picked: DomainSkillName[] = [];

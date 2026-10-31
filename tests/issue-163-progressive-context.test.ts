@@ -33,9 +33,11 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     expect(fastCapture.system).not.toContain("Installed Plugins");
     expect(fastCapture.system).not.toContain("Mounted Plugins");
     expect(fastCapture.system).not.toContain("Recalled Agent Memory");
-    // Fast path still carries the fixed core: base prompt + app map + guidelines.
+    // Fast path carries the fixed core only: base prompt + guidelines.
+    // The app map is on-demand now (#209): pulled via read_skill when
+    // the model needs it, never injected up front.
     expect(fastCapture.system).toContain("Polymax Agent");
-    expect(fastCapture.system).toContain("App Map");
+    expect(fastCapture.system).not.toContain("App Map");
 
     const fullCapture = { system: "" };
     await runAgentLoop({

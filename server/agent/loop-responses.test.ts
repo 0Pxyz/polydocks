@@ -236,8 +236,7 @@ describe("Agent loop over Responses API", () => {
     expect(flatNames).toContain("search_web");
   });
 
-  it("carries url_citations into the finish payload", async () => {
-    const events: AgentStepEvent[] = [];
+  it("carries url_citations into the finish payload", async () => {    const events: AgentStepEvent[] = [];
     let calls = 0;
     const mockClient: any = {
       responses: {
@@ -271,5 +270,39 @@ describe("Agent loop over Responses API", () => {
     expect(result.status).toBe("completed");
     const finish = events.find((e) => e.type === "agent.finish");
     expect(finish?.payload?.citations).toEqual([{ url: "https://example.com/spark", title: "Spark" }]);
+  });
+
+  it("keeps the app map on demand: dock-add loads it, other turns pull via skills.read", async () => {
+    let instructions = "";
+    let flatNames: string[] = [];
+    const mockClient: any = {
+      responses: {
+        create: async (params: any) => {
+          instructions = params.instructions ?? "";
+          flatNames = [];
+          for (const t of params.tools ?? []) {
+            if (t.type === "namespace") for (const fn of t.tools) flatNames.push(fn.name);
+            else if (t.type === "function") flatNames.push(t.name);
+          }
+          return {
+            id: "resp_skill_probe",
+            usage: {},
+            output: [{ type: "message", content: [{ type: "output_text", text: "Done." }] }],
+          };
+        },
+      },
+    };
+    await runAgentLoop({ prompt: "Hello", llmClient: mockClient, onEvent: () => {} });
+    expect(instructions).not.toContain("App Map");
+    // The on-demand route is offered instead of the injected map.
+    expect(flatNames).toContain("skills.read");
+
+    await runAgentLoop({
+      prompt: "Build me a habit tracker",
+      origin: "dock-add",
+      llmClient: mockClient,
+      onEvent: () => {},
+    });
+    expect(instructions).toContain("App Map");
   });
 });
