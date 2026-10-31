@@ -1,76 +1,77 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MiniOrb } from "@/components/icons/MiniOrb";
-import { resolveIcon } from "@/components/icons/adapter";
+import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 
-const ROTATING_EXAMPLES = [
-  "Research the latest on small modular reactors",
-  "Build a tracker for my reading list",
-  "Organize my sources on urbanism",
-  "Summarize this workspace",
+const HINT_SEEN_KEY = "polymax-home-hint-seen";
+
+/**
+ * Quiet rotating tips for returning users (the first-run Ctrl K hint is
+ * gone, but the spot stays useful). Plain copy the agent can rewrite at
+ * any time — no tool call, no endpoint, just edit this list.
+ */
+const ROTATING_TIPS = [
+  "Ask anything, or give a dock command…",
+  "Tip: Ctrl Shift P opens dock search",
+  "Your plugins live in the dock",
+  "Try: change my background",
 ];
 
-export interface HomePluginEntry {
-  id: string;
-  label: string;
-  detail?: string;
-  iconKey?: string;
-}
-
 export interface HomeScreenProps {
-  onSendMessage: (prompt: string, meta?: { origin?: string }) => void;
-  onOpenPlugin?: (pluginId: string) => void;
-  onOpenStore?: () => void;
-  installedPlugins?: HomePluginEntry[];
+  /** Open the agent chat panel (same panel as Ctrl K / dock agent icon). */
+  onOpenAgent: () => void;
+  panelOpen: boolean;
   className?: string;
 }
 
-export function HomeScreen({
-  onSendMessage,
-  onOpenPlugin,
-  onOpenStore,
-  installedPlugins = [],
-  className = "",
-}: HomeScreenProps) {
-  const [value, setValue] = useState("");
-  const [exampleIndex, setExampleIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+/**
+ * Living desktop: wallpaper + one orb. Nothing else in the center.
+ * The orb shares its layoutId with the chat panel orb so opening the
+ * panel slides this orb down into place — never two orbs on screen.
+ * The prompt box, plugin tiles and placeholders were removed: everything
+ * runs through the agent panel, and plugins live in the dock.
+ */
+export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScreenProps) {
+  const [hintVisible, setHintVisible] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
+  const [hintDismissed, setHintDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem(HINT_SEEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const isReduced = prefersReducedMotion();
+  const isCoarse =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
 
-  // Rotate examples every 4 seconds
+  // Quiet Ctrl K hint after ~3s idle (or on hover via CSS); gone after first use.
   useEffect(() => {
-    const interval = setInterval(() => {
-      setExampleIndex((prev) => (prev + 1) % ROTATING_EXAMPLES.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+    if (hintDismissed || panelOpen) return;
+    const t = setTimeout(() => setHintVisible(true), 3000);
+    return () => clearTimeout(t);
+  }, [hintDismissed, panelOpen]);
 
-  // Global '/' shortcut to focus search input
+  // Returning users: rotate a subtle tip every ~12s while idle. Same
+  // quiet spot, never a prompt box; pauses while the panel is open.
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.key === "/" &&
-        !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)
-      ) {
-        e.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    if (!hintDismissed || panelOpen) return;
+    const t = setInterval(() => setTipIndex((i) => (i + 1) % ROTATING_TIPS.length), 12000);
+    return () => clearInterval(t);
+  }, [hintDismissed, panelOpen]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const query = value.trim() || ROTATING_EXAMPLES[exampleIndex];
-    if (!query) return;
-    onSendMessage(query, { origin: "home" });
-    setValue("");
+  const openAgent = () => {
+    try {
+      window.localStorage.setItem(HINT_SEEN_KEY, "1");
+    } catch {
+      // Non-fatal: hint simply shows again next visit.
+    }
+    setHintDismissed(true);
+    onOpenAgent();
   };
-
-  const visiblePlugins = (installedPlugins || []).slice(0, 6);
 
   return (
     <div
@@ -79,121 +80,56 @@ export function HomeScreen({
         className
       )}
     >
-      <motion.div
-        initial={{ opacity: 0, y: isReduced ? 0 : 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="flex flex-col items-center w-full"
-      >
-        {/* Agent presence: a quiet breathing orb, the focal point */}
-        <motion.div
-          animate={isReduced ? undefined : { opacity: [0.75, 1, 0.75] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="relative mb-7"
-          aria-hidden="true"
-        >
-          <div className="absolute inset-0 -m-5 rounded-full bg-[radial-gradient(circle,rgba(200,255,87,0.12)_0%,transparent_70%)]" />
-          <MiniOrb state="idle" size={44} />
-        </motion.div>
-
-        {/* Central prompt: the primary interaction */}
-        <form
-          onSubmit={handleSubmit}
-          className="relative w-full max-w-[560px] flex items-center bg-[#0c0e14]/80 backdrop-blur-xl rounded-2xl px-5 py-4 shadow-2xl focus-within:ring-1 focus-within:ring-[var(--accent-lime)]/40 transition-shadow"
-        >
-          <div className="relative flex-1 flex items-center min-w-0">
-            <input
-              ref={inputRef}
-              type="text"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              className="w-full bg-transparent text-base text-white outline-none placeholder-transparent z-10"
-              aria-label="Ask your agent what to do"
-            />
-
-            {/* Cross-fading rotating placeholder */}
-            {!value && (
-              <div className="absolute inset-0 flex items-center pointer-events-none overflow-hidden text-base text-[#9aa5b8]/70">
-                <AnimatePresence mode="wait">
-                  <motion.span
-                    key={exampleIndex}
-                    initial={{ opacity: 0, y: isReduced ? 0 : 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: isReduced ? 0 : -4 }}
-                    transition={{ duration: 0.25 }}
-                    className="truncate text-left"
-                  >
-                    {ROTATING_EXAMPLES[exampleIndex]}
-                  </motion.span>
-                </AnimatePresence>
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handleSubmit()}
-            className="ml-3 p-1 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-transform"
-            aria-label="Ask Agent"
+      <AnimatePresence mode="wait" initial={false}>
+        {!panelOpen && (
+          <motion.div
+            key="home-orb"
+            initial={false}
+            exit={isReduced ? { opacity: 0 } : { opacity: 0, y: 48, scale: 0.6 }}
+            transition={{ duration: 0.22, ease: "easeIn" }}
+            className="flex flex-col items-center w-full"
           >
-            <MiniOrb state="idle" size={22} />
-          </button>
-        </form>
-
-        {/* Your plugins: installed tools as first-class experiences */}
-        <div className="mt-12 w-full max-w-[560px]">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <span className="text-[11px] uppercase tracking-widest text-[#545f75]">
-              Your plugins
-            </span>
-            <button
+            {/* The one orb: the same Orb component as the chat panel,
+                breathing when idle, still under reduced motion. */}
+            <motion.button
               type="button"
-              onClick={() => onOpenStore?.()}
-              className="text-xs text-[var(--accent-lime)] hover:opacity-80 transition-opacity cursor-pointer"
+              layoutId="agent-orb-shared"
+              onClick={openAgent}
+              data-home-orb
+              aria-label="Talk to your agent (Ctrl K)"
+              title="Talk to your agent (Ctrl K)"
+              transition={isReduced ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
+              className="group relative rounded-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent-lime)]"
             >
-              Discover
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {visiblePlugins.map((plugin, index) => {
-              const Icon = resolveIcon(plugin.iconKey || plugin.id);
-              return (
-                <motion.button
-                  key={plugin.id}
-                  type="button"
-                  initial={{ opacity: 0, y: isReduced ? 0 : 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.1 + index * 0.05 }}
-                  onClick={() => onOpenPlugin?.(plugin.id)}
-                  title={plugin.detail || plugin.label}
-                  className="group flex flex-col items-center gap-2.5 px-2 py-5 rounded-2xl bg-white/[0.03] border border-white/[0.07] hover:bg-white/[0.05] hover:border-[var(--accent-lime)]/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-lime)]"
-                >
-                  <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.05] border border-white/[0.06] text-white/80 group-hover:text-[var(--accent-lime)] transition-colors">
-                    <Icon size={20} weight="duotone" />
-                  </span>
-                  <span className="text-xs text-[#9aa5b8] group-hover:text-white transition-colors truncate max-w-full">
-                    {plugin.label}
-                  </span>
-                </motion.button>
-              );
-            })}
-            {visiblePlugins.length === 0 && (
-              <div className="col-span-full flex flex-col items-center gap-2 py-6 text-center">
-                <p className="text-xs text-[#9aa5b8]">
-                  No plugins installed yet. Nothing ships by default.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onOpenStore?.()}
-                  className="text-xs text-[var(--accent-lime)] hover:opacity-80 transition-opacity cursor-pointer"
-                >
-                  Discover plugins
-                </button>
+              <Orb state="idle" size={isCoarse ? "xl" : "sm"} />
+            </motion.button>
+
+            {/* Quiet hint: Ctrl K on desktop, tap on touch. Never a second prompt box. */}
+            {!hintDismissed ? (
+              <div
+                className={cn(
+                  "mt-6 h-5 text-xs text-[var(--text-muted)] font-sans transition-opacity duration-500",
+                  hintVisible ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                )}
+                aria-hidden="true"
+              >
+                {isCoarse ? "Tap to talk" : "Ctrl K"}
+              </div>
+            ) : (
+              <div
+                key={tipIndex}
+                className={cn(
+                  "mt-6 h-5 text-xs text-[var(--text-muted)] font-sans",
+                  !isReduced && "animate-in fade-in duration-500"
+                )}
+                aria-hidden="true"
+              >
+                {ROTATING_TIPS[tipIndex]}
               </div>
             )}
-          </div>
-        </div>
-      </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

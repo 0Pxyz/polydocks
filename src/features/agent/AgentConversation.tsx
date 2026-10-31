@@ -543,7 +543,14 @@ export function AgentConversation({
                 )}
                 title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
               >
-                <Orb state={orbState} size="sm" audioLevel={audioLevel} />
+                {/* Shared with the home orb: opening chat morphs it here. */}
+                <motion.div
+                  layoutId={reduceMotion ? undefined : "agent-orb-shared"}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                  className="flex items-center justify-center"
+                >
+                  <Orb state={orbState} size="xs" audioLevel={audioLevel} />
+                </motion.div>
               </button>
 
               <button
@@ -593,6 +600,25 @@ export function AgentConversation({
             )}
 
             {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript) */}
+            {!draft.trim() && stagedAttachments.length === 0 && !isStreaming && (
+              <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
+                {[
+                  "Show notes and sources side by side",
+                  "Start a focus session",
+                  "Research a topic for me",
+                  "Change my background",
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => setDraft(suggestion)}
+                    className="px-2.5 py-1 rounded-full text-[11px] text-white/60 bg-white/[0.05] hover:bg-white/[0.1] hover:text-white border border-white/[0.06] transition-colors cursor-pointer font-sans"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
             <form
               onSubmit={(e) => {
                 e.preventDefault();

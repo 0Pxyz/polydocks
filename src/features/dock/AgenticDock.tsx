@@ -186,7 +186,6 @@ interface AgenticDockProps {
   /** Send a fix prompt to the agent for a failed plugin. */
   onFixWithAgent?: (prompt: string) => void;
   onOpenAgent?: () => void;
-  onOpenInstallUrl?: () => void;
   onOpenMcpConnect?: () => void;
   /**
    * Contextual ids (city tools): shown in the bar while their context is
@@ -214,7 +213,6 @@ export function AgenticDock({
   onSubmitToolPrompt,
   onFixWithAgent,
   onOpenAgent,
-  onOpenInstallUrl,
   onOpenMcpConnect,
   contextualIds = [],
   isBuilding = false,
@@ -320,6 +318,8 @@ export function AgenticDock({
   // in the remaining space instead of the full width (otherwise icons spill
   // out of the capsule and the dock reads as cut off).
   const sideOffset = useConversationStore((s) => (s.layoutState === "side" ? s.sideWidth : 0));
+  // Ring "needs you" state: a pending approval pulses the agent glyph.
+  const hasPendingApproval = useConversationStore((s) => s.activeApproval !== null);
   const currentStyle = DOCK_STYLES[dockStyle] || DOCK_STYLES.glass;
   const isReducedMotion = prefersReducedMotion();
 
@@ -470,7 +470,6 @@ export function AgenticDock({
                 })
               )}
               onOpenAgent={onOpenAgent}
-              onOpenInstallUrl={onOpenInstallUrl}
               onOpenMcpConnect={onOpenMcpConnect}
               onOpenItem={(toolId) => {
                 openTool(toolId);
@@ -589,6 +588,7 @@ export function AgenticDock({
                   isActive={isActive}
                   isAgent={isAgent}
                   isAgentWorking={isAgentWorking}
+                  needsAttention={isAgent && hasPendingApproval}
                   size={20}
                 />
 
