@@ -1,2 +1,217 @@
-export { OnboardingPluginView } from "./OnboardingPluginView";
-export { LiveOnboardingOverlay, LiveOnboardingOverlay as LiveOnboarding } from "./LiveOnboardingOverlay";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
+import {
+  X,
+  Play,
+  Pause,
+  ArrowRight,
+  ArrowLeft,
+} from "@phosphor-icons/react";
+import {
+  useOnboardingStore,
+  ONBOARDING_STEPS,
+} from "@/lib/store/useOnboardingStore";
+import { pushThought } from "@/lib/agent/thoughtStream";
+import { useDockStore } from "@/lib/store/useDockStore";
+import { useThemeStore } from "@/lib/theme";
+import { spring, prefersReducedMotion } from "@/lib/motion";
+
+export function LiveOnboarding() {
+  const {
+    isOpen,
+    isPlaying,
+    currentStep,
+    currentStepIndex,
+    nextStep,
+    prevStep,
+    skipDemo,
+    completeDemo,
+  } = useOnboardingStore();
+
+  const [paused, setPaused] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const isReduced = prefersReducedMotion();
+  const dockPosition = useThemeStore((s) => s.dockPosition);
+
+  const stepDef = ONBOARDING_STEPS[currentStepIndex] ?? ONBOARDING_STEPS[0];
+
+  // Auto-advance timer when playing and not paused
+  useEffect(() => {
+    if (!isOpen || paused || !isPlaying) return;
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    timerRef.current = setTimeout(() => {
+      if (currentStepIndex < ONBOARDING_STEPS.length - 1) {
+        nextStep();
+      } else {
+        completeDemo();
+      }
+    }, stepDef.durationMs);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [isOpen, paused, isPlaying, currentStepIndex, stepDef.durationMs, nextStep, completeDemo]);
+
+  // Orchestrate dock and thought stream on step entry
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const dock = useDockStore.getState();
+
+    switch (currentStep) {
+      case "intro":
+        dock.setActiveTool("");
+        pushThought("Poly is active and ready");
+        break;
+
+      case "research":
+        pushThought("Querying literature via TinyFish: deep work protocols...", {
+          tool: "search.web",
+        });
+        setTimeout(() => {
+          pushThought("Fetched primary source: Sophie Leroy (2009) Attention Residue", {
+            tool: "search.fetch",
+          });
+        }, 2200);
+        setTimeout(() => {
+          pushThought("Synthesizing 3 evidence-based techniques into briefing note…");
+        }, 5000);
+        break;
+
+      case "workspace":
+        dock.setActiveTool("browser");
+        pushThought("Opening primary source in native Browser surface", {
+          tool: "browser",
+        });
+        break;
+
+      case "tools":
+        dock.setActiveTool("deep-work-flashcards");
+        pushThought("Synthesizing deep-work-flashcards plugin…");
+        setTimeout(() => {
+          pushThought("Mounted and pinned deep-work-flashcards in dock");
+        }, 3000);
+        break;
+
+      case "handoff":
+        dock.setActiveTool("");
+        pushThought("Your workspace is ready");
+        break;
+    }
+  }, [isOpen, currentStep]);
+
+  // Keyboard navigation: Esc to skip, arrows to navigate, Space to toggle pause
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        skipDemo();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        nextStep();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prevStep();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        setPaused((p) => !p);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, skipDemo, nextStep, prevStep]);
+
+  if (!isOpen || currentStep === "idle") return null;
+
+  // Position opposite to the dock so it never collides!
+  const isDockTop = dockPosition === "top";
+  const positionClass = isDockTop
+    ? "bottom-8 left-1/2 -translate-x-1/2"
+    : "top-8 left-1/2 -translate-x-1/2";
+
+  const yOffset = isReduced ? 0 : isDockTop ? 20 : -20;
+
+  return (
+    <div
+      className={`fixed ${positionClass} z-50 pointer-events-auto select-none max-w-xl w-[calc(100%-2rem)]`}
+      aria-label="Live product demonstration"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: yOffset }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: yOffset }}
+        transition={spring.soft}
+        className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-[#12151D]/95 border border-white/10 shadow-2xl backdrop-blur-xl w-full justify-between"
+      >
+        {/* Step Info */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-[var(--accent-lime)] shrink-0 animate-pulse" />
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-foreground truncate">
+                {stepDef.title}
+              </span>
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                ({currentStepIndex + 1}/{ONBOARDING_STEPS.length})
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground truncate hidden sm:inline">
+              {stepDef.subtitle}
+            </span>
+          </div>
+        </div>
+
+        {/* Step Controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Pause / Play */}
+          <button
+            type="button"
+            onClick={() => setPaused((p) => !p)}
+            className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors cursor-pointer"
+            title={paused ? "Resume demo (Space)" : "Pause demo (Space)"}
+            aria-label={paused ? "Resume demo" : "Pause demo"}
+          >
+            {paused ? <Play size={13} weight="fill" /> : <Pause size={13} weight="fill" />}
+          </button>
+
+          {/* Prev / Next */}
+          <button
+            type="button"
+            onClick={prevStep}
+            disabled={currentStepIndex === 0}
+            className="p-1.5 rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 transition-colors cursor-pointer"
+            title="Previous step (Left Arrow)"
+          >
+            <ArrowLeft size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={nextStep}
+            className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors cursor-pointer"
+            title="Next step (Right Arrow)"
+          >
+            <ArrowRight size={13} />
+          </button>
+
+          <div className="w-px h-3.5 bg-white/10 mx-0.5" />
+
+          {/* Skip Demo Button */}
+          <button
+            type="button"
+            onClick={skipDemo}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+            title="Skip demo and start working (Esc)"
+          >
+            <span>Skip</span>
+            <X size={12} weight="bold" />
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
