@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
+import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import {
   pushLine,
   riseDurationMs,
@@ -62,9 +63,19 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
           data-thought-line={line.id}
         >
           {/* Blurred chip: readable over any wallpaper or theme, no box —
-            just enough backdrop to lift the text off the background. */}
-        <span className="inline-block max-w-full truncate rounded-full bg-black/30 px-3 font-sans text-[13px] leading-[22px] text-white backdrop-blur-md [text-shadow:0_1px_8px_rgba(0,0,0,0.65)]">
-          {line.text}
+            just enough backdrop to lift the text off the background.
+            Same TinyFish mark the chat uses, when a discovery tool speaks. */}
+        <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full bg-black/30 px-3 font-sans text-[13px] leading-[22px] text-white backdrop-blur-md [text-shadow:0_1px_8px_rgba(0,0,0,0.65)]">
+          {line.tool && isTinyFishTool(line.tool) && (
+            <img
+              src={TINYFISH_LOGO_SRC}
+              alt="TinyFish"
+              width={14}
+              height={14}
+              className="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
+            />
+          )}
+          <span className="truncate">{line.text}</span>
         </span>
         </div>
       ))}
