@@ -23,6 +23,16 @@ describe("intent-scoped minimal surface", () => {
     expect(full).toContain("install_plugin");
   });
 
+  it("theme intent turns can reach apply_theme on the default surface", async () => {
+    const { INTENT_TOOL_DENYLIST } = await import("../server/agent/intent");
+    const min = minimalTools.map((t) => t.name);
+    // The theme skill names apply_theme explicitly; the tool must be
+    // offered (not denied, not surface-filtered) or the model correctly
+    // reports "theme control isn't available" (regression from #219).
+    expect(min).toContain("apply_theme");
+    expect(INTENT_TOOL_DENYLIST.theme).not.toContain("apply_theme");
+  });
+
   it("minimal context is smaller than full", () => {
     expect(minimalTools.length).toBeLessThan(fullTools.length);
   });

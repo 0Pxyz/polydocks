@@ -135,4 +135,15 @@ describe("Responses namespace builder", () => {
     expect(resolveResponsesToolName(nameMap, "add", "sources")).toBe("add");
     expect(resolveResponsesToolName(nameMap, "nope")).toBe("nope");
   });
+
+  it("resolves a namespace-prefixed guess for a flat function", () => {
+    const { nameMap } = buildResponsesTools([fakeTool("apply_theme"), fakeTool("dock.open")]);
+    // The model naturally calls "media.apply_theme" for the flat function
+    // declared inside the media namespace — resolve, don't hard-fail.
+    expect(resolveResponsesToolName(nameMap, "media.apply_theme")).toBe("apply_theme");
+    // Direct names still win over the suffix fallback.
+    expect(resolveResponsesToolName(nameMap, "dock.open")).toBe("dock.open");
+    // Unknown qualified names still pass through for the loop's error path.
+    expect(resolveResponsesToolName(nameMap, "nope.nowhere")).toBe("nope.nowhere");
+  });
 });

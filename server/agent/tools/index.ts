@@ -143,7 +143,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: dock_pin, surfaces: ["full"] },
   { tool: dock_unpin, surfaces: ["full"] },
   { tool: dock_close, surfaces: ["full"] },
-  { tool: apply_theme, surfaces: ["full"] },
+  { tool: apply_theme, surfaces: ["full", "minimal"] },
   { tool: open_source, surfaces: ["full"] },
   { tool: search_web, surfaces: ["full"] },
   { tool: fetch_page, surfaces: ["full"] },
