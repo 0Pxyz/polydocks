@@ -1,7 +1,14 @@
 import { create } from "zustand";
 import { platformStorage } from "@/lib/platform/storage";
+import { useDockStore } from "@/lib/store/useDockStore";
 
 const ONBOARDING_STORAGE_KEY = "polymax_onboarding_completed_v2";
+
+/** Exported for tests: the persisted completion flag. */
+export const ONBOARDING_COMPLETED_KEY = ONBOARDING_STORAGE_KEY;
+
+/** Dock tab id that hosts the walkthrough surface. */
+export const ONBOARDING_TAB_ID = "onboarding";
 
 export type OnboardingStep =
   | "idle"
@@ -20,36 +27,36 @@ export const ONBOARDING_STEPS: {
 }[] = [
   {
     id: "intro",
-    title: "Welcome to PolyDocks",
-    subtitle: "Your personal workspace operated by an autonomous agent.",
+    title: "Meet Poly",
+    subtitle: "Your dock, run by an agent. Talk or type — Poly opens, arranges, and operates everything beside you.",
     dockTarget: "agent",
     durationMs: 7000,
   },
   {
     id: "research",
-    title: "Agents That Do Real Work",
-    subtitle: "Poly searches and synthesizes primary sources via TinyFish.",
+    title: "Real research, real browser",
+    subtitle: "Poly searches the web, news, and papers — and reads them in real Chromium tabs with sources saved.",
     dockTarget: "browser",
     durationMs: 9000,
   },
   {
     id: "workspace",
-    title: "Your Workspace Comes Alive",
-    subtitle: "Real Chromium browser and research sources mounted in parallel.",
-    dockTarget: "browser",
+    title: "Make it yours",
+    subtitle: "Backgrounds and themes apply everywhere, live. Tell Poly a new look and watch the workspace follow.",
+    dockTarget: "settings",
     durationMs: 8000,
   },
   {
     id: "tools",
-    title: "Your Dock, Your Tools",
-    subtitle: "Poly builds and mounts custom tools directly into the dock.",
-    dockTarget: "deep-work-flashcards",
+    title: "Tools, built on demand",
+    subtitle: "Ask and Poly builds a sandboxed tool straight into your dock. This tab is full of them.",
+    dockTarget: "plugins",
     durationMs: 9000,
   },
   {
     id: "handoff",
-    title: "Your Workspace, Your Rules",
-    subtitle: "This is your workspace. Tell me what you want to build next.",
+    title: "Your turn",
+    subtitle: "Tell Poly what to build next — research, tools, or a fresh look.",
     dockTarget: "agent",
     durationMs: 6000,
   },
@@ -102,6 +109,9 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       currentStepIndex: 0,
       hasCompleted: false,
     });
+    // The walkthrough is a standard dock tab on every entry path
+    // (first launch, agent, replay, settings): opening here covers them all.
+    useDockStore.getState().openTool(ONBOARDING_TAB_ID);
   },
 
   setStep: (step: OnboardingStep) => {
@@ -112,6 +122,8 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       isOpen: step !== "idle",
       isPlaying: step !== "idle",
     });
+    // Stepping implies a visible tour (agent path may skip startDemo).
+    if (step !== "idle") useDockStore.getState().openTool(ONBOARDING_TAB_ID);
   },
 
   nextStep: () => {
@@ -146,6 +158,9 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       currentStep: "idle",
       hasCompleted: true,
     });
+    // Closing removes the tab from the dock; the completed flag stops
+    // any auto-reopen. Only an explicit replay or request brings it back.
+    useDockStore.getState().closeTool(ONBOARDING_TAB_ID);
   },
 
   completeDemo: () => {
@@ -156,6 +171,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       currentStep: "idle",
       hasCompleted: true,
     });
+    useDockStore.getState().closeTool(ONBOARDING_TAB_ID);
   },
 
   resetOnboarding: () => {
@@ -167,9 +183,19 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       currentStepIndex: 0,
       hasCompleted: false,
     });
+    useDockStore.getState().openTool(ONBOARDING_TAB_ID);
   },
 }));
 
 if (typeof window !== "undefined") {
   (window as any).__onboardingStore = useOnboardingStore;
+}
+
+// First launch opens the walkthrough tab (no store action runs at import,
+// so the dock sync happens here, once, in the browser only). Completed
+// workspaces skip it via the persisted flag above.
+if (typeof window !== "undefined" && !loadInitialStatus()) {
+  queueMicrotask(() => {
+    useDockStore.getState().openTool(ONBOARDING_TAB_ID);
+  });
 }
