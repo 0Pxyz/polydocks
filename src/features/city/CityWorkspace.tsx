@@ -9,6 +9,7 @@ import { useConversationStore } from "@/lib/agent/conversationStore";
 import { NotesView } from "./tools/NotesView";
 import { SourcesView } from "./tools/SourcesView";
 import { SourceDetailView } from "./tools/SourceDetailView";
+import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { QuestsView } from "./tools/QuestsView";
 import { TerminalView } from "./tools/TerminalView";
 import { FilesView } from "./tools/FilesView";
@@ -126,6 +127,14 @@ export function CityWorkspace({
         ),
       },
       {
+        id: "browser",
+        render: () => (
+          <div className="w-full flex-1 min-w-0 flex flex-col min-h-0">
+            <NativeBrowserView workspaceKey={cityId} />
+          </div>
+        ),
+      },
+      {
         id: "quests",
         render: () => (
           <QuestsView quests={data.quests} cityName={data.title} onToggleQuest={toggleQuest} />
@@ -153,14 +162,8 @@ export function CityWorkspace({
   );
   const visibleTabId = dynamicTab
     ? `dyn:${dynamicTab.id}`
-    : activeTool === "browser"
-      ? "sources"
-      : activeTool || "overview";
-  const secondaryVisibleId = secondaryToolId
-    ? secondaryToolId === "browser"
-      ? "sources"
-      : secondaryToolId
-    : null;
+    : activeTool || "overview";
+  const secondaryVisibleId = secondaryToolId || null;
   const dual = Boolean(secondaryVisibleId && secondaryVisibleId !== visibleTabId);
 
   return (
