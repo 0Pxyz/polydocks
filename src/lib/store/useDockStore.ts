@@ -7,6 +7,9 @@ import {
   type DockDirective,
 } from "@/lib/dock/dockModel";
 import {
+  BESIDE_WIDTH_DEFAULT,
+  BESIDE_WIDTH_MAX,
+  BESIDE_WIDTH_MIN,
   emptyDock,
   openItem,
   closeItem,
@@ -51,6 +54,28 @@ function persistDockSnapshot(snapshot: DockItemsSnapshot): void {
   platformStorage.setItem(DOCK_ITEMS_KEY, snapshot);
 }
 
+const BESIDE_KEY = "polymax-tool-sidebar";
+
+interface BesidePersisted {
+  ids?: string[];
+  width?: number;
+}
+
+/** Reads persisted beside state (used at store creation; exported for tests). */
+export function loadBeside(): { ids: string[]; width: number } {
+  const stored = platformStorage.getItem<BesidePersisted>(BESIDE_KEY);
+  const ids = Array.isArray(stored?.ids) ? stored.ids.filter((id) => typeof id === "string" && id) : [];
+  const width =
+    typeof stored?.width === "number" && stored.width >= BESIDE_WIDTH_MIN && stored.width <= BESIDE_WIDTH_MAX
+      ? stored.width
+      : BESIDE_WIDTH_DEFAULT;
+  return { ids, width };
+}
+
+function persistBeside(ids: string[], width: number): void {
+  platformStorage.setItem(BESIDE_KEY, { ids, width });
+}
+
 /** Legacy mirrors derived from the single source (read-cache for old UI). */
 function deriveLegacy(snapshot: DockItemsSnapshot): { openIds: string[]; activeToolId: string | null } {
   const openIds = snapshot.order.filter((id) => {
@@ -69,6 +94,17 @@ export interface DockState {
   /** Single source: one record per dock item (plugin). */
   dock: DockItemsSnapshot;
 
+  /** Tools open beside the main view (on-demand second panel). */
+  besideIds: string[];
+  /** Beside panel width (persisted, resizable). */
+  besideWidth: number;
+  /** Open a tool beside: mounts it, selects it in the panel, keeps main focus. */
+  openBeside: (toolId: string) => void;
+  /** Remove a tool from beside (record stays open, unfocused). */
+  closeBeside: (toolId: string) => void;
+  /** Empty the beside panel. */
+  clearBeside: () => void;
+  setBesideWidth: (width: number) => void;
   setActiveTool: (toolId: string | null) => void;
   toggleExpanded: () => void;
   setExpanded: (expanded: boolean) => void;
@@ -125,6 +161,54 @@ export const useDockStore = create<DockState>((set, get) => {
     activeToolId: initialDock.focusedId ?? INITIAL_DOCK_STATE.activeToolId,
     dock: initialDock,
     dockActions: DOCK_ACTIONS,
+    besideIds: loadBeside().ids,
+    besideWidth: loadBeside().width,
+
+    openBeside: (toolId) =>
+      set((state) => {
+        if (!toolId || toolId === "agent") return state;
+        // Ensure the record exists and is not closed; never steal main focus.
+        let dock = state.dock;
+        const record = dock.items[toolId];
+        if (!record || record.state === "closed") {
+          dock = openItem(dock, toolId, dock.activeContextId);
+        }
+        // Moving the focused tool beside frees the main view (focus goes to
+        // the visual neighbor); otherwise main focus is untouched.
+        if (dock.focusedId === toolId) {
+          dock = backgroundItem(dock, toolId);
+        }
+        persistDockSnapshot(dock);
+        const besideIds = state.besideIds.includes(toolId)
+          ? state.besideIds
+          : [...state.besideIds, toolId];
+        persistBeside(besideIds, state.besideWidth);
+        const derived = deriveLegacy(dock);
+        return { dock, besideIds, activeToolId: dock.focusedId, openIds: derived.openIds };
+      }),
+
+    closeBeside: (toolId) =>
+      set((state) => {
+        if (!state.besideIds.includes(toolId)) return state;
+        const besideIds = state.besideIds.filter((id) => id !== toolId);
+        persistBeside(besideIds, state.besideWidth);
+        return { besideIds };
+      }),
+
+    clearBeside: () =>
+      set((state) => {
+        if (state.besideIds.length === 0) return state;
+        persistBeside([], state.besideWidth);
+        return { besideIds: [] as string[] };
+      }),
+
+    setBesideWidth: (width) =>
+      set((state) => {
+        const clamped = Math.min(Math.max(width, BESIDE_WIDTH_MIN), BESIDE_WIDTH_MAX);
+        if (clamped === state.besideWidth) return state;
+        persistBeside(state.besideIds, clamped);
+        return { besideWidth: clamped };
+      }),
 
     setActiveTool: (toolId) =>
       set((state) => {
@@ -220,7 +304,13 @@ export const useDockStore = create<DockState>((set, get) => {
         const dock = closeItem(state.dock, toolId);
         persistDockSnapshot(dock);
         const derived = deriveLegacy(dock);
-        return { dock, activeToolId: dock.focusedId, openIds: derived.openIds };
+        // Single home per tool: a closed tool leaves the beside set too.
+        if (!state.besideIds.includes(toolId)) {
+          return { dock, activeToolId: dock.focusedId, openIds: derived.openIds };
+        }
+        const besideIds = state.besideIds.filter((id) => id !== toolId);
+        persistBeside(besideIds, state.besideWidth);
+        return { dock, besideIds, activeToolId: dock.focusedId, openIds: derived.openIds };
       }),
 
     focusTool: (toolId) =>
@@ -312,6 +402,18 @@ export const useDockStore = create<DockState>((set, get) => {
           get().openTool(chatId, null);
           return { ok: true, message: "Chat focused." };
         }
+        case "sidebar.beside": {
+          const target = params?.id ?? state.dock.focusedId;
+          if (!target || target === "agent") {
+            return { ok: false, message: "Nothing suitable to open beside." };
+          }
+          if (state.besideIds.includes(target)) {
+            get().closeBeside(target);
+            return { ok: true, message: `Removed "${target}" from beside.` };
+          }
+          get().openBeside(target);
+          return { ok: true, message: `Opened "${target}" beside.` };
+        }
         default:
           return { ok: false, message: `Unknown dock action "${actionId}".` };
       }
@@ -353,11 +455,14 @@ export const useDockStore = create<DockState>((set, get) => {
 
     resetDock: () => {
       persistPinnedIds([...DEFAULT_PINNED_IDS]);
+      persistBeside([], BESIDE_WIDTH_DEFAULT);
       const dock = emptyDock();
       persistDockSnapshot(dock);
       set({
         ...INITIAL_DOCK_STATE,
         pinnedToolIds: [...DEFAULT_PINNED_IDS],
+        besideIds: [],
+        besideWidth: BESIDE_WIDTH_DEFAULT,
         dock,
       });
     },
