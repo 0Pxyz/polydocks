@@ -179,6 +179,7 @@ http://localhost:5173, API on :3000).
 | `TINYFISH_API_KEY` | Web / news / paper research | Research tools stay offline |
 | `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | Code execution in sandboxes | Sandbox tools fail closed with a setup hint |
 | `ATRIUM_WORKER_SECRET` (+ worker on `:7070`) | Real Chromium browser in the dock | Reader fallback for pages |
+| `AGENT_SURFACE` | Tool catalog: `full` (everything) or `minimal` (dock verbs + discovery, default) | Restart the server after changing; `minimal` keeps turns cheap, `full` exposes theme/files/sandbox directly |
 
 Details: [sandbox packaging](docs/docker-sandbox.md) · [model API](docs/meta-model-api.md) · [research API](docs/tinyfish.md) · [sandbox trust](docs/sandbox-trust.md). Contributor rules: [AGENTS.md](AGENTS.md).
 
