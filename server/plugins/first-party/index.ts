@@ -5,6 +5,7 @@ import { tinyfish } from "../../discovery/tinyfish";
 import type { PluginManifest } from "../manifest";
 import { registerSourcesPlugin } from "../sources";
 import { registerSandboxPlugin } from "../sandbox";
+import { registerOnboardingPlugin } from "./onboarding";
 
 /**
  * 1. Search Plugin
@@ -114,6 +115,7 @@ export function initializeFirstPartyPlugins(): void {
   // the bus registration, HTTP route and CLI command.
   registerSourcesPlugin();
   registerSandboxPlugin();
+  registerOnboardingPlugin();
 
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);

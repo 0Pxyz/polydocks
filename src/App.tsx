@@ -5,7 +5,7 @@ import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { HomeScreen } from "@/features/home/HomeScreen";
-import { OnboardingModal } from "@/features/onboarding/OnboardingModal";
+import { LiveOnboarding } from "@/features/onboarding/LiveOnboarding";
 import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
@@ -705,8 +705,8 @@ export default function App() {
             }
           />
 
-          {/* First-launch Guided Onboarding */}
-          <OnboardingModal />
+          {/* First-launch Guided Live Onboarding Demo */}
+          <LiveOnboarding />
 
           {/* Single Agent Conversation Instance */}
           <AgentConversation
