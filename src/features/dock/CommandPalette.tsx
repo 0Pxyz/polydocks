@@ -10,6 +10,7 @@ import {
   PushPin,
   Wrench,
   ArrowLeft,
+  ColumnsPlusRight,
 } from "@phosphor-icons/react";
 import {
   Command,
@@ -52,6 +53,8 @@ interface CommandPaletteProps {
   onOpenMcpConnect?: () => void;
   /** Open a dock item: focus its tab. */
   onOpenItem?: (id: string) => void;
+  /** Open a dock tool in the beside panel (no-op for ineligible rows). */
+  onOpenBesideItem?: (id: string) => void;
   /** Close a dock tab (never deletes). */
   onCloseItem?: (id: string) => void;
   /** Submit a "create with agent" prompt. */
@@ -85,6 +88,7 @@ export function CommandPalette({
   onOpenAgent,
   onOpenMcpConnect,
   onOpenItem,
+  onOpenBesideItem,
   onCloseItem,
   onSubmitToolPrompt,
   onFixWithAgent,
@@ -427,6 +431,11 @@ export function CommandPalette({
     const failed = failedIds.has(item.id);
     const pinned = isPinned(item);
     const canPin = (item.kind === "builtin" || item.kind === "plugin" || item.kind === "tab") && !item.system;
+    const canBeside =
+      (item.kind === "builtin" || item.kind === "plugin" || item.kind === "tab") &&
+      !item.system &&
+      item.id !== "agent" &&
+      item.id !== "maps";
     const showClose = openSet.has(item.id) && !item.system;
     return (
       <CommandItem
@@ -461,6 +470,20 @@ export function CommandPalette({
               className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
             >
               <PushPin className="w-3.5 h-3.5" weight={pinned ? "fill" : "regular"} />
+            </button>
+          )}
+          {canBeside && (
+            <button
+              type="button"
+              onClick={() => {
+                closePalette();
+                onOpenBesideItem?.(item.id);
+              }}
+              title="Open beside"
+              aria-label={`Open ${item.label} beside`}
+              className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent-lime)]"
+            >
+              <ColumnsPlusRight className="w-3.5 h-3.5" />
             </button>
           )}
           {showClose && (
