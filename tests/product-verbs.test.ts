@@ -94,6 +94,21 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
     expect(report.errors.length).toBeGreaterThan(0);
   });
 
+  it("opaque static backgrounds fail strict, theme tokens pass", () => {
+    const opaque = `<div class="bg-black text-white"><div class="bg-zinc-900"><div class="bg-white/[0.04]">x</div></div></div>`;
+    const strict = validateSlop(opaque, { strict: true });
+    expect(strict.ok).toBe(false);
+    expect(strict.errors.join(" ")).toMatch(/opaque static background/);
+
+    const legacy = validateSlop(opaque);
+    expect(legacy.ok).toBe(true);
+    expect(legacy.warnings.join(" ")).toMatch(/opaque static background/);
+
+    const themed = `<div class="bg-card text-card-foreground"><div class="bg-muted/50 text-muted-foreground">x</div></div>`;
+    const clean = validateSlop(themed, { strict: true });
+    expect(clean.ok).toBe(true);
+  });
+
   it("plugins.create validates the kit and saves userApproved-gated", async () => {
     const blocked: any = await pluginsCreate.execute(
       { id: PLUGIN, name: "Verb Test", description: "t", code: SLOP_CODE, workspaceId: WS, userApproved: true } as any,
