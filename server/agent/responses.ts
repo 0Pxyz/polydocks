@@ -23,12 +23,18 @@ import type { AgentTool } from "./tools/types";
 export interface ResponsesFunctionCall {
   callId: string;
   name: string;
+  /** Namespace qualifier for calls into namespace tools (may be absent). */
+  namespace?: string;
   argsText: string;
 }
 
 export interface ResponsesTurn {
   text: string;
   functionCalls: ResponsesFunctionCall[];
+  /** Hosted `tool_search_call` / `tool_search_output` items, in output
+   *  order, replayed into the stateless input so the loaded set stays
+   *  stable across turns. Informational only — never executed. */
+  toolSearchItems: any[];
   usage: unknown;
   responseId?: string;
   encryptedReasoning?: string[];
@@ -127,11 +133,21 @@ function extractCallsFromOutput(output: any[]): ResponsesFunctionCall[] {
       calls.push({
         callId: normalizeCallId(item.call_id ?? item.id, i),
         name: String(item.name ?? ""),
+        ...(typeof item.namespace === "string" && item.namespace
+          ? { namespace: item.namespace }
+          : {}),
         argsText: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments ?? {}),
       });
     }
   });
   return calls;
+}
+
+/** Hosted tool-search handshake items, preserved in output order. */
+function extractToolSearchFromOutput(output: any[]): any[] {
+  return (output ?? []).filter(
+    (item) => item?.type === "tool_search_call" || item?.type === "tool_search_output"
+  );
 }
 
 function extractReasoningFromOutput(output: any[]): string[] {
@@ -160,7 +176,7 @@ export async function createResponsesTurn(input: {
   model: string;
   instructions: string;
   inputItems: any[];
-  tools: ReturnType<typeof toResponsesTools>;
+  tools: any[];
   effort?: string;
   signal?: AbortSignal;
   onTextDelta: (delta: string) => void | Promise<void>;
@@ -194,7 +210,16 @@ export async function createResponsesTurn(input: {
   }
 
   let text = "";
-  const callAcc = new Map<number, { callId: string; name: string; args: string }>();
+  const callAcc = new Map<number, { callId: string; name: string; namespace?: string; args: string }>();
+  const toolSearchItems: any[] = [];
+  const seenToolSearchIds = new Set<string>();
+  const pushToolSearchItem = (item: any) => {
+    if (!item || typeof item !== "object") return;
+    const key = typeof item.id === "string" ? item.id : JSON.stringify(item);
+    if (seenToolSearchIds.has(key)) return;
+    seenToolSearchIds.add(key);
+    toolSearchItems.push(item);
+  };
   let usage: unknown = {};
   let responseId: string | undefined;
   const encryptedReasoning: string[] = [];
@@ -239,15 +264,24 @@ export async function createResponsesTurn(input: {
       continue;
     }
     // Completed items carry the full function call + reasoning payloads.
+    // Hosted tool_search handshake items ride the same channel: record
+    // them for stateless replay, never for execution.
     if (t === "response.output_item.done" || t === "response.output_item.added") {
       const item = event?.item ?? {};
       if (item?.type === "function_call") {
         const idx = typeof event?.output_index === "number" ? event.output_index : outputIndex++;
+        const prev = callAcc.get(idx);
         callAcc.set(idx, {
           callId: normalizeCallId(item.call_id ?? item.id, idx),
-          name: String(item.name ?? callAcc.get(idx)?.name ?? ""),
-          args: typeof item.arguments === "string" ? item.arguments : (callAcc.get(idx)?.args ?? ""),
+          name: String(item.name ?? prev?.name ?? ""),
+          ...(typeof item.namespace === "string" && item.namespace ? { namespace: item.namespace } : {}),
+          args: typeof item.arguments === "string" ? item.arguments : (prev?.args ?? ""),
         });
+      } else if (
+        item?.type === "tool_search_call" ||
+        item?.type === "tool_search_output"
+      ) {
+        pushToolSearchItem(item);
       } else if (item?.type === "reasoning" && typeof item.encrypted_content === "string") {
         encryptedReasoning.push(item.encrypted_content);
       } else if (item?.type === "message" && Array.isArray(item.content)) {
@@ -274,6 +308,7 @@ export async function createResponsesTurn(input: {
         const existing = [...callAcc.values()].find((v) => v.callId === c.callId && v.name);
         if (!existing) callAcc.set(callAcc.size + 1000, c);
       }
+      for (const ts of extractToolSearchFromOutput(output)) pushToolSearchItem(ts);
       for (const e of extractReasoningFromOutput(output)) {
         if (!encryptedReasoning.includes(e)) encryptedReasoning.push(e);
       }
@@ -287,10 +322,11 @@ export async function createResponsesTurn(input: {
     .map(([idx, v], i) => ({
       callId: normalizeCallId(v.callId || `stream_call_${idx}_${i}`, i),
       name: v.name,
+      ...(v.namespace ? { namespace: v.namespace } : {}),
       argsText: v.args,
     }));
 
-  return { text, functionCalls, usage, responseId, encryptedReasoning };
+  return { text, functionCalls, toolSearchItems, usage, responseId, encryptedReasoning };
 }
 
 /** Normalize a plain (non-streaming) Responses object to a turn. */
@@ -299,6 +335,7 @@ export function normalizeResponsesObject(response: any): ResponsesTurn {
   return {
     text: extractTextFromOutput(output) || response?.output_text || "",
     functionCalls: extractCallsFromOutput(output),
+    toolSearchItems: extractToolSearchFromOutput(output),
     usage: response?.usage ?? {},
     responseId: response?.id,
     encryptedReasoning: extractReasoningFromOutput(output),
