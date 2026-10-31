@@ -62,9 +62,9 @@ describe("buildDockSections", () => {
     });
     expect(sections.map((s) => s.id)).toEqual(["docked", "yours", "store", "create"]);
     expect(sections[0].title).toBe("In your dock");
-    expect(sections[1].title).toBe("Your tools");
-    expect(sections[2].title).toBe("Store");
-    expect(sections[3].title).toBe("Create with agent");
+    expect(sections[1].title).toBe("Tools");
+    expect(sections[2].title).toBe("Library");
+    expect(sections[3].title).toBe("Creations");
   });
 
   test("docked holds pinned and open items, yours holds the rest", () => {
@@ -133,17 +133,9 @@ describe("createItemsForQuery", () => {
 });
 
 describe("getStaticCreateRows", () => {
-  test("mirrors the original suggestions, city-aware when a city exists", () => {
-    const city = getStaticCreateRows("Stoicism");
-    expect(city.map((i) => i.label)).toEqual([
-      "Flashcards for Stoicism",
-      "Compare two sources on Stoicism",
-      "A timeline of Stoicism",
-    ]);
-    const generic = getStaticCreateRows();
-    expect(generic.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
-    const emptyCity = getStaticCreateRows("   ");
-    expect(emptyCity.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+  test("mirrors the original static suggestions", () => {
+    const rows = getStaticCreateRows();
+    expect(rows.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
   });
 });
 
@@ -233,8 +225,10 @@ describe("sliceEmptyQueryRows reserved", () => {
 });
 
 describe("dock catalog", () => {
-  test("the Plugin Store is not a dock item", () => {
-    expect(DOCK_CORE_CATALOG.some((item) => item.id === "store")).toBe(false);
+  test("the Library store and Creations are dock items", () => {
+    expect(DOCK_CORE_CATALOG.some((item) => item.id === "store")).toBe(true);
+    expect(DOCK_CORE_CATALOG.some((item) => item.id === "creations")).toBe(true);
+    expect(DOCK_CORE_CATALOG.some((item) => item.id === "maps")).toBe(false);
   });
 });
 
@@ -297,20 +291,19 @@ describe("applyDockDirective", () => {
     expect(applyDockDirective(state, { op: "unpin", id: "browser" }, known).ok).toBe(true);
   });
 
-  test("defaults keep the curated core without the store", () => {
-    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "plugins", "settings"]);
-    expect(DEFAULT_PINNED_IDS).not.toContain("store");
+  test("defaults keep the curated core", () => {
+    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
     expect(DEFAULT_PINNED_IDS).not.toContain("maps");
     expect(SYSTEM_TOOL_IDS.has("agent")).toBe(true);
   });
 
-  test("the Plugin Store migrates out of persisted pins without deleting", () => {
+  test("retired knowledge-map tools migrate out of persisted pins without deleting", () => {
     expect(migratePinnedIds(["agent", "maps", "store", "settings"])).toEqual([
       "agent",
-      "maps",
+      "store",
       "settings",
     ]);
-    expect(migratePinnedIds(["agent", "maps"])).toEqual(["agent", "maps"]);
-    expect(migratePinnedIds(["store"])).toEqual(["agent", "plugins", "settings"]);
+    expect(migratePinnedIds(["agent", "maps"])).toEqual(["agent"]);
+    expect(migratePinnedIds(["maps", "flashcards"])).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
   });
 });

@@ -43,15 +43,27 @@ export interface DockLayoutState {
 export const SYSTEM_TOOL_IDS = new Set(["agent"]);
 
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
-export const DEFAULT_PINNED_IDS = ["agent", "plugins", "settings"];
+export const DEFAULT_PINNED_IDS = ["agent", "browser", "plugins", "creations", "store", "settings"];
+
+/** Builtin ids retired with the knowledge-map experience (never valid pins). */
+export const RETIRED_PIN_IDS = new Set([
+  "maps",
+  "notes",
+  "files",
+  "quests",
+  "flashcards",
+  "terminal",
+  "sources",
+  "papers",
+]);
 
 /**
- * One-way migration for persisted layouts: the Plugin Store is not a dock
- * item, so existing pins drop it without deleting anything else. Pure so
+ * One-way migration for persisted layouts: pins pointing at the retired
+ * knowledge-map tools drop out without deleting anything else. Pure so
  * both the store and tests share it.
  */
 export function migratePinnedIds(pinnedIds: string[]): string[] {
-  const migrated = pinnedIds.filter((id) => id !== "store");
+  const migrated = pinnedIds.filter((id) => !RETIRED_PIN_IDS.has(id));
   return migrated.length > 0 ? migrated : [...DEFAULT_PINNED_IDS];
 }
 
