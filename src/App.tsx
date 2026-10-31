@@ -499,10 +499,6 @@ export default function App() {
               setActiveToolId("agent");
               setDockActiveTool("agent");
             }}
-            onOpenInstallUrl={() => {
-              setActiveToolId("plugins");
-              setDockActiveTool("plugins");
-            }}
             onOpenMcpConnect={() => {
               setActiveToolId("plugins");
               setDockActiveTool("plugins");

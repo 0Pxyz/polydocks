@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { MiniOrb } from "@/components/icons/MiniOrb";
+import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 
@@ -68,7 +68,8 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
             transition={{ duration: 0.22, ease: "easeIn" }}
             className="flex flex-col items-center w-full"
           >
-            {/* The one orb: MiniOrb breathes when idle, still when reduced-motion */}
+            {/* The one orb: the same Orb component as the chat panel,
+                breathing when idle, still under reduced motion. */}
             <motion.button
               type="button"
               layoutId="agent-orb-shared"
@@ -79,7 +80,7 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
               transition={isReduced ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
               className="group relative rounded-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent-lime)]"
             >
-              <MiniOrb state="idle" size={isCoarse ? 112 : 68} />
+              <Orb state="idle" size={isCoarse ? "xl" : "sm"} />
             </motion.button>
 
             {/* Quiet hint: Ctrl K on desktop, tap on touch. Never a second prompt box. */}

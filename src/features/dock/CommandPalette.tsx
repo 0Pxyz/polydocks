@@ -3,7 +3,6 @@ import {
   Sparkle,
   Terminal,
   PlugsConnected,
-  Link,
   ShieldWarning,
   CheckCircle,
   XCircle,
@@ -51,7 +50,6 @@ interface CommandPaletteProps {
   /** Session-created experiences (dynamic tabs) that are not in any store. */
   extraItems?: DockItem[];
   onOpenAgent?: () => void;
-  onOpenInstallUrl?: () => void;
   onOpenMcpConnect?: () => void;
   /** Open a dock item: focus its tab. */
   onOpenItem?: (id: string) => void;
@@ -87,7 +85,6 @@ export function CommandPalette({
   cityId,
   extraItems = [],
   onOpenAgent,
-  onOpenInstallUrl,
   onOpenMcpConnect,
   onOpenItem,
   onCloseItem,
@@ -885,22 +882,6 @@ export function CommandPalette({
                     <span className="text-sm font-medium">Open Agent Conversation</span>
                   </div>
                   <span className="text-[10px] font-mono text-white/40">⌘K</span>
-                </CommandItem>
-              )}
-
-              {onOpenInstallUrl && (
-                <CommandItem
-                  onSelect={() => {
-                    closePalette();
-                    onOpenInstallUrl();
-                  }}
-                  className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Link className="w-4 h-4 text-sky-400" weight="bold" />
-                    <span className="text-sm font-medium">Install Plugin from Manifest URL...</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-white/40">URL</span>
                 </CommandItem>
               )}
 

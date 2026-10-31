@@ -1,12 +1,13 @@
 import { motion } from "motion/react";
 import { cn } from "@/lib/cn";
 import { RotateCcw } from "lucide-react";
+import { prefersReducedMotion } from "@/lib/motion";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking" | "error";
 
 interface OrbProps {
   state: OrbState;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
   accentColor?: string;
   onClick?: () => void;
   className?: string;
@@ -27,10 +28,14 @@ export function Orb({
   audioLevel = 0,
 }: OrbProps) {
   const sizeMap = {
+    xs: "w-8 h-8",
     sm: "w-16 h-16",
     md: "w-24 h-24",
     lg: "w-32 h-32",
+    xl: "w-28 h-28",
   };
+  // Still frame under reduced motion, like MiniOrb.
+  const isReduced = prefersReducedMotion();
 
   const scaleBoost =
     state === "listening" || state === "speaking"
@@ -65,25 +70,33 @@ export function Orb({
     >
       {/* Outer ambient glow halo */}
       <motion.div
-        animate={{
-          scale:
-            state === "thinking"
-              ? [1, 1.12, 1]
-              : state === "speaking" || state === "listening"
-              ? [scaleBoost, scaleBoost * 1.1, scaleBoost]
-              : [1, 1.05, 1],
-          opacity:
-            state === "thinking"
-              ? [0.4, 0.75, 0.4]
-              : state === "error"
-              ? 0.35
-              : [0.25, 0.45, 0.25],
-        }}
-        transition={{
-          repeat: Infinity,
-          duration: state === "thinking" ? 2 : 3,
-          ease: "easeInOut",
-        }}
+        animate={
+          isReduced
+            ? { scale: 1, opacity: 0.4 }
+            : {
+                scale:
+                  state === "thinking"
+                    ? [1, 1.12, 1]
+                    : state === "speaking" || state === "listening"
+                    ? [scaleBoost, scaleBoost * 1.1, scaleBoost]
+                    : [1, 1.05, 1],
+                opacity:
+                  state === "thinking"
+                    ? [0.4, 0.75, 0.4]
+                    : state === "error"
+                    ? 0.35
+                    : [0.25, 0.45, 0.25],
+              }
+        }
+        transition={
+          isReduced
+            ? { duration: 0 }
+            : {
+                repeat: Infinity,
+                duration: state === "thinking" ? 2 : 3,
+                ease: "easeInOut",
+              }
+        }
         className={cn(
           "absolute rounded-full blur-xl pointer-events-none transition-all duration-300",
           sizeMap[size]
@@ -98,12 +111,18 @@ export function Orb({
 
       {/* Main Orb Body */}
       <motion.div
-        animate={{
-          scale: scaleBoost,
-          rotate: state === "thinking" ? 360 : 0,
-        }}
+        animate={
+          isReduced
+            ? { scale: scaleBoost, rotate: 0 }
+            : {
+                scale: scaleBoost,
+                rotate: state === "thinking" ? 360 : 0,
+              }
+        }
         transition={
-          state === "thinking"
+          isReduced
+            ? { duration: 0 }
+            : state === "thinking"
             ? { repeat: Infinity, duration: 6, ease: "linear" }
             : { type: "spring", stiffness: 300, damping: 25 }
         }
@@ -118,25 +137,33 @@ export function Orb({
         {/* Horizon light slit (inspired by the reference photo) */}
         <div className="absolute inset-0 flex items-center justify-center">
           <motion.div
-            animate={{
-              opacity:
-                state === "thinking"
-                  ? [0.6, 1, 0.6]
-                  : state === "speaking"
-                  ? [0.7, 1, 0.8]
-                  : 0.8,
-              scaleX:
-                state === "speaking"
-                  ? [0.85, 1.1, 0.95]
-                  : state === "listening"
-                  ? [0.9, 1.05, 0.9]
-                  : 1,
-            }}
-            transition={{
-              repeat: Infinity,
-              duration: state === "thinking" ? 1.6 : 2.4,
-              ease: "easeInOut",
-            }}
+            animate={
+              isReduced
+                ? { opacity: 0.8 }
+                : {
+                    opacity:
+                      state === "thinking"
+                        ? [0.6, 1, 0.6]
+                        : state === "speaking"
+                        ? [0.7, 1, 0.8]
+                        : 0.8,
+                    scaleX:
+                      state === "speaking"
+                        ? [0.85, 1.1, 0.95]
+                        : state === "listening"
+                        ? [0.9, 1.05, 0.9]
+                        : 1,
+                  }
+            }
+            transition={
+              isReduced
+                ? { duration: 0 }
+                : {
+                    repeat: Infinity,
+                    duration: state === "thinking" ? 1.6 : 2.4,
+                    ease: "easeInOut",
+                  }
+            }
             className="w-4/5 h-[3px] rounded-full blur-[1px]"
             style={{
               background:
@@ -160,7 +187,7 @@ export function Orb({
         />
 
         {/* Dynamic Waveform rings when listening */}
-        {state === "listening" && (
+        {state === "listening" && !isReduced && (
           <motion.div
             animate={{ scale: [1, 1.4], opacity: [0.6, 0] }}
             transition={{ repeat: Infinity, duration: 1.2, ease: "easeOut" }}

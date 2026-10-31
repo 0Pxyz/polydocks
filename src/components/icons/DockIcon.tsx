@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { resolveIcon } from "./adapter";
-import { MiniOrb, type MiniOrbState } from "./MiniOrb";
+import type { MiniOrbState } from "./MiniOrb";
+import { prefersReducedMotion } from "@/lib/motion";
 
 export interface DockIconProps {
   /** Icon name (Phosphor id, legacy Lucide id, or tool id), or a direct React component */
@@ -15,9 +16,65 @@ export interface DockIconProps {
   isAgent?: boolean;
   agentState?: MiniOrbState;
   isAgentWorking?: boolean;
+  /** Agent needs the user (e.g. pending approval): accent pulse. */
+  needsAttention?: boolean;
   useAgentStaticFallback?: boolean;
   size?: number;
   className?: string;
+}
+
+/**
+ * Agent ring glyph: one accent color, three states. Static ring when idle,
+ * rotating arc while working, accent pulse when the agent needs the user
+ * (e.g. a pending approval). Still under reduced motion.
+ */
+function AgentRing({
+  working = false,
+  needsAttention = false,
+  active = false,
+}: {
+  working?: boolean;
+  needsAttention?: boolean;
+  active?: boolean;
+}) {
+  const isReduced = prefersReducedMotion();
+  const showAccent = active || needsAttention || working;
+  return (
+    <div className="w-10 h-10 flex items-center justify-center select-none" aria-hidden="true">
+      <svg
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        className={
+          working && !isReduced
+            ? "animate-spin text-[var(--accent-lime)]"
+            : needsAttention && !isReduced
+              ? "animate-pulse text-[var(--accent-lime)]"
+              : showAccent
+                ? "text-[var(--accent-lime)]"
+                : "text-white/25"
+        }
+        style={working && !isReduced ? { animationDuration: "1.4s" } : undefined}
+      >
+        {/* Base ring: symmetric, unaffected by the working spin. */}
+        <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" opacity={showAccent ? 0.25 : 1} />
+        {working ? (
+          <circle
+            cx="12"
+            cy="12"
+            r="8.5"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray="16 38"
+          />
+        ) : (
+          showAccent && <circle cx="12" cy="12" r="3" fill="currentColor" />
+        )}
+      </svg>
+    </div>
+  );
 }
 
 /**
@@ -33,20 +90,19 @@ export function DockIcon({
   name,
   isActive = false,
   isAgent = false,
-  agentState,
+  agentState: _agentState,
   isAgentWorking = false,
+  needsAttention = false,
   useAgentStaticFallback = false,
   size = 20,
   className = "",
 }: DockIconProps) {
   if (isAgent && !useAgentStaticFallback) {
-    const computedState: MiniOrbState =
-      agentState || (isAgentWorking ? "working" : isActive ? "thinking" : "idle");
-
+    // Ring glyph: idle static, rotating arc while working, accent pulse
+    // when the agent needs the user. The home screen uses the full chat
+    // Orb; the dock keeps this lighter ring at icon size.
     return (
-      <div className={`w-10 h-10 flex items-center justify-center ${className}`}>
-        <MiniOrb state={computedState} size={size} />
-      </div>
+      <AgentRing working={isAgentWorking} needsAttention={needsAttention} active={isActive} />
     );
   }
 
