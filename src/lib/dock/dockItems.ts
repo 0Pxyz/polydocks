@@ -268,7 +268,7 @@ export interface DockShortcutSpec {
 }
 
 export interface DockActionDef {
-  id: "tabs.focus" | "tabs.next" | "tabs.prev" | "tabs.close" | "tabs.background" | "chat.toggle";
+  id: "tabs.focus" | "tabs.next" | "tabs.prev" | "tabs.close" | "tabs.background" | "chat.toggle" | "sidebar.beside";
   description: string;
   shortcut: DockShortcutSpec;
   /** Human label for tooltips (shortcut number only shows on hover/focus). */
@@ -319,6 +319,13 @@ export const DOCK_ACTIONS: DockActionDef[] = [
     hint: "Ctrl+Shift+0",
     alternative: "Alt+0",
   },
+  {
+    id: "sidebar.beside",
+    description: "Open the current tool beside the main view (toggle).",
+    shortcut: { code: "KeyS", ctrl: true, shift: true },
+    hint: "Ctrl+Shift+S",
+    alternative: "Alt+S",
+  },
 ];
 
 /** Digit1…Digit9 map to tabs.focus index 0…8 (same action, nth slot). */
@@ -343,6 +350,10 @@ export function matchDockShortcut(event: {
       if (event.code === "ArrowLeft") return { action: DOCK_ACTIONS[2] };
       if (event.code === "KeyW") return { action: DOCK_ACTIONS[3] };
       if (event.code === "KeyH") return { action: DOCK_ACTIONS[4] };
+      if (event.code === "KeyS") {
+        const beside = DOCK_ACTIONS.find((action) => action.id === "sidebar.beside");
+        if (beside) return { action: beside };
+      }
     }
     return null;
   }
@@ -359,6 +370,69 @@ export function matchDockShortcut(event: {
 
 /** Two panels fit at or above this viewport width (px). */
 export const TWO_PANEL_MIN_WIDTH = 1100;
+
+/** Beside-panel width bounds (mirror the chat panel: same feel, same room). */
+export const BESIDE_WIDTH_MIN = 340;
+export const BESIDE_WIDTH_MAX = 560;
+export const BESIDE_WIDTH_DEFAULT = 400;
+
+export interface PanelLayout {
+  /** Chat panel is docked to the side (its own open rule already applied). */
+  chatSide: boolean;
+  /** Beside panel is docked to the right (needs full width). */
+  besideSide: boolean;
+  /** Beside panel floats over the content (narrow viewport). */
+  besideOverlay: boolean;
+  /** Left margin the content area must reserve for the chat panel. */
+  mainMarginLeft: number;
+  /** Right margin the content area must reserve for the beside panel. */
+  mainMarginRight: number;
+}
+
+/**
+ * One layout rule for all three regions (content | beside | chat), applied
+ * to both panels. The chat keeps its own open/close behavior; this only
+ * positions. Docked order is fixed: chat left, content center, beside
+ * right. Below the two-panel width the beside panel overlays under the
+ * chat (lower z-order) so each stays independently closable with no space
+ * fight. Pure: covered by tests/tool-sidebar.test.ts.
+ */
+export function panelLayout(args: {
+  chatSideOpen: boolean;
+  besideCount: number;
+  viewportWidth: number;
+  sideWidth: number;
+  besideWidth: number;
+}): PanelLayout {
+  const wide = args.viewportWidth >= TWO_PANEL_MIN_WIDTH;
+  const chatSide = args.chatSideOpen;
+  const besideSide = args.besideCount > 0 && wide;
+  const besideOverlay = args.besideCount > 0 && !wide;
+  return {
+    chatSide,
+    besideSide,
+    besideOverlay,
+    mainMarginLeft: chatSide ? args.sideWidth : 0,
+    mainMarginRight: besideSide ? args.besideWidth : 0,
+  };
+}
+
+/**
+ * Dock items allowed beside the main view. Built-in tool panels plus
+ * workspace/session plugins passed in as dynamic ids. The browser stays
+ * main-only: one remote Chromium session per key, a second live instance
+ * would fork it. The agent has its own panel; the map its own surface.
+ */
+const BESIDE_STATIC_IDS = new Set(["settings", "theme", "plugins", "creations", "store"]);
+
+export function isBesideEligible(id: string | null | undefined, dynamicIds: Iterable<string>): boolean {
+  if (!id || id === "agent" || id === "maps") return false;
+  if (BESIDE_STATIC_IDS.has(id)) return true;
+  for (const dyn of dynamicIds) {
+    if (dyn === id) return true;
+  }
+  return false;
+}
 
 /**
  * Panel assignment: focused + most recent open side by side when wide
