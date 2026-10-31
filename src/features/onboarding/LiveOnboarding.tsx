@@ -13,6 +13,7 @@ import {
 } from "@/lib/store/useOnboardingStore";
 import { pushThought } from "@/lib/agent/thoughtStream";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { shouldPauseTourOnTakeover } from "@/lib/onboarding/tourTakeover";
 import { useThemeStore } from "@/lib/theme";
 import { spring, prefersReducedMotion } from "@/lib/motion";
 
@@ -30,6 +31,12 @@ export function LiveOnboarding() {
 
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const thoughtTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  // Last tool the tour itself force-focused (null = none yet). Lets the
+  // takeover guard below tell tour choreography apart from user switches.
+  const forcedToolRef = useRef<string | null>(null);
+  const lastSeenRef = useRef<{ wasOpen: boolean; step: string; tool: string | null } | null>(null);
+  const activeToolId = useDockStore((s) => s.activeToolId);
   const isReduced = prefersReducedMotion();
   const dockPosition = useThemeStore((s) => s.dockPosition);
 
@@ -59,10 +66,14 @@ export function LiveOnboarding() {
     if (!isOpen) return;
 
     const dock = useDockStore.getState();
+    const force = (toolId: string) => {
+      forcedToolRef.current = toolId || null;
+      dock.setActiveTool(toolId);
+    };
 
     switch (currentStep) {
       case "intro":
-        dock.setActiveTool("");
+        force("");
         pushThought("Poly is active and ready");
         break;
 
@@ -70,37 +81,73 @@ export function LiveOnboarding() {
         pushThought("Querying literature via TinyFish: deep work protocols...", {
           tool: "search.web",
         });
-        setTimeout(() => {
-          pushThought("Fetched primary source: Sophie Leroy (2009) Attention Residue", {
-            tool: "search.fetch",
-          });
-        }, 2200);
-        setTimeout(() => {
-          pushThought("Synthesizing 3 evidence-based techniques into briefing note…");
-        }, 5000);
+        thoughtTimersRef.current.push(
+          setTimeout(() => {
+            pushThought("Fetched primary source: Sophie Leroy (2009) Attention Residue", {
+              tool: "search.fetch",
+            });
+          }, 2200)
+        );
+        thoughtTimersRef.current.push(
+          setTimeout(() => {
+            pushThought("Synthesizing 3 evidence-based techniques into briefing note…");
+          }, 5000)
+        );
         break;
 
       case "workspace":
-        dock.setActiveTool("browser");
+        force("browser");
         pushThought("Opening primary source in native Browser surface", {
           tool: "browser",
         });
         break;
 
       case "tools":
-        dock.setActiveTool("deep-work-flashcards");
+        force("deep-work-flashcards");
         pushThought("Synthesizing deep-work-flashcards plugin…");
-        setTimeout(() => {
-          pushThought("Mounted and pinned deep-work-flashcards in dock");
-        }, 3000);
+        thoughtTimersRef.current.push(
+          setTimeout(() => {
+            pushThought("Mounted and pinned deep-work-flashcards in dock");
+          }, 3000)
+        );
         break;
 
       case "handoff":
-        dock.setActiveTool("");
+        force("");
         pushThought("Your workspace is ready");
         break;
     }
+
+    // Drop pending thought callbacks on step change/close so no ghost
+    // reasoning fires after the user moved on or skipped.
+    return () => {
+      for (const t of thoughtTimersRef.current) clearTimeout(t);
+      thoughtTimersRef.current = [];
+    };
   }, [isOpen, currentStep]);
+
+  // User takeover: any manual dock switch while the tour plays pauses it
+  // (stops the auto-advance timer and the focus stealing). Resume with the
+  // pill play button, dismiss with Skip/Esc. Never fires on the tour's own
+  // focus changes — see shouldPauseTourOnTakeover.
+  useEffect(() => {
+    const prev = lastSeenRef.current;
+    lastSeenRef.current = { wasOpen: isOpen, step: currentStep, tool: activeToolId };
+    if (!prev) return;
+    if (
+      shouldPauseTourOnTakeover({
+        wasOpen: prev.wasOpen,
+        isPlaying,
+        paused,
+        stepChanged: prev.step !== currentStep,
+        prevTool: prev.tool,
+        activeTool: activeToolId,
+        forcedTool: forcedToolRef.current,
+      })
+    ) {
+      setPaused(true);
+    }
+  }, [isOpen, isPlaying, paused, currentStep, activeToolId]);
 
   // Keyboard navigation: Esc to skip, arrows to navigate, Space to toggle pause
   useEffect(() => {
