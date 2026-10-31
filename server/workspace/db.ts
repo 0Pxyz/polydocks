@@ -29,3 +29,44 @@ try {
 } catch (err: any) {
   console.error("[SQLite] Error initializing database schema:", err.message);
 }
+
+// One-way city retirement migration (existing databases only; fresh installs
+// already match schema.sql). Renames scope columns with data preserved and
+// drops parked city/world tables (the future/city-experience branch holds the
+// code that reads them back). Workspace folders on disk are never touched.
+try {
+  const tables = new Set(
+    (
+      db.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+        name: string;
+      }>
+    ).map((r) => r.name)
+  );
+  const columnsOf = (table: string): Set<string> =>
+    new Set(
+      (db.query(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>).map(
+        (c) => c.name
+      )
+    );
+  for (const table of ["sources", "audit_log", "executions", "experience_errors", "agent_thread_messages"]) {
+    if (!tables.has(table)) continue;
+    const cols = columnsOf(table);
+    if (cols.has("city_id") && !cols.has("workspace_id")) {
+      db.exec(`ALTER TABLE "${table}" RENAME COLUMN "city_id" TO "workspace_id"`);
+    }
+  }
+  for (const table of [
+    "cities",
+    "city_tabs",
+    "city_notes",
+    "city_sources",
+    "maps",
+    "map_points",
+    "city_conversations",
+    "conversation_messages",
+  ]) {
+    if (tables.has(table)) db.exec(`DROP TABLE "${table}"`);
+  }
+} catch (err: any) {
+  console.error("[SQLite] Error running city retirement migration:", err.message);
+}
