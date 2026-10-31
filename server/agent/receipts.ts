@@ -79,6 +79,35 @@ function splitSentences(text: string): string[] {
   return text.split(/(?<=[.!?\n])\s+/).map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
+/**
+ * Not every verb mention is a completion claim (#154 false positive).
+ * Questions, negations, future intentions and conditionals describe what
+ * was NOT done, what MIGHT be done, or what the user should decide —
+ * flagging them punishes honest answers ("I don't install anything
+ * without your explicit yes", "Want me to install…?"). Only affirmative
+ * statements about this turn's outcome are claims. Only the text BEFORE
+ * the verb counts: "Installed without issues" still claims (the cue
+ * follows the verb), while "I won't install" never does. The R13b
+ * transcript stays flagged: its install sentence is affirmative past
+ * tense with no matching receipt.
+ */
+const QUESTION_MARK = /\?/;
+const NON_CLAIM_PREFIX =
+  /\b(don'?t|doesn'?t|didn'?t|won'?t|wouldn'?t|can'?t|couldn'?t|shouldn'?t|do not|does not|did not|will not|would not|cannot|can not|could not|can|could|never|not|without|want me to|would you like|should i|shall i|do you want|if|unless|when|going to|will|would|shall|might)\b/i;
+
+function isCompletionClaim(sentence: string, verbIndex: number): boolean {
+  if (QUESTION_MARK.test(sentence)) return false;
+  return !NON_CLAIM_PREFIX.test(sentence.slice(0, verbIndex));
+}
+
+function claimedVerbIndex(sentence: string, verbs: RegExp): number {
+  for (const m of sentence.matchAll(new RegExp(verbs.source, "gi"))) {
+    const at = m.index ?? 0;
+    if (isCompletionClaim(sentence, at)) return at;
+  }
+  return -1;
+}
+
 export function verifyReceipts(
   finalText: string,
   userPrompt: string,
@@ -93,7 +122,7 @@ export function verifyReceipts(
 
   for (const sentence of splitSentences(finalText)) {
     for (const rule of HIGH_STAKES) {
-      if (!rule.verbs.test(sentence)) continue;
+      if (claimedVerbIndex(sentence, rule.verbs) < 0) continue;
       const familyHit = okReceipts.some((r) =>
         rule.tools.some((t) => r.tool === t || r.tool.includes(t))
       );

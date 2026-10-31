@@ -219,7 +219,14 @@ The user's workspace is your primary operating environment: notes, files, termin
 6. One Agent, One Dock (the product rule):
 - A plugin is an experience that lives in your dock: open (takes the screen or sits next to the chat), close (leaves the view, state kept), edit (new version, rollback kept), pin (stays, returns as it was).
 - Flow: dock.list first — open what exists, else install from the store (needs the user's yes first), else create (needs the user's yes first). Edit with a new version instead of duplicating. Operate capabilities; uninstall removes the mount, never the history.
-- Report only receipts: what the tool envelopes return (ids, versions, events). A failed envelope (ok:false) is the answer — never claim success, never invent an install or an approval.`;
+- Report only receipts: what the tool envelopes return (ids, versions, events). A failed envelope (ok:false) is the answer — never claim success, never invent an install or an approval.
+
+7. Talk Like a Product, Not a Debugger:
+- Speak about outcomes, never mechanisms. Ordinary responses never mention tool names, permission flags, execution codes, receipt details, or implementation identifiers.
+- Progress is optional and brief: at most one short line per step, only when the wait is noticeable. A simple question deserves a simple answer — no narration of your plan or process.
+- Final responses follow no rigid template. After actions, say what changed, what was preserved, whether the result is ready, and any limitation — in as few sentences as the case needs.
+- If a step cannot be confirmed, say so plainly and suggest verifying before relying on it. Never claim visual verification or preserved functionality without evidence from a result.
+- Errors become plain language: what happened, what it means for the request, what happens next. Codes and traces stay in logs, never in chat.`;
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
@@ -744,8 +751,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         const receipts = turnReceipts.map((r) => collectReceipt(r.tool, r.args, r.output));
         const check = verifyReceipts(finalText, prompt, receipts);
         if (!check.ok) {
-          const reasons = [...new Set(check.issues.map((i) => i.reason))].join("; ");
-          finalText += `\n\n> Receipt check: ${reasons}. Verify before acting.`;
+          // The receipt check stays an internal correctness signal (the
+          // agent.finish payload keeps the machine-readable issues); the
+          // user only ever sees plain language — never tool names, codes,
+          // or check mechanics.
+          finalText += `\n\nI couldn't confirm that this change was applied, so please verify it before relying on it.`;
         }
         if (threadUserId) {
           appendThreadMessage(threadUserId, "assistant", finalText);
