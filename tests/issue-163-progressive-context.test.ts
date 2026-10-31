@@ -9,7 +9,7 @@ import {
 } from "../server/agent/skills/index";
 import { THREAD_CONTEXT_MAX_MESSAGES, THREAD_CONTEXT_TOKEN_BUDGET } from "../server/workspace/thread";
 import { runAgentLoop } from "../server/agent/loop";
-import { defaultTools, minimalTools } from "../server/agent/tools/index";
+import { fullTools, minimalTools } from "../server/agent/tools/index";
 
 function mockLlm(capture: { system: string }) {
   return {
@@ -106,7 +106,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
 
   it("denylists are minimal and contain no stale entries", () => {
     // No denylist may name a tool that does not exist.
-    const known = new Set(defaultTools.map((t) => t.name));
+    const known = new Set(fullTools.map((t) => t.name));
     // Verb tools are also offerable (minimal surface).
     for (const t of minimalTools) known.add(t.name);
     for (const [intent, denied] of Object.entries(INTENT_TOOL_DENYLIST)) {

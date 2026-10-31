@@ -8,7 +8,7 @@ position (e.g. "Add this background to my theme", "mude o papel de parede",
 Do NOT activate it for research questions or plugin work
 planning. Theme edits never require web search.
 
-## 2. Theme Editing Protocol
+## Principles
 
 The theme lives entirely in the client. The `apply_theme` tool validates the
 request server-side and the UI applies it to the real theme store
@@ -16,31 +16,21 @@ request server-side and the UI applies it to the real theme store
 `setDockStyle`, `setDockPosition`, `clearWallpaper`), persisted to local
 storage. Your final reply must confirm the actual applied values.
 
-### Step 1: Resolve the image (if any)
-- If the user attached an image, its file reference arrives as
-  `attachmentId`. Pass it through as `attachmentId` — do NOT re-upload it,
-  do NOT convert it to a URL yourself, and do NOT search the web for a
-  substitute image.
-- If the user named a remote image, pass its `https://` URL as
-  `wallpaperUrl`. Never invent URLs.
+- Resolve the image first (if any): an attached image arrives as
+  `attachmentId` — pass it through, do NOT re-upload it, do NOT convert
+  it to a URL, and do NOT search the web for a substitute. A named remote
+  image goes as `wallpaperUrl` (`https://` only). Never invent URLs.
+- Apply exactly what was asked with `apply_theme` and nothing else:
+  `attachmentId` or `wallpaperUrl` for the background; `theme` for a base
+  id (`void`, `cyber`, `amber`, `amethyst`); `accentColor` (`#rrggbb`);
+  `wallpaperFit` (`cover` | `contain` | `tile`), `wallpaperOpacity`
+  (0.05–1), `wallpaperBlur` (0–30); `clearWallpaper: true` to remove.
+  Preserve everything else: never reset unrelated theme settings.
+- Report the verified result: the tool result holds the validated
+  `applied` values — confirm precisely those. On error (e.g. unresolvable
+  attachment), ask the user to re-attach instead of substituting.
 
-### Step 2: Apply exactly what was asked (`apply_theme`)
-Call `apply_theme` with ONLY the fields the user requested:
-- `attachmentId` or `wallpaperUrl` for the background image.
-- `theme` for a base theme id (`void`, `cyber`, `amber`, `amethyst`).
-- `accentColor` for a custom `#rrggbb` accent.
-- `wallpaperFit` (`cover` | `contain` | `tile`), `wallpaperOpacity`
-  (0.05–1), `wallpaperBlur` (0–30) to tune the background.
-- `clearWallpaper: true` to remove the background.
-- Preserve everything else: never reset unrelated theme settings.
-
-### Step 3: Report the verified result
-The tool result contains the validated `applied` values. Confirm precisely
-those values in your reply. If the tool reports an error (e.g. the
-attachment could not be resolved), ask the user to re-attach the image
-instead of substituting another one.
-
-## 3. Hard Rules
+## Hard Rules
 - NEVER call `search_web` or `fetch_page` for a theme request.
 - NEVER claim success without a successful `apply_theme` result.
 - NEVER touch workspaces, plugins, or tabs for a theme request.
