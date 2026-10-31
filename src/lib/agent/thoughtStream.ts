@@ -23,6 +23,8 @@ export interface ThoughtLine {
   text: string;
   jobId?: string;
   level?: "dispatcher" | "worker";
+  /** Tool that produced the line; drives the TinyFish brand mark. */
+  tool?: string;
   at: number;
 }
 
@@ -42,13 +44,14 @@ let nextId = 1;
 
 export function makeThoughtLine(
   text: string,
-  opts?: { jobId?: string; level?: "dispatcher" | "worker"; at?: number }
+  opts?: { jobId?: string; level?: "dispatcher" | "worker"; tool?: string; at?: number }
 ): ThoughtLine {
   return {
     id: nextId++,
     text: text.trim().slice(0, 140),
     jobId: opts?.jobId,
     level: opts?.level,
+    tool: opts?.tool,
     at: opts?.at ?? Date.now(),
   };
 }
@@ -83,6 +86,7 @@ export interface UIThoughtSource {
   jobId?: string;
   goal?: string;
   level?: "dispatcher" | "worker";
+  tool?: string;
 }
 
 /**
@@ -120,7 +124,7 @@ export function adaptToThought(event: AgentEvent | UIThoughtSource): ThoughtLine
       // (reply deltas, finals, errors) stays in the sheet.
       const src = event as UIThoughtSource;
       if (src.type === "tool.started" && src.statusLabel) {
-        return makeThoughtLine(src.statusLabel, { jobId: src.jobId });
+        return makeThoughtLine(src.statusLabel, { jobId: src.jobId, tool: src.tool });
       }
       return null;
     }

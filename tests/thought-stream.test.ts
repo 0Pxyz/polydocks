@@ -91,7 +91,13 @@ describe("thought adapter: stream fades, finals persist", () => {
     expect(adaptToThought({ type: "agent.error", step: 1, message: "x" } as never)).toBeNull();
   });
 
-  it("job lifecycle tracks active ids for the orb indicator", () => {    let ids: string[] = [];
+  it("carries the tool so the UI can show the TinyFish mark", () => {
+    const t = adaptToThought({ type: "tool.started", statusLabel: "Searching the web", tool: "search_web" });
+    expect(t?.tool).toBe("search_web");
+  });
+
+  it("job lifecycle tracks active ids for the orb indicator", () => {
+    let ids: string[] = [];
     const off = subscribeJobs((next) => {
       ids = next;
     });
