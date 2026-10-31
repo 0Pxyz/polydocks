@@ -31,6 +31,13 @@ export const MAX_VISIBLE_LINES = 4;
 /** Minimum gap between line starts so text stays readable. */
 export const MIN_LINE_GAP_MS = 1200;
 
+/** First slow stretch of a turn gets one honest nudge in the stream. */
+export const HEARTBEAT_NUDGE_AFTER_MS = 8000;
+
+export function shouldNudge(elapsedMs: number, alreadyNudged: boolean): boolean {
+  return !alreadyNudged && elapsedMs >= HEARTBEAT_NUDGE_AFTER_MS;
+}
+
 let nextId = 1;
 
 export function makeThoughtLine(

@@ -7,6 +7,8 @@ import {
   pushLine,
   pushThought,
   riseDurationMs,
+  shouldNudge,
+  HEARTBEAT_NUDGE_AFTER_MS,
   subscribeJobs,
   subscribeThoughts,
   MAX_VISIBLE_LINES,
@@ -89,8 +91,7 @@ describe("thought adapter: stream fades, finals persist", () => {
     expect(adaptToThought({ type: "agent.error", step: 1, message: "x" } as never)).toBeNull();
   });
 
-  it("job lifecycle tracks active ids for the orb indicator", () => {
-    let ids: string[] = [];
+  it("job lifecycle tracks active ids for the orb indicator", () => {    let ids: string[] = [];
     const off = subscribeJobs((next) => {
       ids = next;
     });
@@ -102,5 +103,11 @@ describe("thought adapter: stream fades, finals persist", () => {
     feedThoughtEvent({ type: "job.cancelled", id: "b" });
     expect(ids).toEqual([]);
     off();
+  });
+
+  it("heartbeat nudge fires once per turn past the threshold", () => {
+    expect(shouldNudge(HEARTBEAT_NUDGE_AFTER_MS - 1, false)).toBe(false);
+    expect(shouldNudge(HEARTBEAT_NUDGE_AFTER_MS, false)).toBe(true);
+    expect(shouldNudge(HEARTBEAT_NUDGE_AFTER_MS * 10, true)).toBe(false);
   });
 });
