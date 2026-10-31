@@ -399,7 +399,7 @@ export function applyDockDirective(
 export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
   agent: "Talk to the dock agent",
   maps: "Travel the knowledge map",
-  browser: "Research and sources",
+  browser: "Browse the web with a real browser",
   notes: "Synthesized notes",
   files: "City workspace files",
   papers: "Reading list and papers",
@@ -421,7 +421,7 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
 export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin", system: true },
   { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
-  { id: "browser", label: "Research & Sources", description: "Research and sources", icon: "browser", kind: "builtin" },
+  { id: "browser", label: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
   { id: "notes", label: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
   { id: "files", label: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
   { id: "papers", label: "Papers", description: "Reading list and papers", icon: "papers", kind: "builtin" },

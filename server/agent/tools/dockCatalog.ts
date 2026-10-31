@@ -19,7 +19,7 @@ export interface DockCatalogEntry {
 export const DOCK_BUILTINS: DockCatalogEntry[] = [
   { id: "agent", title: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
   { id: "maps", title: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin" },
-  { id: "browser", title: "Research & Sources", description: "Research and sources", icon: "browser", kind: "builtin" },
+  { id: "browser", title: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
   { id: "notes", title: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
   { id: "files", title: "City Files", description: "City workspace files", icon: "files", kind: "builtin" },
   { id: "papers", title: "Papers", description: "Reading list and papers", icon: "papers", kind: "builtin" },

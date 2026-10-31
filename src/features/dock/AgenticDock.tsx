@@ -63,7 +63,7 @@ export const CORE_DOCK_TOOLS: DockToolItem[] = [
   },
   {
     id: "browser",
-    label: "Research & Sources",
+    label: "Browser",
     type: "icon",
     icon: Globe,
   },

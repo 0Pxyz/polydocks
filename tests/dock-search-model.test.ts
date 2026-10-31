@@ -19,7 +19,7 @@ import {
 const catalog: DockItem[] = [
   { id: "maps", label: "World Map", description: "Travel the knowledge map", icon: "maps", kind: "builtin", system: true },
   { id: "agent", label: "Agent", description: "Talk to the dock agent", icon: "agent", kind: "builtin" },
-  { id: "browser", label: "Research & Sources", description: "Research and sources", icon: "browser", kind: "builtin" },
+  { id: "browser", label: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
   { id: "notes", label: "Notes", description: "Synthesized notes", icon: "notes", kind: "builtin" },
   { id: "gtm-feed", label: "GTM Feed", description: "Go-to-market news plugin", icon: "rss", kind: "plugin" },
   { id: "flashcards", label: "Flashcards", description: "Interactive flashcards", icon: "cards", kind: "tab" },

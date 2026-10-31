@@ -103,6 +103,11 @@ Plugin tools emit reactive SSE events (`plugin.created`, `plugin.updated`, `plug
 
 The agent fills a plugin's context with real content using the TinyFish web APIs (https://docs.tinyfish.ai, details in `docs/tinyfish.md`). Flow: the agent searches the web for tutorials, papers and news, fetches the best pages, and saves them as **sources** in the workspace context. Each source can open in the Browser surface.
 
+**Rule: all web content goes through the native Browser surface.** Every
+page, video, or research result the agent shows opens via `open_source` /
+`browser.open` (remote Chromium playback; audio pending upstream). Never
+embed third-party pages in ad-hoc iframes or open raw browser windows for content.
+
 - Server-side only. `TINYFISH_API_KEY` never reaches the front. All calls go through `server/discovery/tinyfish.ts`, a thin adapter that tests and the demo seed can mock.
 - Use **Search** (`GET https://api.search.tinyfish.ai`, `domain_type`: `web`, `news` or `research_paper`) to find candidates and **Fetch** (`POST https://api.fetch.tinyfish.ai`, `format: markdown`, up to 10 URLs per call) to read them. Both are free up to a daily quota (12,000 searches, 1,000 fetched URLs), so cache results in SQLite and batch fetches.
 - **Research** (`POST https://agent.tinyfish.ai/v1/automation/run-research`) takes several minutes. Only use it as a background, queued job, never inside the interactive loop.
