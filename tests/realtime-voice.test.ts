@@ -82,3 +82,83 @@ describe("Voice realtime protocol (Meta ASR)", () => {
     expect(url).not.toContain("api.meta.ai");
   });
 });
+
+describe("voice session handshake (opened promise)", () => {
+  type Listener = (event: any) => void;
+
+  function mockSocket() {
+    const listeners = new Map<string, Listener[]>();
+    const socket: any = {
+      readyState: 0,
+      sent: [] as any[],
+      send(payload: any) {
+        socket.sent.push(payload);
+      },
+      close() {
+        socket.readyState = 3;
+        for (const fn of listeners.get("close") || []) fn({ code: 1000 });
+      },
+      emit(name: string, event: any) {
+        for (const fn of listeners.get(name) || []) fn(event);
+      },
+      addEventListener(name: string, fn: Listener) {
+        listeners.set(name, [...(listeners.get(name) || []), fn]);
+      },
+    };
+    return socket;
+  }
+
+  async function withMockSocket(socket: any, fn: () => Promise<void>) {
+    const RealWebSocket = globalThis.WebSocket;
+    (globalThis as any).WebSocket = function () {
+      return socket;
+    };
+    try {
+      await fn();
+    } finally {
+      globalThis.WebSocket = RealWebSocket;
+    }
+  }
+
+  it("opened resolves on the handshake ack, before any transcript", async () => {
+    const { connectRealtimeVoice } = await import("../src/lib/agent/realtimeVoice");
+    const socket = mockSocket();
+    let resolved = false;
+    await withMockSocket(socket, async () => {
+      const conn = connectRealtimeVoice({});
+      void conn.opened.then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+      socket.readyState = 1;
+      socket.emit("message", { data: JSON.stringify({ sessionId: "abc" }) });
+      await Promise.resolve();
+      expect(resolved).toBe(true);
+      conn.close();
+    });
+  });
+
+  it("a server error frame rejects opened with the server message", async () => {
+    const { connectRealtimeVoice } = await import("../src/lib/agent/realtimeVoice");
+    const socket = mockSocket();
+    await withMockSocket(socket, async () => {
+      let seen = "";
+      const conn = connectRealtimeVoice({
+        onError: (m) => {
+          seen = m;
+        },
+      });
+      const rejection = conn.opened.then(
+        () => "resolved",
+        (e: Error) => e.message
+      );
+      socket.emit("message", {
+        data: JSON.stringify({ type: "error", message: "Voice realtime is not configured." }),
+      });
+      expect(await rejection).toBe("Voice realtime is not configured.");
+      expect(seen).toBe("Voice realtime is not configured.");
+      conn.close();
+    });
+  });
+});

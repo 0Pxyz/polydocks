@@ -197,6 +197,10 @@ export function AgentConversation({
     };
   }, []);
 
+  // Tracks whether the current/last voice attempt showed an error: the
+  // close handler must not wipe it, or failures look like silence.
+  const voiceErrorShownRef = useRef(false);
+
   // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
   const adjustTextareaHeight = useCallback(() => {
     const el = textareaRef.current;
@@ -294,8 +298,7 @@ export function AgentConversation({
     // Stop any spoken reply first: without this the mic transcribes the
     // agent's own TTS voice into the next user turn (feedback loop).
     cancelSpeech();
-    setOrbState("listening");
-    setStatusText("Listening… speak now. Tap the Orb to stop.");
+    voiceErrorShownRef.current = false;
 
     // Single-shot voice command: the first final transcript stops the mic,
     // flushes the turn (endStream) and sends itself as a chat message.
@@ -308,8 +311,14 @@ export function AgentConversation({
       realtimeRef.current = null;
     };
 
+    // Order matters: open the session first so no mic audio is captured
+    // without a live socket (and the mic light never turns on for a dead
+    // session). The user sees Connecting → Listening, never silence.
+    setOrbState("listening");
+    setStatusText("Connecting to voice…");
+    let session: ReturnType<typeof connectRealtimeVoice>;
     try {
-      const session = connectRealtimeVoice({
+      const conn = connectRealtimeVoice({
         onPartial: (text) => {
           if (!sent) setDraft(text);
         },
@@ -341,6 +350,7 @@ export function AgentConversation({
         },
         onLevel: (level) => setAudioLevel(level),
         onError: (message) => {
+          voiceErrorShownRef.current = true;
           setStatusText(message);
           setOrbState("error");
           window.setTimeout(() => {
@@ -350,24 +360,70 @@ export function AgentConversation({
         onClose: () => {
           realtimeRef.current = null;
           setOrbState("idle");
-          // Keep the busy-handoff message: the user's words are parked in
-          // the draft and clearing the status would hide where they went.
-          if (!busyHandoff) setStatusText("");
+          // Keep the busy-handoff message (words parked in the draft) and
+          // any shown error: clearing the status would hide where the
+          // words went, or make a failure look like silence.
+          if (!busyHandoff && !voiceErrorShownRef.current) setStatusText("");
         },
       });
+      session = conn;
 
-      const streamer: MicPcmStreamer = await createMicPcmStreamer(
-        (pcm) => {
-          if (session.ws.readyState === WebSocket.OPEN) {
-            try {
-              session.ws.send(pcm);
-            } catch {
-              // Ignore transient send failures
+      // Wait for the socket before touching the mic: early PCM frames would
+      // be dropped silently, and the mic light must never turn on for a
+      // dead session.
+      try {
+        await Promise.race([
+          session.opened,
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error("voice handshake timeout")), 12000)
+          ),
+        ]);
+      } catch (err: any) {
+        const detail = String(err?.message || "");
+        setOrbState("idle");
+        // A socket-level message is specific (auth, upstream failure);
+        // only the local timeout needs the generic connection wording.
+        setStatusText(
+          detail && detail !== "voice handshake timeout"
+            ? detail
+            : "Could not reach the voice service. Check your connection and try again."
+        );
+        try {
+          session.close();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
+
+      let streamer: MicPcmStreamer;
+      try {
+        streamer = await createMicPcmStreamer(
+          (pcm) => {
+            if (session.ws.readyState === WebSocket.OPEN) {
+              try {
+                session.ws.send(pcm);
+              } catch {
+                // Ignore transient send failures
+              }
             }
-          }
-        },
-        (level) => setAudioLevel(level)
-      );
+          },
+          (level) => setAudioLevel(level)
+        );
+      } catch (err: any) {
+        setOrbState("idle");
+        setStatusText(
+          err?.message || "Microphone unavailable. Allow microphone access and try again."
+        );
+        try {
+          session.close();
+        } catch {
+          // Ignore
+        }
+        return;
+      }
+      // Mic is live: only now claim to be listening.
+      setStatusText("Listening… speak now. Tap the Orb to stop.");
 
       realtimeRef.current = {
         stopMic: () => streamer.stop(),

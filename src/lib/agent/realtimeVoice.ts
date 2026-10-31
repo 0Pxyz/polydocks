@@ -78,10 +78,18 @@ export interface RealtimeVoiceHandle {
  * The caller owns microphone capture; use `createMicPcmStreamer` below
  * or stream PCM frames manually via the returned socket handle.
  */
-export function connectRealtimeVoice(callbacks: RealtimeVoiceCallbacks = {}): { ws: WebSocket; sessionId: string; close: () => void } {
+export function connectRealtimeVoice(callbacks: RealtimeVoiceCallbacks = {}): { ws: WebSocket; sessionId: string; close: () => void; opened: Promise<void> } {
   const sessionId = newVoiceSessionId();
   const ws = new WebSocket(buildProxyUrl(sessionId));
   let closed = false;
+  let resolveOpened!: () => void;
+  let rejectOpened!: (err: Error) => void;
+  const opened = new Promise<void>((resolve, reject) => {
+    resolveOpened = resolve;
+    rejectOpened = reject;
+  });
+  // An unawaited rejection must never surface as an unhandled error.
+  opened.catch(() => {});
 
   ws.addEventListener("message", (event) => {
     if (typeof event.data !== "string") return;
@@ -94,7 +102,10 @@ export function connectRealtimeVoice(callbacks: RealtimeVoiceCallbacks = {}): { 
     callbacks.onEvent?.(obj);
 
     // Handshake acknowledgement: only frame without `type`.
-    if (!obj.type && typeof obj.sessionId === "string") return;
+    if (!obj.type && typeof obj.sessionId === "string") {
+      resolveOpened();
+      return;
+    }
 
     if (obj.type === "transcript" && typeof obj.transcript === "string") {
       if (obj.final === true) callbacks.onFinal?.(obj.transcript, undefined);
@@ -114,22 +125,29 @@ export function connectRealtimeVoice(callbacks: RealtimeVoiceCallbacks = {}): { 
       return;
     }
     if (obj.type === "error") {
-      callbacks.onError?.(String(obj.message || "Voice session failed."));
+      const message = String(obj.message || "Voice session failed.");
+      rejectOpened(new Error(message));
+      callbacks.onError?.(message);
     }
   });
 
   ws.addEventListener("error", () => {
-    if (!closed) callbacks.onError?.("Voice connection error.");
+    if (!closed) {
+      rejectOpened(new Error("Voice connection error."));
+      callbacks.onError?.("Voice connection error.");
+    }
   });
 
   ws.addEventListener("close", (event) => {
     closed = true;
+    rejectOpened(new Error(`Voice connection closed (${event.code}).`));
     callbacks.onClose?.(event.code, event.code === 1000);
   });
 
   return {
     ws,
     sessionId,
+    opened,
     close: () => {
       closed = true;
       try {
@@ -171,6 +189,18 @@ export async function createMicPcmStreamer(
   });
   const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
   const ctx: AudioContext = new AudioCtx();
+  // A context created outside a user gesture starts suspended and would
+  // capture silence forever: mic light on, zero frames, zero transcripts.
+  try {
+    await ctx.resume();
+  } catch {
+    // Resume rejection is advisory; the state check below decides.
+  }
+  if (ctx.state !== "running") {
+    for (const track of stream.getTracks()) track.stop();
+    ctx.close().catch(() => {});
+    throw new Error("Microphone is blocked by the browser. Allow microphone access and try again.");
+  }
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 256;
