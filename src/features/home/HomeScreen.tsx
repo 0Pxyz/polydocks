@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
 import { prefersReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
-import { ThoughtStream, useActiveJobs } from "./ThoughtStream";
+import { useActiveJobs } from "./ThoughtStream";
 import { feedThoughtEvent, pushThought } from "@/lib/agent/thoughtStream";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
@@ -119,10 +119,6 @@ export function HomeScreen({ onOpenAgent, panelOpen, onCancelJobs, className = "
             transition={{ duration: 0.22, ease: "easeIn" }}
             className="flex flex-col items-center w-full"
           >
-            {/* Living-agent thoughts drift up from the orb and fade out.
-                Nothing when idle: the resting state is orb + Ctrl K. */}
-            {!panelOpen && <ThoughtStream />}
-
             {/* The one orb: the same Orb component as the chat panel,
                 breathing when idle, still under reduced motion. */}
             <motion.button
