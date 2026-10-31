@@ -66,6 +66,9 @@ export interface EscalationResult {
   text: string;
   steps: number;
   citations: Array<{ url: string; title: string }>;
+  /** Heavy-turn measured cost, harvested from its finish payload (for #214 metrics). */
+  heavyInputTokens: number;
+  heavyOutputTokens: number;
   error?: string;
 }
 
@@ -122,6 +125,8 @@ export interface OrchestratorOptions {
   /** Injectable fast-model client (tests); production resolves the orchestrator role. */
   llmClient?: AgentLoopOptions["llmClient"];
   modelId?: string;
+  /** Tool surface override (eval doubles); defaults to ORCHESTRATOR_TOOLS. */
+  tools?: AgentTool[];
   onEvent?: AgentLoopOptions["onEvent"];
   maxSteps?: number;
 }
@@ -153,7 +158,7 @@ export async function runOrchestratorLoop(options: OrchestratorOptions) {
     prompt: options.prompt,
     workspaceId: options.workspaceId,
     history: options.history,
-    tools: ORCHESTRATOR_TOOLS,
+    tools: options.tools ?? ORCHESTRATOR_TOOLS,
     ...resolved,
     reasoningEffort: roleReasoningEffort("orchestrator"),
     ...(systemPrompt ? { systemPrompt } : {}),
@@ -178,9 +183,15 @@ export async function escalateToHeavyAgent(
   // through the caller's handler (the orchestrator relays), and its
   // citations are harvested from the finish payload into the result.
   let citations: Array<{ url: string; title: string }> = [];
+  let heavyInputTokens = 0;
+  let heavyOutputTokens = 0;
   const relay = async (event: AgentStepEvent) => {
-    if (event.type === "agent.finish" && Array.isArray((event.payload as any)?.citations)) {
-      citations = (event.payload as any).citations;
+    if (event.type === "agent.finish") {
+      if (Array.isArray((event.payload as any)?.citations)) {
+        citations = (event.payload as any).citations;
+      }
+      heavyInputTokens = Number((event.payload as any)?.inputTokens ?? heavyInputTokens) || heavyInputTokens;
+      heavyOutputTokens = Number((event.payload as any)?.outputTokens ?? heavyOutputTokens) || heavyOutputTokens;
     }
     await options.onEvent?.(event);
   };
@@ -203,17 +214,19 @@ export async function escalateToHeavyAgent(
     onEvent: relay,
   });
   if (result.status === "completed") {
-    return { ok: true, text: result.text ?? "", steps: result.steps, citations };
+    return { ok: true, text: result.text ?? "", steps: result.steps, citations, heavyInputTokens, heavyOutputTokens };
   }
   if (result.status === "max_steps_reached" && (result.text ?? "").trim()) {
     // Partial synthesis still answers: return control with the text.
-    return { ok: true, text: result.text ?? "", steps: result.steps, citations };
+    return { ok: true, text: result.text ?? "", steps: result.steps, citations, heavyInputTokens, heavyOutputTokens };
   }
   return {
     ok: false,
     text: result.text ?? "",
     steps: result.steps,
     citations,
+    heavyInputTokens,
+    heavyOutputTokens,
     error: result.error ?? `heavy agent stopped: ${result.status}`,
   };
 }

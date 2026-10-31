@@ -104,7 +104,7 @@ describe("escalation contract", () => {
   });
 
   it("escalate tool relays the heavy answer end to end", async () => {
-    setHeavyRunnerForTest(async () => ({ ok: true, text: "Relayed.", steps: 2, citations: [] }));
+    setHeavyRunnerForTest(async () => ({ ok: true, text: "Relayed.", steps: 2, citations: [], heavyInputTokens: 0, heavyOutputTokens: 0 }));
     const out = (await escalate.execute(
       { prompt: "Do heavy work" },
       { workspaceId: "ws-1", step: 1 }

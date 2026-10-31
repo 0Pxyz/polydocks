@@ -39,6 +39,12 @@ export const escalate: AgentTool<{
     if (!result.ok) {
       return { error: result.error ?? "heavy agent failed", steps: result.steps };
     }
-    return { text: result.text, steps: result.steps, citations: result.citations };
+    return {
+      text: result.text,
+      steps: result.steps,
+      citations: result.citations,
+      heavyInputTokens: result.heavyInputTokens,
+      heavyOutputTokens: result.heavyOutputTokens,
+    };
   },
 };
