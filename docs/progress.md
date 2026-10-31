@@ -104,3 +104,4 @@
 | 2026-10-31 | Deterministic dispatcher fast path (#178 slice 1): zero-model-call open/close/list/theme with manifest gate + fallback, 7 tests (jobs stay open) | [#249](https://github.com/0Pxyz/polymax/pull/249) |
 | 2026-10-31 | Voice frame counters (#177 slice): isSilentPcm16LE + MicFrameStats wired via onStats, 4 tests (mic repro stays open) | [#251](https://github.com/0Pxyz/polymax/pull/251) |
 | 2026-10-31 | Inspect row contract (#181 slice): SSE-to-row mapping with shapes-only redaction, 4 tests (live surface stays open) | [#252](https://github.com/0Pxyz/polymax/pull/252) |
+| 2026-10-31 | Docker sandbox smoke (#254): pinned multi-stage image, fixed-owner local mode, 25/25 packaging/persistence/isolation checks + README local-run section | [#254](https://github.com/0Pxyz/polymax/pull/254) |
