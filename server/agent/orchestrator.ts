@@ -13,6 +13,7 @@ import {
   chatToggle,
 } from "./tools/verbs/dock";
 import { escalate } from "./tools/verbs/escalate";
+import { matchDeterministicCommand, runDeterministicCommand } from "./dispatcher";
 import type { AgentTool } from "./tools/types";
 
 /**
@@ -129,6 +130,8 @@ export interface OrchestratorOptions {
   tools?: AgentTool[];
   onEvent?: AgentLoopOptions["onEvent"];
   maxSteps?: number;
+  /** Agent manifest override for the permission gate (#207). */
+  agentManifest?: import("../plugins/manifest").PluginManifest;
 }
 
 /**
@@ -141,6 +144,23 @@ export interface OrchestratorOptions {
  * the missed-escalation build gate.
  */
 export async function runOrchestratorLoop(options: OrchestratorOptions) {
+  // Fast dispatcher first (#178): imperative dock/theme commands resolve
+  // with zero model calls. A denied or failed deterministic run falls
+  // through to the model loop — never fail the turn on the fast path.
+  const emit = options.onEvent ?? (() => {});
+  const fast = matchDeterministicCommand(options.prompt);
+  if (fast) {
+    const ran = await runDeterministicCommand(fast, {
+      workspaceId: options.workspaceId,
+      agentManifest: options.agentManifest,
+    });
+    if (ran.ok) {
+      await emit({ step: 1, type: "tool.start", payload: { name: ran.toolName, deterministic: true, reason: fast.reason } });
+      await emit({ step: 1, type: "tool.done", payload: { name: ran.toolName, deterministic: true } });
+      await emit({ step: 1, type: "agent.finish", payload: { text: ran.text, deterministic: true } });
+      return { status: "completed" as const, text: ran.text, steps: 1 };
+    }
+  }
   const resolved = options.llmClient
     ? { llmClient: options.llmClient, ...(options.modelId ? { modelId: options.modelId } : {}) }
     : (() => {
@@ -164,6 +184,7 @@ export async function runOrchestratorLoop(options: OrchestratorOptions) {
     ...(systemPrompt ? { systemPrompt } : {}),
     onEvent: options.onEvent ?? (() => {}),
     ...(typeof options.maxSteps === "number" ? { maxSteps: options.maxSteps } : {}),
+    ...(options.agentManifest ? { agentManifest: options.agentManifest } : {}),
   });
 }
 
