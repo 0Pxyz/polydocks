@@ -18,6 +18,14 @@ import { getMemoryContext } from "./memory";
 import { AGENT_GUIDELINES_EXTRACT } from "./guidelines";
 import { extractUsage, recordTurnUsage } from "./usage";
 import {
+  createResponsesTurn,
+  hasResponsesSurface,
+  normalizeCallId,
+  toResponsesName,
+  toResponsesTools,
+  toResponsesUserContent,
+} from "./responses";
+import {
   getSession,
   createSession,
   updateTaskState,
@@ -625,6 +633,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       },
     ];
 
+    // Responses API input (stateless: instructions + full input resent every
+    // turn, store:false). History entries are plain { role, content } turns;
+    // the user turn carries converted text/image parts. Function calls and
+    // outputs are appended below as paired items per turn.
+    const responsesInput: any[] = [
+      ...effectiveHistory.map((h) => ({ role: h.role, content: h.content })),
+      { role: "user", content: toResponsesUserContent(userMessageContent) as any },
+    ];
+
+    // Responses function tools mirror the scoped Chat tools. Names allow at
+    // most one dot; grouping plugin-scoped functions under namespaces is
+    // #222 work — this mapping stays 1:1 so coverage never diverges.
+    const responsesTools = toResponsesTools(scopedTools);
+    const responsesNameToOriginal = new Map<string, string>();
+    for (const t of scopedTools) responsesNameToOriginal.set(toResponsesName(t.name), t.name);
+
+    // Responses when the client exposes it (prod Meta client); Chat
+    // otherwise (test doubles, eval scripted LLM, openweight endpoints).
+    const useResponses = hasResponsesSurface(llmClient);
+
     const retryCounts = new Map<string, number>();
     // Same tool with identical arguments already ran this turn: refuse the
     // duplicate so the model changes approach instead of looping.
@@ -693,34 +721,102 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       currentPhase = "thinking";
       currentTool = undefined;
-      // Streaming primary: text deltas are forwarded as agent.text_delta
-      // (first paint <1s instead of 6-15s of silence) and tool calls are
-      // accumulated from chunks. Legacy object responses (older mocks,
-      // non-streaming clients) are used as-is, so this degrades cleanly.
-      const response = await createModelResponse({
-        llmClient,
-        completionParams,
-        signal,
-        onTextDelta: (delta) =>
-          emit({
-            step: currentStep,
-            type: "agent.text_delta",
-            payload: { delta },
-          }),
-      });
-      noteUsage(response);
-      const choice = response.choices?.[0];
+      // Model turn: Responses API when the client exposes it (prod Meta
+      // client), Chat Completions otherwise (test doubles, eval scripted
+      // LLM, openweight endpoints). Both paths normalize to one shape so
+      // the tool-execution, receipt, and event logic below stays shared.
+      // Responses resends instructions/tools/reasoning.effort every turn
+      // (they do not persist across turns) with store:false.
+      let assistantContent = "";
+      let normalizedCalls: Array<{ id: string; name: string; argsText: string }> = [];
+      let assistantMessage: any = null;
 
-      if (!choice || !choice.message) {
-        throw new Error("No response message returned from Meta Model API");
+      if (useResponses) {
+        const turn = await createResponsesTurn({
+          client: llmClient,
+          model: effectiveModel,
+          instructions: finalSystemPrompt,
+          inputItems: responsesInput,
+          tools: responsesTools,
+          effort: options.reasoningEffort,
+          signal,
+          onTextDelta: (delta) =>
+            emit({
+              step: currentStep,
+              type: "agent.text_delta",
+              payload: { delta },
+            }),
+        });
+        noteUsage({ usage: turn.usage });
+        assistantContent = turn.text;
+        normalizedCalls = turn.functionCalls.map((c, i) => ({
+          id: normalizeCallId(c.callId, i),
+          name: c.name,
+          argsText: c.argsText,
+        }));
+        // Record model outputs in the stateless input so the next turn
+        // replays the full conversation (function_call items pair with
+        // the function_call_output items appended after execution).
+        for (const c of normalizedCalls) {
+          responsesInput.push({
+            type: "function_call",
+            call_id: c.id,
+            name: c.name,
+            arguments: c.argsText,
+          });
+        }
+      } else {
+        const completionParams: any = {
+          model: effectiveModel,
+          messages,
+        };
+
+        if (formattedTools.length > 0) {
+          completionParams.tools = formattedTools;
+          completionParams.tool_choice = "auto";
+        }
+
+        if (effectiveEffort) {
+          completionParams.reasoning_effort = effectiveEffort;
+        }
+
+        // Streaming primary: text deltas are forwarded as agent.text_delta
+        // (first paint <1s instead of 6-15s of silence) and tool calls are
+        // accumulated from chunks. Legacy object responses (older mocks,
+        // non-streaming clients) are used as-is, so this degrades cleanly.
+        const response = await createModelResponse({
+          llmClient,
+          completionParams,
+          signal,
+          onTextDelta: (delta) =>
+            emit({
+              step: currentStep,
+              type: "agent.text_delta",
+              payload: { delta },
+            }),
+        });
+        noteUsage(response);
+        const choice = response.choices?.[0];
+
+        if (!choice || !choice.message) {
+          throw new Error("No response message returned from Meta Model API");
+        }
+
+        assistantMessage = choice.message;
+        assistantContent = assistantMessage.content || "";
+        const chatCalls = assistantMessage.tool_calls ?? [];
+        normalizedCalls = chatCalls.map((tc: any, i: number) => ({
+          id: normalizeCallId(tc.id, i),
+          name: tc.function?.name ?? tc.name ?? "",
+          argsText: typeof tc.function?.arguments === "string" ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}),
+        }));
       }
 
-      const assistantMessage = choice.message;
-      const toolCalls = assistantMessage.tool_calls;
+      const toolCalls = normalizedCalls.length > 0 ? normalizedCalls : undefined;
 
       // If no tool calls, the model provided its final textual answer
       if (!toolCalls || toolCalls.length === 0) {
-        let finalText = assistantMessage.content || "";
+        let finalText = assistantContent || "";
         // Receipt check: the answer may only claim installs, approvals or
         // creations with a matching ok:true envelope from this turn.
         // Violations are flagged in the finish payload and the text gains
@@ -769,20 +865,31 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         };
       }
 
-      // Append the full assistant message (mandatory per dev.meta.ai documentation)
-      messages.push(assistantMessage);
+      // Append the model outputs to the active history. Chat requires the
+      // full assistant message before tool messages; Responses pairs each
+      // function_call (already appended above) with a function_call_output.
+      if (!useResponses && assistantMessage) {
+        messages.push(assistantMessage);
+      }
 
       // Execute each tool call
       currentPhase = "running_tool";
       for (const call of toolCalls) {
-        const toolName = call.function.name;
-        const toolId = call.id;
+        const rawToolName = (call as any).name ?? (call as any).function?.name;
+        // Responses names are sanitized (≤1 dot); map back to the registry
+        // name before execution so coverage never diverges (#221 → #222).
+        const toolName = useResponses ? (responsesNameToOriginal.get(rawToolName) ?? rawToolName) : rawToolName;
+        const toolId = normalizeCallId((call as any).id, 0);
         currentTool = toolName;
         const toolStart = Date.now();
         let rawArgs: Record<string, unknown> = {};
 
         try {
-          rawArgs = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+          const argsText =
+            typeof (call as any).argsText === "string"
+              ? (call as any).argsText
+              : ((call as any).function?.arguments ?? "");
+          rawArgs = argsText ? JSON.parse(argsText) : {};
         } catch {
           rawArgs = {};
         }
@@ -845,12 +952,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           }
         }
 
-        // Append role: tool message per call
-        messages.push({
-          role: "tool",
-          tool_call_id: toolId,
-          content: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
-        });
+        // Append tool result to the active history per call.
+        if (useResponses) {
+          responsesInput.push({
+            type: "function_call_output",
+            call_id: toolId,
+            output: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
+          });
+        } else {
+          messages.push({
+            role: "tool",
+            tool_call_id: toolId,
+            content: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
+          });
+        }
 
         await emit({
           step: currentStep,
@@ -1033,25 +1148,47 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Reached maximum steps — synthesize progress gracefully rather than failing abruptly
     let fallbackText = "";
     try {
-      const fallbackMessages = [
-        ...messages,
-        {
-          role: "user",
-          content:
-            "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
-        },
-      ];
+      if (useResponses) {
+        const fallbackTurn = await createResponsesTurn({
+          client: llmClient,
+          model: effectiveModel,
+          instructions: finalSystemPrompt,
+          inputItems: [
+            ...responsesInput,
+            {
+              role: "user",
+              content:
+                "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
+            },
+          ],
+          tools: [],
+          effort: options.reasoningEffort,
+          signal,
+          onTextDelta: () => {},
+        });
+        noteUsage({ usage: fallbackTurn.usage });
+        if (fallbackTurn.text.trim()) fallbackText = fallbackTurn.text.trim();
+      } else {
+        const fallbackMessages = [
+          ...messages,
+          {
+            role: "user",
+            content:
+              "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
+          },
+        ];
 
-      const fallbackResponse = await llmClient.chat.completions.create({
-        model: effectiveModel,
-        messages: fallbackMessages,
-        ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
-      });
-      noteUsage(fallbackResponse);
+        const fallbackResponse = await (llmClient as any).chat.completions.create({
+          model: effectiveModel,
+          messages: fallbackMessages,
+          ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
+        });
+        noteUsage(fallbackResponse);
 
-      const fallbackChoice = fallbackResponse.choices?.[0];
-      if (fallbackChoice?.message?.content) {
-        fallbackText = fallbackChoice.message.content.trim();
+        const fallbackChoice = fallbackResponse.choices?.[0];
+        if (fallbackChoice?.message?.content) {
+          fallbackText = fallbackChoice.message.content.trim();
+        }
       }
     } catch {
       // Non-fatal
