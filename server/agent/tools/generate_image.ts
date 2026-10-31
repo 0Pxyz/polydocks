@@ -11,9 +11,9 @@ export const generate_image: AgentTool<{
 }> = {
   name: "generate_image",
   description:
-    "Generate an image with Muse Image (muse-image-1.0) from a chat request: illustrations, covers, city art, share cards. The file is cached under DATA_DIR/image-cache AND saved to the user's artifacts (GET /api/artifacts) so it survives the session. Returns ok:false with a structured retryable error when unconfigured or when generation fails; never claims success without a verified file.",
+    "Generate an image with Muse Image (muse-image-1.0) from a chat request: illustrations, covers, share cards. The file is cached under DATA_DIR/image-cache AND saved to the user's artifacts (GET /api/artifacts) so it survives the session. Returns ok:false with a structured retryable error when unconfigured or when generation fails; never claims success without a verified file.",
   schema: z.object({
-    prompt: z.string().min(1).max(4000).describe("Image prompt (e.g. 'flat dark cover art for a city about Stoicism, lime accent')"),
+    prompt: z.string().min(1).max(4000).describe("Image prompt (e.g. 'flat dark cover art about Stoicism, lime accent')"),
     size: z.string().default("1024x1024").describe("Aspect ratio WxH, e.g. 1024x1024 or 1536x1024"),
     outputFormat: z.enum(["webp", "png", "jpeg"]).default("webp"),
     kind: z.enum(["cover", "share-card"]).default("cover").describe("What the image is for (artifact type hint)"),

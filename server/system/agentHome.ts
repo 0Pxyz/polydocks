@@ -45,7 +45,7 @@ This document records the user's active goals, preferences, and context to perso
 - **Learning Mode**: Socratic, interactive, depth over superficial breadth.
 
 ## Active Goals
-- Master complex domains through living concept cities and structured roadmaps.
+- Master complex domains through structured roadmaps and living notes.
 `,
   "MEMORY.md": `# Long-Term Curated Memory
 

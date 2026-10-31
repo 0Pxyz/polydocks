@@ -99,7 +99,7 @@ export const modify_plugin: AgentTool<ModifyPluginArgs> = {
         return { success: false, error: `Design kit violation: ${report.errors.join("; ")}`, code: "slop_violation" };
       }
     }
-    const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
+    const workspaceId = args.workspaceId || ctx?.workspaceId || "default";
     const normalized = normalizePluginId(args.id);
     const cleanIcon = args.icon ? args.icon.toLowerCase().trim() : undefined;
 

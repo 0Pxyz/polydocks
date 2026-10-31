@@ -51,7 +51,7 @@ export const operate_plugin: AgentTool<OperatePluginArgs> = {
 
     const execResult = await capabilityBus.invoke(capabilityId, input.args || {}, {
       actor: "agent",
-      cityId: input.workspaceId || ctx?.workspaceId || ctx?.cityId || "default",
+      workspaceId: input.workspaceId || ctx?.workspaceId || "default",
       step: ctx?.step,
     });
 

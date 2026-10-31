@@ -468,12 +468,12 @@ export class TaskExecutionEngine {
         } else {
           // Default: execute runAgentLoop with task input
           const prompt = String(task.input?.prompt || "");
-          const cityId = task.input?.cityId ? String(task.input.cityId) : undefined;
+          const workspaceId = task.input?.workspaceId ? String(task.input.workspaceId) : undefined;
           const origin = task.input?.origin === "dock-add" ? "dock-add" : "chat";
 
           const loopResult = await runAgentLoop({
             prompt,
-            cityId,
+            workspaceId,
             workspaceId: task.workspaceId,
             sessionId: task.sessionId,
             taskId: task.id,

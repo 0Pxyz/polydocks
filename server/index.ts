@@ -6,7 +6,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config";
 import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
-import { mcpRouter } from "./api/mcp";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
@@ -140,9 +139,6 @@ app.get("/api/health", (c) => {
     },
   });
 });
-
-// Mount Model Context Protocol (MCP) router
-app.route("/api/mcp", mcpRouter);
 
 // Mount Plugins and Capabilities router
 app.route("/api/plugins", pluginsRouter);

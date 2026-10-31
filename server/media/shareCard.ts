@@ -4,8 +4,8 @@ import { imageBudget, refundImageSpend, reserveImageSpend } from "./budget";
 import { config } from "../config";
 
 export const ShareCardInput = z.object({
-  city: z.string().min(1).max(80).describe("City title shown on the card"),
-  region: z.string().max(80).optional().describe("Region line under the city"),
+  title: z.string().min(1).max(80).describe("Title shown on the card"),
+  subtitle: z.string().max(80).optional().describe("Subtitle line under the title"),
   level: z.number().int().min(1).max(99).optional().describe("Explorer level"),
   xp: z.number().int().min(0).optional().describe("Total XP"),
   streak: z.number().int().min(0).optional().describe("Day streak"),
@@ -25,8 +25,8 @@ export interface ShareCardResult {
 }
 
 export function buildShareCardPrompt(input: ShareCardInput): string {
-  const bits: string[] = [input.city];
-  if (input.region) bits.push(input.region);
+  const bits: string[] = [input.title];
+  if (input.subtitle) bits.push(input.subtitle);
   const stats: string[] = [];
   if (typeof input.level === "number") stats.push(`level ${input.level}`);
   if (typeof input.xp === "number") stats.push(`${input.xp} XP`);
@@ -34,14 +34,14 @@ export function buildShareCardPrompt(input: ShareCardInput): string {
   const statLine = stats.length > 0 ? ` Explorer stats: ${stats.join(" · ")}.` : "";
   return (
     `Premium dark share card background art for a learning milestone, no text, no letters, no watermark: ` +
-    `theme of "${bits.join(" — ")}".${statLine} Abstract topographic map lines and glowing city lights, ` +
+    `theme of "${bits.join(" — ")}".${statLine} Abstract topographic map lines and glowing lights, ` +
     `charcoal background with a single lime-green accent, generous empty space in the center for overlay text. ` +
     `Minimal, celebratory, 16:9 composition.`
   ).slice(0, 900);
 }
 
 /**
- * Generate an exportable share-card background. Text (city, XP, streak)
+ * Generate an exportable share-card background. Text (title, XP, streak)
  * is rendered by the client on top — the model only paints the backdrop,
  * which keeps stats exact and avoids garbled model text.
  */

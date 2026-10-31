@@ -286,6 +286,7 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
 
   it("should emit plugin.created when create_plugin succeeds", async () => {
     const events: AgentStepEvent[] = [];
+    const pluginId = `test-loop-plugin-${Date.now().toString(36)}`;
     let callCount = 0;
 
     const mockLlmClient: any = {
@@ -306,7 +307,7 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
                           function: {
                             name: "create_plugin",
                             arguments: JSON.stringify({
-                              id: "test-loop-plugin",
+                              id: pluginId,
                               name: "Loop Plugin",
                               userApproved: true,
                               description: "Created by the loop test",
@@ -344,6 +345,10 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
     expect(result.status).toBe("completed");
     const createdEvent = events.find((e) => e.type === "plugin.created");
     expect(createdEvent).toBeDefined();
+    const { db: testDb } = await import("../workspace/db");
+    testDb.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(pluginId);
+    testDb.query("DELETE FROM plugins WHERE id = ?").run(pluginId);
+    testDb.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(pluginId);
   });
 
   it("should catch errors and emit error event", async () => {

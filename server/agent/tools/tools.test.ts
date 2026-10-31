@@ -105,7 +105,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
   it("open_source validates URLs", async () => {
     const res = (await open_source.execute(
       { url: "https://arxiv.org/abs/2301.12345", title: "arXiv Paper" },
-      { cityId: "test", step: 1 }
+      { workspaceId: "test", step: 1 }
     )) as any;
 
     expect(res.action).toBe("browser.open");

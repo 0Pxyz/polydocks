@@ -95,7 +95,7 @@ sessionsRouter.post("/:id/run", async (c) => {
     type: body.type || "chat",
     input: {
       prompt: prompt.trim(),
-      cityId: body.cityId,
+      workspaceId: body.workspaceId,
       origin: body.origin || "chat",
       // Thread link for the background run (additive attribution; the task
       // path session carries the same link in its metadata).

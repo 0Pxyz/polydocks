@@ -6,7 +6,7 @@ function actorCtx(ctx: { workspaceId?: string; workspaceId?: string; sessionId?:
   return { actor: "agent" as const, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId };
 }
 
-const workspaceScope = { workspaceId: z.string().optional().describe("City workspace scope") };
+const workspaceScope = { workspaceId: z.string().optional().describe("Workspace scope") };
 
 export const dockOpen: AgentTool<{ tabId: string; workspaceId?: string }> = {
   name: "dock.open",

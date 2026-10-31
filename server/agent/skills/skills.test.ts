@@ -70,7 +70,7 @@ describe("Domain skills: plugins and dock (backend contracts)", () => {
 
     await runAgentLoop({
       prompt: "fix the reader",
-      cityId: "quantum-computing",
+      workspaceId: "quantum-computing",
       llmClient: mockLlmClient,
     });
 
@@ -160,7 +160,7 @@ describe("Domain skills: plugins and dock (backend contracts)", () => {
 
     await runAgentLoop({
       prompt: "pesquise os papers mais recentes sobre distributed systems",
-      cityId: "distributed-systems",
+      workspaceId: "distributed-systems",
       llmClient: mockLlmClient,
     });
 

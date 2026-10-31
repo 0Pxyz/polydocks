@@ -6,7 +6,7 @@ function actorCtx(ctx: { workspaceId?: string; workspaceId?: string; sessionId?:
   return { actor: "agent" as const, workspaceId: ctx.workspaceId, sessionId: ctx.sessionId };
 }
 
-const workspaceScope = { workspaceId: z.string().optional().describe("City workspace scope") };
+const workspaceScope = { workspaceId: z.string().optional().describe("Workspace scope") };
 
 const userApproved = {
   userApproved: z.boolean().optional().describe("Set true only after the user explicitly said yes (install policy is ask-by-default)"),
@@ -83,7 +83,7 @@ export const pluginsOperate: AgentTool<{ plugin: string; capability: string; inp
     plugin: z.string().min(1).describe("Plugin id (e.g. sources, search)"),
     capability: z.string().min(1).describe("Capability name (e.g. add, quest_add)"),
     input: z.record(z.string(), z.unknown()).default({}).describe("Capability input object"),
-    workspaceId: z.string().optional().describe("City workspace scope"),
+    workspaceId: z.string().optional().describe("Workspace scope"),
   }),
   execute: (args, ctx) =>
     invokeCapability(args.plugin, args.capability, args.input ?? {}, {

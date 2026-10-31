@@ -17,7 +17,7 @@ export const CliAdapterConfigSchema = z.object({
   bin: z.string().min(1),
   args: z.array(z.string()).default([]),
   env: z.record(z.string(), z.string()).optional(),
-  workingDir: z.enum(["city", "plugin", "root"]).default("city"),
+  workingDir: z.enum(["workspace", "plugin", "root"]).default("workspace"),
   timeoutMs: z.number().int().positive().default(15_000),
   allowStdio: z.boolean().default(false),
 });

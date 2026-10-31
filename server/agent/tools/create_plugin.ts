@@ -25,7 +25,7 @@ export interface CreatePluginArgs {
 export const create_plugin: AgentTool<CreatePluginArgs> = {
   name: "create_plugin",
   description:
-    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin) or for city tabs (use create_tab). UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
+    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin). UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
   schema: z.object({
     id: z
       .string()
@@ -100,7 +100,7 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
         return { success: false, error: `Design kit violation: ${report.errors.join("; ")}`, code: "slop_violation" };
       }
     }
-    const workspaceId = args.workspaceId || ctx?.workspaceId || ctx?.cityId || "default";
+    const workspaceId = args.workspaceId || ctx?.workspaceId || "default";
 
     // Retry safety: an idempotency key that already executed returns the
     // cached result before the duplicate guard (a retry is not a recreate).

@@ -21,7 +21,7 @@ export const inspect_execution: AgentTool<InspectExecutionArgs> = {
           capability_id: string;
           plugin_id: string;
           actor: string;
-          city_id: string | null;
+          workspace_id: string | null;
           status: string;
           duration_ms: number;
           input_json: string | null;
@@ -66,7 +66,7 @@ export const inspect_execution: AgentTool<InspectExecutionArgs> = {
         capabilityId: row.capability_id,
         pluginId: row.plugin_id,
         actor: row.actor,
-        cityId: row.city_id,
+        workspaceId: row.workspace_id,
         status: row.status,
         durationMs: row.duration_ms,
         input,

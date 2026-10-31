@@ -15,7 +15,7 @@ export interface FeatureManifest {
   id: string;
   title: string;
   icon?: string;
-  scope?: "city" | "global";
+  scope?: "workspace" | "global";
   capabilities?: string[];
   permissions?: unknown[];
   createdAt?: string;
@@ -411,7 +411,7 @@ export function escapeInlineScript(js: string): string {
 
 /**
  * Writes and transpiles a TypeScript feature module into SQLite (single source
- * of truth). Filesystem mirroring to workspace/<city>/{features,tabs}/ was
+ * of truth). Filesystem mirroring to workspace/<id>/{features,tabs}/ was
  * removed: in production only ./data is a volume, so workspace/ files vanish
  * on redeploy while registry rows survive. DB rows survive with the volume.
  */

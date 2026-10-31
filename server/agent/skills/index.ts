@@ -141,7 +141,7 @@ export function isResearchIntent(prompt: string): boolean {
 
   // Canonical triggers. Deliberately narrow: bare words like "feed",
   // "docs", "quest" or "learn about" also appear in creation/update
-  // requests ("create docs for the city directory", "add a quest",
+  // requests ("create docs for the project directory", "add a quest",
   // "update the feed plugin") and must NOT route to research.
   const triggers = [
     "research",
@@ -276,7 +276,7 @@ export function isContentOpenIntent(prompt: string): boolean {
   );
 }
 
-/** Theme customization: appearance-only requests (never research/city/plugin). */
+/** Theme customization: appearance-only requests (never research/plugin). */
 export function isThemeIntent(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   if (!lower.trim()) return false;

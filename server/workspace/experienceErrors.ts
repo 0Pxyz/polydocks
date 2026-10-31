@@ -3,7 +3,7 @@ import { db } from "./db";
 export interface ExperienceErrorRecord {
   id: string;
   experienceId: string;
-  cityId: string;
+  workspaceId: string;
   message: string;
   filename?: string;
   lineno?: number;
@@ -17,7 +17,7 @@ export interface ExperienceErrorRecord {
  */
 export function recordExperienceError(
   experienceId: string,
-  cityId: string,
+  workspaceId: string,
   error: {
     message: string;
     filename?: string;
@@ -31,12 +31,12 @@ export function recordExperienceError(
 
   try {
     db.query(
-      `INSERT INTO experience_errors (id, experience_id, city_id, message, filename, lineno, colno, stack, created_at)
+      `INSERT INTO experience_errors (id, experience_id, workspace_id, message, filename, lineno, colno, stack, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       experienceId,
-      cityId,
+      workspaceId,
       error.message || "Unknown error",
       error.filename || null,
       error.lineno || null,
@@ -51,7 +51,7 @@ export function recordExperienceError(
   return {
     id,
     experienceId,
-    cityId,
+    workspaceId,
     message: error.message,
     filename: error.filename,
     lineno: error.lineno,
@@ -66,16 +66,16 @@ export function recordExperienceError(
  */
 export function getExperienceErrors(
   experienceId: string,
-  cityId?: string,
+  workspaceId?: string,
   limit = 20
 ): ExperienceErrorRecord[] {
   try {
     let query = "SELECT * FROM experience_errors WHERE experience_id = ?";
     const params: any[] = [experienceId];
 
-    if (cityId) {
-      query += " AND city_id = ?";
-      params.push(cityId);
+    if (workspaceId) {
+      query += " AND workspace_id = ?";
+      params.push(workspaceId);
     }
 
     query += " ORDER BY created_at DESC LIMIT ?";
@@ -85,7 +85,7 @@ export function getExperienceErrors(
       {
         id: string;
         experience_id: string;
-        city_id: string;
+        workspace_id: string;
         message: string;
         filename: string | null;
         lineno: number | null;
@@ -99,7 +99,7 @@ export function getExperienceErrors(
     return rows.map((r) => ({
       id: r.id,
       experienceId: r.experience_id,
-      cityId: r.city_id,
+      workspaceId: r.workspace_id,
       message: r.message,
       filename: r.filename || undefined,
       lineno: r.lineno || undefined,

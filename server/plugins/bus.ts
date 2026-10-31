@@ -15,7 +15,7 @@ import { resolveAdapterHandler } from "./adapters";
 
 export interface ExecutionContext {
   actor: "agent" | "user";
-  cityId?: string;
+  workspaceId?: string;
   signal?: AbortSignal;
   log: (msg: string) => void;
   emit?: (event: { type: string; payload: Record<string, unknown> }) => Promise<void> | void;
@@ -41,7 +41,7 @@ export interface RegisteredCapability {
 
 export interface CapabilityExecutionOptions {
   actor: "agent" | "user";
-  cityId?: string;
+  workspaceId?: string;
   signal?: AbortSignal;
   timeoutMs?: number;
   step?: number;
@@ -197,7 +197,7 @@ export class CapabilityBus {
         capabilityId,
         "unknown",
         options.actor,
-        options.cityId,
+        options.workspaceId,
         "failed",
         0,
         redactSecrets(rawInput),
@@ -218,7 +218,7 @@ export class CapabilityBus {
         capabilityId,
         pluginId,
         options.actor,
-        options.cityId,
+        options.workspaceId,
         "denied",
         0,
         redactSecrets(rawInput),
@@ -255,7 +255,7 @@ export class CapabilityBus {
       capability,
       plugin: activePlugin,
       actor: options.actor,
-      cityId: options.cityId,
+      workspaceId: options.workspaceId,
       input:
         rawInput && typeof rawInput === "object"
           ? (redactSecrets(rawInput) as Record<string, unknown>)
@@ -275,7 +275,7 @@ export class CapabilityBus {
         capabilityId,
         pluginId,
         options.actor,
-        options.cityId,
+        options.workspaceId,
         "denied",
         0,
         redactSecrets(rawInput),
@@ -327,7 +327,7 @@ export class CapabilityBus {
           capabilityId,
           pluginId,
           options.actor,
-          options.cityId,
+          options.workspaceId,
           "failed",
           duration,
           redactSecrets(rawInput),
@@ -365,7 +365,7 @@ export class CapabilityBus {
         capabilityId,
         pluginId,
         options.actor,
-        options.cityId,
+        options.workspaceId,
         "failed",
         duration,
         redactSecrets(validatedInput),
@@ -390,7 +390,7 @@ export class CapabilityBus {
         capabilityId,
         pluginId,
         options.actor,
-        options.cityId,
+        options.workspaceId,
         "running",
         0,
         redactSecrets(validatedInput),
@@ -402,7 +402,7 @@ export class CapabilityBus {
         pluginId,
         manifest: activePlugin.manifest,
         actor: options.actor,
-        cityId: options.cityId,
+        workspaceId: options.workspaceId,
         signal: controller.signal,
         log: (msg) => console.log(`[CapabilityBus][${capabilityId}] ${msg}`),
         emit: async (evt) => {
@@ -486,7 +486,7 @@ export class CapabilityBus {
     capabilityId: string,
     pluginId: string,
     actor: "agent" | "user",
-    cityId: string | undefined,
+    workspaceId: string | undefined,
     status: "running" | "success" | "failed" | "denied",
     durationMs: number,
     input: unknown,
@@ -496,14 +496,14 @@ export class CapabilityBus {
     try {
       const now = new Date().toISOString();
       db.query(
-        `INSERT INTO executions (execution_id, capability_id, plugin_id, actor, city_id, status, duration_ms, input_json, output_json, error, created_at)
+        `INSERT INTO executions (execution_id, capability_id, plugin_id, actor, workspace_id, status, duration_ms, input_json, output_json, error, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         executionId,
         capabilityId,
         pluginId,
         actor,
-        cityId || null,
+        workspaceId || null,
         status,
         durationMs,
         input !== undefined ? JSON.stringify(redactSecrets(input)) : null,
