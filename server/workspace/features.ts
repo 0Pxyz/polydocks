@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import {
   resolveSafeCityPath,
@@ -86,8 +87,136 @@ export function transpileFeatureCode(tsCode: string): string {
 }
 
 /**
- * Builds the sandboxed iframe srcdoc containing design tokens,
- * the window.polymax bridge runtime, and the transpiled guest code.
+ * Native vanilla UI kit for the no-import (plain script) sandbox path.
+ *
+ * React plugins get the full shadcn kit; plain-script plugins get these
+ * `px-*` classes instead, so both paths render native PolyDocks UI from the
+ * same design tokens. Group with whitespace and surface steps, never outline
+ * borders; state as plain text or a live badge, never decorative pills.
+ */
+const VANILLA_PX_CSS = `
+    /* Legacy aliases: early vanilla plugins used these names. They track the
+       semantic tokens above, so old code follows the active theme for free. */
+    :root {
+      --bg: var(--background);
+      --surface: var(--card);
+      --surface-hover: var(--secondary);
+      --accent: var(--primary);
+      --accent-dim: var(--accent);
+      --border: var(--border);
+      --text: var(--foreground);
+      --muted: var(--muted-foreground);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-display: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'Geist Mono', monospace;
+    }
+    /* Typography: one sans scale, normal tracking, at most two levels. */
+    .px-h1 { font-size: 15px; font-weight: 600; line-height: 1.3; letter-spacing: 0; color: var(--foreground); margin: 0; }
+    .px-h2 { font-size: 13px; font-weight: 600; line-height: 1.4; letter-spacing: 0; color: var(--foreground); margin: 0; }
+    .px-text { font-size: 13px; font-weight: 400; line-height: 1.6; color: var(--foreground); margin: 0; }
+    .px-muted { font-size: 12px; font-weight: 400; line-height: 1.5; color: var(--muted-foreground); margin: 0; }
+    .px-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    /* Buttons: primary for the main action, quiet for the rest. */
+    .px-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: var(--secondary); color: var(--secondary-foreground);
+      border: 1px solid transparent; padding: 7px 14px; border-radius: 8px;
+      cursor: pointer; font-size: 13px; font-weight: 500; font-family: inherit;
+      transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+    }
+    .px-btn:hover { background: var(--muted); }
+    .px-btn:active { transform: scale(0.97); }
+    .px-btn-primary { background: var(--primary); color: var(--primary-foreground); font-weight: 600; }
+    .px-btn-primary:hover { background: var(--primary); opacity: 0.9; }
+    .px-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+    .px-btn:focus-visible, .px-icon-btn:focus-visible, .px-tab:focus-visible,
+    .px-input:focus-visible, .px-select:focus-visible {
+      outline: 2px solid var(--ring); outline-offset: 2px;
+    }
+    .px-icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+      background: transparent; color: var(--muted-foreground); border: 1px solid transparent;
+      font-size: 15px; transition: background 0.15s ease, color 0.15s ease;
+    }
+    .px-icon-btn:hover { background: var(--secondary); color: var(--foreground); }
+    /* Badge: live state only (Live, Paused). Never decoration. */
+    .px-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500; color: var(--foreground);
+    }
+    .px-badge .px-dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--muted-foreground); }
+    .px-badge.is-live .px-dot { background: var(--primary); animation: px-pulse 1.6s ease-in-out infinite; }
+    @keyframes px-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    /* Group: content breathes on a subtle surface step, no outline border. */
+    .px-group { background: var(--card); border-radius: 12px; padding: 14px 16px; }
+    /* Tabs / segmented control: one row, selected tab reads as the value. */
+    .px-tabs { display: grid; background: var(--muted); border-radius: 10px; padding: 3px; gap: 2px; }
+    .px-tab {
+      border: 1px solid transparent; background: transparent; color: var(--muted-foreground);
+      padding: 6px 10px; border-radius: 7px; cursor: pointer;
+      font-size: 13px; font-weight: 500; font-family: inherit; text-align: center;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .px-tab:hover { color: var(--foreground); }
+    .px-tab[aria-selected="true"] { background: var(--background); color: var(--foreground); }
+    /* Inputs: one quiet style, ring on focus, dim when disabled. */
+    .px-input, .px-select, textarea.px-input {
+      background: var(--background); border: 1px solid var(--input);
+      color: var(--foreground); padding: 8px 12px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; outline: none; width: 100%;
+    }
+    .px-input:focus, .px-select:focus, textarea.px-input:focus { border-color: var(--ring); }
+    .px-input:disabled, .px-select:disabled { opacity: 0.55; cursor: not-allowed; }
+    .px-input::placeholder { color: var(--text-dim); }
+    /* Skeleton: shimmer while loading. Empty state: centered truth, one action. */
+    .px-skeleton {
+      border-radius: 8px; background: var(--muted);
+      background-image: linear-gradient(100deg, transparent 30%, var(--secondary) 50%, transparent 70%);
+      background-size: 200% 100%; animation: px-shimmer 1.4s infinite;
+    }
+    @keyframes px-shimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+    .px-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 16px; text-align: center; }
+    /* Tooltip: contextual help via data-px-tip, no framework needed. */
+    [data-px-tip] { position: relative; }
+    [data-px-tip]:hover::after {
+      content: attr(data-px-tip); position: absolute; bottom: calc(100% + 6px); left: 50%;
+      transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+      background: var(--popover); color: var(--popover-foreground);
+      font-size: 11px; padding: 4px 8px; border-radius: 6px; z-index: 50;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .px-badge.is-live .px-dot, .px-skeleton { animation: none; }
+      .px-btn:active { transform: none; }
+    }
+`;
+
+// App design tokens (server/plugin-kit/tokens.css) inlined into the vanilla
+// srcdoc so plain-script plugins use the exact same palette — including every
+// [data-theme] override — as the React kit path. Cached; falls back to a
+// minimal void palette if the kit file is missing (tests, fresh checkouts).
+let vanillaTokensCache: string | null = null;
+
+function getVanillaTokens(): string {
+  if (vanillaTokensCache !== null) return vanillaTokensCache;
+  try {
+    const kitTokens = path.resolve(import.meta.dir, "..", "plugin-kit", "tokens.css");
+    vanillaTokensCache = fsSync.readFileSync(kitTokens, "utf-8");
+  } catch {
+    vanillaTokensCache = `:root { --background: #0a0a0c; --foreground: #f1f3f9; --card: #12151d; --secondary: #1a1f2c; --muted: #1e2433; --muted-foreground: #8b95a8; --primary: #c8ff57; --primary-foreground: #0a0a0c; --accent: #c8ff57; --border: #222938; --input: #222938; --ring: #c8ff57; --popover: #12151d; --popover-foreground: #f1f3f9; --radius: 0.5rem; }`;
+  }
+  return vanillaTokensCache;
+}
+
+/** Exposed for tests: the vanilla kit must stay token-native (no raw hex). */
+export function getVanillaKitCss(): string {
+  return VANILLA_PX_CSS;
+}
+
+/**
+ * Builds the sandboxed iframe srcdoc containing the app design tokens, the
+ * native vanilla `px-*` component kit, the window.polymax bridge runtime,
+ * and the transpiled guest code.
  */
 export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): string {
   return `<!DOCTYPE html>
@@ -98,27 +227,18 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data: blob:; media-src https: data: blob:; font-src data:; connect-src https:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
   <title>${escapeHtml(manifest.title)}</title>
   <style>
-    :root {
-      --bg: #0A0A0C;
-      --surface: #131318;
-      --surface-hover: #1C1C24;
-      --accent: #C8FF57;
-      --accent-dim: rgba(200, 255, 87, 0.15);
-      --border: #23232E;
-      --text: #F0F0F5;
-      --muted: #A0A0B0;
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      --font-display: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-mono: 'Geist Mono', monospace;
-    }
+${getVanillaTokens()}
+${VANILLA_PX_CSS}
+  </style>
+  <style>
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
     body {
-      background: var(--bg);
-      color: var(--text);
+      background: var(--background);
+      color: var(--foreground);
       font-family: var(--font-sans);
       min-height: 100vh;
       overflow-x: hidden;
@@ -133,41 +253,29 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
       flex-direction: column;
       flex: 1;
     }
+    /* Bare elements inherit the native look so legacy vanilla plugins
+       improve automatically; new code should prefer the px-* classes. */
     button {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 8px 14px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 13px;
-      transition: background 0.15s ease, border-color 0.15s ease;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      background: var(--secondary); color: var(--secondary-foreground);
+      border: 1px solid transparent; padding: 8px 14px; border-radius: 8px;
+      cursor: pointer; font-size: 13px; font-weight: 500; font-family: inherit;
+      transition: background 0.15s ease, opacity 0.15s ease;
     }
-    button:hover {
-      background: var(--surface-hover);
-      border-color: var(--accent);
+    button:hover { background: var(--muted); }
+    button.primary { background: var(--primary); color: var(--primary-foreground); font-weight: 600; }
+    button.primary:hover { background: var(--primary); opacity: 0.9; }
+    button:disabled { cursor: not-allowed; opacity: 0.55; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+      outline: 2px solid var(--ring); outline-offset: 2px;
     }
-    button.primary {
-      background: var(--accent);
-      color: #0A0A0C;
-      font-weight: 600;
-      border-color: var(--accent);
+    input, textarea, select {
+      background: var(--background); border: 1px solid var(--input);
+      color: var(--foreground); padding: 8px 12px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; outline: none;
     }
-    button.primary:hover {
-      background: #D4FF70;
-    }
-    input, textarea {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      outline: none;
-    }
-    input:focus, textarea:focus {
-      border-color: var(--accent);
-    }
+    input:focus, textarea:focus, select:focus { border-color: var(--ring); }
+    input::placeholder, textarea::placeholder { color: var(--text-dim); }
   </style>
   <script>
     // Polymax Host-Guest Sandboxed Bridge Protocol (single source of truth:

@@ -24,7 +24,8 @@ export type BridgeAction =
   | "task.done"
   | "runtime.error"
   | "runtime.ready"
-  | "ui.ready";
+  | "ui.ready"
+  | "theme.get";
 
 export type BridgeTaskStatus = "running" | "done" | "error";
 
@@ -77,4 +78,6 @@ export interface HostBridgeOptions {
   onOpenContent?: (url: string) => void;
   onTaskEvent?: (event: HostBridgeTaskEvent) => void;
   getContext?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+  /** Active app theme id (e.g. void, cyber). Sent in the ui.ready ack and on demand. */
+  getTheme?: () => string;
 }

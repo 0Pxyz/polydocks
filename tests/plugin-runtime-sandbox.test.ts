@@ -145,6 +145,8 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("Timer Active");
     expect(html).toContain("window.polydocks = window.polymax;");
-    expect(html).toContain("--accent: #C8FF57;");
+    // Shared app tokens (including every theme override), not a forked palette.
+    expect(html).toContain('[data-theme="cyber"]');
+    expect(html).toContain("--bg: var(--background)");
   });
 });

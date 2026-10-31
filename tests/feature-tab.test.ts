@@ -76,10 +76,15 @@ describe("Feature Modules & Dynamic Tab Runtime", () => {
     const manifest = { id: "test-tab", title: "Test Tab" };
     const srcdoc = buildFeatureSrcdoc(sampleJs, manifest);
 
-    // Dark theme tokens
-    expect(srcdoc).toContain("--bg: #0A0A0C");
-    expect(srcdoc).toContain("--accent: #C8FF57");
-    expect(srcdoc).toContain("--surface: #131318");
+    // App design tokens (same file the React kit path inlines), not a forked
+    // palette: every theme override ships with the vanilla srcdoc.
+    expect(srcdoc).toContain('[data-theme="cyber"]');
+    expect(srcdoc).toContain("--accent-lime: #c8ff57");
+    // Legacy aliases track the semantic tokens so old plugins follow the theme.
+    expect(srcdoc).toContain("--bg: var(--background)");
+    // Native vanilla kit primitives for plain-script plugins.
+    expect(srcdoc).toContain("px-btn");
+    expect(srcdoc).toContain("px-badge");
 
     // Bridge API
     expect(srcdoc).toContain("window.polymax =");

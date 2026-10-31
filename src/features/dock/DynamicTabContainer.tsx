@@ -3,6 +3,7 @@ import { createHostBridge } from "./bridge/host-bridge";
 import { ReaderView } from "./ReaderView";
 import { TaskNotice } from "./TaskNotice";
 import { useTabHostStore } from "@/lib/tabs/tabHostStore";
+import { useThemeStore } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 
 export interface DynamicTabContainerProps {
@@ -43,6 +44,7 @@ export function DynamicTabContainer({
   const [error, setError] = useState<string | null>(null);
   const [readerUrl, setReaderUrl] = useState<string | null>(null);
   const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bridgeRef = useRef<{ pushTheme: (theme: string) => void } | null>(null);
 
   // Fetch compiled srcdoc from backend if not provided directly
   const fetchSrcdoc = useCallback(async () => {
@@ -110,12 +112,23 @@ export function DynamicTabContainer({
       onError: (err) => {
         setError(typeof err === "string" ? err : "Runtime error in tab");
       },
+      // Same theme contract as the plugin sandbox: first-frame theme from
+      // the ui.ready ack, live changes pushed without a reload.
+      getTheme: () => useThemeStore.getState().theme,
     });
+    bridgeRef.current = bridge;
 
     return () => {
       bridge.destroy();
+      if (bridgeRef.current === bridge) bridgeRef.current = null;
     };
   }, [cityId, tabId, onExpand, onCollapse, onSubmitCommand, srcdoc]);
+
+  // Follow the app theme live: push changes into the guest sandbox.
+  const activeTheme = useThemeStore((s) => s.theme);
+  useEffect(() => {
+    bridgeRef.current?.pushTheme(activeTheme);
+  }, [activeTheme]);
 
   // 3-second ready handshake timeout once srcdoc is mounted
   useEffect(() => {
