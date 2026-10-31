@@ -9,8 +9,8 @@
 ## Next slices (in order)
 
 - [ ] **Slice 1 — `plugins.install` on the full surface.** Expose the existing minimal verb (`server/agent/tools/verbs/plugins.ts:53-65`) in `fullToolsList` (`server/agent/tools/index.ts:123`) behind the same `userApproved` gate (`server/agent/installPolicy.ts:27-34`). Revert: one-line removal. Verify: `bun test tests/agent-intent-driven.test.ts` + new case asserting `approval_required` without approval, success with it.
-- [ ] **Slice 2 — extract one city view (pilot).** Candidate: Flashcards or Sources. Move from direct import in `CityWorkspace.tsx` to manifest + `registerSourcesPlugin` pattern (`server/plugins/first-party/index.ts:205-206`) + existing `/srcdoc` route. Keep the migration shim (`src/App.tsx:68-84`) as the precedent; the view stays reachable while core stops importing it. Revert: restore the import.
-- [ ] **Slice 3 — unify reads onto `sources` + server `dock_pins`.** Migrate read paths off `city_sources`/`feed.json` and client-only pins; keep legacy writers untouched until reads are green. Revert: flip reads back. Verify: `tests/sources-plugin.test.ts` + row-count parity script.
+- [x] **Slice 2 — city/world experience removed, parked on `future/city-experience`.** No pilot extraction: the whole city/world surface (routes, tools, views, tables, skills) left mainline in one reversible branch instead of being incrementally extracted.
+- [x] **Slice 3 — unified `sources` keyed by workspace + server `dock_pins`.** Reads go to the unified table; dead city tables dropped with a data-preserving boot migration. Verify: `tests/issue-165-persistence.test.ts`.
 - [ ] **Slice 4 — minimum auth + per-user data.** Bearer check on all routes (MCP's `isAuthorizedMcpRequest` is the pattern), `resolveUserId` validates instead of falling back, `DATA_DIR/<userId>/` split. Document as single-user-until-then; no Modal yet. Revert: env flag off.
 - [ ] **Slice 5 — Modal spike (behind flag).** One function, one volume: create/destroy per-user sandbox reusing the Docker image. No loop changes. Revert: flag off, local path unchanged.
 

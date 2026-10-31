@@ -10,9 +10,8 @@ the dock and the agent:
 
 Everything else follows from this:
 
-- A city is an experience that, when opened, shows other experiences
-  (Sources, Notes, Quests).
-- The map is an experience that opens cities.
+- A workspace folder is an experience that, when opened, shows other
+  experiences (Sources, Notes).
 - XP and streak are a small experience on the status line.
 - The agent creates a new tool, and it appears in the dock like any other.
 
@@ -40,9 +39,9 @@ The agent opens what exists first; finding nothing, it creates
 `sea-haiku` (one file, tokens only), mounts it, and opens it in the dock.
 Same verbs as everything else: close keeps it, edit versions it.
 
-**A city as an experience.** Opening `stoicism` shows Sources, Notes,
-Quests — each an experience with the same four verbs. The map opens
-cities; the city opens experiences. One recursion, no special cases.
+**A folder as an experience.** Opening a workspace shows Sources and
+Notes — each an experience with the same four verbs. Experiences open
+experiences. One recursion, no special cases.
 
 ## Direction (not requirements)
 

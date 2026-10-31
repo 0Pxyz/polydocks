@@ -251,10 +251,10 @@ describe("PolyDocks V2 Agentic Runtime End-to-End Integration Benchmark (Issue #
   });
 
   // =========================================================================
-  // STAGE 5: Polymax V1 Backward Compatibility & REST Routes
+  // STAGE 5: REST Endpoints
   // =========================================================================
-  describe("Stage 5: Polymax V1 Backward Compatibility & REST Endpoints", () => {
-    it("maintains 100% compatibility with Polymax V1 /api/health, /api/cities, and /api/maps", async () => {
+  describe("Stage 5: REST Endpoints", () => {
+    it("serves /api/health and /api/workspaces", async () => {
       // 1. GET /api/health
       const healthRes = await app.fetch(new Request("http://localhost/api/health"));
       expect(healthRes.status).toBe(200);
@@ -262,19 +262,18 @@ describe("PolyDocks V2 Agentic Runtime End-to-End Integration Benchmark (Issue #
       expect(healthBody.status).toBe("ok");
       expect(healthBody.model).toBeDefined();
 
-      // 2. GET /api/cities
-      const citiesRes = await app.fetch(new Request("http://localhost/api/cities"));
-      expect(citiesRes.status).toBe(200);
-      const citiesBody: any = await citiesRes.json();
-      expect(citiesBody.success).toBe(true);
-      expect(Array.isArray(citiesBody.data)).toBe(true);
+      // 2. GET /api/workspaces
+      const wsRes = await app.fetch(new Request("http://localhost/api/workspaces"));
+      expect(wsRes.status).toBe(200);
+      const wsBody: any = await wsRes.json();
+      expect(wsBody.success).toBe(true);
+      expect(Array.isArray(wsBody.data)).toBe(true);
 
-      // 3. GET /api/maps
-      const mapsRes = await app.fetch(new Request("http://localhost/api/maps"));
-      expect(mapsRes.status).toBe(200);
-      const mapsBody: any = await mapsRes.json();
-      expect(mapsBody.maps).toBeDefined();
-      expect(Array.isArray(mapsBody.maps)).toBe(true);
+      // 3. Retired city/world routes stay gone
+      for (const path of ["/api/cities", "/api/maps", "/api/world", "/api/mcp"]) {
+        const res = await app.fetch(new Request(`http://localhost${path}`));
+        expect(res.status).toBe(404);
+      }
     });
   });
 });
