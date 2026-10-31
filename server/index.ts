@@ -25,6 +25,12 @@ import { recordExperienceError, getExperienceErrors } from "./workspace/experien
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
 import { isVoiceRealtimeRequest, voiceSessionIdFrom, voiceWebsocketHandlers } from "./voice/proxy";
+import { browserRouter } from "./browser/route";
+import {
+  browserStreamIdentity,
+  browserWebsocketHandlers,
+  isBrowserStreamRequest,
+} from "./browser/relay";
 
 // Bootstrap persistent agent-home filesystem structure on startup
 await initAgentHome().catch((err) => {
@@ -171,6 +177,9 @@ app.route("/api/agent/thread", threadRouter);
 
 // Native Reader backend (SSRF-guarded article/video loader)
 app.route("/api/reader", readerRouter);
+
+// Native remote browser (Atrium worker + viewer relay, first-party service)
+app.route("/api/browser/atrium", browserRouter);
 
 // Mount Persistent Work Sessions & Background Task Engine (Issue #76)
 app.route("/api/sessions", sessionsRouter);
@@ -336,9 +345,46 @@ export default {
       }
       return new Response("Voice realtime requires a WebSocket upgrade.", { status: 426 });
     }
+    if (isBrowserStreamRequest(req)) {
+      const identity = browserStreamIdentity(req);
+      try {
+        if (
+          identity &&
+          server?.upgrade?.(req, {
+            data: { kind: "browser", sessionId: identity.sessionId, token: identity.token },
+          })
+        )
+          return undefined as any;
+      } catch {
+        // Fall through to an explicit error below
+      }
+      return new Response("Browser stream requires a WebSocket upgrade.", { status: 426 });
+    }
     return app.fetch(req, server);
   },
-  websocket: voiceWebsocketHandlers,
+  websocket: {
+    open(client: any) {
+      if ((client?.data as any)?.kind === "browser") {
+        browserWebsocketHandlers.open(client);
+        return;
+      }
+      voiceWebsocketHandlers.open(client);
+    },
+    message(client: any, message: any) {
+      if ((client?.data as any)?.kind === "browser") {
+        browserWebsocketHandlers.message(client, message);
+        return;
+      }
+      voiceWebsocketHandlers.message(client, message);
+    },
+    close(client: any, code?: number, reason?: string) {
+      if ((client?.data as any)?.kind === "browser") {
+        browserWebsocketHandlers.close(client);
+        return;
+      }
+      (voiceWebsocketHandlers as any).close?.(client, code, reason);
+    },
+  },
 };
 
 if (import.meta.main) {
