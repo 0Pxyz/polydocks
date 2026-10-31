@@ -8,6 +8,7 @@ import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { HomeScreen } from "@/features/home/HomeScreen";
+import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { OnboardingModal } from "@/features/onboarding/OnboardingModal";
 import { WorldView } from "@/features/views/WorldView";
 import { CityView } from "@/features/views/CityView";
@@ -638,7 +639,7 @@ export default function App() {
                 />
               </DockSurface>
             ) : isCityMode ? (
-              <DockSurface frameless>
+              <DockSurface frameless className={activeToolId === "browser" ? "pb-0" : undefined}>
                 <div className="w-full">
                   <CityView
                     cityName={activeCityId || selectedCity || "workspace"}
@@ -646,6 +647,12 @@ export default function App() {
                     secondaryToolId={secondaryToolId}
                     onSelectTool={handleSelectTool}
                   />
+                </div>
+              </DockSurface>
+            ) : activeToolId === "browser" && !isCityMode ? (
+              <DockSurface frameless className="pb-0">
+                <div className="w-full flex-1 min-w-0 flex flex-col min-h-0">
+                  <NativeBrowserView workspaceKey="home" />
                 </div>
               </DockSurface>
             ) : !isMapsOpen ? (
