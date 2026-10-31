@@ -46,7 +46,6 @@ export interface CapabilityItem {
 }
 
 interface CommandPaletteProps {
-  cityId?: string;
   /** Session-created experiences (dynamic tabs) that are not in any store. */
   extraItems?: DockItem[];
   onOpenAgent?: () => void;
@@ -82,7 +81,6 @@ const ROW_CLASS =
   "group flex w-full max-w-full items-center justify-between gap-2 min-h-10 pointer-coarse:min-h-11 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]";
 
 export function CommandPalette({
-  cityId,
   extraItems = [],
   onOpenAgent,
   onOpenMcpConnect,
@@ -153,7 +151,7 @@ export function CommandPalette({
     }
   }, []);
 
-  // Fetch everything the dock can show: installed plugins, city tabs,
+  // Fetch everything the dock can show: installed plugins,
   // community store plugins, and recorded failures for installed plugins.
   const fetchDockData = useCallback(async () => {
     setLoadError(false);
@@ -170,24 +168,7 @@ export function CommandPalette({
       }
     })();
 
-    const tabsPromise = (async (): Promise<DockItem[]> => {
-      if (!cityId) return [];
-      try {
-        const res = await fetch(`/api/cities/${encodeURIComponent(cityId)}/tabs`);
-        if (!res.ok) return [];
-        const json = await res.json();
-        const tabs = Array.isArray(json.data) ? json.data : [];
-        return tabs.map((tab: { id: string; title?: string; icon?: string }) => ({
-          id: tab.id,
-          label: tab.title || tab.id,
-          description: "City tab",
-          icon: tab.icon || tab.id,
-          kind: "tab" as DockItemKind,
-        }));
-      } catch {
-        return [];
-      }
-    })();
+    const tabsPromise = (async (): Promise<DockItem[]> => [])();
 
     const storePromise = (async (): Promise<RegistryEntry[]> => {
       try {
@@ -246,7 +227,7 @@ export function CommandPalette({
     } catch {
       // Failure metadata is best-effort; rows still render without it.
     }
-  }, [cityId]);
+  }, []);
 
   const reload = useCallback(() => {
     void fetchCapabilities();
@@ -327,7 +308,7 @@ export function CommandPalette({
       }),
     [dockedItems, yoursItems, openIds, showBrowseRow]
   );
-  const staticCreateRows = useMemo(() => getStaticCreateRows(cityId), [cityId]);
+  const staticCreateRows = useMemo(() => getStaticCreateRows(), []);
 
   const capMatches = useMemo(() => {
     const q = trimmedQuery.toLowerCase();
@@ -607,8 +588,7 @@ export function CommandPalette({
         body: JSON.stringify({
           capabilityId: cap.id,
           input: {},
-          cityId,
-        }),
+                }),
       });
 
       const data = await res.json();

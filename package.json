@@ -23,7 +23,6 @@
     "lint": "oxlint",
     "test": "bun test",
     "test:browser": "bun tests/browser/reader-smoke.ts",
-    "seed": "bun scripts/seedDemoWorld.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "dependencies": {

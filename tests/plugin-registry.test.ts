@@ -44,7 +44,7 @@ describe("Plugin Architecture & Manifest Registry (Core)", () => {
       },
       {
         type: "fs",
-        scope: "city",
+        scope: "workspace",
         mode: "read",
       },
     ],

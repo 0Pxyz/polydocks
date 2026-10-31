@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { runAgentLoop, type AgentStepEvent } from "../server/agent/loop";
 import { defaultTools } from "../server/agent/tools";
 import { getFriendlyToolStatus } from "../src/lib/agent/events";
 
 describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () => {
-  it("Scenario A: answers general greetings directly with zero tool calls or city assumptions", async () => {
+  it("Scenario A: answers general greetings directly with zero tool calls or scope assumptions", async () => {
     let capturedSystemPrompt = "";
     const emittedEvents: AgentStepEvent[] = [];
 
@@ -40,18 +40,18 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
     expect(result.status).toBe("completed");
     expect(result.text).toBe("Hey! How can I help you in your workspace today?");
 
-    // Verify system prompt enforces workspace as default and forbids unsolicited city assumptions
+    // Verify system prompt enforces workspace as default and forbids unsolicited scope assumptions
     expect(capturedSystemPrompt).toContain("Workspace as Default (Intent-Driven)");
     expect(capturedSystemPrompt).toContain("General conversation, greetings, and explanations");
     expect(capturedSystemPrompt).toContain("Zero Unsolicited Inspections");
-    expect(capturedSystemPrompt).not.toContain("Active City Workspace Scope");
+    expect(capturedSystemPrompt).not.toContain("Workspace Scope");
 
     // Zero tool calls emitted
     const toolEvents = emittedEvents.filter((ev) => ev.type === "tool.start");
     expect(toolEvents.length).toBe(0);
   });
 
-  it("Scenario B: explains conceptual topics without creating a city or assuming active city", async () => {
+  it("Scenario B: explains conceptual topics without creating anything or assuming scope", async () => {
     let capturedSystemPrompt = "";
     const emittedEvents: AgentStepEvent[] = [];
 
@@ -87,26 +87,22 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
     expect(result.status).toBe("completed");
     expect(result.text).toContain("self-attention");
-    expect(capturedSystemPrompt).not.toContain("Active City Workspace Scope");
+    expect(capturedSystemPrompt).not.toContain("Workspace Scope");
 
-    // No city creation or unsolicited tool executions
+    // No creation or unsolicited tool executions
     const toolCalls = emittedEvents.filter((ev) => ev.type === "tool.start");
     expect(toolCalls.length).toBe(0);
   });
 
-  it("Scenario C: triggers Knowledge City creation tools only when explicitly requested", async () => {
-    let capturedSystemPrompt = "";
+  it("Scenario C: creates a plugin only when explicitly requested", async () => {
     const emittedEvents: AgentStepEvent[] = [];
     let stepCount = 0;
-
+    const pluginId = `test-issue90-plugin-${Date.now().toString(36)}`;
     const mockLlm: any = {
       chat: {
         completions: {
           create: async (params: any) => {
-            const sys = params.messages.find((m: any) => m.role === "system");
-            capturedSystemPrompt = sys?.content || "";
-            stepCount++;
-
+            stepCount += 1;
             if (stepCount === 1) {
               return {
                 choices: [
@@ -115,11 +111,17 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
                       role: "assistant",
                       tool_calls: [
                         {
-                          id: "call_plan_1",
+                          id: "call_create_1",
                           type: "function",
                           function: {
-                            name: "plan_map",
-                            arguments: JSON.stringify({ interests: ["Neural Networks"] }),
+                            name: "create_plugin",
+                            arguments: JSON.stringify({
+                              id: pluginId,
+                              name: "Issue90 Plugin",
+                              description: "Created on explicit request",
+                              userApproved: true,
+                              code: "const app = document.getElementById(\"app\"); if (app) app.textContent = \"hi\";",
+                            }),
                           },
                         },
                       ],
@@ -128,16 +130,8 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
                 ],
               };
             }
-
             return {
-              choices: [
-                {
-                  message: {
-                    role: "assistant",
-                    content: "Created Neural Networks knowledge territory and mapped foundational cities.",
-                  },
-                },
-              ],
+              choices: [{ message: { role: "assistant", content: "Plugin mounted." } }],
             };
           },
         },
@@ -145,7 +139,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
     };
 
     const result = await runAgentLoop({
-      prompt: "Create a Knowledge City to learn neural networks from scratch.",
+      prompt: "Build me a small plugin.",
       tools: defaultTools,
       llmClient: mockLlm,
       onEvent: (ev) => {
@@ -154,81 +148,20 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
     });
 
     expect(result.status).toBe("completed");
-    expect(capturedSystemPrompt).toContain("Specialized Skill: world-and-cities");
-
     const toolStarts = emittedEvents.filter((ev) => ev.type === "tool.start");
     expect(toolStarts.length).toBe(1);
-    expect(toolStarts[0].payload?.name).toBe("plan_map");
-
-    // Map changed event should be emitted
-    const mapEvents = emittedEvents.filter((ev) => ev.type === "map.changed");
-    expect(mapEvents.length).toBe(1);
+    expect(toolStarts[0].payload?.name).toBe("create_plugin");
+    const createdEvents = emittedEvents.filter((ev) => ev.type === "plugin.created");
+    expect(createdEvents.length).toBe(1);
+    const { db: tdb } = await import("../server/workspace/db");
+    tdb.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(pluginId);
+    tdb.query("DELETE FROM plugins WHERE id = ?").run(pluginId);
+    tdb.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(pluginId);
+    tdb.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(pluginId);
   });
 
-  it("Scenario D: opens specific requested experience without inspecting unrelated tools", async () => {
-    let stepCount = 0;
-    const executedTools: string[] = [];
 
-    const mockLlm: any = {
-      chat: {
-        completions: {
-          create: async () => {
-            stepCount++;
-            if (stepCount === 1) {
-              return {
-                choices: [
-                  {
-                    message: {
-                      role: "assistant",
-                      tool_calls: [
-                        {
-                          id: "call_open_1",
-                          type: "function",
-                          function: {
-                            name: "open_tab",
-                            arguments: JSON.stringify({ tabId: "browser" }),
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              };
-            }
-            return {
-              choices: [
-                {
-                  message: {
-                    role: "assistant",
-                    content: "Opened Browser in the workspace tray.",
-                  },
-                },
-              ],
-            };
-          },
-        },
-      },
-    };
-
-    const result = await runAgentLoop({
-      prompt: "Open Browser.",
-      tools: defaultTools,
-      llmClient: mockLlm,
-      onEvent: (ev) => {
-        if (ev.type === "tool.start") {
-          executedTools.push(String(ev.payload?.name));
-        }
-      },
-    });
-
-    expect(result.status).toBe("completed");
-    expect(executedTools).toEqual(["open_tab"]);
-    expect(executedTools).not.toContain("list_tabs");
-    expect(executedTools).not.toContain("inspect_tab");
-    expect(executedTools).not.toContain("get_city_context");
-  });
-
-  it("Scenario E: researches and writes workspace note directly without requiring a city", async () => {
+  it("Scenario E: researches and writes workspace note directly", async () => {
     let stepCount = 0;
     const executedTools: string[] = [];
 
@@ -320,13 +253,6 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
   it("silences trivial bookkeeping and internal inspection tools from noisy UI status updates", () => {
     const trivialTools = [
-      "list_tabs",
-      "inspect_tab",
-      "get_city_context",
-      "close_tray",
-      "list_maps",
-      "set_map",
-      "place_city",
       "find_capabilities",
       "invoke_capability",
       "inspect_experience",
@@ -341,40 +267,5 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
     for (const tool of trivialTools) {
       expect(getFriendlyToolStatus(tool)).toBeNull();
     }
-  });
-
-  it("scopes context when cityId is explicitly provided without forcing unsolicited city dumps", async () => {
-    let capturedSystemPrompt = "";
-
-    const mockLlm: any = {
-      chat: {
-        completions: {
-          create: async (params: any) => {
-            const sys = params.messages.find((m: any) => m.role === "system");
-            capturedSystemPrompt = sys?.content || "";
-            return {
-              choices: [
-                {
-                  message: {
-                    role: "assistant",
-                    content: "Athens workspace is ready for your questions.",
-                  },
-                },
-              ],
-            };
-          },
-        },
-      },
-    };
-
-    const result = await runAgentLoop({
-      prompt: "Hello from Athens",
-      cityId: "athens",
-      llmClient: mockLlm,
-    });
-
-    expect(result.status).toBe("completed");
-    expect(capturedSystemPrompt).toContain('Active City Workspace Scope: "athens"');
-    expect(capturedSystemPrompt).toContain("Operate within this city only when the user's request pertains to it");
   });
 });

@@ -8,7 +8,7 @@ import { PluginRegistry } from "../server/plugins/registry";
 import { initializeFirstPartyPlugins } from "../server/plugins/first-party/index";
 import { db } from "../server/workspace/db";
 
-const CITY = "test-reader-ws";
+const WS = "test-reader-ws";
 const realFetch = globalThis.fetch;
 
 function stubFetch(headMode: "allow" | "deny" | "fail" = "allow") {
@@ -31,14 +31,14 @@ describe("sources.open modes (no silent fallbacks)", () => {
   });
   beforeEach(() => {
     stubFetch("allow");
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
-    PluginRegistry.getInstance().recordGrant("sources", "read", `city:${CITY}`, "allow_always");
-    PluginRegistry.getInstance().recordGrant("sources", "write", `city:${CITY}`, "allow_always");
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(WS);
+    PluginRegistry.getInstance().recordGrant("sources", "read", `workspace:${WS}`, "allow_always");
+    PluginRegistry.getInstance().recordGrant("sources", "write", `workspace:${WS}`, "allow_always");
   });
 
   afterEach(() => {
     globalThis.fetch = realFetch;
-    db.query("DELETE FROM sources WHERE city_id = ?").run(CITY);
+    db.query("DELETE FROM sources WHERE workspace_id = ?").run(WS);
     db.query("DELETE FROM plugin_grants WHERE plugin_id = 'sources'").run();
   });
 
@@ -98,7 +98,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
         url: "https://example.com/a",
         mode: "reader",
         title: "T",
-        cityId: CITY,
+        workspaceId: WS,
         markdown: "# T",
       },
     });
@@ -106,7 +106,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
     if (ui?.type === "reader.open") {
       expect(ui.mode).toBe("reader");
       expect(ui.markdown).toBe("# T");
-      expect(ui.cityId).toBe(CITY);
+      expect(ui.workspaceId).toBe(WS);
     }
   });
 
@@ -114,7 +114,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
     const ui = adaptBackendEvent({
       type: "reader.open",
       step: 3,
-      payload: { id: "s9", url: "https://example.com/a", mode: "video", title: "V", embedUrl: "https://x/y", cityId: CITY },
+      payload: { id: "s9", url: "https://example.com/a", mode: "video", title: "V", embedUrl: "https://x/y", workspaceId: WS },
     });
     expect(ui?.type).toBe("reader.open");
     // The store case delegates here: if nothing listened, the panel would
@@ -132,7 +132,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
       mode: "reader",
       title: "T",
       url: "https://example.com/a",
-      cityId: CITY,
+      workspaceId: WS,
       markdown: "# T",
     });
     const open = useConversationStore.getState().readerView;
@@ -152,7 +152,7 @@ describe("sources.open modes (no silent fallbacks)", () => {
       mode: "reader",
       title: "T",
       url: "https://example.com/a",
-      cityId: CITY,
+      workspaceId: WS,
       markdown: "# T",
     });
     expect(useConversationStore.getState().readerView?.mode).toBe("reader");
@@ -164,8 +164,8 @@ describe("sources.open modes (no silent fallbacks)", () => {
     const now = new Date().toISOString();
     const seed = (id: string, kind: string, url: string, image: string | null) => {
       db.query(
-        "INSERT INTO sources (id, city_id, kind, url, title, image, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-      ).run(id, CITY, kind, url, "T", image, now);
+        "INSERT INTO sources (id, workspace_id, kind, url, title, image, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).run(id, WS, kind, url, "T", image, now);
     };
     seed("v_youtube", "video", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null);
     seed("v_vimeo", "video", "https://vimeo.com/76979871", null);
@@ -193,8 +193,8 @@ describe("sources.open modes (no silent fallbacks)", () => {
     const mk = (kind: string, url: string, fullText: string | null) => {
       const id = `t_${Math.random().toString(36).slice(2, 8)}`;
       db.query(
-        "INSERT INTO sources (id, city_id, kind, url, title, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-      ).run(id, CITY, kind, url, "T", new Date().toISOString());
+        "INSERT INTO sources (id, workspace_id, kind, url, title, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(id, WS, kind, url, "T", new Date().toISOString());
       if (fullText) db.query("UPDATE sources SET full_text = ? WHERE id = ?").run(fullText, id);
       return id;
     };
@@ -202,15 +202,15 @@ describe("sources.open modes (no silent fallbacks)", () => {
     const art = mk("article", "https://example.com/with-text", "# Saved\n\ntext");
     const bare = mk("article", "https://example.com/no-text", null);
 
-    const ctx = { step: 1, cityId: CITY } as any;
-    const v: any = await invoke_capability.execute({ id: "sources.open", input: { id: vid, cityId: CITY } }, ctx);
+    const ctx = { step: 1, workspaceId: WS } as any;
+    const v: any = await invoke_capability.execute({ id: "sources.open", input: { id: vid, workspaceId: WS } }, ctx);
     expect(v.data?.data?.mode).toBe("video");
     expect(v.data?.data?.embedUrl || "").toContain("youtube.com/embed/");
 
-    const a: any = await invoke_capability.execute({ id: "sources.open", input: { id: art, cityId: CITY } }, ctx);
+    const a: any = await invoke_capability.execute({ id: "sources.open", input: { id: art, workspaceId: WS } }, ctx);
     expect(a.data?.data?.mode).toBe("reader");
 
-    const e: any = await invoke_capability.execute({ id: "sources.open", input: { id: bare, cityId: CITY } }, ctx);
+    const e: any = await invoke_capability.execute({ id: "sources.open", input: { id: bare, workspaceId: WS } }, ctx);
     expect(e.data?.data?.mode).toBe("external");
     expect(typeof e.data?.data?.reason).toBe("string");
   });

@@ -46,7 +46,7 @@ The agent is never overwhelmed by static context dumps or hundreds of tool schem
 
 Capabilities must earn trust through explicit, revocable user grants:
 - **Default-Deny:** Undeclared network hosts, filesystem paths, and command executions are blocked.
-- **Confinement:** Filesystem operations are strictly confined to the active city workspace or the plugin's data directory. Path traversal and symlink escapes are rejected.
+- **Confinement:** Filesystem operations are strictly confined to the active workspace or the plugin's data directory. Path traversal and symlink escapes are rejected.
 - **SSRF Guard:** Network fetches block loopback, link-local, private subnets, and cloud metadata endpoints.
 - **Canary Redaction:** Secrets are scoped and injected strictly into handler context; they never appear in prompts, tool results, logs, SSE streams, or error messages.
 - **Sandboxed Execution:** Untrusted code and generated tools run exclusively in sandboxed iframes communicating via a permission-checked `postMessage` bridge.
@@ -60,4 +60,4 @@ Every plugin traverses a deterministic, auditable lifecycle:
 4. **Authorize:** Scoped, default-deny permission grants are requested and stored. Destructive actions require explicit confirmation.
 5. **Execute:** Calls route through the capability bus with timeouts, abort signals, and execution logging.
 6. **Inspect:** Execution records, runtime errors, and performance metrics are auditable via `inspect_execution` and the Plugins dock tool.
-7. **Evolve / Promote:** Successful experiences synthesized by the agent are packaged into declarative plugins reusable across all cities.
+7. **Evolve / Promote:** Successful experiences synthesized by the agent are packaged into declarative plugins reusable across all workspaces.

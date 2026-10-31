@@ -27,22 +27,24 @@ describe("Product simplification — core dock and Discover", () => {
     db.query("DELETE FROM workspaces WHERE id = ?").run(WS);
   });
 
-  it("fresh workspace pins exactly Agent, Plugins, Settings", () => {
-    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "plugins", "settings"]);
+  it("fresh workspace pins the curated core", () => {
+    expect(DEFAULT_PINNED_IDS).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
     const homeIds = HOME_DOCK_TOOLS.map((t) => t.id);
-    expect(homeIds).toEqual(["agent", "plugins", "settings"]);
-    expect(new Set(homeIds).size).toBe(3);
+    expect(homeIds).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
+    expect(new Set(homeIds).size).toBe(6);
   });
 
-  it("existing user pins are preserved, never reset to defaults", () => {
-    expect(migratePinnedIds(["agent", "maps", "settings", "browser"])).toEqual([
+  it("existing user pins are preserved, retired tools migrate out", () => {
+    expect(migratePinnedIds(["agent", "browser", "plugins", "creations", "store", "settings"])).toEqual([
       "agent",
-      "maps",
-      "settings",
       "browser",
+      "plugins",
+      "creations",
+      "store",
+      "settings",
     ]);
-    // Only the removed store entry drops out; everything else survives.
-    expect(migratePinnedIds(["agent", "store", "settings"])).toEqual(["agent", "settings"]);
+    // Retired knowledge-map ids drop out; everything else survives.
+    expect(migratePinnedIds(["agent", "maps", "settings"])).toEqual(["agent", "settings"]);
   });
 
   it("Discover catalog lists the real registry seed (no mocks)", async () => {
@@ -83,23 +85,23 @@ describe("Product simplification — core dock and Discover", () => {
     expect(WorkspaceService.listWorkspacePlugins(WS).map((p) => p.pluginId)).toContain(PLUGIN);
   });
 
-  it("builtin Polymax pins/unpins through the persisted dock API", async () => {
+  it("builtin tools pin/unpin through the persisted dock API", async () => {
     const pin = await app.request("/api/dock/action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "tabs.pin", id: "maps", workspaceId: WS }),
+      body: JSON.stringify({ op: "tabs.pin", id: "browser", workspaceId: WS }),
     });
     expect(pin.status).toBe(200);
     const { listDockPins } = await import("../server/workspace/workspaces");
-    expect(listDockPins(WS)).toContain("maps");
+    expect(listDockPins(WS)).toContain("browser");
 
     const unpin = await app.request("/api/dock/action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ op: "tabs.unpin", id: "maps", workspaceId: WS }),
+      body: JSON.stringify({ op: "tabs.unpin", id: "browser", workspaceId: WS }),
     });
     expect(unpin.status).toBe(200);
-    expect(listDockPins(WS)).not.toContain("maps");
+    expect(listDockPins(WS)).not.toContain("browser");
   });
 
   it("web search failure throws instead of fabricating sources", async () => {

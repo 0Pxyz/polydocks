@@ -4,7 +4,7 @@
 
 ## The system in one paragraph
 
-PolyDocks is a **microkernel**. The core stays minimal: **dock + capability bus + plugin lifecycle/policy + sandbox bridge**. Everything else is a plugin: maps, cities, notes, files, browser, and the agent itself — a privileged first-party plugin with permissions in its manifest, subject to the same policy as every other plugin. The core never understands domain concepts: plugins remember context, the core only passes an opaque `contextId`. The user downloads the app, receives their agent running in a per-user sandbox, and that agent controls the dock and builds plugins that appear in the UI.
+PolyDocks is a **microkernel**. The core stays minimal: **dock + capability bus + plugin lifecycle/policy + sandbox bridge**. Everything else is a plugin: browser, notes, files, and the agent itself — a privileged first-party plugin with permissions in its manifest, subject to the same policy as every other plugin. The core never understands domain concepts: plugins remember context, the core only passes an opaque `contextId`. The user downloads the app, receives their agent running in a per-user sandbox, and that agent controls the dock and builds plugins that appear in the UI.
 
 ## The loop that matters
 
@@ -27,10 +27,10 @@ Our focus is teaching the agent to control the dock and to build good plugins. A
 ## What TARGET (not built)
 
 - Per-user sandbox (Modal). Today: single-tenant local process / one Docker service (`docker-compose.yml`), no auth (`server/identity.ts:11` falls back to `"local"`, self-asserted header).
-- UI = only dock + plugins. Today: city/world views are hardcoded core imports (`src/features/city/`, `src/features/world/`, `CITY_TOOL_IDS` in `src/lib/dock/dockModel.ts:209`).
+- UI = only dock + plugins. The retired knowledge-map views live on the `future/city-experience` branch, not in core.
 - Agent as a first-party plugin under the same policy. Today: the agent is core code with a hardcoded 45-tool catalog.
 - `plugins.install` on the full agent surface. Today: install exists only as a minimal-surface verb and HTTP/CLI routes.
-- Opaque `contextId`. Today: `cityId` threads through routes, tools, tables, and the front (issue #153).
+- Opaque `workspaceId`. Scope is a plain workspace id everywhere: routes, tools, tables, and the front.
 
 ## Adopted decisions (from archived work, code not merged)
 

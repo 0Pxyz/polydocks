@@ -5,7 +5,7 @@ import { searchFiles } from "../../system/filesystem";
 export const search_files: AgentTool<{ query: string; path?: string; extension?: string }> = {
   name: "search_files",
   description:
-    "Searches agent-home text. Use to locate agent files; never for city content.",
+    "Searches agent-home text. Use to locate agent files.",
   schema: z.object({
     query: z.string().describe("Keyword or regex query string"),
     path: z.string().optional().describe("Directory path relative to agent-home to limit search (default '.')"),

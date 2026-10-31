@@ -3,7 +3,7 @@ import type { AgentTool } from "./types";
 import { db } from "../../workspace/db";
 
 export interface ListRecentExecutionsArgs {
-  cityId?: string;
+  workspaceId?: string;
   pluginId?: string;
   status?: "all" | "success" | "failed" | "denied";
   limit?: number;
@@ -14,7 +14,7 @@ export const list_recent_executions: AgentTool<ListRecentExecutionsArgs> = {
   description:
     "Lists recent capability runs by status. Use to spot failure patterns; not for routine checks.",
   schema: z.object({
-    cityId: z.string().optional().describe("Filter by city workspace"),
+    workspaceId: z.string().optional().describe("Filter by workspace"),
     pluginId: z.string().optional().describe("Filter by plugin identifier"),
     status: z
       .enum(["all", "success", "failed", "denied"])
@@ -24,15 +24,15 @@ export const list_recent_executions: AgentTool<ListRecentExecutionsArgs> = {
     limit: z.number().int().min(1).max(50).optional().default(10),
   }),
   execute: async (args, ctx) => {
-    const targetCity = args.cityId || ctx.cityId;
+    const targetWorkspace = args.workspaceId || ctx.workspaceId;
     const limit = args.limit || 10;
 
-    let query = "SELECT execution_id, capability_id, plugin_id, actor, city_id, status, duration_ms, error, created_at FROM executions WHERE 1=1";
+    let query = "SELECT execution_id, capability_id, plugin_id, actor, workspace_id, status, duration_ms, error, created_at FROM executions WHERE 1=1";
     const params: any[] = [];
 
-    if (targetCity) {
-      query += " AND (city_id = ? OR city_id IS NULL)";
-      params.push(targetCity);
+    if (targetWorkspace) {
+      query += " AND (workspace_id = ? OR workspace_id IS NULL)";
+      params.push(targetWorkspace);
     }
 
     if (args.pluginId) {
@@ -54,7 +54,7 @@ export const list_recent_executions: AgentTool<ListRecentExecutionsArgs> = {
         capability_id: string;
         plugin_id: string;
         actor: string;
-        city_id: string | null;
+        workspace_id: string | null;
         status: string;
         duration_ms: number;
         error: string | null;
@@ -70,7 +70,7 @@ export const list_recent_executions: AgentTool<ListRecentExecutionsArgs> = {
         capabilityId: r.capability_id,
         pluginId: r.plugin_id,
         actor: r.actor,
-        cityId: r.city_id,
+        workspaceId: r.workspace_id,
         status: r.status,
         durationMs: r.duration_ms,
         error: r.error,

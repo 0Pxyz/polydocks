@@ -24,13 +24,12 @@ bun run dev           # Start frontend + backend dev server
 bun run build         # Production build
 bun run check         # Typecheck + lint + test (REQUIRED before every commit)
 bun run test          # Run Vitest test suite
-bun run seed          # Populate demo world & cities
 docker compose up     # Launch unified container
 ```
 
 ## Core Agentic Dock Architecture
 - **Dock as the UI:** Pinned Nook tray with expandable dock icons representing tabs. Active tab renders directly into the tray background.
-- **Tabs as Workspaces:** Built-in tabs (`Browser`, `Files`, `Notes`, `Papers`, `Terminal`) and agent-generated dynamic tabs (isolated iframe micro-apps using `postMessage` bridge).
+- **Panels as Tools:** Built-in tools (`Browser`, `Tools`, `Creations`, `Library`) and agent-generated plugins (isolated iframe micro-apps using the `window.polymax` bridge).
 - **Two Run Modes:**
   1. **Hosted / Web Demo:** Sandboxed workspaces in Docker/Bun, no direct OS execution.
   2. **Local Machine:** Access to explicitly granted folders and tools via typed grants.

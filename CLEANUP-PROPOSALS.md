@@ -6,8 +6,8 @@
 
 | File | Problem (evidence) | Proposal |
 |---|---|---|
-| `docs/architecture.md` | Documents nonexistent tools `get_tab_state`, `interact_tab` (§3.2; no such files under `server/agent/tools/`), nonexistent `web-research.md` skill (§4), city-as-filesystem-framing that contradicts the opaque-`contextId` target | Supersede: keep for history, add a header pointing to `ARCHITECTURE.md`, stop updating it |
-| `docs/product-philosophy.md` §6 | Confinement framed as "active city workspace" | Keep, amend §6 to opaque `contextId` in a follow-up PR |
+| `docs/architecture.md` | superseded reference, contradicting the target | DONE: file removed; history on `future/city-experience` |
+| `docs/product-philosophy.md` §6 | outdated confinement framing | DONE: reframed to active workspace / plugin data dir |
 | `AGENTS.md` (old, on `main`) | Cited `src/features/tabs/registerTab` (never existed), `skills/create-tab.md` (never existed), `docs/product.md|demo.md|credits.md` (never existed), Biome/Vitest (actually oxlint + `bun test`), per-launch token (no token code exists) | Rewritten on this branch |
 | `README.md` (old, on `main`) | Referenced `docs/assets/polymax-hero.png|polymax-dock.png|polymax-demo.gif` (only `plugin-store-redesign.png` exists in `docs/assets/`) | Rewritten on this branch; demo media stays pending work, not a blocker |
 | `docs/api.md`, `docs/model.md`, `docs/dock-shortcuts.md`, `docs/plugins/lifecycle.md`, `docs/meta-model-api.md`, `docs/tinyfish.md`, `docs/system-access.md`, `docs/design-system.md`, `docs/design-slop.md` | Verified accurate against code where checked (MCP tools `server/api/mcp.ts:13-60`, `skill.triggers` `server/plugins/manifest.ts:106`, shortcuts registry) | Keep, no action |
@@ -30,8 +30,8 @@
 | Item | Evidence | Proposal (later phase, needs ok) |
 |---|---|---|
 | Orphan `dock_items` table (live DB, zero references) | Phase 0/1 audits | Decide single source of truth, then drop or adopt — needs ok |
-| Triple source store (`city_sources` vs `sources` vs `workspace/*/feed.json`) | `MIGRATION.md` Slice 3 | Unify reads first, then remove writers — needs ok |
-| City-hardcoded routes/views/tools/front | `ARCHITECTURE.md` §1 + §3 Gap 2 | Extract per `MIGRATION.md` Slice 2, starting with one pilot view — needs ok |
+| Triple source store | `MIGRATION.md` Slice 3 | DONE: unified `sources` keyed by workspace; dead tables dropped with migration |
+| Hardcoded knowledge-map routes/views/tools/front | `ARCHITECTURE.md` §1 + §3 Gap 2 | DONE: removed to the parked experience branch |
 | `MCP_TOKEN` missing from `.env.example` | Referenced in code, absent in example env | One-line follow-up — low risk, needs ok |
 
 ## D. Stashes and backups (already preserved, Phase 2)

@@ -138,7 +138,7 @@ describe("Permissions, Scoped Execution Context & User Approval Flow", () => {
   });
 
   describe("Scoped Execution Context Confinement", () => {
-    it("confines filesystem operations to the city directory and blocks path traversal attacks", async () => {
+    it("confines filesystem operations to the granted directory and blocks path traversal attacks", async () => {
       const testCity = "city_perm_test";
       const ctx = createScopedExecutionContext({
         pluginId: "test_fs_plugin",
@@ -151,19 +151,19 @@ describe("Permissions, Scoped Execution Context & User Approval Flow", () => {
           icon: "folder",
           trust: "first-party",
           capabilities: [],
-          permissions: [{ type: "fs", scope: "city", mode: "write" }],
+          permissions: [{ type: "fs", scope: "workspace", mode: "write" }],
         },
         actor: "agent",
-        cityId: testCity,
+        workspaceId: testCity,
       });
 
-      // Valid write within city root
-      await ctx.fs.writeFile("notes/summary.md", "# Test City Notes");
+      // Valid write within the granted root
+      await ctx.fs.writeFile("notes/summary.md", "# Test Notes");
       expect(await ctx.fs.exists("notes/summary.md")).toBe(true);
       const readContent = await ctx.fs.readFile("notes/summary.md");
-      expect(readContent).toBe("# Test City Notes");
+      expect(readContent).toBe("# Test Notes");
 
-      // Traversal attack via ../ escaping city folder
+      // Traversal attack via ../ escaping the granted folder
       await expect(
         ctx.fs.readFile("../../../etc/passwd")
       ).rejects.toThrow("Path traversal violation");
@@ -371,7 +371,7 @@ describe("Permissions, Scoped Execution Context & User Approval Flow", () => {
       // First run: requires approval
       const firstRunPromise = capabilityBus.invoke(externalCap, { url: "https://example.com" }, {
         actor: "agent",
-        cityId: "city_paris",
+        workspaceId: "city_paris",
         timeoutMs: 2000,
       });
 
@@ -387,7 +387,7 @@ describe("Permissions, Scoped Execution Context & User Approval Flow", () => {
       // Second run: auto-approved because of allow_always grant
       const secondResult = await capabilityBus.invoke(externalCap, { url: "https://example.com" }, {
         actor: "agent",
-        cityId: "city_paris",
+        workspaceId: "city_paris",
       });
 
       expect(secondResult.success).toBe(true);
@@ -399,7 +399,7 @@ describe("Permissions, Scoped Execution Context & User Approval Flow", () => {
         pluginId: "api_test_plugin",
         capabilityId: "api_test_plugin.destroy",
         risk: "destructive",
-        scope: "city:test",
+        scope: "workspace:test",
         timeoutMs: 5000,
       });
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import app from "../server/index";
-import { create_tab } from "../server/agent/tools/create_tab";
+import { create_plugin } from "../server/agent/tools/create_plugin";
 import { inspect_experience } from "../server/agent/tools/inspect_experience";
 import { promote_to_plugin } from "../server/agent/tools/promote_to_plugin";
 import { pluginRegistry } from "../server/plugins/registry";
@@ -18,19 +18,32 @@ import { db } from "../server/workspace/db";
 import { z } from "zod";
 
 describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)", () => {
-  const testCity = "city_exp_test";
+  const testCity = "ws-exp-test";
   const testExpId = "exp_flashcards";
 
+  const TEST_IDS = ["exp_inspector_test", "exp_stoic_matrix", "gen_exp_stoic_matrix", testExpId];
   beforeEach(() => {
     clearExperienceErrors();
     db.query("DELETE FROM plugins WHERE id LIKE 'gen_%'").run();
     db.query("DELETE FROM plugin_grants WHERE plugin_id LIKE 'gen_%'").run();
+    for (const id of TEST_IDS) {
+      db.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(id);
+      db.query("DELETE FROM plugins WHERE id = ?").run(id);
+      db.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(id);
+      db.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(id);
+    }
   });
 
   afterEach(() => {
     clearExperienceErrors();
     db.query("DELETE FROM plugins WHERE id LIKE 'gen_%'").run();
     db.query("DELETE FROM plugin_grants WHERE plugin_id LIKE 'gen_%'").run();
+    for (const id of TEST_IDS) {
+      db.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(id);
+      db.query("DELETE FROM plugins WHERE id = ?").run(id);
+      db.query("DELETE FROM workspace_plugins WHERE plugin_id = ?").run(id);
+      db.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(id);
+    }
   });
 
   async function cleanTestFeature() {
@@ -63,23 +76,23 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
         window.polymax.storage.set('count', 1);
       `;
 
-      const result = (await create_tab.execute(
+      const result = (await create_plugin.execute(
         {
           id: testExpId,
-          title: "Stoic Flashcards",
+          name: "Stoic Flashcards",
+          description: "Study decks",
           icon: "Cards",
           code,
-          capabilities: ["search.web", "writing.read_file"],
-          permissions: [{ type: "fs", scope: "city", mode: "read" }],
-          cityId: testCity,
+          capabilities: [{ id: "search.web", title: "Search", description: "Search" }],
+          permissions: [{ type: "fs", scope: "workspace", mode: "read" }],
+          workspaceId: testCity,
+          userApproved: true,
         },
-        { cityId: testCity, step: 1 }
+        { workspaceId: testCity, step: 1, actor: "user" }
       )) as any;
 
       expect(result.success).toBe(true);
-      expect(result.tab.id).toBe(testExpId);
-      expect(result.tab.capabilities).toEqual(["search.web", "writing.read_file"]);
-      expect(result.tab.permissions.length).toBe(1);
+      expect(result.pluginId).toBe(testExpId);
     });
 
     it("injects runtime error listener and window.polymax.invoke into generated srcdoc", () => {
@@ -119,7 +132,7 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            cityId: testCity,
+            workspaceId: testCity,
             error: {
               message: "TypeError: Cannot read properties of undefined",
               lineno: 12,
@@ -134,7 +147,7 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       expect(data.error.message).toBe("TypeError: Cannot read properties of undefined");
 
       const listRes = await app.fetch(
-        new Request(`http://localhost:3000/api/experiences/${testExpId}/errors?cityId=${testCity}`)
+        new Request(`http://localhost:3000/api/experiences/${testExpId}/errors?workspaceId=${testCity}`)
       );
       expect(listRes.status).toBe(200);
       const listData = (await listRes.json()) as any;
@@ -161,7 +174,7 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       } as unknown as Window;
 
       const bridge = createHostBridge(fakeWindow, {
-        cityId: testCity,
+        workspaceId: testCity,
         tabId: testExpId,
         allowedCapabilities: ["bridge_test.greet"],
         onInvoke: async (capId, input) => {
@@ -196,7 +209,7 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       } as unknown as Window;
 
       const bridge = createHostBridge(fakeWindow, {
-        cityId: testCity,
+        workspaceId: testCity,
         tabId: testExpId,
         allowedCapabilities: ["search.web"], // only search.web is declared!
       });
@@ -221,15 +234,18 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
   describe("inspect_experience & promote_to_plugin Agent Tools", () => {
     it("inspect_experience returns health, payload size, declared capabilities, and errors", async () => {
       // First create experience
-      await create_tab.execute(
+      const { create_plugin: createPlugin } = await import("../server/agent/tools/create_plugin");
+      await createPlugin.execute(
         {
           id: "exp_inspector_test",
-          title: "Inspector Test",
+          name: "Inspector Test",
+          description: "inspect test",
           code: "console.log('inspect me');",
-          capabilities: ["search.web"],
-          cityId: testCity,
-        },
-        { cityId: testCity, step: 1 }
+          capabilities: [{ id: "search.web", title: "Search", description: "Search" }],
+          workspaceId: testCity,
+          userApproved: true,
+        } as any,
+        { workspaceId: testCity, step: 1, actor: "user" } as any
       );
 
       // Record a test error
@@ -238,40 +254,43 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       });
 
       const inspectRes = (await inspect_experience.execute(
-        { id: "exp_inspector_test", cityId: testCity },
-        { cityId: testCity, step: 2 }
+        { id: "exp_inspector_test", workspaceId: testCity },
+        { workspaceId: testCity, step: 2 }
       )) as any;
 
       expect(inspectRes.success).toBe(true);
       expect(inspectRes.experience.id).toBe("exp_inspector_test");
       expect(inspectRes.experience.title).toBe("Inspector Test");
       expect(inspectRes.experience.sizeBytes).toBeGreaterThan(0);
-      expect(inspectRes.experience.capabilities).toContain("search.web");
+      expect(inspectRes.experience.capabilities.map((c: any) => c.id ?? c)).toContain("search.web");
       expect(inspectRes.experience.errors.length).toBe(1);
       expect(inspectRes.experience.isHealthy).toBe(false);
     });
 
     it("promote_to_plugin promotes a verified experience into a reusable plugin", async () => {
-      await create_tab.execute(
+      const { create_plugin: createPlugin2 } = await import("../server/agent/tools/create_plugin");
+      await createPlugin2.execute(
         {
           id: "exp_stoic_matrix",
-          title: "Stoic Decision Matrix",
+          name: "Stoic Decision Matrix",
+          description: "matrix",
           icon: "Cards",
           code: "export default {};",
-          capabilities: ["search.web"],
-          cityId: testCity,
-        },
-        { cityId: testCity, step: 1 }
+          capabilities: [{ id: "search.web", title: "Search", description: "Search" }],
+          workspaceId: testCity,
+          userApproved: true,
+        } as any,
+        { workspaceId: testCity, step: 1, actor: "user" } as any
       );
 
       const promoteRes = (await promote_to_plugin.execute(
         {
           id: "exp_stoic_matrix",
-          cityId: testCity,
+          workspaceId: testCity,
           name: "Stoic Decision Matrix Plugin",
           description: "Reusable Stoic decision matrix",
         },
-        { cityId: testCity, step: 2 }
+        { workspaceId: testCity, step: 2 }
       )) as any;
 
       expect(promoteRes.success).toBe(true);

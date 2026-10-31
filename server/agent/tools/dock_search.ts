@@ -2,20 +2,20 @@ import { z } from "zod";
 import type { AgentTool } from "./types";
 import { searchDockCatalog } from "./dockCatalog";
 
-export const dock_search: AgentTool<{ query?: string; cityId?: string; limit?: number }> = {
+export const dock_search: AgentTool<{ query?: string; workspaceId?: string; limit?: number }> = {
   name: "dock_search",
   description:
-    "Searches everything the Agentic Dock can show: builtin tools, city tabs, installed workspace plugins, and community store plugins. Call it when the user asks to find, open, pin, or manage a dock item. Read-only: it never installs, pins, or deletes anything.",
+    "Searches everything the Agentic Dock can show: builtin tools, installed workspace plugins, and community store plugins. Call it when the user asks to find, open, pin, or manage a dock item. Read-only: it never installs, pins, or deletes anything.",
   schema: z.object({
     query: z.string().optional().describe("Search text (e.g. 'GTM feed', 'flashcards')"),
-    cityId: z.string().optional().describe("City workspace scope (defaults to active city)"),
+    workspaceId: z.string().optional().describe("Workspace scope"),
     limit: z.number().min(1).max(50).optional().describe("Maximum results (default 20)"),
   }),
   execute: async (args, ctx) => {
     const results = await searchDockCatalog({
       query: args.query,
-      cityId: args.cityId || ctx.cityId,
-      workspaceId: ctx.workspaceId || ctx.cityId,
+      workspaceId: args.workspaceId || ctx.workspaceId,
+      workspaceId: ctx.workspaceId || ctx.workspaceId,
       limit: args.limit,
     });
     return {

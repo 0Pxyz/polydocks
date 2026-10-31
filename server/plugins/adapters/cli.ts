@@ -53,12 +53,12 @@ export async function executeCliAdapter(
   // 1. Resolve argument list without shell interpolation
   const resolvedArgs = resolveArgv(config.args, input);
 
-  // 2. Resolve working directory confined to city or workspace
+  // 2. Resolve working directory confined to the workspace
   let cwd: string | undefined;
   if (ctx.fs?.rootDir) {
     cwd = ctx.fs.rootDir;
-  } else if (ctx.cityId) {
-    cwd = path.resolve(process.cwd(), "workspace", ctx.cityId);
+  } else if (ctx.workspaceId) {
+    cwd = path.resolve(process.cwd(), "workspace", ctx.workspaceId);
   } else {
     cwd = path.resolve(process.cwd(), "workspace");
   }

@@ -5,7 +5,7 @@ export type AuditActor = "agent" | "user" | "cli";
 
 export interface AuditRecord {
   id: number;
-  cityId?: string;
+  workspaceId?: string;
   actor: AuditActor;
   action: string;
   targetId?: string;
@@ -17,7 +17,7 @@ export interface RecordAuditOptions {
   actor?: AuditActor;
   action: string;
   targetId?: string;
-  cityId?: string;
+  workspaceId?: string;
   details?: Record<string, unknown> | unknown;
 }
 
@@ -65,7 +65,7 @@ export function recordAudit(options: RecordAuditOptions): void {
   const actor = options.actor || "user";
   const action = options.action;
   const targetId = options.targetId || null;
-  const cityId = options.cityId || null;
+  const workspaceId = options.workspaceId || null;
   const now = new Date().toISOString();
 
   let detailsStr: string | null = null;
@@ -80,9 +80,9 @@ export function recordAudit(options: RecordAuditOptions): void {
 
   try {
     db.prepare(`
-      INSERT INTO audit_log (city_id, actor, action, target_id, details, created_at)
+      INSERT INTO audit_log (workspace_id, actor, action, target_id, details, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(cityId, actor, action, targetId, detailsStr, now);
+    `).run(workspaceId, actor, action, targetId, detailsStr, now);
   } catch (err: any) {
     console.error(`[AuditLog] Failed to record audit log for "${action}":`, err.message);
   }
@@ -123,7 +123,7 @@ export function getAuditLogs(options?: {
   const rows = db.prepare(query).all(...params) as any[];
   return rows.map((r) => ({
     id: r.id,
-    cityId: r.city_id || undefined,
+    workspaceId: r.workspace_id || undefined,
     actor: (r.actor as AuditActor) || "user",
     action: r.action,
     targetId: r.target_id || undefined,

@@ -10,7 +10,7 @@ export const NetPermissionSchema = z.object({
 
 export const FsPermissionSchema = z.object({
   type: z.literal("fs"),
-  scope: z.enum(["city", "plugin"]),
+  scope: z.enum(["workspace", "plugin"]),
   mode: z.enum(["read", "write"]),
 });
 

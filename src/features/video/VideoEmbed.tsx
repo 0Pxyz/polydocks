@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import { youtubeIdFromUrl, vimeoIdFromUrl } from "@/features/city/sourceMedia";
+import { youtubeIdFromUrl, vimeoIdFromUrl } from "./ids";
 import { VIDEO_IFRAME_ATTRS } from "./embedConfig";
 import { YouTubeEmbed } from "./YouTubeEmbed";
 

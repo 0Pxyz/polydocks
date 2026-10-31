@@ -53,7 +53,7 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     } as unknown as Window;
 
     const bridge = createHostBridge(mockWindow, {
-      cityId: "ws-focus",
+      workspaceId: "ws-focus",
       tabId: "pomodoro-tool",
       workspaceId: "ws-focus",
       pluginId: "pomodoro-tool",
@@ -131,7 +131,7 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
         code,
         workspaceId: "test-runtime-ws",
       },
-      { cityId: "test-runtime-ws" }
+      { workspaceId: "test-runtime-ws" }
     );
 
     const res = await app.fetch(

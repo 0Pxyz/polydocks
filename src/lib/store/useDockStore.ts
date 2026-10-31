@@ -83,7 +83,7 @@ export interface DockState {
   backgroundTool: (toolId?: string) => void;
   focusByIndex: (index: number) => void;
   focusNext: (direction?: 1 | -1) => void;
-  /** Opaque scope switch (city id or null for map). Persists every record. */
+  /** Opaque scope switch (workspace id or null for global). Persists every record. */
   setActiveContext: (contextId: string | null) => void;
   /** Register without opening (mount bookkeeping). */
   registerDockItem: (id: string, contextId?: string | null) => void;

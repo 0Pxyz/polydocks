@@ -222,7 +222,7 @@ pluginsRouter.post("/lifecycle", async (c) => {
   const { pluginLifecycle } = await import("../facade/shared");
   const out = await pluginLifecycle(typeof op === "string" ? op : "", params ?? {}, {
     actor: "user",
-    cityId: (body as any)?.cityId || c.req.query("cityId"),
+    workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
     workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
   });
   if (!out.ok) return c.json(out, 400);
@@ -268,17 +268,17 @@ pluginsRouter.post("/:pluginId/:capability", async (c) => {
   const capability = c.req.param("capability");
   const body = await c.req.json().catch(() => ({}));
   const input = (body && typeof body === "object" && "input" in (body as any) ? (body as any).input : body) ?? {};
-  const cityId =
-    (body && typeof body === "object" && typeof (body as any).cityId === "string"
-      ? (body as any).cityId
+  const workspaceId =
+    (body && typeof body === "object" && typeof (body as any).workspaceId === "string"
+      ? (body as any).workspaceId
 
       : undefined) ??
-    (input && typeof input === "object" && typeof (input as any).cityId === "string"
-      ? (input as any).cityId
+    (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
+      ? (input as any).workspaceId
       : undefined) ??
-    c.req.query("cityId");
+    c.req.query("workspaceId");
   const { invokeCapability } = await import("../facade/shared");
-  const out = await invokeCapability(pluginId, capability, input, { actor: "user", cityId });
+  const out = await invokeCapability(pluginId, capability, input, { actor: "user", workspaceId });
   if (!out.ok) {
     const status = (out as any).code === "unknown_capability" ? 404 : 400;
     return c.json(out, status as any);
@@ -362,14 +362,14 @@ capabilitiesRouter.post("/approvals/:id", async (c) => {
  */
 capabilitiesRouter.post("/invoke", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const { capabilityId, input, cityId } = body;
+  const { capabilityId, input, workspaceId } = body;
   if (!capabilityId) {
     return c.json({ error: "Missing capabilityId" }, 400);
   }
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
-    cityId,
+    workspaceId,
   });
 
   return c.json(result);
@@ -381,11 +381,11 @@ capabilitiesRouter.post("/invoke", async (c) => {
 capabilitiesRouter.post("/:id/invoke", async (c) => {
   const capabilityId = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
-  const { input, cityId } = body;
+  const { input, workspaceId } = body;
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
-    cityId,
+    workspaceId,
   });
 
   return c.json(result);

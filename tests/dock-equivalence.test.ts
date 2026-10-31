@@ -18,20 +18,20 @@ describe("dock equivalence: keyboard, REST, CLI, agent verbs", () => {
 
   test("REST tabs.open then agent verb focus give the same final state + events", async () => {
     // REST: open two items in a context.
-    const opened1 = await dockAction("tabs.open", { tabId: "notes", cityId: "city-eq" }, { actor: "user" });
+    const opened1 = await dockAction("tabs.open", { tabId: "notes", workspaceId: "ws-eq" }, { actor: "user" });
     expect(opened1.ok).toBe(true);
-    const opened2 = await dockAction("tabs.open", { tabId: "sources", cityId: "city-eq" }, { actor: "cli" });
+    const opened2 = await dockAction("tabs.open", { tabId: "sources", workspaceId: "ws-eq" }, { actor: "cli" });
     expect(opened2.ok).toBe(true);
 
     // Agent verb: focus index 0 (same as Ctrl+Shift+1).
-    const viaVerb: any = await dockFocus.execute({ index: 0, cityId: "city-eq" } as any, {
-      step: 1, cityId: "city-eq",
+    const viaVerb: any = await dockFocus.execute({ index: 0, workspaceId: "ws-eq" } as any, {
+      step: 1, workspaceId: "ws-eq",
     } as any);
     expect(viaVerb.ok).toBe(true);
     const focusedId = (viaVerb.data as any)?.id;
 
     // REST: same focus by index.
-    const viaRest = await dockAction("tabs.focus", { index: 0, cityId: "city-eq" }, { actor: "user" });
+    const viaRest = await dockAction("tabs.focus", { index: 0, workspaceId: "ws-eq" }, { actor: "user" });
     expect(viaRest.ok).toBe(true);
     expect((viaRest.data as any)?.id).toBe(focusedId);
     // Same event type on both surfaces.
@@ -40,8 +40,8 @@ describe("dock equivalence: keyboard, REST, CLI, agent verbs", () => {
   });
 
   test("tabs.next/prev wrap identically via REST and agent verbs", async () => {
-    await dockAction("tabs.open", { tabId: "a", cityId: null }, { actor: "user" });
-    await dockAction("tabs.open", { tabId: "b", cityId: null }, { actor: "user" });
+    await dockAction("tabs.open", { tabId: "a", workspaceId: null }, { actor: "user" });
+    await dockAction("tabs.open", { tabId: "b", workspaceId: null }, { actor: "user" });
     await dockAction("tabs.focus", { index: 0 }, { actor: "user" });
     const nextRest = await dockAction("tabs.next", {}, { actor: "user" });
     await dockAction("tabs.focus", { index: 0 }, { actor: "user" });
@@ -52,8 +52,8 @@ describe("dock equivalence: keyboard, REST, CLI, agent verbs", () => {
   });
 
   test("close + background keep records (reopen returns same state)", async () => {
-    const open: any = await dockOpen.execute({ tabId: "notes", cityId: "city-eq" } as any, {
-      step: 1, cityId: "city-eq",
+    const open: any = await dockOpen.execute({ tabId: "notes", workspaceId: "ws-eq" } as any, {
+      step: 1, workspaceId: "ws-eq",
     } as any);
     expect(open.ok).toBe(true);
     const bg: any = await dockBackground.execute({ id: "notes" } as any, { step: 1 } as any);
@@ -61,8 +61,8 @@ describe("dock equivalence: keyboard, REST, CLI, agent verbs", () => {
     expect((bg.data as any)?.dockItem?.state).toBe("background");
     const closed: any = await dockClose.execute({ id: "notes" } as any, { step: 1 } as any);
     expect(closed.ok).toBe(true);
-    const reopened: any = await dockOpen.execute({ tabId: "notes", cityId: "city-eq" } as any, {
-      step: 1, cityId: "city-eq",
+    const reopened: any = await dockOpen.execute({ tabId: "notes", workspaceId: "ws-eq" } as any, {
+      step: 1, workspaceId: "ws-eq",
     } as any);
     expect(reopened.ok).toBe(true);
     expect((reopened.data as any)?.dockItem?.id).toBe("notes");

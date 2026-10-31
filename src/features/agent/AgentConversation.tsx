@@ -35,7 +35,6 @@ import {
 import { spring, prefersReducedMotion } from "@/lib/motion";
 
 interface AgentConversationProps {
-  cityId?: string;
   onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
   onOpenExperience?: (expId: string) => void;
   onCloseExperience?: (expId: string) => void;
@@ -80,7 +79,6 @@ function shortSummary(
 }
 
 export function AgentConversation({
-  cityId,
   onExperienceCreated,
   onOpenExperience,
   onCloseExperience,
@@ -346,7 +344,7 @@ export function AgentConversation({
           setDraft("");
           setOrbState("idle");
           setStatusText("");
-          void store.sendMessage(clean, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
+          void store.sendMessage(clean, { onExperienceCreated, onOpenExperience, onCloseExperience });
         },
         onLevel: (level) => setAudioLevel(level),
         onError: (message) => {
@@ -443,7 +441,7 @@ export function AgentConversation({
       setOrbState("idle");
       setStatusText("Microphone permission denied.");
     }
-  }, [cityId, onExperienceCreated, onOpenExperience, onCloseExperience, sendMessage, setAudioLevel, setDraft, setOrbState, setStatusText]);
+  }, [onExperienceCreated, onOpenExperience, onCloseExperience, sendMessage, setAudioLevel, setDraft, setOrbState, setStatusText]);
 
   // Home orb entry: the orb click opens the panel and asks for voice.
   // Start listening once (never stop an active session from here).
@@ -457,7 +455,7 @@ export function AgentConversation({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (isStreaming) return;
-      sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
+      sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience });
     }
   };
 
@@ -575,14 +573,14 @@ export function AgentConversation({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleApproval(true, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                    onClick={() => handleApproval(true, { onExperienceCreated, onOpenExperience, onCloseExperience })}
                     className="px-2.5 py-1 rounded-md text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
                   >
                     Allow
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleApproval(false, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                    onClick={() => handleApproval(false, { onExperienceCreated, onOpenExperience, onCloseExperience })}
                     className="px-2.5 py-1 rounded-md text-xs bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
                   >
                     Cancel
@@ -693,7 +691,7 @@ export function AgentConversation({
                   return;
                 }
                 if (!draft.trim() && stagedAttachments.length === 0) return;
-                sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience });
+                sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience });
               }}
               className="relative z-10 shrink-0 flex flex-col gap-1 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
             >
@@ -925,7 +923,7 @@ export function AgentConversation({
                       {msg.error.code !== "model_unauthorized" && (
                         <button
                           type="button"
-                          onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                          onClick={() => retryLast({ onExperienceCreated, onOpenExperience, onCloseExperience })}
                           className="underline hover:text-white transition-colors cursor-pointer"
                         >
                           Retry
@@ -1017,7 +1015,7 @@ export function AgentConversation({
                   {isLastMessage && !isStreaming && (
                     <button
                       type="button"
-                      onClick={() => retryLast(cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                      onClick={() => retryLast({ onExperienceCreated, onOpenExperience, onCloseExperience })}
                       className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
                       title="Retry message"
                     >
@@ -1203,7 +1201,7 @@ export function AgentConversation({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => sendMessage(undefined, cityId, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                    onClick={() => sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience })}
                     disabled={!draft.trim() && stagedAttachments.length === 0}
                     className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
                     title="Send message"

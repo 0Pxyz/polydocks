@@ -54,24 +54,21 @@ describe("Intent routing (deterministic, no special cases)", () => {
     expect(classifyIntent("use this image as my wallpaper")).toBe("theme");
   });
 
-  it("routes artifact updates to plugin_update, never research/city", () => {
+  it("routes artifact updates to plugin_update, never research", () => {
     expect(classifyIntent("Update the existing feed to group articles by topic")).toBe("plugin_update");
     expect(classifyIntent("Modify plugin pomodoro to add streaks")).toBe("plugin_update");
     // Broken behavior routes to plugin_fix (patch in place, never recreate).
     expect(classifyIntent("Fix this tool, it crashes on load")).toBe("plugin_fix");
   });
 
-  it("keeps research and city intents on their existing matchers", () => {
+  it("keeps research intent on its existing matcher; no domain intent exists", () => {
     expect(classifyIntent("Search the web for the best go-to-market strategies")).toBe("research");
-    expect(classifyIntent("Create a Knowledge City to learn neural networks")).toBe("city");
     expect(classifyIntent("Explain how transformers work")).toBe("general");
   });
 
   it("denies research/synthesis tools for theme intent and create tools for updates", () => {
     expect(INTENT_TOOL_DENYLIST.theme).toContain("search_web");
     expect(INTENT_TOOL_DENYLIST.theme).toContain("fetch_page");
-    expect(INTENT_TOOL_DENYLIST.theme).toContain("build_city");
-    expect(INTENT_TOOL_DENYLIST.plugin_update).toContain("create_tab");
     expect(INTENT_TOOL_DENYLIST.plugin_update).toContain("create_plugin");
     expect(INTENT_TOOL_DENYLIST.general).toEqual([]);
   });
@@ -194,7 +191,7 @@ describe("Scenario C: plugin update never recreates", () => {
 });
 
 describe("Scenario D: context-only questions stay tool-free", () => {
-  it("answers without tool calls or city scope", async () => {
+  it("answers without tool calls or workspace scope", async () => {
     const { llm } = mockLlm([{ content: "Self-attention lets every token weigh every other token." }]);
     const { events, onEvent } = collect();
     let capturedSystem = "";
@@ -212,7 +209,7 @@ describe("Scenario D: context-only questions stay tool-free", () => {
     const result = await runAgentLoop({ prompt: "Explain how transformers work", llmClient: probing, onEvent });
     expect(result.status).toBe("completed");
     expect(events.filter((e) => e.type === "tool.start").length).toBe(0);
-    expect(capturedSystem).not.toContain("Active City Workspace Scope");
+    expect(capturedSystem).not.toContain("Workspace Scope");
   });
 });
 

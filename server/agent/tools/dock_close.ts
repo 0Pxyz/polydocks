@@ -2,19 +2,19 @@ import { z } from "zod";
 import type { AgentTool } from "./types";
 import { resolveDockTarget } from "./dockCatalog";
 
-export const dock_close: AgentTool<{ id: string; cityId?: string }> = {
+export const dock_close: AgentTool<{ id: string; workspaceId?: string }> = {
   name: "dock_close",
   description:
     "Closes a dock tab (e.g. 'close the flashcards tab'). Closing only dismisses the open view; it never deletes data, plugins, or tabs. Deletion stays a separate explicitly approved flow. The map cannot be closed.",
   schema: z.object({
     id: z.string().min(1).describe("Dock item id to close"),
-    cityId: z.string().optional().describe("City workspace scope (defaults to active city)"),
+    workspaceId: z.string().optional().describe("Workspace scope"),
   }),
   execute: async (args, ctx) => {
-    const targetCity = args.cityId || ctx.cityId || "default";
+    const targetWorkspace = args.workspaceId || ctx.workspaceId || "default";
     const resolution = await resolveDockTarget(args.id, {
-      cityId: targetCity,
-      workspaceId: ctx.workspaceId || targetCity,
+      workspaceId: targetWorkspace,
+      workspaceId: ctx.workspaceId || targetWorkspace,
     });
     if (!resolution.entry) {
       return { success: false, id: args.id, action: "dock.close", message: resolution.error };

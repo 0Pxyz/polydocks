@@ -28,7 +28,7 @@ export { videoEmbedUrl } from "../video/ids";
 export const SOURCES_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
-  city_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'article',
   url TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS sources (
   hook TEXT,
   full_text TEXT,
   created_at TEXT NOT NULL,
-  UNIQUE(city_id, url)
+  UNIQUE(workspace_id, url)
 );
 `;
 
@@ -53,7 +53,7 @@ export type SourceKind = "article" | "paper" | "video";
 
 export interface SourceRow {
   id: string;
-  cityId: string;
+  workspaceId: string;
   kind: SourceKind;
   url: string;
   title: string;
@@ -393,7 +393,7 @@ export async function resolveSourceMode(row: Pick<SourceRow, "url" | "kind" | "f
 function rowFromDb(r: any): SourceRow {
   return {
     id: r.id,
-    cityId: r.city_id,
+    workspaceId: r.workspace_id,
     kind: r.kind,
     url: r.url,
     title: r.title,
@@ -414,24 +414,24 @@ export function getSourceById(id: string): SourceRow | null {
   return row ? rowFromDb(row) : null;
 }
 
-export function listSources(cityId: string): SourceRow[] {
+export function listSources(workspaceId: string): SourceRow[] {
   ensureSourcesSchema();
   const rows = db
-    .query("SELECT * FROM sources WHERE city_id = ? ORDER BY created_at ASC")
-    .all(cityId) as any[];
+    .query("SELECT * FROM sources WHERE workspace_id = ? ORDER BY created_at ASC")
+    .all(workspaceId) as any[];
   return rows.map(rowFromDb);
 }
 
 export const AddSourceInput = z.object({
   url: z.string().url().describe("Source URL to enrich and save"),
-  cityId: z.string().min(1).describe("City workspace id"),
+  workspaceId: z.string().min(1).describe("Workspace id"),
   title: z.string().optional().describe("Optional title override (verified against the page)"),
   kind: z.enum(["article", "paper", "video"]).optional().describe("Optional kind override"),
 });
 
 export const AddSourceOutput = z.object({
   id: z.string(),
-  cityId: z.string(),
+  workspaceId: z.string(),
   kind: z.enum(["article", "paper", "video"]),
   url: z.string(),
   title: z.string(),
@@ -445,10 +445,10 @@ export const AddSourceOutput = z.object({
 });
 
 /**
- * Migrates existing city workspace data (feed.json and sources/*.json) into
+ * Migrates existing workspace data (feed.json and sources/*.json) into
  * the SQLite sources table so the feed never has to read raw files.
  */
-export async function migrateLegacyCitySources(): Promise<{ migratedCount: number }> {
+export async function migrateLegacyWorkspaceSources(): Promise<{ migratedCount: number }> {
   ensureSourcesSchema();
   const workspaceRoot = path.resolve(process.cwd(), "workspace");
   let count = 0;
@@ -456,11 +456,11 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
     const entries = await fs.readdir(workspaceRoot, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const cityId = entry.name;
+      const workspaceId = entry.name;
 
       // 1. Check feed.json
       try {
-        const feedPath = path.join(workspaceRoot, cityId, "feed.json");
+        const feedPath = path.join(workspaceRoot, workspaceId, "feed.json");
         const raw = await fs.readFile(feedPath, "utf-8");
         const feed = JSON.parse(raw);
         const items = Array.isArray(feed.items) ? feed.items : [];
@@ -473,19 +473,19 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
             continue;
           }
           const existing = db
-            .query("SELECT id FROM sources WHERE city_id = ? AND url = ?")
-            .get(cityId, canon);
+            .query("SELECT id FROM sources WHERE workspace_id = ? AND url = ?")
+            .get(workspaceId, canon);
           if (!existing) {
-            const id = `src_mig_${cityId.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_${Math.random().toString(36).slice(2, 8)}`;
+            const id = `src_mig_${workspaceId.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_${Math.random().toString(36).slice(2, 8)}`;
             const kind = inferKind(canon, item.kind);
             const site = siteFromUrl(canon);
             const now = new Date().toISOString();
             db.query(
-              `INSERT OR IGNORE INTO sources (id, city_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
+              `INSERT OR IGNORE INTO sources (id, workspace_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               id,
-              cityId,
+              workspaceId,
               kind,
               canon,
               item.title,
@@ -508,7 +508,7 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
 
       // 2. Check sources/ directory
       try {
-        const sourcesDir = path.join(workspaceRoot, cityId, "sources");
+        const sourcesDir = path.join(workspaceRoot, workspaceId, "sources");
         const files = await fs.readdir(sourcesDir, { withFileTypes: true });
         for (const file of files) {
           if (!file.isFile() || !file.name.endsWith(".json")) continue;
@@ -523,8 +523,8 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
                 continue;
               }
               const existing = db
-                .query("SELECT id FROM sources WHERE city_id = ? AND url = ?")
-                .get(cityId, canon);
+                .query("SELECT id FROM sources WHERE workspace_id = ? AND url = ?")
+                .get(workspaceId, canon);
               if (!existing) {
                 const id = `src_mig_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
                 const kind = inferKind(canon, data.kind);
@@ -534,11 +534,11 @@ export async function migrateLegacyCitySources(): Promise<{ migratedCount: numbe
                   file.name.replace(/\.json$/, "").replace(/_/g, " ");
                 const now = new Date().toISOString();
                 db.query(
-                  `INSERT OR IGNORE INTO sources (id, city_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
+                  `INSERT OR IGNORE INTO sources (id, workspace_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 ).run(
                   id,
-                  cityId,
+                  workspaceId,
                   kind,
                   canon,
                   title,
@@ -597,7 +597,7 @@ export function backfillVideoThumbnails(): { filledCount: number } {
 export function registerSourcesPlugin(): void {
   ensureSourcesSchema();
   // Perform background migration on registration
-  void migrateLegacyCitySources().catch(() => {});
+  void migrateLegacyWorkspaceSources().catch(() => {});
   backfillVideoThumbnails();
 
   // 1. sources.add capability
@@ -605,8 +605,8 @@ export function registerSourcesPlugin(): void {
     plugin: "sources",
     name: "add",
     title: "Add Source",
-    description: "Enriches a URL server-side (canonical form, dedupe, kind, title, image, site, date) and saves it to the city feed. The agent passes the URL; the server does the rest.",
-    scope: "city",
+    description: "Enriches a URL server-side (canonical form, dedupe, kind, title, image, site, date) and saves it to the workspace feed. The agent passes the URL; the server does the rest.",
+    scope: "workspace",
     input: AddSourceInput,
     output: AddSourceOutput,
     emits: ["source.added"],
@@ -629,8 +629,8 @@ export function registerSourcesPlugin(): void {
         };
       }
       const existing = db
-        .query("SELECT * FROM sources WHERE city_id = ? AND url = ?")
-        .get(input.cityId, enriched.url) as any;
+        .query("SELECT * FROM sources WHERE workspace_id = ? AND url = ?")
+        .get(input.workspaceId, enriched.url) as any;
       if (existing) {
         const row = rowFromDb(existing);
         return {
@@ -644,10 +644,10 @@ export function registerSourcesPlugin(): void {
       const id = `src_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
       const now = new Date().toISOString();
       db.query(
-        `INSERT INTO sources (id, city_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
+        `INSERT INTO sources (id, workspace_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
-        id, input.cityId, enriched.kind, enriched.url, enriched.title, enriched.site,
+        id, input.workspaceId, enriched.kind, enriched.url, enriched.title, enriched.site,
         enriched.image, enriched.author, enriched.publishedAt, enriched.readMinutes,
         enriched.durationSec ?? null, null, enriched.fullText, now
       );
@@ -661,20 +661,20 @@ export function registerSourcesPlugin(): void {
     plugin: "sources",
     name: "list",
     title: "List Sources",
-    description: "Lists all sources saved for a city workspace.",
-    scope: "city",
+    description: "Lists all sources saved for a workspace.",
+    scope: "workspace",
     input: z.object({
-      cityId: z.string().min(1).describe("City workspace id"),
+      workspaceId: z.string().min(1).describe("Workspace id"),
     }),
     output: z.object({
-      cityId: z.string(),
+      workspaceId: z.string(),
       items: z.array(z.any()),
     }),
     emits: [],
     risk: "read",
     handler: async (input) => {
-      const items = listSources(input.cityId);
-      return { ok: true as const, data: { cityId: input.cityId, items } };
+      const items = listSources(input.workspaceId);
+      return { ok: true as const, data: { workspaceId: input.workspaceId, items } };
     },
   });
 
@@ -683,18 +683,18 @@ export function registerSourcesPlugin(): void {
     plugin: "sources",
     name: "open",
     title: "Open Source",
-    description: "Decides how a saved source opens (video embed, in-app reader, framed PDF, or explicit external state) and emits reader.open. Only works for sources already in the city feed. Never opens a new tab by itself.",
-    scope: "city",
+    description: "Decides how a saved source opens (video embed, in-app reader, framed PDF, or explicit external state) and emits reader.open. Only works for sources already in the workspace feed. Never opens a new tab by itself.",
+    scope: "workspace",
     input: z.object({
-      id: z.string().describe("Source id from the city feed"),
-      cityId: z.string().optional().describe("City workspace id (optional)"),
+      id: z.string().describe("Source id from the workspace feed"),
+      workspaceId: z.string().optional().describe("Workspace id (optional)"),
     }),
     output: z.object({
       id: z.string(),
       url: z.string(),
       kind: z.enum(["article", "paper", "video"]),
       title: z.string(),
-      cityId: z.string(),
+      workspaceId: z.string(),
       mode: z.enum(["video", "reader", "embed", "external"]),
       embedUrl: z.string().nullable().optional(),
       markdown: z.string().nullable().optional(),
@@ -704,8 +704,8 @@ export function registerSourcesPlugin(): void {
     risk: "read",
     handler: async (input, ctx) => {
       const row = getSourceById(input.id);
-      const targetCity = input.cityId || ctx.cityId;
-      if (!row || (targetCity && row.cityId !== targetCity)) {
+      const targetWorkspace = input.workspaceId || ctx.workspaceId;
+      if (!row || (targetWorkspace && row.workspaceId !== targetWorkspace)) {
         return {
           ok: false as const,
           error: `Source "${input.id}" not found. Save it first with sources.add.`,
@@ -721,7 +721,7 @@ export function registerSourcesPlugin(): void {
           url: row.url,
           kind: row.kind,
           title: row.title,
-          cityId: row.cityId,
+          workspaceId: row.workspaceId,
           image: row.image,
           site: row.site,
           publishedAt: row.publishedAt,

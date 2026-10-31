@@ -9,8 +9,6 @@ import {
 } from "../server/icons/catalog";
 import { search_icons } from "../server/agent/tools/search_icons";
 import { list_icon_categories } from "../server/agent/tools/list_icon_categories";
-import { create_tab } from "../server/agent/tools/create_tab";
-import { update_tab } from "../server/agent/tools/update_tab";
 import { create_plugin } from "../server/agent/tools/create_plugin";
 import { modify_plugin } from "../server/agent/tools/modify_plugin";
 import { runAgentLoop } from "../server/agent/loop";
@@ -93,14 +91,15 @@ describe("search_icons + list_icon_categories tools", () => {
 });
 
 describe("icon validation on create/update", () => {
-  it("create_tab accepts catalog ids and rejects unknown ones with a hint", () => {
+  it("create_plugin accepts catalog ids and rejects unknown ones with a hint", () => {
     const base: any = {
       id: "icon-test",
-      title: "Icon test",
+      name: "Icon test",
+      description: "Icon validation test",
       code: "export default function App() { return null; }",
     };
-    expect(create_tab.schema.safeParse({ ...base, icon: "atom" }).success).toBe(true);
-    const bad = create_tab.schema.safeParse({ ...base, icon: "not-a-real-icon" });
+    expect(create_plugin.schema.safeParse({ ...base, icon: "atom" }).success).toBe(true);
+    const bad = create_plugin.schema.safeParse({ ...base, icon: "not-a-real-icon" });
     expect(bad.success).toBe(false);
     if (!bad.success) {
       const msg = bad.error.issues.map((i) => i.message).join(" ");
@@ -109,10 +108,11 @@ describe("icon validation on create/update", () => {
     }
   });
 
-  it("create_tab keeps working defaults", () => {
-    const parsed = create_tab.schema.safeParse({
+  it("create_plugin keeps working defaults", () => {
+    const parsed = create_plugin.schema.safeParse({
       id: "icon-default",
-      title: "Default icon",
+      name: "Default icon",
+      description: "Default icon test",
       code: "export default function App() { return null; }",
     });
     expect(parsed.success).toBe(true);
@@ -121,11 +121,11 @@ describe("icon validation on create/update", () => {
     }
   });
 
-  it("update_tab rejects unknown icons", () => {
-    const bad = update_tab.schema.safeParse({ id: "some-tab", icon: "bogus-icon-xyz" });
+  it("modify_plugin rejects unknown icons", () => {
+    const bad = modify_plugin.schema.safeParse({ id: "some-plugin", icon: "bogus-icon-xyz", changeSummary: "icon tweak" });
     expect(bad.success).toBe(false);
-    expect(update_tab.schema.safeParse({ id: "some-tab", icon: "brain" }).success).toBe(true);
-    expect(update_tab.schema.safeParse({ id: "some-tab", title: "No icon" }).success).toBe(true);
+    expect(modify_plugin.schema.safeParse({ id: "some-plugin", icon: "brain", changeSummary: "icon tweak" }).success).toBe(true);
+    expect(modify_plugin.schema.safeParse({ id: "some-plugin", name: "No icon", changeSummary: "rename" }).success).toBe(true);
   });
 
   it("create_plugin rejects unknown icons", () => {
@@ -160,8 +160,8 @@ describe("icon validation on create/update", () => {
 });
 
 describe("agent discovers and uses icons end-to-end", () => {
-  const TEST_CITY = "test-city-icon-discovery";
-  const TEST_DIR = path.resolve(process.cwd(), "workspace", TEST_CITY);
+  const TEST_WS = "test-ws-icon-discovery";
+  const TEST_DIR = path.resolve(process.cwd(), "workspace", TEST_WS);
 
   beforeAll(async () => {
     await fs.mkdir(TEST_DIR, { recursive: true });
@@ -178,7 +178,7 @@ describe("agent discovers and uses icons end-to-end", () => {
     }
   });
 
-  it("loop: search_icons then create_tab with the discovered id", async () => {
+  it("loop: search_icons then create_plugin with the discovered id", async () => {
     const discovered = searchCatalog("science lab", 3)[0].id;
     let step = 0;
     const started: string[] = [];
@@ -219,10 +219,11 @@ describe("agent discovers and uses icons end-to-end", () => {
                           id: "call_tab_1",
                           type: "function",
                           function: {
-                            name: "create_tab",
+                            name: "create_plugin",
                             arguments: JSON.stringify({
                               id: "icon-e2e-tab",
-                              title: "Icon E2E",
+                              name: "Icon E2E",
+                              description: "Icon end-to-end test tool",
                               icon: discovered,
                               code: "export default function App() { return null; }",
                               // Install policy is ask-by-default: the mock models
@@ -237,7 +238,7 @@ describe("agent discovers and uses icons end-to-end", () => {
                 ],
               };
             }
-            return { choices: [{ message: { role: "assistant", content: "Tab ready." } }] };
+            return { choices: [{ message: { role: "assistant", content: "Tool ready." } }] };
           },
         },
       },
@@ -245,7 +246,7 @@ describe("agent discovers and uses icons end-to-end", () => {
 
     const result = await runAgentLoop({
       prompt: "Build a science lab tool with a fitting icon",
-      cityId: TEST_CITY,
+      workspaceId: TEST_WS,
       origin: "chat",
       tools: [...defaultTools],
       llmClient: mockLlm,
@@ -256,9 +257,9 @@ describe("agent discovers and uses icons end-to-end", () => {
 
     expect(result.status).toBe("completed");
     expect(started).toContain("search_icons");
-    expect(started).toContain("create_tab");
+    expect(started).toContain("create_plugin");
 
-    const feature = await readFeature(TEST_CITY, "icon-e2e-tab");
+    const feature = await readFeature(TEST_WS, "icon-e2e-tab");
     expect(feature.manifest.icon).toBe(discovered.toLowerCase());
     expect(isValidIconId(feature.manifest.icon)).toBe(true);
   });

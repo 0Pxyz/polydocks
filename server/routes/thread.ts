@@ -15,7 +15,7 @@ function serializeMessage(message: AgentThreadMessage) {
     seq: message.seq,
     role: message.role,
     content: message.content,
-    cityId: message.cityId,
+    workspaceId: message.workspaceId,
     attachments: message.attachments,
     createdAt: message.createdAt,
   };

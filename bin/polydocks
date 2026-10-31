@@ -15,7 +15,6 @@ interface CliOptions {
   session?: string;
   status?: string;
   fromStep?: number;
-  city?: string;
   maxSteps?: number;
 }
 
@@ -42,8 +41,6 @@ function parseCliArgs(args: string[]): {
       options.status = args[++i];
     } else if (arg === "--from-step") {
       options.fromStep = parseInt(args[++i], 10);
-    } else if (arg === "--city") {
-      options.city = args[++i];
     } else if (arg === "--max-steps") {
       options.maxSteps = parseInt(args[++i], 10);
     } else if (!arg.startsWith("-")) {
@@ -78,28 +75,27 @@ COMMANDS:
   plugins list [--workspace <id>]      List installed plugins
   plugins inspect <pluginId>           Inspect plugin manifest and capabilities
   plugins install <pluginId>           Install plugin into active workspace
-  plugins invoke <plugin> <capability> [--k v] [--city <id>]
+  plugins invoke <plugin> <capability> [--k v] [--workspace <id>]
                                        Same handler as POST /api/plugins/:id/:capability
   plugins lifecycle --op <create|modify|publish|install|uninstall> [--k v]
                                        Same handler as POST /api/plugins/lifecycle
   plugins versions <pluginId>          List kept versions (edit history)
   plugins rollback <pluginId> --version <v> [--workspace <id>]
                                        Roll back to a kept version
-  dock tabs [--city <id>]              List dock tabs (same as GET /api/dock/tabs)
-  dock action --op <op> [--k v] [--city <id>]
+  dock tabs [--workspace <id>]            List dock tabs
+  dock action --op <op> [--k v] [--workspace <id>]
                                        Dock verb (same as POST /api/dock/action)
-  dock open <tabId> | close|pin|unpin <id> | list [--city <id>]
+  dock open <tabId> | close|pin|unpin <id> | list [--workspace <id>]
                                        Verb shortcuts (tabs.open/close/pin/unpin/list)
   dock focus <index> | next | prev | background <id> | chat-toggle
                                        Focus shortcuts (tabs.focus/next/prev/background, chat.toggle)
-  dock scope <cityId>                  Enter a city scope (same as POST /api/dock/scope)
   dock appearance [--theme x ...]      Apply appearance (same as POST /api/dock/appearance)
   agent run "<prompt>"                 Run agent instruction directly in terminal
   agent status | models                 Runtime status / model roles (same as /api/agent/*)
   agent memory|task|approve|session --op <op> [--k v]
                                        Agent surface (same as /api/agent/*)
-  <plugin> <capability> [--k v]      Run a contract capability (sources, cities, ...)
-                                     e.g. polydocks sources add --url https://... --city biohacking --json
+  <plugin> <capability> [--k v]      Run a contract capability (sources, search, ...)
+                                     e.g. polydocks sources add --url https://... --workspace default --json
 
 GLOBAL OPTIONS:
   --json                               Output machine-readable JSON on stdout
@@ -372,7 +368,7 @@ function printEnvelope(envelope: unknown, options: CliOptions): void {
 }
 
 function facadeCtx(options: CliOptions) {
-  return { actor: "cli" as const, cityId: options.city, workspaceId: options.workspace };
+  return { actor: "cli" as const, workspaceId: options.workspace };
 }
 
 /** plugins invoke <plugin> <capability> [--k v] — same handler as the route. */
@@ -383,16 +379,13 @@ async function handlePluginsInvoke(
 ): Promise<void> {
   const [pluginId, capability, ...rest] = posArgs;
   if (!pluginId || !capability) {
-    console.error('Error: Usage: polydocks plugins invoke <plugin> <capability> [--key value] [--city <id>]');
+    console.error('Error: Usage: polydocks plugins invoke <plugin> <capability> [--key value] [--workspace <id>]');
     process.exit(1);
   }
   const { parseContractFlags } = await import("../server/plugins/contractCli");
-  const { input, city } = parseContractFlags([...rest, ...rawTail]);
+  const { input } = parseContractFlags([...rest, ...rawTail]);
   const { invokeCapability } = await import("../server/facade/shared");
-  const out = await invokeCapability(pluginId, capability, input, {
-    ...facadeCtx(options),
-    cityId: options.city || city,
-  });
+  const out = await invokeCapability(pluginId, capability, input, facadeCtx(options));
   printEnvelope(out, options);
   process.exit(out.ok ? 0 : 1);
 }
@@ -414,7 +407,6 @@ async function handlePluginsLifecycle(
   const { op: _op, ...params } = input;
   const out = await pluginLifecycle(op, params, {
     ...facadeCtx(options),
-    cityId: options.city || (params as any).cityId,
     workspaceId: options.workspace || (params as any).workspaceId,
   });
   printEnvelope(out, options);
@@ -454,7 +446,7 @@ async function handleDock(
   const { dockAction } = await import("../server/facade/shared");
   const { parseContractFlags } = await import("../server/plugins/contractCli");
   if (subcommand === "tabs" || !subcommand) {
-    const out = await dockAction("tabs.list", options.city ? { cityId: options.city } : {}, facadeCtx(options));
+    const out = await dockAction("tabs.list", options.workspace ? { workspaceId: options.workspace } : {}, facadeCtx(options));
     printEnvelope(out, options);
     process.exit(out.ok ? 0 : 1);
   }
@@ -476,36 +468,35 @@ async function handleDock(
     const params: Record<string, unknown> = {};
     if (subcommand === "open") {
       if (!id) {
-        console.error("Error: Usage: polydocks dock open <tabId> [--city <id>]");
+        console.error("Error: Usage: polydocks dock open <tabId> [--workspace <id>]");
         process.exit(1);
       }
       params.tabId = id;
     } else if (subcommand === "focus") {
       const index = Number(id);
       if (!Number.isInteger(index) || index < 0) {
-        console.error("Error: Usage: polydocks dock focus <index> [--city <id>]");
+        console.error("Error: Usage: polydocks dock focus <index> [--workspace <id>]");
         process.exit(1);
       }
       params.index = index;
     } else if (subcommand === "background") {
       if (!id) {
-        console.error("Error: Usage: polydocks dock background <id> [--city <id>]");
+        console.error("Error: Usage: polydocks dock background <id> [--workspace <id>]");
         process.exit(1);
       }
       params.id = id;
     } else if (subcommand === "next" || subcommand === "prev" || subcommand === "chat-toggle" || subcommand === "list") {
       if (id && subcommand === "list") {
-        console.error("Error: Usage: polydocks dock list [--city <id>]");
+        console.error("Error: Usage: polydocks dock list [--workspace <id>]");
         process.exit(1);
       }
     } else if (subcommand !== "list") {
       if (!id) {
-        console.error(`Error: Usage: polydocks dock ${subcommand} <id> [--city <id>]`);
+        console.error(`Error: Usage: polydocks dock ${subcommand} <id> [--workspace <id>]`);
         process.exit(1);
       }
       params.id = id;
     }
-    if (options.city) params.cityId = options.city;
     if (options.workspace) params.workspaceId = options.workspace;
     const out = await dockAction(verbOp[subcommand], params, facadeCtx(options));
     printEnvelope(out, options);
@@ -515,27 +506,16 @@ async function handleDock(
     const { input } = parseContractFlags(rawTail);
     const { op, ...params } = input as Record<string, unknown>;
     if (typeof op !== "string") {
-      console.error('Error: dock action needs --op <tabs.list|tabs.open|tabs.pin|tabs.unpin|tabs.close|tabs.focus|tabs.next|tabs.prev|tabs.background|chat.toggle|scope.enter|scope.get|appearance.apply>');
+      console.error('Error: dock action needs --op <tabs.list|tabs.open|tabs.pin|tabs.unpin|tabs.close|tabs.focus|tabs.next|tabs.prev|tabs.background|chat.toggle|appearance.apply>');
       process.exit(1);
     }
-    if (options.city && !params.cityId) (params as any).cityId = options.city;
     const out = await dockAction(op, params, facadeCtx(options));
-    printEnvelope(out, options);
-    process.exit(out.ok ? 0 : 1);
-  }
-  if (subcommand === "scope") {
-    const cityId = posArgs[0] || options.city;
-    if (!cityId) {
-      console.error("Error: Usage: polydocks dock scope <cityId>");
-      process.exit(1);
-    }
-    const out = await dockAction("scope.enter", { cityId }, facadeCtx(options));
     printEnvelope(out, options);
     process.exit(out.ok ? 0 : 1);
   }
   if (subcommand === "appearance") {
     const { input } = parseContractFlags(rawTail);
-    const out = await dockAction("appearance.apply", { ...input, ...(options.city ? { cityId: options.city } : {}) }, facadeCtx(options));
+    const out = await dockAction("appearance.apply", input, facadeCtx(options));
     printEnvelope(out, options);
     process.exit(out.ok ? 0 : 1);
   }
@@ -552,7 +532,7 @@ async function handleAgentSurface(
   const { parseContractFlags } = await import("../server/plugins/contractCli");
   const shared = await import("../server/facade/shared");
   const { input } = parseContractFlags(rawTail);
-  const params = { ...input, ...(options.city ? { cityId: options.city } : {}), ...(options.workspace ? { workspaceId: options.workspace } : {}) };
+  const params = { ...input, ...(options.workspace ? { workspaceId: options.workspace } : {}) };
   let out: unknown;
   switch (subcommand) {
     case "status":
@@ -646,7 +626,6 @@ async function handleAgentRun(
 
   const result = await runAgentLoop({
     prompt,
-    cityId: options.city,
     origin: "cli",
     onEvent,
     maxSteps: options.maxSteps,
@@ -726,8 +705,7 @@ async function main(): Promise<void> {
         const { runContractCommand } = await import("../server/plugins/contractCli");
         const { found, envelope, exitCode } = await runContractCommand(command, subcommand, rawArgs.slice(2), {
           json: options.json,
-          city: options.city,
-          workspace: options.workspace,
+            workspace: options.workspace,
         });
         if (found) {
           if (options.json) {

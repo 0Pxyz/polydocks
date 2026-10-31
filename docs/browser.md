@@ -66,7 +66,7 @@ in `AGENTS.md` (§4b) and the research skill prompt.
   dial to the worker, navigate allowlist).
 - **Frontend** (`src/features/browser/`): `NativeBrowserView` renders
   `RemoteBrowser` (interactive, tab strip only) inside the dock `browser`
-  surface (home + city). Session persists in `useTabState` and survives UI
+  surface. Session persists in `useTabState` and survives UI
   navigation via `TabHost` (mounted-hidden, hibernation restores from storage).
 - **Agent**: no new tools. `open_source` / `browser.open` opens everything
   in the Browser surface (pages and videos alike). Background research reuses

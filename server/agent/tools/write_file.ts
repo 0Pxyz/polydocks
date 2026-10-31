@@ -5,7 +5,7 @@ import { writeFileSafe } from "../../system/filesystem";
 export const write_file: AgentTool<{ path: string; content: string; overwrite?: boolean }> = {
   name: "write_file",
   description:
-    "Writes one agent-home file. Use for agent artifacts; never for city notes (use write_city_file).",
+    "Writes one agent-home file. Use for agent artifacts.",
   schema: z.object({
     path: z.string().describe("File path relative to agent-home (e.g. 'artifacts/report.md', 'tasks/summary.json')"),
     content: z.string().describe("Full text content to write"),

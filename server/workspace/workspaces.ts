@@ -374,34 +374,3 @@ export function isDockPinned(workspaceId: string, itemId: string): boolean {
   ).get(workspaceId, itemId) as any;
   return Boolean(row?.one);
 }
-
-/**
- * City backfill (additive, reversible): every legacy city row gets a
- * canonical workspace `city-<id>` with kind 'city', so city data can migrate
- * into canonical workspaces without moving or deleting anything. The loop
- * already scopes city turns to `city-<id>` workspaces; this makes those rows
- * explicit. Full city migration (compat paths, dead-table removal) belongs
- * to #153 — this only guarantees the target rows exist.
- */
-export function ensureCityWorkspaces(): { ensured: number } {
-  ensureDefaultWorkspace();
-  let ensured = 0;
-  let cities: Array<{ id: string; title: string }> = [];
-  try {
-    cities = db.query<any, []>(`SELECT id, title FROM cities`).all() as Array<{ id: string; title: string }>;
-  } catch {
-    return { ensured: 0 };
-  }
-  for (const city of cities) {
-    const wsId = `city-${city.id}`;
-    const existing = db.query(`SELECT id FROM workspaces WHERE id = ?`).get(wsId) as any;
-    if (existing) continue;
-    const now = new Date().toISOString();
-    db.query(
-      `INSERT INTO workspaces (id, name, description, icon, kind, is_default, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'city', 0, ?, ?)`
-    ).run(wsId, city.title || city.id, `Migrated city workspace for "${city.id}"`, "MapPin", now, now);
-    ensured++;
-  }
-  return { ensured };
-}

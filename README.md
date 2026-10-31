@@ -145,7 +145,7 @@ One model per job, configured by environment only (`server/agent/modelRegistry.t
 
 - **Runs today:** a single-user local runtime. You bring `MODEL_API_KEY` (plus `TINYFISH_API_KEY` and `MODAL_*` for the full experience). Without a model key Poly answers `model_unauthorized`.
 - **Not built yet:** per-user sandboxes, auth / multi-tenancy, a remote store for tools.  Until those ship, **don't expose the server beyond localhost.**
-- **In migration:** the city and world views are still built into the core and are becoming panels (issue #153, see `MIGRATION.md`).
+- **Retired:** the knowledge-map experience was removed from the core and parked on the `future/city-experience` branch.
 
 ---
 

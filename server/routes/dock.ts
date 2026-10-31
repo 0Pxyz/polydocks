@@ -6,22 +6,10 @@ export const dockRouter = new Hono();
 function ctxFrom(c: { req: { query: (k: string) => string | undefined } }, body: any): FacadeContext {
   return {
     actor: "user",
-    cityId: body?.cityId || c.req.query("cityId"),
     workspaceId: body?.workspaceId || c.req.query("workspaceId"),
     sessionId: body?.sessionId || c.req.query("sessionId"),
   };
 }
-
-/**
- * GET /api/dock/tabs — dock tabs mounted for a city/scope.
- * Delegates to the list_tabs tool executor (same as the agent uses).
- */
-dockRouter.get("/tabs", async (c) => {
-  const cityId = c.req.query("cityId");
-  const out = await dockAction("tabs.list", cityId ? { cityId } : {}, ctxFrom(c, {}));
-  if (!out.ok) return c.json(out, 400);
-  return c.json(out);
-});
 
 /**
  * POST /api/dock/action — one verb per dock control.
@@ -41,17 +29,6 @@ dockRouter.post("/action", async (c) => {
     const status = (out as any).code === "not_found" ? 404 : 400;
     return c.json(out, status as any);
   }
-  return c.json(out);
-});
-
-/**
- * POST /api/dock/scope — enter a city scope (verified entry, same check
- * the agent's enter_city uses). Emits map.changed.
- */
-dockRouter.post("/scope", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const out = await dockAction("scope.enter", { cityId: body?.cityId }, ctxFrom(c, body));
-  if (!out.ok) return c.json(out, 400);
   return c.json(out);
 });
 

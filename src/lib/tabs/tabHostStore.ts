@@ -16,7 +16,7 @@ import { create } from "zustand";
  */
 
 export type TabLifecycleStatus = "live" | "hibernated";
-export type TabKind = "plugin" | "city-tool" | "view";
+export type TabKind = "plugin" | "view";
 
 export interface TabEntry {
   id: string;
