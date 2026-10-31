@@ -6,6 +6,18 @@ import { cn } from "@/lib/cn";
 
 const HINT_SEEN_KEY = "polymax-home-hint-seen";
 
+/**
+ * Quiet rotating tips for returning users (the first-run Ctrl K hint is
+ * gone, but the spot stays useful). Plain copy the agent can rewrite at
+ * any time — no tool call, no endpoint, just edit this list.
+ */
+const ROTATING_TIPS = [
+  "Ask anything, or give a dock command…",
+  "Tip: Ctrl Shift P opens dock search",
+  "Your plugins live in the dock",
+  "Try: change my background",
+];
+
 export interface HomeScreenProps {
   /** Open the agent chat panel (same panel as Ctrl K / dock agent icon). */
   onOpenAgent: () => void;
@@ -22,6 +34,7 @@ export interface HomeScreenProps {
  */
 export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScreenProps) {
   const [hintVisible, setHintVisible] = useState(false);
+  const [tipIndex, setTipIndex] = useState(0);
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return window.localStorage.getItem(HINT_SEEN_KEY) === "1";
@@ -40,6 +53,14 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
     if (hintDismissed || panelOpen) return;
     const t = setTimeout(() => setHintVisible(true), 3000);
     return () => clearTimeout(t);
+  }, [hintDismissed, panelOpen]);
+
+  // Returning users: rotate a subtle tip every ~12s while idle. Same
+  // quiet spot, never a prompt box; pauses while the panel is open.
+  useEffect(() => {
+    if (!hintDismissed || panelOpen) return;
+    const t = setInterval(() => setTipIndex((i) => (i + 1) % ROTATING_TIPS.length), 12000);
+    return () => clearInterval(t);
   }, [hintDismissed, panelOpen]);
 
   const openAgent = () => {
@@ -84,7 +105,7 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
             </motion.button>
 
             {/* Quiet hint: Ctrl K on desktop, tap on touch. Never a second prompt box. */}
-            {!hintDismissed && (
+            {!hintDismissed ? (
               <div
                 className={cn(
                   "mt-6 h-5 text-xs text-[var(--text-muted)] font-sans transition-opacity duration-500",
@@ -93,6 +114,17 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
                 aria-hidden="true"
               >
                 {isCoarse ? "Tap to talk" : "Ctrl K"}
+              </div>
+            ) : (
+              <div
+                key={tipIndex}
+                className={cn(
+                  "mt-6 h-5 text-xs text-[var(--text-muted)] font-sans",
+                  !isReduced && "animate-in fade-in duration-500"
+                )}
+                aria-hidden="true"
+              >
+                {ROTATING_TIPS[tipIndex]}
               </div>
             )}
           </motion.div>

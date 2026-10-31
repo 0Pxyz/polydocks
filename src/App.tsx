@@ -132,7 +132,15 @@ export default function App() {
 
   const handleSelectTool = (toolId: string) => {
     if (toolId === "agent") {
+      // Single source of truth for the glyph: the dock icon is active
+      // exactly while the panel is open. Never leave a stale "agent"
+      // active id behind a closed panel.
+      const wasOpen = layoutState !== "closed";
       toggleAgent(activeToolId);
+      if (wasOpen && activeToolId === "agent") {
+        setActiveToolId("");
+        setDockActiveTool("");
+      }
       return;
     }
 
@@ -377,6 +385,10 @@ export default function App() {
           setLayoutState("sheet");
         } else if (layoutState === "sheet") {
           setLayoutState("closed");
+          if (activeToolId === "agent") {
+            setActiveToolId("");
+            setDockActiveTool("");
+          }
           returnFocusToOrb();
         } else if (layoutState === "side") {
           if (activeToolId) {
@@ -482,6 +494,10 @@ export default function App() {
             onCloseItem={(toolId) => {
               if (toolId === "agent") {
                 setLayoutState("closed");
+                if (activeToolId === "agent") {
+                  setActiveToolId("");
+                  setDockActiveTool("");
+                }
                 return;
               }
               // Single source: close in the store, mirror locally.
