@@ -51,7 +51,7 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
       {visible.map((line, i) => (
         <div
           key={line.id}
-          className="thought-line text-center font-sans text-[13px] leading-[22px] text-[var(--text-muted)]"
+          className="thought-line text-center"
           style={{
             opacity: reduced ? 1 : Math.max(0.35, 1 - (visible.length - 1 - i) * 0.22) * jobOpacity(line.jobId),
             animationDuration: `${duration}ms`,
@@ -59,7 +59,11 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
           }}
           data-thought-line={line.id}
         >
+          {/* Blurred chip: readable over any wallpaper or theme, no box —
+            just enough backdrop to lift the text off the background. */}
+        <span className="inline-block max-w-full truncate rounded-full bg-black/30 px-3 font-sans text-[13px] leading-[22px] text-white backdrop-blur-md [text-shadow:0_1px_8px_rgba(0,0,0,0.65)]">
           {line.text}
+        </span>
         </div>
       ))}
     </div>
