@@ -3,9 +3,9 @@ import { minimalTools, fullTools, defaultTools } from "../server/agent/tools/ind
 import { config } from "../server/config";
 
 describe("intent-scoped minimal surface", () => {
-  it("schema default is minimal (code evidence, env-independent)", async () => {
+  it("schema default is full (code evidence, env-independent)", async () => {
     const src = await Bun.file("server/config.ts").text();
-    expect(src).toContain('AGENT_SURFACE: z.enum(["full", "minimal"]).default("minimal")');
+    expect(src).toContain('AGENT_SURFACE: z.enum(["full", "minimal"]).default("full")');
     expect(["full", "minimal"]).toContain(config.AGENT_SURFACE);
   });
 
