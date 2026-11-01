@@ -104,11 +104,11 @@ export function LiveOnboarding() {
         break;
 
       case "tools":
-        force("deep-work-flashcards");
-        pushThought("Synthesizing deep-work-flashcards plugin…");
+        force("bitcoin-viewer");
+        pushThought("Synthesizing bitcoin-viewer plugin…");
         thoughtTimersRef.current.push(
           setTimeout(() => {
-            pushThought("Mounted and pinned deep-work-flashcards in dock");
+            pushThought("Mounted and pinned bitcoin-viewer in dock");
           }, 3000)
         );
         break;

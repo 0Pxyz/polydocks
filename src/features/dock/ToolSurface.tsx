@@ -4,7 +4,7 @@ import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
-import { DeepWorkFlashcardsView } from "@/features/dock/DeepWorkFlashcardsView";
+import { BitcoinViewer } from "@/features/dock/BitcoinViewer";
 import { OnboardingPluginView } from "@/features/onboarding/OnboardingPluginView";
 
 export interface SurfaceSandboxTab {
@@ -88,10 +88,10 @@ export function ToolSurface({
       </DockSurface>
     );
   }
-  if (toolId === "deep-work-flashcards") {
+  if (toolId === "bitcoin-viewer" || toolId === "deep-work-flashcards") {
     return (
       <DockSurface frameless>
-        <DeepWorkFlashcardsView onDismiss={() => onDismiss("deep-work-flashcards")} />
+        <BitcoinViewer onDismiss={() => onDismiss(toolId)} />
       </DockSurface>
     );
   }

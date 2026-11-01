@@ -26,6 +26,6 @@ describe("Dock Native Architecture (core tools only)", () => {
 
   it("contextual suggestions are generic (no knowledge-map variants)", () => {
     const rows = getStaticCreateRows();
-    expect(rows.map((r) => r.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+    expect(rows.map((r) => r.label)).toEqual(["Bitcoin price viewer", "A reading list", "A timeline"]);
   });
 });
