@@ -29,29 +29,6 @@ interface BrowserTab {
 /** One Chromium per tab (worker cap); the sidebar is the only tab UI. */
 const MAX_TABS = 5;
 
-const DEFAULT_RESEARCH_MARKDOWN = `# Why Is It So Hard to Do My Work? The Challenge of Attention Residue When Switching Between Work Tasks
-
-**Author:** Sophie Leroy, Ph.D.  
-*Organizational Behavior and Human Decision Processes · Sage Publications*  
-**DOI:** [10.1177/0018726709339090](https://journals.sagepub.com/doi/10.1177/0018726709339090) · *Primary source fetched via TinyFish*
-
----
-
-### Abstract
-When switching between tasks, individuals often struggle to shift their attention entirely to the new task. This paper conceptualizes this phenomenon as **attention residue** — cognitive resources that remain engaged with a prior task even after physical switching has occurred. Across two laboratory and field experiments, the presence of attention residue significantly impairs performance, cognitive stamina, and decision quality on subsequent tasks.
-
-### Key Empirical Findings
-- **Cognitive Carryover:** When Task A is left incomplete or interrupted by extraneous notifications, participants exhibited a 40% reduction in executive working memory during Task B.
-- **The Context Switching Tax:** Frequent task switching does not merely divide time; it fragments cognitive flow. The brain continues background processing of unanswered questions from earlier contexts.
-- **Deep Work Mitigation:** Batching related tasks, establishing clear completion criteria, and isolating workspaces drastically reduces residue, allowing rapid state recovery.
-
-### Architectural Alignment in PolyDocks
-PolyDocks directly solves the attention residue problem:
-1. **Single Persistent Control Surface:** The Agentic Dock replaces multi-window sprawl and tabs chaos.
-2. **Pedagogical Autonomy:** The agent surfaces authoritative primary sources directly into native viewing surfaces.
-3. **Focused Extension Surfaces:** Custom tools (such as live price viewers and research briefs) are synthesized on demand and mounted cleanly without disrupting current context.
-`;
-
 function normalizeUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -97,6 +74,11 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
   const viewerRef = useRef<RemoteBrowserHandle>(null);
   const ensuredRef = useRef(false);
   const reensuredRef = useRef(false);
+  // URL typed while no live viewer exists (or while recovering a dead worker
+  // session). The worker only materializes Chromium on viewer connection and
+  // server-side navigate 502s until then, so queue and flush on live instead
+  // of minting a fresh session per keystroke (about:blank tab sprawl).
+  const pendingNavigateRef = useRef<string | null>(null);
   const readerUrl = useConversationStore((s) => s.readerView?.url);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -228,9 +210,6 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
         setFallbackMode(true);
         setStatus("live");
         setError(null);
-        if (!urlInput) {
-          setUrlInput("https://journals.sagepub.com/doi/10.1177/0018726709339090");
-        }
       } else {
         setError(msg);
       }
@@ -276,9 +255,6 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
           setFallbackMode(true);
           setStatus("live");
           setError(null);
-          if (!urlInput) {
-            setUrlInput("https://journals.sagepub.com/doi/10.1177/0018726709339090");
-          }
         } else if (!cancelled) {
           setError(msg);
         }
@@ -314,46 +290,47 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
       setUrlInput(normalized);
       return;
     }
-    const attempt = async (sessionId: string) => {
-      await navigateBrowserSession(workspaceKey, sessionId, normalized);
-      viewerRef.current?.navigate(normalized);
-    };
     setError(null);
     setTabUrl(activeTab.id, normalized);
     setUrlInput(normalized);
-    // The worker only materializes the Chromium session on the first viewer
-    // connection, so a server-side navigate before `live` always 502s. Send
-    // it through the viewer channel and ask for patience instead of burning
-    // the one recovery round-trip.
-    if (status !== "live") {
+    // Fire through the live viewer channel when possible; the worker session
+    // may not exist yet (or died with a worker restart), in which case the
+    // HTTP navigate 502s. Queue for the live flush instead of retrying
+    // against a session with no Chromium behind it.
+    const attempt = async (sessionId: string) => {
       viewerRef.current?.navigate(normalized);
+      await navigateBrowserSession(workspaceKey, sessionId, normalized);
+    };
+    if (status === "live") {
       try {
         await attempt(session.sessionId);
+        pendingNavigateRef.current = null;
+        return;
       } catch {
-        setError("Connecting… try again in a moment.");
+        // Fall through to recovery below.
+      }
+    } else {
+      viewerRef.current?.navigate(normalized);
+      pendingNavigateRef.current = normalized;
+      setError("Connecting… it will load as soon as the session is live.");
+      return;
+    }
+    // Worker-side sessions die with the worker (restart wipes them) while
+    // our record survives. Re-ensure once, then let the fresh viewer's live
+    // flush do the navigation — an immediate HTTP navigate would 502 again
+    // because Chromium materializes on viewer connection, not on create.
+    if (!reensuredRef.current) {
+      reensuredRef.current = true;
+      try {
+        const created = await replaceSession(activeTab, normalized);
+        setSession(created);
+        pendingNavigateRef.current = normalized;
+      } catch (retryErr: unknown) {
+        setError(retryErr instanceof Error ? retryErr.message : "Navigation failed");
       }
       return;
     }
-    try {
-      await attempt(session.sessionId);
-    } catch (err: unknown) {
-      // Worker-side sessions die with the worker (restart wipes them) while
-      // our record survives. On a worker failure, re-ensure once and retry
-      // against the fresh session instead of stranding the user on a 502.
-      if (!reensuredRef.current) {
-        reensuredRef.current = true;
-        try {
-          const created = await replaceSession(activeTab, normalized);
-          setSession(created);
-          await attempt(created.sessionId);
-          return;
-        } catch (retryErr: unknown) {
-          setError(retryErr instanceof Error ? retryErr.message : "Navigation failed");
-          return;
-        }
-      }
-      setError(err instanceof Error ? err.message : "Navigation failed");
-    }
+    setError("Navigation failed. Retry to start a new session.");
   }, [urlInput, activeTab, session, status, workspaceKey, setTabUrl, replaceSession]);
 
   const handleNewTab = useCallback(async () => {
@@ -528,7 +505,7 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
                   {i + 1}
                 </span>
                 <span className="hidden md:block flex-1 truncate text-xs font-sans">
-                  {t.url ? shortLabel(t.url, "New tab") : fallbackMode ? "Attention Residue" : "New tab"}
+                  {t.url ? shortLabel(t.url, "New tab") : "New tab"}
                 </span>
                 <button
                   type="button"
@@ -574,6 +551,20 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
               style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column" }}
               onControlChange={() => {
                 setStatus("live");
+                // Flush a URL queued while the viewer was not live (or while
+                // recovering a dead worker session). Viewer channel first —
+                // it targets the session Chromium that just materialized —
+                // then best-effort HTTP so the server record stays in sync.
+                const pending = pendingNavigateRef.current;
+                if (pending && session) {
+                  pendingNavigateRef.current = null;
+                  reensuredRef.current = false;
+                  setError(null);
+                  viewerRef.current?.navigate(pending);
+                  void navigateBrowserSession(workspaceKey, session.sessionId, pending).catch(
+                    () => undefined
+                  );
+                }
               }}
               onTerminated={(reason) => {
                 // A terminated stream usually means expiry or idle eviction.
@@ -609,11 +600,13 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
           ) : fallbackMode ? (
             <div className="flex-1 min-h-0 w-full overflow-y-auto px-6 py-6 font-sans">
               <div className="max-w-3xl mx-auto">
-                <ReaderView
-                  url={activeUrl || "https://journals.sagepub.com/doi/10.1177/0018726709339090"}
-                  initialTitle="Why Is It So Hard to Do My Work? The Challenge of Attention Residue When Switching Between Work Tasks"
-                  initialMarkdown={DEFAULT_RESEARCH_MARKDOWN}
-                />
+                {activeUrl ? (
+                  <ReaderView url={activeUrl} />
+                ) : (
+                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <span className="text-xs">Type a URL above to read it here.</span>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
