@@ -35,7 +35,7 @@ export const sandboxPluginManifest: PluginManifest = {
   version: "1.0.0",
   description: "Runs shell commands, manages files and serves apps in an isolated Modal sandbox per workspace.",
   icon: "Terminal",
-  trust: "first-party",
+  trust: "core",
   capabilities: [
     {
       id: "sandbox.exec",
