@@ -114,3 +114,5 @@
 | 2026-11-01 | Theme control reachable on minimal surface (#264): apply_theme ships on minimal, namespace-guess resolution, live-verified background set | [#264](https://github.com/0Pxyz/polymax/pull/264) |
 | 2026-11-01 | README documents AGENT_SURFACE flag (#267): full vs minimal catalog switch | [#267](https://github.com/0Pxyz/polymax/pull/267) |
 | 2026-11-01 | Full tool surface by default (#269): AGENT_SURFACE default full, minimal stays one env line away | [#269](https://github.com/0Pxyz/polymax/pull/269) |
+| 2026-11-01 | Core plugin suite ADR + reconciliation audit (#271): cities/writing/workspace absent from code, notes/files gaps named | [#271](https://github.com/0Pxyz/polymax/pull/271) |
+| 2026-11-01 | Core suite ships in dev (#272): files + notes contract plugins, core trust on search/browser/sandbox, live-verified over HTTP | [#272](https://github.com/0Pxyz/polymax/pull/272) |
