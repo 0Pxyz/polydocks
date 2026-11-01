@@ -49,7 +49,7 @@ When switching between tasks, individuals often struggle to shift their attentio
 PolyDocks directly solves the attention residue problem:
 1. **Single Persistent Control Surface:** The Agentic Dock replaces multi-window sprawl and tabs chaos.
 2. **Pedagogical Autonomy:** The agent surfaces authoritative primary sources directly into native viewing surfaces.
-3. **Focused Extension Surfaces:** Custom tools (such as Flashcards and Notes) are synthesized on demand and mounted cleanly without disrupting current context.
+3. **Focused Extension Surfaces:** Custom tools (such as live price viewers and research briefs) are synthesized on demand and mounted cleanly without disrupting current context.
 `;
 
 function normalizeUrl(raw: string): string | null {

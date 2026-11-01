@@ -55,8 +55,8 @@ export const ONBOARDING_STEPS: {
     id: "tools",
     title: "Your Dock, Your Tools",
     subtitle: "Poly builds and mounts custom tools directly into the dock.",
-    narration: "Building and mounting interactive tools into your dock…",
-    dockTarget: "deep-work-flashcards",
+    narration: "Building and mounting a live Bitcoin price viewer into your dock…",
+    dockTarget: "bitcoin-viewer",
     durationMs: 9000,
   },
   {

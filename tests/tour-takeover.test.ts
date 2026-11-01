@@ -29,13 +29,13 @@ describe("tour takeover", () => {
   });
 
   it("ignores the tour's own settled focus", () => {
-    // Auto-advance forced flashcards; focus settled there afterwards.
+    // Auto-advance forced bitcoin-viewer; focus settled there afterwards.
     expect(
       shouldPauseTourOnTakeover({
         ...playing,
         prevTool: "browser",
-        activeTool: "deep-work-flashcards",
-        forcedTool: "deep-work-flashcards",
+        activeTool: "bitcoin-viewer",
+        forcedTool: "bitcoin-viewer",
       })
     ).toBe(false);
   });

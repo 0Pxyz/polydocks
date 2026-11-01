@@ -138,10 +138,10 @@ export function createItemsForQuery(query: string): DockItem[] {
   const short = q.length > 40 ? `${q.slice(0, 40)}…` : q;
   return [
     {
-      id: `create:flashcards:${q}`,
-      label: `Flashcards for ${short}`,
-      description: `Ask the agent to build flashcards for ${short}`,
-      icon: "cards",
+      id: `create:bitcoin-viewer:${q}`,
+      label: `Price viewer for ${short}`,
+      description: `Ask the agent to build a live price viewer for ${short}`,
+      icon: "chartlineup",
       kind: "create",
     },
     {
@@ -166,7 +166,7 @@ export function createItemsForQuery(query: string): DockItem[] {
  */
 export function getStaticCreateRows(): DockItem[] {
   const rows: Array<[string, string]> = [
-    ["Flashcards", "Ask the agent to build flashcards"],
+    ["Bitcoin price viewer", "Ask the agent to mount a live crypto price viewer"],
     ["A reading list", "Ask the agent to build a reading list"],
     ["A timeline", "Ask the agent to build a timeline"],
   ];
