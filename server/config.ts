@@ -52,7 +52,7 @@ const envSchema = z.object({
   // Agent tool surface: minimal = intent-scoped verb tools (default) plus
   // find_capabilities; full = current catalog. Whole-tool and per-action
   // denylists still apply on top (intent + surface filters).
-  AGENT_SURFACE: z.enum(["full", "minimal"]).default("minimal"),
+  AGENT_SURFACE: z.enum(["full", "minimal"]).default("full"),
   // Install policy for agent-originated plugin lifecycle (create/install/
   // publish): ask = needs { userApproved: true } (default), auto = proceed,
   // never = always deny. actor=user|cli means an explicit human action.
