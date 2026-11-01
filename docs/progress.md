@@ -113,3 +113,4 @@
 | 2026-11-01 | Media re-record on cinematic engine (#263): walkthrough mp4 + spotlights + gifs | [#263](https://github.com/0Pxyz/polymax/pull/263) |
 | 2026-11-01 | Theme control reachable on minimal surface (#264): apply_theme ships on minimal, namespace-guess resolution, live-verified background set | [#264](https://github.com/0Pxyz/polymax/pull/264) |
 | 2026-11-01 | README documents AGENT_SURFACE flag (#267): full vs minimal catalog switch | [#267](https://github.com/0Pxyz/polymax/pull/267) |
+| 2026-11-01 | Full tool surface by default (#269): AGENT_SURFACE default full, minimal stays one env line away | [#269](https://github.com/0Pxyz/polymax/pull/269) |
