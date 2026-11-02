@@ -8,7 +8,7 @@ import {
 
 describe("Agent Tool Catalog & Security Guards", () => {
   it("should export all canonical tools in fullTools catalog", () => {
-    expect(fullTools.length).toBe(44);
+    expect(fullTools.length).toBe(45);
     const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
@@ -81,6 +81,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     const names = minimalTools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
+        "apply_theme",
         "chat.toggle",
         "dock.background",
         "dock.close",
@@ -101,9 +102,10 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "plugins.rollback",
         "plugins.uninstall",
         "skills.read",
+        "ui_catalog",
       ].sort()
     );
-    expect(fullTools.length).toBe(44);
+    expect(fullTools.length).toBe(45);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
@@ -124,15 +126,15 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(new Set(names).size).toBe(names.length);
     const fullNames = new Set(fullTools.map((t) => t.name));
     const minimalNames = new Set(minimalTools.map((t) => t.name));
-    // Derived views partition the canonical list (find_capabilities is
-    // the only tool offered on both surfaces).
-    expect(fullNames.size).toBe(44);
-    expect(minimalNames.size).toBe(20);
+    // Derived views cover the canonical list (find_capabilities and
+    // ui_catalog are the tools offered on both surfaces).
+    expect(fullNames.size).toBe(45);
+    expect(minimalNames.size).toBe(22);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
     }
     const both = [...fullNames].filter((n) => minimalNames.has(n));
-    expect(both).toEqual(["find_capabilities"]);
+    expect(both).toEqual(["apply_theme", "find_capabilities", "ui_catalog"]);
     // plugins.install ships on every surface.
     expect(fullNames.has("install_plugin")).toBe(true);
     expect(minimalNames.has("plugins.install")).toBe(true);

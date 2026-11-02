@@ -22,6 +22,11 @@ const KIT_FILES = [
   "textarea.tsx", "tooltip.tsx",
 ];
 
+// Kit v2 primitives + patterns live in server/plugin-kit/kit/ and are
+// aliased as @/components/ui/kit so guest code imports one stable path.
+// They are read separately from the shadcn files above.
+const KIT_V2_SOURCES = ["kit/primitives.tsx", "kit/patterns.tsx"];
+
 function extractCandidates(sources: string[]): string[] {
   const found = new Set<string>();
   for (const src of sources) {
@@ -98,10 +103,17 @@ async function buildCss(uiSources: string[]): Promise<{ bytes: number }> {
 const uiSources = await Promise.all(
   KIT_FILES.map((f) => fs.readFile(path.join(UI_DIR, f), "utf-8"))
 );
+const kitV2Sources = await Promise.all(
+  KIT_V2_SOURCES.map((f) => fs.readFile(path.join(OUT_DIR, f), "utf-8"))
+);
+const allSources = [...uiSources, ...kitV2Sources];
 
 // Inventory of flattened UI exports (duplicate check).
 const exportNames: string[] = [];
-for (const src of uiSources) {
+for (const src of allSources) {
+  for (const m of src.matchAll(/export\s+(?:function|const|class)\s+([A-Za-z_$][\w$]*)/g)) {
+    exportNames.push(m[1]);
+  }
   for (const m of src.matchAll(/export\s*\{([^}]*)\}/g)) {
     for (const part of m[1].split(",")) {
       const name = part.trim().split(/\s+as\s+/).pop()?.trim();
@@ -113,7 +125,7 @@ const dupes = exportNames.filter((n, i) => exportNames.indexOf(n) !== i);
 if (dupes.length > 0) throw new Error(`Duplicate kit export names: ${[...new Set(dupes)].join(", ")}`);
 
 const js = await buildJs();
-const css = await buildCss(uiSources);
+const css = await buildCss(allSources);
 
 // Vendor the raw design tokens so the sandbox can define the shadcn
 // semantic vars at runtime (prod images ship server/ but not src/).
@@ -125,7 +137,7 @@ await fs.copyFile(
 await fs.writeFile(
   path.join(OUT_DIR, "manifest.json"),
   JSON.stringify(
-    { files: KIT_FILES, exports: exportNames, jsBytes: js.bytes, cssBytes: css.bytes, builtAt: new Date().toISOString() },
+    { files: [...KIT_FILES, ...KIT_V2_SOURCES], version: "2.0.0", exports: exportNames, jsBytes: js.bytes, cssBytes: css.bytes, builtAt: new Date().toISOString() },
     null,
     2
   ),

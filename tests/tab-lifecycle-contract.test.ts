@@ -12,12 +12,14 @@ import {
 import { useTabStateStore, clearTabState, resetTabStateForTests } from "../src/lib/tabs/useTabState";
 import { platformStorage } from "../src/lib/platform/storage";
 
-const GOOD_CODE = `import { createRoot } from "react-dom/client";
+const GOOD_CODE = `import { Stack } from "@/components/ui/kit";
+import { Button } from "@/components/ui/button";
+import { createRoot } from "react-dom/client";
 function App() {
   const [v, setV] = React.useState(null);
   React.useEffect(() => { window.polymax.storage.get("v").then(setV); }, []);
   const run = () => { window.polymax.task.start({ label: "Export" }).then(({ id }) => window.polymax.task.done(id)); };
-  return <div><button onClick={run}>go</button><span>{v}</span></div>;
+  return <Stack gap={8}><Button size="sm" onClick={run}>go</Button><span>{v}</span></Stack>;
 }
 createRoot(document.getElementById("app")).render(<App />);`;
 
