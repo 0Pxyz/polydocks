@@ -8,25 +8,25 @@
 
 ## Tools in order
 
-`find_capabilities({query, limit?})` scores id (+5), title (+4), plugin (+3), description (+2) over enabled capabilities and returns `{query, found, capabilities: [{id, pluginId, title, description, risk, inputSchema}]}`. Then `invoke_capability({id, input?})` runs it as the agent and returns `{success, capabilityId, pluginId, data, durationMs}` or `{error, capabilityId, durationMs}` on failure.
+`find_capabilities({query, limit?})` scores id/title/plugin/description and returns `{capabilities: [{id, pluginId, title, description, risk, inputSchema}]}`. Then `invoke_capability({id, input?})` runs it, returning `{success, data, durationMs}` or `{error, durationMs}`.
 
 ## Risk and policy
 
-Every capability declares `risk: read|write|destructive|external` (`server/plugins/manifest.ts`). `read` runs free; `destructive` and `external` always pause for user approval; `write` is auto-allowed for core and first-party plugins, otherwise it needs a grant or approval (15s timeout; denial halts with the reason). The bus enforces this per call, records each run in `executions`, and times out at 30s.
+Every capability declares `risk: read|write|destructive|external`. `read` runs free; `destructive` and `external` always pause for approval; `write` is auto-allowed for core/first-party, else needs a grant (15s timeout). The bus enforces per call, records each run, times out at 30s.
 
 ## Wiring data sources
 
-Remote systems join as user-connected MCP servers (`POST /api/plugins/mcp/connect`, explicit permission grant in the Plugins UI); their tools appear as `mcp.<server>.<tool>` capabilities with `external` risk. Transport order is Streamable HTTP first, SSE fallback, stdio denied unless `MCP_ALLOW_STDIO=1`. HTTP and CLI adapters exist for fixed endpoints. The agent connects only on explicit user intent via `mcp_connect({name, url})`, lists with `mcp_list_servers`, searches connected tools progressively with `mcp_search_tools({query})` (names first, full schema later), disconnects with `mcp_disconnect`, and never fetches credentials or endpoints directly; it invokes the capability and passes `input` matching its schema.
+Remote systems join as user-connected MCP servers (explicit grant in the Plugins UI); tools appear as `mcp.<server>.<tool>` with `external` risk. Transport order is Streamable HTTP, SSE fallback, stdio denied unless `MCP_ALLOW_STDIO=1`. Connect only on explicit intent via `mcp_connect({name, url})`, list with `mcp_list_servers`, search tools with `mcp_search_tools({query})`, disconnect with `mcp_disconnect`; never fetch endpoints directly.
 
-PolyDocks is itself an MCP server: any external client connects at `POST /mcp` (Streamable HTTP, stateless) and gets the capability bus as tools plus `polymax://plugins` / `polymax://capabilities` resources. Details: `docs/mcp.md`.
+PolyDocks is itself an MCP server: external clients connect at `POST /mcp` (Streamable HTTP, stateless). Details: `docs/mcp.md`.
 
 ## Common mistakes
 
-Invoking before discovering (wrong id); guessing `input` instead of reading `inputSchema`; treating a denial as a bug (report it and ask); building a new plugin around one capability call.
+Invoking before discovering; guessing `input` instead of reading `inputSchema`; treating a denial as a bug; building a plugin around one capability call.
 
 ## Example
 
-"Run the search": `find_capabilities({query: "search web"})` returns `search.web` with its `inputSchema`; `invoke_capability({id: "search.web", input: {query: "raft consensus", limit: 5}})` runs it through policy and audit.
+"Run the search": `find_capabilities({query: "search web"})` → `search.web`; `invoke_capability({id: "search.web", input: {query: "raft consensus"}})` runs it through policy and audit.
 
 <!--
 Source files (maintainer refs, stripped before injection):

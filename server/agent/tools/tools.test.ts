@@ -8,7 +8,7 @@ import {
 
 describe("Agent Tool Catalog & Security Guards", () => {
   it("should export all canonical tools in fullTools catalog", () => {
-    expect(fullTools.length).toBe(45);
+    expect(fullTools.length).toBe(49);
     const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
@@ -105,7 +105,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "ui_catalog",
       ].sort()
     );
-    expect(fullTools.length).toBe(45);
+    expect(fullTools.length).toBe(49);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
@@ -128,7 +128,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     const minimalNames = new Set(minimalTools.map((t) => t.name));
     // Derived views cover the canonical list (find_capabilities and
     // ui_catalog are the tools offered on both surfaces).
-    expect(fullNames.size).toBe(45);
+    expect(fullNames.size).toBe(49);
     expect(minimalNames.size).toBe(22);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
