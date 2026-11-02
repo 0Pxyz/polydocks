@@ -1,20 +1,27 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { config } from "../config";
 import { SessionService } from "../services/sessionService";
 import { TaskService } from "../services/taskService";
 import { taskExecutionEngine } from "../agent/taskRunner";
 import type { AgentStepEvent } from "../agent/loop";
+import { effectiveUserId, getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
 
 export const sessionsRouter = new Hono();
 
 /**
  * GET /api/sessions
- * List sessions, optionally filtered by workspaceId.
+ * List sessions, optionally filtered by workspaceId. Results are limited
+ * to workspaces the caller may access: device-local plus owned-by-caller.
  */
-sessionsRouter.get("/", (c) => {
+sessionsRouter.get("/", async (c) => {
+  const caller = await getEffectiveCaller(c.req.raw.headers);
   const workspaceId = c.req.query("workspaceId");
-  const sessions = SessionService.listSessions(workspaceId);
+  if (workspaceId && !hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ sessions: [] });
+  }
+  const sessions = SessionService.listSessions(workspaceId).filter((s) =>
+    hasWorkspaceAccess(s.workspaceId, caller)
+  );
   return c.json({ sessions });
 });
 
@@ -31,6 +38,10 @@ sessionsRouter.post("/", async (c) => {
   }
 
   const workspaceId = body.workspaceId || "default";
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
   const session = await SessionService.createSession({
     workspaceId,
     title: body.title,
@@ -55,6 +66,11 @@ sessionsRouter.get("/:id", async (c) => {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);
   }
 
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(session.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
+
   const transcript = await SessionService.getTranscript(sessionId);
 
   return c.json({
@@ -75,6 +91,11 @@ sessionsRouter.post("/:id/run", async (c) => {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);
   }
 
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(session.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
+
   let body: any = {};
   try {
     body = await c.req.json();
@@ -87,11 +108,7 @@ sessionsRouter.post("/:id/run", async (c) => {
     return c.json({ error: "Missing required 'prompt' string field" }, 400);
   }
 
-  const { resolveUserIdForMode } = await import("../identity");
-  const userId = resolveUserIdForMode(
-    { header: c.req.header("x-polymax-user"), body: body.userId },
-    config.DEPLOY_MODE
-  );
+  const userId = effectiveUserId(caller);
 
   const task = await TaskService.createTask({
     sessionId,
@@ -120,12 +137,17 @@ sessionsRouter.post("/:id/run", async (c) => {
  * Connects to live SSE stream of task events for the session,
  * replaying buffered events starting from optional ?fromStep=N.
  */
-sessionsRouter.get("/:id/stream", (c) => {
+sessionsRouter.get("/:id/stream", async (c) => {
   const sessionId = c.req.param("id");
   const session = SessionService.getSession(sessionId);
 
   if (!session) {
     return c.json({ error: `Session "${sessionId}" not found` }, 404);
+  }
+
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(session.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
   }
 
   const fromStepParam = c.req.query("fromStep");
