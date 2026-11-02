@@ -162,6 +162,8 @@ export function getRouter(): IntentRouter {
 export interface StreamEvent {
   type: "delta" | "progress";
   text: string;
+  /** True when the text is pre-tool narration (goes to the thinking block). */
+  thinking?: boolean;
 }
 
 export interface AnswerContext {
@@ -191,22 +193,32 @@ async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
     sessionId: ctx.sessionId,
     history: [{ role: "system", content: snapshot } as any],
     ...(ctx.llmClient ? { llmClient: ctx.llmClient as any } : {}),
-    onEvent: async (ev: AgentStepEvent) => {
-      if (ev.type === "agent.heartbeat") return;
-      if (ev.type === "agent.text_delta" && typeof (ev.payload as any)?.delta === "string") {
-        ctx.onEvent?.({ type: "delta", text: (ev.payload as any).delta });
-        return;
-      }
-      if (ev.type === "tool.start" && typeof (ev.payload as any)?.name === "string") {
-        ctx.onEvent?.({ type: "progress", text: `Running ${(ev.payload as any).name}…` });
-      }
-      // Every other loop event rides the durable job stream (same
-      // Last-Event-ID resume as job events): tools, dock/theme/reader
-      // side-effects and plugin registrations all land in the UI.
-      taskExecutionEngine.announceRow(
-        insertJobEvent(ctx.messageId, ctx.sessionId, ev.type, (ev.payload as Record<string, unknown>) || {})
-      );
-    },
+    onEvent: (() => {
+      let toolSeen = false;
+      return async (ev: AgentStepEvent) => {
+        if (ev.type === "agent.heartbeat") return;
+        if (ev.type === "agent.text_delta" && typeof (ev.payload as any)?.delta === "string") {
+          const text = (ev.payload as any).delta as string;
+          if (!toolSeen) {
+            // Pre-tool narration becomes collapsible thinking, not chat text.
+            ctx.onEvent?.({ type: "delta", text, thinking: true });
+          } else {
+            ctx.onEvent?.({ type: "delta", text });
+          }
+          return;
+        }
+        if (ev.type === "tool.start") toolSeen = true;
+        if (ev.type === "tool.start" && typeof (ev.payload as any)?.name === "string") {
+          ctx.onEvent?.({ type: "progress", text: `Running ${(ev.payload as any).name}…` });
+        }
+        // Every other loop event rides the durable job stream (same
+        // Last-Event-ID resume as job events): tools, dock/theme/reader
+        // side-effects and plugin registrations all land in the UI.
+        taskExecutionEngine.announceRow(
+          insertJobEvent(ctx.messageId, ctx.sessionId, ev.type, (ev.payload as Record<string, unknown>) || {})
+        );
+      };
+    })(),
   });
   if (result.status === "error") {
     throw new Error(result.error || "Agent execution failed");
@@ -504,8 +516,8 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
       llmClient: input.llmClient,
       onEvent: (ev) => {
         if (ev.type === "delta" && ev.text) {
-          full += ev.text;
-          publishMessage(row.session_id, messageId, "message.delta", { text: ev.text });
+          if (!ev.thinking) full += ev.text;
+          publishMessage(row.session_id, messageId, "message.delta", { text: ev.text, ...(ev.thinking ? { thinking: true } : {}) });
         } else if (ev.type === "progress" && ev.text) {
           publishMessage(row.session_id, messageId, "message.delta", { text: `\n_${ev.text}_\n` });
         }
