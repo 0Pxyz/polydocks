@@ -993,7 +993,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             seenCalls.add(callKey);
             try {
               toolOutput = await registeredTool.execute(parsed.data, {
-                workspaceId,
                 workspaceId: effectiveWorkspaceId,
                 sessionId: effectiveSessionId,
                 taskId,

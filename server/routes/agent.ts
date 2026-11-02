@@ -16,7 +16,6 @@ function ctxFrom(c: { req: { query: (k: string) => string | undefined } }, body:
   return {
     actor: "user",
     workspaceId: body?.workspaceId || c.req.query("workspaceId"),
-    workspaceId: body?.workspaceId || c.req.query("workspaceId"),
     sessionId: body?.sessionId || c.req.query("sessionId"),
   };
 }

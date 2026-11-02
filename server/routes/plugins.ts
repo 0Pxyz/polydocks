@@ -268,7 +268,6 @@ pluginsRouter.post("/lifecycle", async (c) => {
   const out = await pluginLifecycle(typeof op === "string" ? op : "", params ?? {}, {
     actor: "user",
     workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
-    workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
   });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
