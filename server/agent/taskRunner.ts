@@ -352,10 +352,15 @@ export function updateTaskState(
     const row = db.prepare("SELECT session_id FROM tasks WHERE id = ?").get(taskId) as any;
     sessionId = row?.session_id ?? null;
     if (sessionId) {
+      const summary =
+        status === "completed" && data?.output !== undefined && data?.output !== null && typeof data.output === "object"
+          ? String((data.output as Record<string, unknown>).text || "").slice(0, 300)
+          : undefined;
       insertJobEvent(taskId, sessionId, `job.${status}`, {
         status,
         ...(data?.progress !== undefined ? { progress: data.progress } : {}),
         ...(data?.error !== undefined ? { error: data.error } : {}),
+        ...(summary ? { summary } : {}),
       });
     }
   })();
@@ -368,6 +373,31 @@ export function updateTaskState(
       // Subscriber failure never fails the transition.
     }
   }
+}
+
+/**
+ * Honest completion gate for heavy jobs: a run that called no tools, or a
+ * synthesis that registered nothing, changed nothing — it fails loudly
+ * instead of announcing "Done". Pure function so tests pin the rule.
+ */
+export function verifyJobEffect(input: {
+  type: string;
+  toolCalls: number;
+  pluginTouched: boolean;
+}): { ok: true } | { ok: false; error: string } {
+  if (input.toolCalls === 0) {
+    return {
+      ok: false,
+      error: "Job finished without any tool call and no verifiable effect — nothing was changed.",
+    };
+  }
+  if (input.type === "plugin_synthesis" && !input.pluginTouched) {
+    return {
+      ok: false,
+      error: "Synthesis finished without registering or updating any plugin — nothing was changed.",
+    };
+  }
+  return { ok: true };
 }
 
 /**
@@ -618,6 +648,8 @@ export class TaskExecutionEngine {
 
     // Execute detached from the immediate request
     void (async () => {
+      let toolCalls = 0;
+      let pluginTouched = false;
       try {
         const emit = async (ev: AgentStepEvent) => {
           await this.emitEvent(task.sessionId, ev, options?.rootDir);
@@ -646,11 +678,9 @@ export class TaskExecutionEngine {
             signal: controller.signal,
             onEvent: async (ev) => {
               await emit(ev);
-              if (
-                ev.type === "plugin.created" ||
-                ev.type === "plugin.updated" ||
-                ev.type === "plugin.published"
-              ) {
+              if (ev.type === "tool.start") toolCalls += 1;
+              if (ev.type === "plugin.created" || ev.type === "plugin.updated" || ev.type === "plugin.published") {
+                pluginTouched = true;
                 const row = insertJobEvent(task.id, task.sessionId, ev.type, {
                   ...(ev.payload as Record<string, unknown>),
                   taskType: task.type,
@@ -669,10 +699,15 @@ export class TaskExecutionEngine {
               error: loopResult.error || "Agent execution failed",
             });
           } else {
-            updateTaskState(task.id, "completed", {
-              progress: 1.0,
-              output: { text: loopResult.text, steps: loopResult.steps },
-            });
+            const verdict = verifyJobEffect({ type: task.type, toolCalls, pluginTouched });
+            if (!verdict.ok) {
+              updateTaskState(task.id, "failed", { error: (verdict as { ok: false; error: string }).error });
+            } else {
+              updateTaskState(task.id, "completed", {
+                progress: 1.0,
+                output: { text: loopResult.text, steps: loopResult.steps },
+              });
+            }
           }
         }
       } catch (err: any) {

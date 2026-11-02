@@ -1,5 +1,5 @@
 import { runAgentLoop, type AgentStepEvent } from "./loop";
-import { matchDeterministicCommand } from "./dispatcher";
+import { matchDeterministicCommand, DOCK_ID_ALIASES } from "./dispatcher";
 import { searchDockCatalog } from "./tools/dockCatalog";
 import { TaskService } from "../services/taskService";
 import { createSession, getSession, taskExecutionEngine } from "./taskRunner";
@@ -50,6 +50,9 @@ export interface IntentRouter {
 }
 
 const PT_ARTICLES = /^(o|a|os|as|um|uma|the)\s+/i;
+
+const ARTIFACT_WORDS = /\b(plugin|tool|app|dashboard|viewer|site|component|widget|timer|tracker|monitor|bot|integration|extension|skill|script|code|fun[çc][aã]o|programa|automa[cç][aã]o)\b/i;
+const BUILD_VERBS = /\b(cri[ea](r)?|crie|build|make|monte|monta|gere|gerar|desenvolva|desenvolver|write|create|escrev[ea](r)?|escreve)\b/i;
 
 function cleanId(text: string): string {
   return text
@@ -108,6 +111,17 @@ export class KeywordRouter implements IntentRouter {
     if (en && en.kind === "dock.list") {
       return { kind: "dock_action", confidence: 0.9, reason: en.reason, args: { dockOp: "list" } };
     }
+    const openAlias = /^(?:abre|abra|open)\b([\s\S]*)$/i.exec(text);
+    if (openAlias) {
+      const rest = ` ${cleanId(openAlias[1])} `;
+      const aliasHit = (Object.keys(DOCK_ID_ALIASES) as string[]).find((a) => rest.includes(` ${a} `) || rest.endsWith(` ${a}`));
+      if (aliasHit) {
+        const id = DOCK_ID_ALIASES[aliasHit];
+        if (state.dockIds.includes(id)) {
+          return { kind: "dock_action", confidence: 0.85, reason: `alias open for "${aliasHit}"`, args: { dockOp: "open", dockId: id } };
+        }
+      }
+    }
     const ptOpen = /^(?:abre|abra|open)\s+(?:o\s+|a\s+|os\s+|as\s+|um\s+|uma\s+|the\s+)?(.+)$/i.exec(text);
     if (ptOpen) {
       const id = cleanId(ptOpen[1]);
@@ -125,13 +139,11 @@ export class KeywordRouter implements IntentRouter {
       return { kind: "dock_action", confidence: 0.8, reason: "inventory request", args: { dockOp: "list" } };
     }
 
-    // Heavy work: explicit build/create asks become engine jobs.
-    if (
-      /\b(cri[ea](r| uma)?|crie|build|make|monte|monta|gere|gerar|desenvolva|desenvolver|plugin|ferramenta|tool|app|tela|dashboard|viewer|site)\b/i.test(
-        lower
-      ) && lower.length > 12
-    ) {
-      return { kind: "create_tool", confidence: 0.7, reason: "build/create keywords" };
+    // Heavy work is explicit: a build verb AND a plugin/code artifact.
+    // Everything else (themes, wallpapers, questions, dock) stays on the
+    // fast agent with the full toolset — never a background job by default.
+    if (BUILD_VERBS.test(lower) && ARTIFACT_WORDS.test(lower) && lower.length > 12) {
+      return { kind: "create_tool", confidence: 0.85, reason: "explicit build verb + artifact noun" };
     }
 
     return { kind: "answer_quick", confidence: 0.5, reason: "default: quick chat turn" };
@@ -156,6 +168,8 @@ export interface AnswerContext {
   prompt: string;
   workspaceId: string;
   sessionId: string;
+  /** Durable scope for loop events (same id as the message being answered). */
+  messageId: string;
   llmClient?: unknown;
   onEvent?: (ev: StreamEvent) => void;
 }
@@ -165,11 +179,12 @@ async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
     (t) => t.status === "running" || t.status === "queued"
   );
   const snapshot =
-    active.length === 0
+    (active.length === 0
       ? "No background tasks running right now."
       : `Live task snapshot (${active.length}): ` +
         active.map((t) => `${t.id} [${t.type}, ${t.status}]`).join("; ") +
-        ".";
+        ".") +
+    " Reply concisely with the result only: no filler narration (no 'Got it', no 'Let me try a different approach'). Progress is shown from your tool calls, not from chat text.";
   const result = await runAgentLoop({
     prompt: ctx.prompt,
     workspaceId: ctx.workspaceId,
@@ -177,13 +192,25 @@ async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
     history: [{ role: "system", content: snapshot } as any],
     ...(ctx.llmClient ? { llmClient: ctx.llmClient as any } : {}),
     onEvent: async (ev: AgentStepEvent) => {
+      if (ev.type === "agent.heartbeat") return;
       if (ev.type === "agent.text_delta" && typeof (ev.payload as any)?.delta === "string") {
         ctx.onEvent?.({ type: "delta", text: (ev.payload as any).delta });
-      } else if (ev.type === "tool.start" && typeof (ev.payload as any)?.name === "string") {
+        return;
+      }
+      if (ev.type === "tool.start" && typeof (ev.payload as any)?.name === "string") {
         ctx.onEvent?.({ type: "progress", text: `Running ${(ev.payload as any).name}…` });
       }
+      // Every other loop event rides the durable job stream (same
+      // Last-Event-ID resume as job events): tools, dock/theme/reader
+      // side-effects and plugin registrations all land in the UI.
+      taskExecutionEngine.announceRow(
+        insertJobEvent(ctx.messageId, ctx.sessionId, ev.type, (ev.payload as Record<string, unknown>) || {})
+      );
     },
   });
+  if (result.status === "error") {
+    throw new Error(result.error || "Agent execution failed");
+  }
   return result.text || "Done.";
 }
 
@@ -473,6 +500,7 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
       prompt: row.prompt,
       workspaceId: row.workspace_id,
       sessionId: row.session_id,
+      messageId,
       llmClient: input.llmClient,
       onEvent: (ev) => {
         if (ev.type === "delta" && ev.text) {

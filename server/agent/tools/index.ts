@@ -49,6 +49,7 @@ import {
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
+import { start_background_job } from "./start_background_job";
 import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback, pluginsActivate, pluginsDeactivate } from "./verbs/plugins";
 import { skillsRead } from "./verbs/skills";
 import { config } from "../../config";
@@ -111,6 +112,7 @@ export {
   dockPrev,
   dockBackground,
   chatToggle,
+  start_background_job,
   pluginsCreate,
   pluginsEdit,
   pluginsInstall,
@@ -191,6 +193,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: dockPrev, surfaces: ["minimal"] },
   { tool: dockBackground, surfaces: ["minimal"] },
   { tool: chatToggle, surfaces: ["minimal"] },
+  { tool: start_background_job, surfaces: ["full"] },
   { tool: pluginsCreate, surfaces: ["minimal"] },
   { tool: pluginsEdit, surfaces: ["minimal"] },
   { tool: pluginsInstall, surfaces: ["minimal"] },
