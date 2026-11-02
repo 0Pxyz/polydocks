@@ -1,253 +1,387 @@
-import { runAgentLoop, type AgentStepEvent, type AgentLoopOptions } from "./loop";
-import { getClientForRole, roleReasoningEffort } from "./modelRegistry";
-import {
-  dockOpen,
-  dockClose,
-  dockPin,
-  dockUnpin,
-  dockList,
-  dockFocus,
-  dockNext,
-  dockPrev,
-  dockBackground,
-  chatToggle,
-} from "./tools/verbs/dock";
-import { escalate } from "./tools/verbs/escalate";
-import { matchDeterministicCommand, runDeterministicCommand } from "./dispatcher";
-import type { AgentTool } from "./tools/types";
+import { runAgentLoop } from "./loop";
+import { matchDeterministicCommand } from "./dispatcher";
+import { searchDockCatalog } from "./tools/dockCatalog";
+import { TaskService } from "../services/taskService";
+import { createSession, getSession } from "./taskRunner";
+import { db } from "../workspace/db";
 
 /**
- * Orchestrator surface (#211): plain function tools ONLY — dock verbs
- * plus escalate. No tool search, no build tools, no discovery roots.
- * Anything outside this list escalates by construction (the model
- * cannot call what it is not offered).
- */
-export const ORCHESTRATOR_TOOLS: AgentTool[] = [
-  dockOpen,
-  dockClose,
-  dockPin,
-  dockUnpin,
-  dockList,
-  dockFocus,
-  dockNext,
-  dockPrev,
-  dockBackground,
-  chatToggle,
-  escalate,
-];
-
-/**
- * Escalation contract (#212): the handoff from the orchestrator loop
- * (#211) to the heavy agent. One payload in, one structured result out;
- * the heavy agent never talks to the user directly — its SSE events flow
- * back through the caller's onEvent so the orchestrator relays status
- * and the final answer. Policy and receipts apply inside the heavy loop
- * exactly as on any other turn (manifest gate, install policy, bus
- * policy, receipt check).
- */
-export interface EscalationHandoff {
-  /** What the heavy agent must do (full user-visible request). */
-  prompt: string;
-  /** Classified intent, when the orchestrator already knows it. */
-  intent?: string;
-  /** Opaque context id; the core never interprets it. */
-  contextId?: string;
-  /** Workspace the heavy agent acts in. */
-  workspaceId?: string;
-  /** Compressed history the orchestrator carries over (optional). */
-  historySummary?: string;
-  /** Bounds the heavy turn must respect. */
-  constraints?: {
-    maxSteps?: number;
-  };
-}
-
-export interface EscalationResult {
-  ok: boolean;
-  text: string;
-  steps: number;
-  citations: Array<{ url: string; title: string }>;
-  /** Heavy-turn measured cost, harvested from its finish payload (for #214 metrics). */
-  heavyInputTokens: number;
-  heavyOutputTokens: number;
-  error?: string;
-}
-
-export interface HeavyRunnerOptions {
-  llmClient?: any;
-  modelId?: string;
-  onEvent?: (event: AgentStepEvent) => void | Promise<void>;
-  agentManifest?: import("../plugins/manifest").PluginManifest;
-}
-
-/**
- * Routing policy (#213): when a heavy turn returns control to the
- * orchestrator, and why. Enforced where noted; documented here so the
- * thresholds have one home and the tests pin them.
+ * Non-blocking orchestrator (slice 3).
  *
- * - Tool error: zod validation retries twice, then the tool fails for
- *   the turn (loop.ts). A failing heavy turn returns ok:false with the
- *   error text — the orchestrator relays the failure, never retries
- *   the same handoff blindly.
- * - No progress: the same tool with identical arguments is refused as
- *   a duplicate; three consecutive refusals end the turn gracefully
- *   with a stuck message (loop.ts). The stuck text returns ok:true —
- *   it names the next action, which the orchestrator can relay or
- *   re-scope, instead of burning more steps.
- * - Step bound: constraints.maxSteps caps the heavy turn; the fallback
- *   synthesis still produces a partial answer, which returns ok:true
- *   with steps (partial beats nothing).
- * - Timeout/cancel: aborts propagate as errors and return ok:false.
- * - Low confidence: the receipt check appends a verify-before-relying
- *   note inside the heavy text; the result still returns ok:true.
+ * Every user message lands in a persisted per-session FIFO and is handled
+ * fast: light turns answer inline, heavy turns (code/tool synthesis) become
+ * engine jobs and return an ack with a taskId. The orchestrator never
+ * awaits a job, so "como está?" and "abre o bitcoin" answer while a 30s
+ * generation runs. Job results arrive later through job_events + SSE.
  */
-export const ROUTING_POLICY = {
-  validationRetries: 2,
-  duplicateRefusalsToStuck: 3,
-  errorReturnsControl: true,
-  stuckReturnsControl: true,
-} as const;
 
-/** Injectable runner so the escalate tool is testable without a live key. */
-let heavyRunner: typeof escalateToHeavyAgent = escalateToHeavyAgent;
+export type RouteKind =
+  | "answer_quick"
+  | "dock_action"
+  | "create_tool"
+  | "steer_task"
+  | "cancel_task";
 
-export function setHeavyRunnerForTest(fn?: typeof escalateToHeavyAgent): void {
-  heavyRunner = fn ?? escalateToHeavyAgent;
+export interface RouteArgs {
+  dockOp?: "open" | "close" | "list";
+  dockId?: string;
+  targetTaskRef?: string;
 }
 
-export function getHeavyRunner(): typeof escalateToHeavyAgent {
-  return heavyRunner;
+export interface RouteDecision {
+  kind: RouteKind;
+  /** 0..1. Low confidence never executes destructive intents. */
+  confidence: number;
+  reason: string;
+  args?: RouteArgs;
 }
 
-export interface OrchestratorOptions {
-  prompt: string;
-  workspaceId?: string;
-  history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
-  /** Injectable fast-model client (tests); production resolves the orchestrator role. */
-  llmClient?: AgentLoopOptions["llmClient"];
-  modelId?: string;
-  /** Tool surface override (eval doubles); defaults to ORCHESTRATOR_TOOLS. */
-  tools?: AgentTool[];
-  onEvent?: AgentLoopOptions["onEvent"];
-  maxSteps?: number;
-  /** Agent manifest override for the permission gate (#207). */
-  agentManifest?: import("../plugins/manifest").PluginManifest;
+export interface RouterState {
+  workspaceId: string;
+  sessionId: string;
+  /** Real dock ids (builtins + installed, never store-only). */
+  dockIds: string[];
+  activeTasks: Array<{ id: string; type: string; status: string }>;
+}
+
+export interface IntentRouter {
+  route(message: string, state: RouterState): Promise<RouteDecision> | RouteDecision;
+}
+
+const PT_ARTICLES = /^(o|a|os|as|um|uma|the)\s+/i;
+
+function cleanId(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(PT_ARTICLES, "")
+    .replace(/[!?.]+$/, "")
+    .trim();
 }
 
 /**
- * Orchestrator loop (#211): the shared agent loop restricted to the
- * orchestrator surface on the small fast model with low reasoning
- * effort. Quick dock requests resolve directly without touching the
- * heavy agent; everything else escalates through the contract (#212).
- * Escalation cannot be forced by the API (tool_choice is auto-only) —
- * it is enforced by the tool description, the orchestrator prompt, and
- * the missed-escalation build gate.
+ * Keyword router: deterministic today, model-backed later. Pure function
+ * of (message, state) — no I/O, no side effects — so tests and a future
+ * small-model router can share the interface and the swap point below.
  */
-export async function runOrchestratorLoop(options: OrchestratorOptions) {
-  // Fast dispatcher first (#178): imperative dock/theme commands resolve
-  // with zero model calls. A denied or failed deterministic run falls
-  // through to the model loop — never fail the turn on the fast path.
-  const emit = options.onEvent ?? (() => {});
-  const fast = matchDeterministicCommand(options.prompt);
-  if (fast) {
-    const ran = await runDeterministicCommand(fast, {
-      workspaceId: options.workspaceId,
-      agentManifest: options.agentManifest,
-    });
-    if (ran.ok) {
-      await emit({ step: 1, type: "tool.start", payload: { name: ran.toolName, deterministic: true, reason: fast.reason } });
-      await emit({ step: 1, type: "tool.done", payload: { name: ran.toolName, deterministic: true } });
-      await emit({ step: 1, type: "agent.finish", payload: { text: ran.text, deterministic: true } });
-      return { status: "completed" as const, text: ran.text, steps: 1 };
+export class KeywordRouter implements IntentRouter {
+  route(message: string, state: RouterState): RouteDecision {
+    const text = (message || "").trim();
+    const lower = text.toLowerCase();
+
+    // Cancel / steer name a running job. Recognized but unsupported yet.
+    if (
+      /\b(cancel|pare|para|stop|interromp|abort)/i.test(lower) &&
+      /\b(task|job|tarefa|trabalho|build|gera[cç][aã]o|generation)\b/i.test(lower)
+    ) {
+      return { kind: "cancel_task", confidence: 0.6, reason: "cancel keywords + task noun" };
     }
-  }
-  const resolved = options.llmClient
-    ? { llmClient: options.llmClient, ...(options.modelId ? { modelId: options.modelId } : {}) }
-    : (() => {
-        const { client, modelId } = getClientForRole("orchestrator");
-        return { llmClient: client as any, modelId: options.modelId ?? modelId };
-      })();
-  const { getPrompt } = await import("./prompts/index");
-  let systemPrompt: string | undefined;
-  try {
-    systemPrompt = getPrompt("orchestrator").text;
-  } catch {
-    systemPrompt = undefined;
-  }
-  return runAgentLoop({
-    prompt: options.prompt,
-    workspaceId: options.workspaceId,
-    history: options.history,
-    tools: options.tools ?? ORCHESTRATOR_TOOLS,
-    ...resolved,
-    reasoningEffort: roleReasoningEffort("orchestrator"),
-    ...(systemPrompt ? { systemPrompt } : {}),
-    onEvent: options.onEvent ?? (() => {}),
-    ...(typeof options.maxSteps === "number" ? { maxSteps: options.maxSteps } : {}),
-    ...(options.agentManifest ? { agentManifest: options.agentManifest } : {}),
-  });
-}
+    if (
+      /\b(muda|altera|ajusta|steer|continua|change)\b/i.test(lower) &&
+      /\b(task|job|tarefa|trabalho|build|gera[cç][aã]o)\b/i.test(lower)
+    ) {
+      return { kind: "steer_task", confidence: 0.55, reason: "steer keywords + task noun" };
+    }
 
-/**
- * Run the heavy agent for one escalated turn. Injectable client for
- * tests; production resolves the agent role (model + effort) here so
- * the orchestrator never hardcodes model ids.
- */
-export async function escalateToHeavyAgent(
-  handoff: EscalationHandoff,
-  options: HeavyRunnerOptions = {}
-): Promise<EscalationResult> {
-  const history = handoff.historySummary
-    ? [{ role: "system" as const, content: `Prior conversation summary:\n${handoff.historySummary}` }]
-    : [];
-  // The heavy agent never talks to the user directly: its events flow
-  // through the caller's handler (the orchestrator relays), and its
-  // citations are harvested from the finish payload into the result.
-  let citations: Array<{ url: string; title: string }> = [];
-  let heavyInputTokens = 0;
-  let heavyOutputTokens = 0;
-  const relay = async (event: AgentStepEvent) => {
-    if (event.type === "agent.finish") {
-      if (Array.isArray((event.payload as any)?.citations)) {
-        citations = (event.payload as any).citations;
+    // Fast dock path first: the English deterministic matcher, then a
+    // small PT imperative matcher. Both resolve against the real dock list.
+    const en = matchDeterministicCommand(text);
+    if (en && (en.kind === "dock.open" || en.kind === "dock.close")) {
+      const id = String((en.args as any).tabId ?? (en.args as any).id ?? "");
+      if (id && state.dockIds.includes(id)) {
+        return {
+          kind: "dock_action",
+          confidence: 0.9,
+          reason: en.reason,
+          args: { dockOp: en.kind === "dock.open" ? "open" : "close", dockId: id },
+        };
       }
-      heavyInputTokens = Number((event.payload as any)?.inputTokens ?? heavyInputTokens) || heavyInputTokens;
-      heavyOutputTokens = Number((event.payload as any)?.outputTokens ?? heavyOutputTokens) || heavyOutputTokens;
     }
-    await options.onEvent?.(event);
-  };
-  const heavy = options.llmClient
-    ? { llmClient: options.llmClient, ...(options.modelId ? { modelId: options.modelId } : {}) }
-    : (() => {
-        const resolved = getClientForRole("agent");
-        return { llmClient: resolved.client, modelId: options.modelId ?? resolved.modelId };
-      })();
+    if (en && en.kind === "dock.list") {
+      return { kind: "dock_action", confidence: 0.9, reason: en.reason, args: { dockOp: "list" } };
+    }
+    const ptOpen = /^(?:abre|abra|open)\s+(?:o\s+|a\s+|os\s+|as\s+|um\s+|uma\s+|the\s+)?(.+)$/i.exec(text);
+    if (ptOpen) {
+      const id = cleanId(ptOpen[1]);
+      if (id && state.dockIds.includes(id)) {
+        return { kind: "dock_action", confidence: 0.85, reason: `PT imperative open for "${id}"`, args: { dockOp: "open", dockId: id } };
+      }
+      return { kind: "dock_action", confidence: 0.85, reason: `PT imperative open for unknown id "${id}"`, args: { dockOp: "open", dockId: id } };
+    }
+    const ptClose = /^(?:fecha|feche|close)\s+(?:o\s+|a\s+|os\s+|as\s+|um\s+|uma\s+|the\s+)?(.+)$/i.exec(text);
+    if (ptClose) {
+      const id = cleanId(ptClose[1]);
+      return { kind: "dock_action", confidence: 0.85, reason: `PT imperative close for "${id}"`, args: { dockOp: "close", dockId: id } };
+    }
+    if (/^(?:liste|mostre|mostra|list|show)\b/i.test(text)) {
+      return { kind: "dock_action", confidence: 0.8, reason: "inventory request", args: { dockOp: "list" } };
+    }
+
+    // Heavy work: explicit build/create asks become engine jobs.
+    if (
+      /\b(cri[ea](r| um| uma)?|crie|build|make|monte|monta|gere|gerar|desenvolva|desenvolver|plugin|ferramenta|tool|app|tela|dashboard|viewer|site)\b/i.test(
+        lower
+      ) && lower.length > 12
+    ) {
+      return { kind: "create_tool", confidence: 0.7, reason: "build/create keywords" };
+    }
+
+    return { kind: "answer_quick", confidence: 0.5, reason: "default: quick chat turn" };
+  }
+}
+
+/** Provider swap point: setRouter(new ModelRouter(...)) replaces rules. */
+let activeRouter: IntentRouter = new KeywordRouter();
+export function setRouter(router: IntentRouter): void {
+  activeRouter = router;
+}
+export function getRouter(): IntentRouter {
+  return activeRouter;
+}
+
+export interface AnswerContext {
+  prompt: string;
+  workspaceId: string;
+  sessionId: string;
+  llmClient?: unknown;
+}
+
+async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
+  const active = TaskService.listTasks({ workspaceId: ctx.workspaceId }).filter(
+    (t) => t.status === "running" || t.status === "queued"
+  );
+  const snapshot =
+    active.length === 0
+      ? "No background tasks running right now."
+      : `Live task snapshot (${active.length}): ` +
+        active.map((t) => `${t.id} [${t.type}, ${t.status}]`).join("; ") +
+        ".";
   const result = await runAgentLoop({
-    prompt: handoff.prompt,
-    workspaceId: handoff.workspaceId,
-    history,
-    ...heavy,
-    reasoningEffort: roleReasoningEffort("agent"),
-    ...(typeof handoff.constraints?.maxSteps === "number"
-      ? { maxSteps: handoff.constraints.maxSteps }
-      : {}),
-    ...(options.agentManifest ? { agentManifest: options.agentManifest } : {}),
-    onEvent: relay,
+    prompt: ctx.prompt,
+    workspaceId: ctx.workspaceId,
+    sessionId: ctx.sessionId,
+    history: [{ role: "system", content: snapshot } as any],
+    ...(ctx.llmClient ? { llmClient: ctx.llmClient as any } : {}),
   });
-  if (result.status === "completed") {
-    return { ok: true, text: result.text ?? "", steps: result.steps, citations, heavyInputTokens, heavyOutputTokens };
+  return result.text || "Done.";
+}
+
+export interface OrchestratorDeps {
+  answerQuick?: (ctx: AnswerContext) => Promise<string>;
+  startHeavy?: (task: {
+    sessionId: string;
+    workspaceId: string;
+    type: string;
+    input: Record<string, unknown>;
+  }) => Promise<{ id: string }>;
+}
+
+async function defaultStartHeavy(task: {
+  sessionId: string;
+  workspaceId: string;
+  type: string;
+  input: Record<string, unknown>;
+}): Promise<{ id: string }> {
+  const created = await TaskService.createTask({
+    sessionId: task.sessionId,
+    workspaceId: task.workspaceId,
+    type: task.type,
+    input: task.input,
+  });
+  await TaskService.runTask(created);
+  return { id: created.id };
+}
+
+export type OrchestratorReply =
+  | { type: "reply"; text: string; decision: RouteDecision }
+  | { type: "ack"; taskId: string; text: string; decision: RouteDecision }
+  | { type: "dock_action"; op: "open" | "close" | "list"; id?: string; text: string; decision: RouteDecision }
+  | { type: "unsupported"; text: string; decision: RouteDecision }
+  | { type: "error"; text: string; decision: RouteDecision };
+
+const QUEUE_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS message_queue (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    origin TEXT NOT NULL DEFAULT 'chat',
+    status TEXT NOT NULL DEFAULT 'queued',
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_message_queue_session ON message_queue(session_id, status, created_at);
+`;
+
+function ensureQueueTable(): void {
+  db.exec(QUEUE_TABLE_SQL);
+}
+
+function newId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** In-process per-session chains: order within a session, never across. */
+const sessionChains = new Map<string, Promise<unknown>>();
+
+async function realDockIds(workspaceId: string): Promise<string[]> {
+  try {
+    const entries = await searchDockCatalog({ workspaceId });
+    return entries.filter((e) => e.kind !== "store").map((e) => e.id);
+  } catch {
+    return [];
   }
-  if (result.status === "max_steps_reached" && (result.text ?? "").trim()) {
-    // Partial synthesis still answers: return control with the text.
-    return { ok: true, text: result.text ?? "", steps: result.steps, citations, heavyInputTokens, heavyOutputTokens };
+}
+
+function activeSnapshot(workspaceId: string): Array<{ id: string; type: string; status: string }> {
+  try {
+    return TaskService.listTasks({ workspaceId })
+      .filter((t) => t.status === "running" || t.status === "queued")
+      .map((t) => ({ id: t.id, type: t.type, status: t.status }));
+  } catch {
+    return [];
   }
-  return {
-    ok: false,
-    text: result.text ?? "",
-    steps: result.steps,
-    citations,
-    heavyInputTokens,
-    heavyOutputTokens,
-    error: result.error ?? `heavy agent stopped: ${result.status}`,
-  };
+}
+
+export interface HandleMessageInput {
+  sessionId?: string;
+  workspaceId?: string;
+  prompt: string;
+  origin?: string;
+  llmClient?: unknown;
+  deps?: OrchestratorDeps;
+}
+
+/**
+ * Enqueues one message and processes the session FIFO. Returns as soon as
+ * THIS message is handled — light turns answer inline, heavy turns return
+ * an ack. Never awaits a job.
+ */
+export async function handleMessage(input: HandleMessageInput): Promise<
+  OrchestratorReply & { sessionId: string; messageId: string }
+> {
+  ensureQueueTable();
+  const workspaceId = input.workspaceId || "default";
+  let sessionId = input.sessionId;
+  if (!sessionId || !getSession(sessionId)) {
+    sessionId = createSession({ workspaceId, title: input.prompt.slice(0, 60) }).id;
+  }
+
+  const messageId = newId("msg");
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO message_queue (id, session_id, workspace_id, prompt, origin, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
+  ).run(messageId, sessionId, workspaceId, input.prompt, input.origin || "chat", now, now);
+
+  const chain = (sessionChains.get(sessionId!) ?? Promise.resolve()).then(() =>
+    processOne(messageId, input)
+  );
+  sessionChains.set(sessionId!, chain.catch(() => {}));
+  const reply = (await chain) as OrchestratorReply;
+  return { ...reply, sessionId: sessionId!, messageId };
+}
+
+async function processOne(
+  messageId: string,
+  input: HandleMessageInput
+): Promise<OrchestratorReply> {
+  const row = db
+    .prepare("SELECT * FROM message_queue WHERE id = ?")
+    .get(messageId) as any;
+  if (!row || row.status !== "queued") {
+    return { type: "error", text: "Message already handled.", decision: { kind: "answer_quick", confidence: 0, reason: "stale" } };
+  }
+  db.prepare("UPDATE message_queue SET status = 'processing', updated_at = ? WHERE id = ?").run(
+    new Date().toISOString(),
+    messageId
+  );
+
+  const deps = input.deps ?? {};
+  const answerQuick = deps.answerQuick ?? defaultAnswerQuick;
+  const startHeavy = deps.startHeavy ?? defaultStartHeavy;
+
+  try {
+    const dockIds = await realDockIds(row.workspace_id);
+    const decision = await activeRouter.route(row.prompt, {
+      workspaceId: row.workspace_id,
+      sessionId: row.session_id,
+      dockIds,
+      activeTasks: activeSnapshot(row.workspace_id),
+    });
+
+    let reply: OrchestratorReply;
+    if (decision.kind === "steer_task" || decision.kind === "cancel_task") {
+      reply = {
+        type: "unsupported",
+        text: "Steering and cancelling running jobs isn't supported yet — it lands right after this cut.",
+        decision,
+      };
+    } else if (decision.kind === "dock_action") {
+      const op = decision.args?.dockOp ?? "list";
+      const id = decision.args?.dockId;
+      if ((op === "open" || op === "close") && id && !dockIds.includes(id)) {
+        reply = {
+          type: "error",
+          text: `Nothing called "${id}" is in your dock. Install it from the Library first.`,
+          decision,
+        };
+      } else {
+        const label = op === "list" ? "Here is your dock." : op === "open" ? `Opening "${id}".` : `Closing "${id}".`;
+        reply = { type: "dock_action", op, ...(id ? { id } : {}), text: label, decision };
+      }
+    } else if (decision.kind === "create_tool") {
+      const started = await startHeavy({
+        sessionId: row.session_id,
+        workspaceId: row.workspace_id,
+        type: "plugin_synthesis",
+        input: { prompt: row.prompt, origin: row.origin },
+      });
+      reply = {
+        type: "ack",
+        taskId: started.id,
+        text: `On it — building in the background (job ${started.id}). I'll post the result here when it lands.`,
+        decision,
+      };
+    } else {
+      const text = await answerQuick({
+        prompt: row.prompt,
+        workspaceId: row.workspace_id,
+        sessionId: row.session_id,
+        llmClient: input.llmClient,
+      });
+      reply = { type: "reply", text, decision };
+    }
+
+    db.prepare("UPDATE message_queue SET status = 'done', updated_at = ? WHERE id = ?").run(
+      new Date().toISOString(),
+      messageId
+    );
+    return reply;
+  } catch (err: any) {
+    db.prepare("UPDATE message_queue SET status = 'failed', error = ?, updated_at = ? WHERE id = ?").run(
+      err?.message || String(err),
+      new Date().toISOString(),
+      messageId
+    );
+    return {
+      type: "error",
+      text: "Couldn't handle that just now — try again.",
+      decision: { kind: "answer_quick", confidence: 0, reason: "handler threw" },
+    };
+  }
+}
+
+/** Boot recovery: queued/processing rows outlive their HTTP calls. */
+export function recoverMessageQueue(): { recovered: number } {
+  try {
+    ensureQueueTable();
+    const res = db
+      .prepare("UPDATE message_queue SET status = 'interrupted', updated_at = ? WHERE status IN ('queued', 'processing')")
+      .run(new Date().toISOString());
+    return { recovered: Number((res as any).changes ?? 0) };
+  } catch {
+    return { recovered: 0 };
+  }
 }
