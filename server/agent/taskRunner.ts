@@ -1,9 +1,25 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "../workspace/db";
-import { ensureSessionTaskTables, mirrorTranscriptEntry } from "../workspace/sessions";
+import {
+  ensureSessionTaskTables,
+  mirrorTranscriptEntry,
+  insertJobEvent,
+} from "../workspace/sessions";
 import { getSessionsPath } from "../system/agentHome";
 import { runAgentLoop, type AgentStepEvent } from "./loop";
+
+/** Terminal task states: timestamps close and no further transitions apply. */
+const TERMINAL_TASK_STATUSES: TaskStatus[] = ["completed", "failed", "cancelled", "interrupted"];
+
+/** In-process worker cap: extra jobs wait in `queued` (FIFO pump on settle). */
+const MAX_CONCURRENT_JOBS = 2;
+
+/** Fallback cap per job; jobs may override via input.timeoutMs. */
+const DEFAULT_JOB_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Task types that run code in the workspace sandbox (terminate on cancel). */
+const SANDBOX_TASK_TYPES = new Set(["plugin_synthesis", "background_worker"]);
 
 export type SessionStatus = "active" | "paused" | "completed" | "archived";
 export type TaskStatus =
@@ -36,6 +52,8 @@ export interface AgentTask {
   error?: string;
   createdAt: string;
   updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface CreateSessionOptions {
@@ -237,6 +255,8 @@ export function getTask(taskId: string): AgentTask | null {
     error: row.error || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    startedAt: row.started_at || undefined,
+    finishedAt: row.finished_at || undefined,
   };
 }
 
@@ -282,6 +302,8 @@ export function listTasks(options?: {
     error: row.error || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    startedAt: row.started_at || undefined,
+    finishedAt: row.finished_at || undefined,
   }));
 }
 
@@ -291,26 +313,53 @@ export function updateTaskState(
   data?: { progress?: number; output?: Record<string, unknown>; error?: string }
 ): void {
   const now = new Date().toISOString();
-  let query = "UPDATE tasks SET status = ?, updated_at = ?";
-  const params: any[] = [status, now];
+  let sessionId: string | null = null;
 
-  if (data?.progress !== undefined) {
-    query += ", progress = ?";
-    params.push(data.progress);
-  }
-  if (data?.output !== undefined) {
-    query += ", output_json = ?";
-    params.push(JSON.stringify(data.output));
-  }
-  if (data?.error !== undefined) {
-    query += ", error = ?";
-    params.push(data.error);
-  }
+  // State transition + durable lifecycle event in one transaction.
+  db.transaction(() => {
+    let query = "UPDATE tasks SET status = ?, updated_at = ?";
+    const params: any[] = [status, now];
 
-  query += " WHERE id = ?";
-  params.push(taskId);
+    if (status === "running") {
+      query += ", started_at = COALESCE(started_at, ?)";
+      params.push(now);
+    }
+    if ((TERMINAL_TASK_STATUSES as string[]).includes(status)) {
+      query += ", finished_at = ?";
+      params.push(now);
+    }
 
-  db.prepare(query).run(...params);
+    if (data?.progress !== undefined) {
+      query += ", progress = ?";
+      params.push(data.progress);
+    }
+    if (data?.output !== undefined) {
+      query += ", output_json = ?";
+      params.push(JSON.stringify(data.output));
+    }
+    if (data?.error !== undefined) {
+      query += ", error = ?";
+      params.push(data.error);
+    }
+
+    query += " WHERE id = ?";
+    params.push(taskId);
+
+    db.prepare(query).run(...params);
+
+    const row = db.prepare("SELECT session_id FROM tasks WHERE id = ?").get(taskId) as any;
+    sessionId = row?.session_id ?? null;
+    if (sessionId) {
+      insertJobEvent(taskId, sessionId, `job.${status}`, {
+        status,
+        ...(data?.progress !== undefined ? { progress: data.progress } : {}),
+        ...(data?.error !== undefined ? { error: data.error } : {}),
+      });
+    }
+  })();
+
+  // Live SSE fan-out of job events ships in the follow-up (resumable
+  // /api/tasks/stream); the durable row above is already queryable.
 }
 
 /**
@@ -322,6 +371,8 @@ export class TaskExecutionEngine {
   private activeControllers = new Map<string, AbortController>();
   private replayBuffers = new Map<string, AgentStepEvent[]>();
   private subscribers = new Map<string, Set<(event: AgentStepEvent) => void>>();
+  /** FIFO of queued task ids waiting for a worker slot. */
+  private pendingQueue: string[] = [];
   private maxReplayEvents = 100;
 
   public static getInstance(): TaskExecutionEngine {
@@ -331,22 +382,38 @@ export class TaskExecutionEngine {
     return TaskExecutionEngine.instance;
   }
 
+  private runningCount(): number {
+    const row = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'running'").get() as any;
+    return row?.count ?? 0;
+  }
+
   /**
-   * Recovers any orphaned tasks left in 'running' state from previous server instances.
+   * Recovers orphaned tasks left in 'running' from previous server
+   * instances. Each recovery also writes a durable job event so
+   * reconnecting SSE clients learn about it without polling.
    */
   public recoverInterruptedTasks(): { recoveredCount: number; taskIds: string[] } {
-    const runningRows = db.prepare("SELECT id FROM tasks WHERE status = 'running'").all() as any[];
+    const runningRows = db.prepare("SELECT id, session_id FROM tasks WHERE status = 'running'").all() as any[];
     const taskIds = runningRows.map((r) => r.id);
 
     if (taskIds.length > 0) {
       const now = new Date().toISOString();
-      db.prepare(`
-        UPDATE tasks
-        SET status = 'interrupted',
-            error = 'Task interrupted by server restart',
-            updated_at = ?
-        WHERE status = 'running'
-      `).run(now);
+      db.transaction(() => {
+        db.prepare(`
+          UPDATE tasks
+          SET status = 'interrupted',
+              error = 'Task interrupted by server restart',
+              finished_at = ?,
+              updated_at = ?
+          WHERE status = 'running'
+        `).run(now, now);
+        for (const row of runningRows) {
+          insertJobEvent(row.id, row.session_id, "job.interrupted", {
+            status: "interrupted",
+            error: "Task interrupted by server restart",
+          });
+        }
+      })();
 
       console.log(
         `[TaskRunner] Recovered ${taskIds.length} interrupted task(s) on server restart:`,
@@ -439,6 +506,8 @@ export class TaskExecutionEngine {
 
   /**
    * Dispatches and executes an AgentTask asynchronously in the background.
+   * At most MAX_CONCURRENT_JOBS run at once; the rest wait in `queued`
+   * (FIFO pump on settle). Never blocks the caller: returns the task now.
    */
   public runTaskInBackground(
     task: AgentTask,
@@ -447,10 +516,44 @@ export class TaskExecutionEngine {
       rootDir?: string;
     }
   ): Promise<AgentTask> {
+    if (this.runningCount() >= MAX_CONCURRENT_JOBS) {
+      if (!this.pendingQueue.includes(task.id)) {
+        this.pendingQueue.push(task.id);
+      }
+      updateTaskState(task.id, "queued");
+      return Promise.resolve(getTask(task.id)!);
+    }
+    this.startTask(task, options);
+    // Do not await the executionPromise synchronously — return task immediately
+    return Promise.resolve(getTask(task.id)!);
+  }
+
+  /** Starts one task now (caller owns the concurrency check). */
+  private startTask(
+    task: AgentTask,
+    options?: {
+      executor?: TaskExecutor;
+      rootDir?: string;
+    }
+  ): void {
     const controller = new AbortController();
     this.activeControllers.set(task.id, controller);
 
     updateTaskState(task.id, "running", { progress: 0.05 });
+
+    const timeoutMs =
+      task.input && typeof task.input.timeoutMs === "number" && task.input.timeoutMs > 0
+        ? Math.min(task.input.timeoutMs, 12 * 60 * 60 * 1000)
+        : DEFAULT_JOB_TIMEOUT_MS;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        controller.abort(`Job timed out after ${timeoutMs}ms`);
+      } catch {
+        // Already settled.
+      }
+    }, timeoutMs);
 
     // Execute detached from the immediate request
     void (async () => {
@@ -480,8 +583,8 @@ export class TaskExecutionEngine {
           });
 
           if (controller.signal.aborted) {
-            updateTaskState(task.id, "cancelled", {
-              error: "Task cancelled by user",
+            updateTaskState(task.id, timedOut ? "failed" : "cancelled", {
+              error: timedOut ? `Job timed out after ${timeoutMs}ms` : "Task cancelled by user",
             });
           } else if (loopResult.status === "error") {
             updateTaskState(task.id, "failed", {
@@ -495,7 +598,11 @@ export class TaskExecutionEngine {
           }
         }
       } catch (err: any) {
-        if (controller.signal.aborted || err?.name === "AbortError") {
+        if (timedOut) {
+          updateTaskState(task.id, "failed", {
+            error: `Job timed out after ${timeoutMs}ms`,
+          });
+        } else if (controller.signal.aborted || err?.name === "AbortError") {
           updateTaskState(task.id, "cancelled", {
             error: "Task cancelled by user",
           });
@@ -505,16 +612,32 @@ export class TaskExecutionEngine {
           });
         }
       } finally {
+        clearTimeout(timer);
         this.activeControllers.delete(task.id);
+        this.pumpQueue(options);
       }
     })();
+  }
 
-    // Do not await the executionPromise synchronously — return task immediately
-    return Promise.resolve(getTask(task.id)!);
+  /** Starts queued tasks while worker slots are free (FIFO). */
+  private pumpQueue(options?: { executor?: TaskExecutor; rootDir?: string }): void {
+    while (
+      this.pendingQueue.length > 0 &&
+      this.runningCount() < MAX_CONCURRENT_JOBS
+    ) {
+      const nextId = this.pendingQueue.shift()!;
+      const next = getTask(nextId);
+      // Skip tasks that settled while queued (cancelled externally).
+      if (!next || next.status !== "queued") continue;
+      this.startTask(next, options);
+    }
   }
 
   /**
-   * Cancels a running task using its AbortController.
+   * Cancels a queued or running task. Aborting the controller stops the
+   * loop between steps; for sandbox-backed task types the workspace
+   * sandbox is also terminated so in-sandbox work stops too (files
+   * survive on the volume; a dev server there restarts on next use).
    */
   public cancelTask(
     taskId: string,
@@ -532,7 +655,12 @@ export class TaskExecutionEngine {
       };
     }
 
-    if (task.status === "completed" || task.status === "cancelled" || task.status === "failed") {
+    if (
+      task.status === "completed" ||
+      task.status === "cancelled" ||
+      task.status === "failed" ||
+      task.status === "interrupted"
+    ) {
       return {
         cancelled: false,
         task,
@@ -540,14 +668,30 @@ export class TaskExecutionEngine {
       };
     }
 
+    // Dequeue without ever starting.
+    this.pendingQueue = this.pendingQueue.filter((id) => id !== taskId);
+
     const controller = this.activeControllers.get(taskId);
     if (controller) {
       controller.abort();
       this.activeControllers.delete(taskId);
     }
 
+    if (task.status === "running" && SANDBOX_TASK_TYPES.has(task.type)) {
+      // Best-effort: never let a failed terminate block the cancel.
+      void (async () => {
+        try {
+          const { sandboxTerminate } = await import("../sandbox/index");
+          await sandboxTerminate(task.workspaceId);
+        } catch {
+          // Sandbox already gone or Modal unconfigured.
+        }
+      })();
+    }
+
     updateTaskState(taskId, "cancelled", { error: "Task cancelled by user" });
     const updated = getTask(taskId)!;
+    this.pumpQueue();
 
     return {
       cancelled: true,
@@ -562,6 +706,7 @@ export class TaskExecutionEngine {
   public clearBuffers(): void {
     this.replayBuffers.clear();
     this.subscribers.clear();
+    this.pendingQueue = [];
     for (const controller of this.activeControllers.values()) {
       controller.abort();
     }

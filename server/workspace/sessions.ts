@@ -56,8 +56,106 @@ export function ensureSessionTaskTables(): void {
 
     CREATE INDEX IF NOT EXISTS idx_session_transcripts_session_id ON session_transcripts(session_id);
   `);
+
+  // Rolling migrations for existing databases (fresh installs get the
+  // columns from schema.sql directly).
+  const taskCols = new Set(
+    (db.query(`PRAGMA table_info("tasks")`).all() as Array<{ name: string }>).map((c) => c.name)
+  );
+  if (!taskCols.has("started_at")) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN started_at TEXT`);
+  }
+  if (!taskCols.has("finished_at")) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN finished_at TEXT`);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS job_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payload_json TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id);
+    CREATE INDEX IF NOT EXISTS idx_job_events_session_id ON job_events(session_id, id);
+  `);
 }
 
+/**
+ * Durable job event log (SSE resume). INSERT-only, monotonic ids per
+ * process; Last-Event-ID replays everything after the given id.
+ */
+export interface JobEventRow {
+  id: number;
+  jobId: string;
+  sessionId: string;
+  type: string;
+  payload?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export function insertJobEvent(
+  jobId: string,
+  sessionId: string,
+  type: string,
+  payload?: Record<string, unknown>
+): JobEventRow {
+  ensureSessionTaskTables();
+  const createdAt = new Date().toISOString();
+  const result = db
+    .query(
+      `INSERT INTO job_events (job_id, session_id, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(jobId, sessionId, type, payload !== undefined ? JSON.stringify(payload) : null, createdAt);
+  return {
+    id: Number((result as any).lastInsertRowid),
+    jobId,
+    sessionId,
+    type,
+    payload,
+    createdAt,
+  };
+}
+
+export function listJobEvents(options: {
+  sessionId?: string;
+  jobId?: string;
+  afterId?: number;
+  limit?: number;
+  order?: "asc" | "desc";
+}): JobEventRow[] {
+  ensureSessionTaskTables();
+  let query = "SELECT * FROM job_events WHERE 1=1";
+  const params: any[] = [];
+  if (options.sessionId) {
+    query += " AND session_id = ?";
+    params.push(options.sessionId);
+  }
+  if (options.jobId) {
+    query += " AND job_id = ?";
+    params.push(options.jobId);
+  }
+  if (options.afterId !== undefined) {
+    query += " AND id > ?";
+    params.push(options.afterId);
+  }
+  query += options.order === "desc" ? " ORDER BY id DESC" : " ORDER BY id ASC";
+  const limit = Math.min(Math.max(options.limit ?? 200, 1), 1000);
+  query += " LIMIT ?";
+  params.push(limit);
+  const rows = db.query(query).all(...params) as any[];
+  return rows.map((row) => ({
+    id: row.id,
+    jobId: row.job_id,
+    sessionId: row.session_id,
+    type: row.type,
+    payload: row.payload_json ? JSON.parse(row.payload_json) : undefined,
+    createdAt: row.created_at,
+  }));
+}
 /**
  * Mirrors one transcript entry into SQLite. INSERT-only, never updates or
  * deletes: the JSONL file stays the read path while the mirror converges.
