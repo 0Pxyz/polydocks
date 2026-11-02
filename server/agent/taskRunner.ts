@@ -5,6 +5,8 @@ import {
   ensureSessionTaskTables,
   mirrorTranscriptEntry,
   insertJobEvent,
+  listJobEvents,
+  type JobEventRow,
 } from "../workspace/sessions";
 import { getSessionsPath } from "../system/agentHome";
 import { runAgentLoop, type AgentStepEvent } from "./loop";
@@ -358,8 +360,14 @@ export function updateTaskState(
     }
   })();
 
-  // Live SSE fan-out of job events ships in the follow-up (resumable
-  // /api/tasks/stream); the durable row above is already queryable.
+  // Fan out to live SSE subscribers (best-effort, outside the transaction).
+  if (sessionId) {
+    try {
+      taskExecutionEngine.fanOutSessionJob(sessionId, taskId, status);
+    } catch {
+      // Subscriber failure never fails the transition.
+    }
+  }
 }
 
 /**
@@ -371,6 +379,7 @@ export class TaskExecutionEngine {
   private activeControllers = new Map<string, AbortController>();
   private replayBuffers = new Map<string, AgentStepEvent[]>();
   private subscribers = new Map<string, Set<(event: AgentStepEvent) => void>>();
+  private jobSubscribers = new Map<string, Set<(row: JobEventRow) => void>>();
   /** FIFO of queued task ids waiting for a worker slot. */
   private pendingQueue: string[] = [];
   private maxReplayEvents = 100;
@@ -385,6 +394,53 @@ export class TaskExecutionEngine {
   private runningCount(): number {
     const row = db.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'running'").get() as any;
     return row?.count ?? 0;
+  }
+
+  /**
+   * Subscribes to durable job events for a session. Replays rows after
+   * `afterId` first (Last-Event-ID resume), then stays live.
+   */
+  public subscribeJobs(
+    sessionId: string,
+    callback: (row: JobEventRow) => void,
+    afterId?: number
+  ): () => void {
+    if (!this.jobSubscribers.has(sessionId)) {
+      this.jobSubscribers.set(sessionId, new Set());
+    }
+    const set = this.jobSubscribers.get(sessionId)!;
+    set.add(callback);
+
+    for (const row of listJobEvents({ sessionId, afterId })) {
+      try {
+        callback(row);
+      } catch {
+        // A failing replay listener never breaks the subscription.
+      }
+    }
+
+    return () => {
+      set.delete(callback);
+      if (set.size === 0) {
+        this.jobSubscribers.delete(sessionId);
+      }
+    };
+  }
+
+  /** Delivers one durable job event row to live session subscribers. */
+  public fanOutSessionJob(sessionId: string, taskId: string, status: TaskStatus): void {
+    const rows = listJobEvents({ sessionId, jobId: taskId, limit: 1, order: "desc" });
+    const row = rows[0];
+    if (!row) return;
+    const set = this.jobSubscribers.get(sessionId);
+    if (!set) return;
+    for (const listener of set) {
+      try {
+        listener(row);
+      } catch {
+        // Non-fatal if subscriber handler throws.
+      }
+    }
   }
 
   /**
@@ -706,6 +762,7 @@ export class TaskExecutionEngine {
   public clearBuffers(): void {
     this.replayBuffers.clear();
     this.subscribers.clear();
+    this.jobSubscribers.clear();
     this.pendingQueue = [];
     for (const controller of this.activeControllers.values()) {
       controller.abort();
