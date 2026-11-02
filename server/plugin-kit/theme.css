@@ -140,6 +140,7 @@
   --radius: 0.5rem;
 }
 
+@import "tailwindcss/theme";
 @theme {
   --font-display: "Inter Variable", sans-serif;
   --font-sans: "Inter Variable", sans-serif;

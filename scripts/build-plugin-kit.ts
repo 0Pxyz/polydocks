@@ -27,20 +27,7 @@ const KIT_FILES = [
 // They are read separately from the shadcn files above.
 const KIT_V2_SOURCES = ["kit/primitives.tsx", "kit/patterns.tsx", "kit/level2.tsx"];
 
-function extractCandidates(sources: string[]): string[] {
-  const found = new Set<string>();
-  for (const src of sources) {
-    // Quoted strings may hold class names (className="...").
-    for (const m of src.matchAll(/["'`]([^"'`]{1,300})["'`]/g)) {
-      for (const token of m[1].split(/\s+/)) {
-        if (/^[A-Za-z0-9_.:/\[\]#][A-Za-z0-9_.:/\[\]#%()-]*$/.test(token) && token.length < 120) {
-          found.add(token);
-        }
-      }
-    }
-  }
-  return [...found];
-}
+import { extractClassCandidates as extractCandidates } from "../server/workspace/reactKit";
 
 async function buildJs(): Promise<{ bytes: number }> {
   const result = await Bun.build({
@@ -80,21 +67,31 @@ async function loadStylesheet(id: string, base: string): Promise<{ content: stri
   throw new Error(`Cannot resolve stylesheet "${id}"`);
 }
 
+/**
+ * Shared Tailwind template: workspace tokens + default theme (spacing,
+ * typography, animations) + app @theme mappings + utilities only.
+ * The default theme import is load-bearing: without it, scale utilities
+ * (h-9, p-4, gap-2, text-sm, animate-pulse, size-*) silently vanish from
+ * the sandbox CSS and shadcn components render as raw HTML.
+ */
+const TAILWIND_TEMPLATE = (themeMatch: string, tokensCss: string): string =>
+  `${tokensCss}\n@import "tailwindcss/theme";\n${themeMatch}\n@import "tailwindcss/utilities";`;
+
 async function buildCss(uiSources: string[]): Promise<{ bytes: number }> {
   const indexCss = await fs.readFile(path.join(ROOT, "src", "index.css"), "utf-8");
   const themeMatch = indexCss.match(/@theme\s*\{[\s\S]*?\n\}/);
   if (!themeMatch) throw new Error("Could not find @theme block in src/index.css");
-  const compiler = await compile(
-    `${themeMatch[0]}\n@import "tailwindcss/utilities";`,
-    { base: ROOT, loadStylesheet: loadStylesheet as any }
-  );
-  const css = compiler.build(extractCandidates(uiSources));
-  await fs.writeFile(path.join(OUT_DIR, "kit.css"), css, "utf-8");
   // Ship tokens + theme so per-publish guest CSS compiles with the same tokens.
   const tokensCss = await fs.readFile(path.join(ROOT, "src", "styles", "tokens.css"), "utf-8");
+  const compiler = await compile(TAILWIND_TEMPLATE(themeMatch[0], ""), {
+    base: ROOT,
+    loadStylesheet: loadStylesheet as any,
+  });
+  const css = compiler.build(extractCandidates(uiSources));
+  await fs.writeFile(path.join(OUT_DIR, "kit.css"), css, "utf-8");
   await fs.writeFile(
     path.join(OUT_DIR, "theme.css"),
-    `${tokensCss}\n${themeMatch[0]}\n@import "tailwindcss/utilities";`,
+    TAILWIND_TEMPLATE(themeMatch[0], tokensCss),
     "utf-8"
   );
   return { bytes: Buffer.byteLength(css, "utf-8") };

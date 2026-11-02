@@ -80,3 +80,9 @@
 - QA: per-theme WCAG AA contrast test
   (`server/plugin-kit/tokens.contrast.test.ts`) — void/cyber/amber/
   amethyst all pass (body 17.8–18.3, muted 6.1–6.6, button 7.5–16.9).
+- Button fix: the class extractor dropped every quoted string after an
+  apostrophe (`[class*='size-']`), so `kit.css` had no button classes and
+  shadcn Buttons rendered as raw HTML; the build template also lacked
+  the default theme (no `--spacing`/`--text-*`/`--animate-*`). Both
+  fixed with a shared `extractClassCandidates` + `@import
+  "tailwindcss/theme"`; `kit.css` 11.7KB → 40KB with regression tests.

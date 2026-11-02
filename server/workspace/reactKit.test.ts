@@ -67,6 +67,28 @@ describe("React allowlist + vendored kit bundling", () => {
     expect(css).toContain(".flex");
   });
 
+  it("kit css covers shadcn button scale utilities (no raw-HTML buttons)", () => {
+    const css = getKitCss();
+    for (const needle of [
+      "text-primary-foreground",
+      "bg-secondary",
+      "h-9",
+      "px-4",
+      "gap-2",
+      "text-sm",
+      "animate-pulse",
+      "size-9",
+    ]) {
+      expect(css).toContain(needle);
+    }
+  });
+
+  it("guest css compiles scale utilities with the vendored theme", async () => {
+    const css = await compileGuestCss(`<div className="grid gap-4 p-5">x</div>`);
+    expect(css).toContain(".gap-4");
+    expect(css).toContain(".p-5");
+  });
+
   it("builds a React srcdoc with CSP, kit bundle, and bridge", () => {
     const srcdoc = buildReactSrcdoc("console.log(1);", ".flex{display:flex}", { id: "x", title: "X" }, {
       js: getKitJs(),
