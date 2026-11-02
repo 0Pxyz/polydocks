@@ -85,7 +85,12 @@ describe("chat full/side views", () => {
   });
 
   test("streaming has no Thinking fallback text", () => {
-    expect(fullSide).not.toContain("Thinking");
+    // The durable thinking timeline (StepsTimeline + messageThinking state,
+    // #296) is the timeline UI — not a bare "Thinking" fallback label.
+    // Forbid user-visible fallback text while allowing the state/prop names.
+    expect(fullSide).not.toContain(">Thinking<");
+    expect(fullSide).not.toContain("Thinking…");
+    expect(fullSide).not.toContain('"Thinking"');
   });
 
   test("resize edge is clamped, touch-friendly and keeps text selectable", () => {

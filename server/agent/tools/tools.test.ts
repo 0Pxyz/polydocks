@@ -8,7 +8,7 @@ import {
 
 describe("Agent Tool Catalog & Security Guards", () => {
   it("should export all canonical tools in fullTools catalog", () => {
-    expect(fullTools.length).toBe(49);
+    expect(fullTools.length).toBe(50);
     const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
@@ -52,6 +52,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("sandbox_logs");
     expect(names).toContain("sandbox_status");
     expect(names).toContain("sandbox_terminate");
+    expect(names).toContain("start_background_job");
     // Legacy tabs and world cartography are gone (parked branch).
     for (const gone of [
       "list_tabs",
@@ -105,7 +106,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "ui_catalog",
       ].sort()
     );
-    expect(fullTools.length).toBe(49);
+    expect(fullTools.length).toBe(50);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
@@ -128,7 +129,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     const minimalNames = new Set(minimalTools.map((t) => t.name));
     // Derived views cover the canonical list (find_capabilities and
     // ui_catalog are the tools offered on both surfaces).
-    expect(fullNames.size).toBe(49);
+    expect(fullNames.size).toBe(50);
     expect(minimalNames.size).toBe(22);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
