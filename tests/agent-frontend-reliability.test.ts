@@ -48,25 +48,44 @@ afterEach(() => {
 });
 
 describe("Busy send is never silently dropped", () => {
-  it("informs the user instead of ignoring the new request", async () => {
+  it("queues through the orchestrator instead of blocking on a running turn", async () => {
     useConversationStore.setState({ isStreaming: true });
     let fetched = false;
     mockFetchOnce(async () => {
       fetched = true;
-      return new Response("nope", { status: 500 });
+      return Response.json({
+        success: true,
+        type: "reply",
+        text: "On it.",
+        decision: { kind: "answer_quick", confidence: 0.5, reason: "test" },
+        sessionId: "sess_busy",
+        messageId: "m1",
+      });
     });
 
     await useConversationStore.getState().sendMessage("Add this background to my theme");
-    expect(fetched).toBe(false);
-    expect(useConversationStore.getState().statusText).toContain("Still working");
-    expect(useConversationStore.getState().messages.length).toBe(0);
+    expect(fetched).toBe(true);
+    expect(useConversationStore.getState().statusText).not.toContain("Still working");
+    expect(useConversationStore.getState().messages.length).toBe(2);
   });
 });
+
+function legacyText(prompt: string) {
+  // Text-only turns go through the orchestrator; the legacy SSE consumer
+  // below is reached with a staged (non-image) attachment.
+  useConversationStore.setState({
+    draft: prompt,
+    stagedAttachments: [
+      { id: "att-leg", name: "note.txt", type: "text/plain", size: 3, isImage: false } as any,
+    ],
+  });
+  return useConversationStore.getState().sendMessage(undefined);
+}
 
 describe("Dead streams reach an explicit terminal state", () => {
   it("ends in error with a cleared progress label when the stream dies silently", async () => {
     mockFetchOnce(async () => sseStream([]));
-    await useConversationStore.getState().sendMessage("hello?");
+    await legacyText("hello?");
     const state = useConversationStore.getState();
     expect(state.isStreaming).toBe(false);
     expect(state.statusText).toContain("Stream ended unexpectedly");
@@ -81,7 +100,7 @@ describe("Dead streams reach an explicit terminal state", () => {
         sseEvent("agent.finish", { text: "Hey there.", steps: 1, model: "muse-spark-1.3", intent: "general" }),
       ])
     );
-    await useConversationStore.getState().sendMessage("hi");
+    await legacyText("hi");
     const state = useConversationStore.getState();
     expect(state.isStreaming).toBe(false);
     expect(state.activeModel).toBeNull();
@@ -137,7 +156,13 @@ describe("theme.apply is verified against the live store", () => {
         sseEvent("agent.finish", { text: "Hmm.", steps: 1, model: "muse-spark-1.3", intent: "theme" }),
       ])
     );
-    await useConversationStore.getState().sendMessage("use that image as wallpaper");
+    useConversationStore.setState({
+      draft: "use that image as wallpaper",
+      stagedAttachments: [
+        { id: "att-other", name: "other.jpg", type: "image/jpeg", size: 100, dataUrl: "data:image/jpeg;base64,AAA", isImage: true } as any,
+      ],
+    });
+    await useConversationStore.getState().sendMessage(undefined);
     const state = useConversationStore.getState();
     expect(state.messages[state.messages.length - 2]?.error?.message).toContain("partially");
   });

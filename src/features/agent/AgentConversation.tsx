@@ -78,6 +78,59 @@ function shortSummary(
   return "Speak or type to research topics, build tools, or explore your workspace.";
 }
 
+const CARD_DOT: Record<string, string> = {
+  queued: "bg-white/40",
+  running: "bg-[var(--accent-lime)] animate-pulse",
+  completed: "bg-emerald-400",
+  failed: "bg-rose-400",
+  cancelled: "bg-white/40",
+  interrupted: "bg-amber-400",
+};
+
+const CARD_LABEL: Record<string, string> = {
+  queued: "Queued",
+  running: "Running",
+  completed: "Done",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  interrupted: "Interrupted",
+};
+
+function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; status: string }> }) {
+  const visible = cards
+    .filter((c) => c.status === "queued" || c.status === "running" || c.status === "failed" || c.status === "interrupted")
+    .sort((a, b) => (a.taskId < b.taskId ? -1 : 1));
+  if (visible.length === 0) return null;
+  return (
+    <div className="mb-1.5 flex flex-col gap-1" aria-live="polite" aria-label="Background jobs">
+      {visible.map((card) => (
+        <div
+          key={card.taskId}
+          className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-1.5 text-xs text-white/80"
+        >
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CARD_DOT[card.status] || "bg-white/40"}`} aria-hidden />
+          <span className="min-w-0 flex-1 truncate" title={card.title}>
+            {card.title}
+          </span>
+          <span className="shrink-0 text-white/40">{CARD_LABEL[card.status] || card.status}</span>
+          {(card.status === "queued" || card.status === "running") && (
+            <button
+              type="button"
+              onClick={() => {
+                void fetch(`/api/tasks/${encodeURIComponent(card.taskId)}/cancel`, { method: "POST" }).catch(() => {});
+              }}
+              className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer"
+              aria-label={`Cancel ${card.title}`}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AgentConversation({
   onExperienceCreated,
   onOpenExperience,
@@ -101,7 +154,7 @@ export function AgentConversation({
     soundEnabled,
     audioLevel,
     orbState,
-    isHydratingThread,
+    taskCards,    isHydratingThread,
     isLoadingOlder,
     hasOlderMessages,
     setLayoutState,
@@ -1146,6 +1199,9 @@ export function AgentConversation({
             className="mb-1 rounded-t-[24px] rounded-b-none border-b-0"
           />
         )}
+
+        {/* Background job cards (resumable SSE; input stays enabled) */}
+        <TaskCards cards={Object.values(taskCards)} />
 
         <div
           className={cn(
