@@ -17,7 +17,8 @@ Heading Text Caption Mono Metric; Button IconButton Link; TextField
 SearchField TextAreaField Select Checkbox Switch SegmentedControl; List
 ListRow Card Avatar ProgressBar Spinner; EmptyState InlineMessage Dialog
 Tooltip Skeleton) + patterns (ListWithSearch ListDetail MetricsPanel
-FormPanel ReaderFeed NotesEditor SettingsForm SingleAction StateScreen).
+FormPanel ReaderFeed NotesEditor SettingsForm SingleAction StateScreen)
++ L2 (AreaChart Bars Countdown DateField MarkdownView CodeBlock).
 
 One primary action; rows wholly clickable (44px); read state by
 dot/weight; no badges/tags, italic, serif, separators, bordered boxes,

@@ -31,10 +31,23 @@ export function findRawElements(code: string): string[] {
   return hits;
 }
 
+/**
+ * Kit hex allowlist mirrors server/plugins/slop.ts: the accent and the
+ * Bitcoin brand orange (asset color, not decoration) plus neutrals.
+ * Everything else must be a theme token.
+ */
+const ALLOWED_KIT_HEX = new Set([
+  "c8ff57", "C8FF57",
+  "f7931a", "F7931A",
+  "0a0a0c", "0A0A0C",
+  "ffffff", "fff", "FFFFFF",
+  "000000", "000",
+]);
+
 export function findKitHex(code: string): string[] {
   const found = new Set<string>();
   for (const m of (code || "").matchAll(/#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g)) {
-    found.add(m[0]);
+    if (!ALLOWED_KIT_HEX.has(m[0].slice(1))) found.add(m[0]);
   }
   return [...found];
 }
@@ -49,6 +62,8 @@ const KIT_IDENTIFIERS = [
   "EmptyState", "InlineMessage", "Dialog", "Tooltip", "Skeleton",
   "ListWithSearch", "ListDetail", "MetricsPanel", "FormPanel", "ReaderFeed", "NotesEditor",
   "SettingsForm", "SingleAction", "StateScreen",
+  "AreaChart", "Bars", "Countdown", "useCountdown", "formatClock", "DateField",
+  "MarkdownView", "CodeBlock",
 ];
 
 export function usesKitComponents(code: string): boolean {

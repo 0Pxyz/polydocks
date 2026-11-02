@@ -34,16 +34,24 @@ describe("Pre-publish validation", () => {
   });
 
   it("rejects hardcoded hex with a fixable kit error", async () => {
-    expect(findHardcodedHex(`color: #C8FF57; border: 1px solid #fff;`)).toEqual(
-      expect.arrayContaining(["#C8FF57", "#fff"])
+    expect(findHardcodedHex(`color: #ff0000; border: 1px solid #fff;`)).toEqual(
+      expect.arrayContaining(["#ff0000", "#fff"])
     );
     expect(findHardcodedHex(`color: var(--primary);`)).toEqual([]);
     const res = await validatePluginCode({
-      code: `${GOOD}\nconst c = "#C8FF57";`,
+      code: `${GOOD}\nconst c = "#ff0000";`,
       bundle: bundleFeatureCode,
     });
     expect(res.ok).toBe(false);
     expect(res.error || "").toContain("Kit v2 violation");
+  });
+
+  it("allows the sanctioned asset hex (Bitcoin orange) through the kit gate", async () => {
+    const res = await validatePluginCode({
+      code: `${GOOD}\nconst brand = "#f7931a";`,
+      bundle: bundleFeatureCode,
+    });
+    expect(res.ok).toBe(true);
   });
 
   it("warns on design slop instead of hard-rejecting", async () => {

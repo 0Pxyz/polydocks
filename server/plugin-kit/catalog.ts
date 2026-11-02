@@ -65,6 +65,13 @@ export const KIT_INDEX: KitEntry[] = [
   E("SettingsForm", "patterns", "Settings group with one save", "error?; onSave", `<SettingsForm onSave={…}>…`, "No per-row save buttons"),
   E("SingleAction", "patterns", "One tool, one button, one result", "title; actionLabel; onAction; result?", `<SingleAction …/>`, "No multi-step wizard here"),
   E("StateScreen", "patterns", "Full empty or error state", "kind: empty|error", `<StateScreen kind="empty" …/>`, "No raw error dumps"),
+  E("AreaChart", "data", "Token-driven SVG area/line chart", "values: number[]; height?; stroke?", `<AreaChart values={closes} stroke="#f7931a"/>`, "No hand-rolled svg paths in guest code"),
+  E("Bars", "data", "Token-driven SVG bar sparkline", "values: number[]; height?", `<Bars values={counts}/>`, "No div bars with inline heights"),
+  E("Countdown", "data", "Mono mm:ss display for timers", "seconds; caption?", `<Countdown seconds={secs}/>`, "No custom clock markup"),
+  E("useCountdown", "data", "Ticking seconds state + reset for timers", "initialSeconds; running", `const [s, reset] = useCountdown(1500, running)`, "No raw setInterval clocks"),
+  E("DateField", "inputs", "Labeled native date input, token styled", "label? + input props", `<DateField label="Due"/>`, "No raw date inputs"),
+  E("MarkdownView", "data", "Reader body: headings, bold, code, lists, links", "markdown", `<MarkdownView markdown={body}/>`, "No dangerouslySetInnerHTML"),
+  E("CodeBlock", "data", "Mono code block with optional caption", "code; caption?", `<CodeBlock code={snippet}/>`, "No custom pre styling"),
 ];
 
 const BY_NAME = new Map(KIT_INDEX.map((e) => [e.name.toLowerCase(), e]));

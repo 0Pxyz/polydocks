@@ -18,7 +18,8 @@
     "textarea.tsx",
     "tooltip.tsx",
     "kit/primitives.tsx",
-    "kit/patterns.tsx"
+    "kit/patterns.tsx",
+    "kit/level2.tsx"
   ],
   "version": "2.0.0",
   "exports": [
@@ -142,9 +143,17 @@
     "SettingsForm",
     "SingleAction",
     "StateScreen",
-    "PatternCards"
+    "PatternCards",
+    "AreaChart",
+    "Bars",
+    "formatClock",
+    "useCountdown",
+    "Countdown",
+    "DateField",
+    "MarkdownView",
+    "CodeBlock"
   ],
-  "jsBytes": 723269,
-  "cssBytes": 10781,
-  "builtAt": "2026-11-02T21:20:27.058Z"
+  "jsBytes": 727933,
+  "cssBytes": 41009,
+  "builtAt": "2026-11-02T22:06:29.961Z"
 }

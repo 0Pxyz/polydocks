@@ -63,4 +63,26 @@
 - Screenshot/overflow pixel QA — render validation only; Playwright
   stays out of `bun test`.
 - Feed/Bitcoin/timer migration — examples prove the kit; migrating
-  shipped plugins is a separate issue.
+  shipped plugins is tracked in #291.
+
+## v2.1 (follow-up, #291)
+
+- Level 2 essentials shipped: `AreaChart`, `Bars`, `Countdown` +
+  `useCountdown`, `DateField`, `MarkdownView`, `CodeBlock`.
+- Shipped plugins migrated: bitcoin (Metric + SegmentedControl +
+  InlineMessage + AreaChart, token up/down), pomodoro (React +
+  Countdown + history ListRow), gtm feed fixture (ReaderFeed +
+  ListRow + SegmentedControl). Guest code moved out of the registry
+  into `server/plugins/seeds/*.code.ts`; the registry owns manifest
+  + upsert only, with one-shot migration for existing checkouts.
+  Light mode stays deferred: tokens are dark-only by design, so
+  "claro/escuro" today means the 4 dark themes.
+- QA: per-theme WCAG AA contrast test
+  (`server/plugin-kit/tokens.contrast.test.ts`) — void/cyber/amber/
+  amethyst all pass (body 17.8–18.3, muted 6.1–6.6, button 7.5–16.9).
+- Button fix: the class extractor dropped every quoted string after an
+  apostrophe (`[class*='size-']`), so `kit.css` had no button classes and
+  shadcn Buttons rendered as raw HTML; the build template also lacked
+  the default theme (no `--spacing`/`--text-*`/`--animate-*`). Both
+  fixed with a shared `extractClassCandidates` + `@import
+  "tailwindcss/theme"`; `kit.css` 11.7KB → 40KB with regression tests.

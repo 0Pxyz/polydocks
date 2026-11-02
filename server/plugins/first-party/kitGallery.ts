@@ -6,7 +6,7 @@ import type { PluginManifest } from "../manifest";
  * pattern in the active workspace theme (light/dark via tokens).
  * Registered on boot; not published to the store.
  */
-const GALLERY_CODE = `import { Stack, Heading, Text, Caption, Mono, Metric, Inline, Grid, Panel, Section, TextField, SearchField, TextAreaField, Select, Checkbox, Switch, SegmentedControl, List, ListRow, Card, Avatar, Spinner, EmptyState, InlineMessage, ListWithSearch, MetricsPanel, FormPanel, ReaderFeed, SettingsForm, SingleAction, StateScreen } from "@/components/ui/kit";
+const GALLERY_CODE = `import { Stack, Heading, Text, Caption, Mono, Metric, Inline, Grid, Panel, Section, TextField, SearchField, TextAreaField, Select, Checkbox, Switch, SegmentedControl, List, ListRow, Card, Avatar, Spinner, EmptyState, InlineMessage, ListWithSearch, MetricsPanel, FormPanel, ReaderFeed, SettingsForm, SingleAction, StateScreen, AreaChart, Bars, Countdown, DateField, MarkdownView, CodeBlock } from "@/components/ui/kit";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
@@ -51,6 +51,16 @@ function App() {
           <EmptyState title="Nothing here yet" hint="Add your first feed to populate this view." action={<Button size="sm">Add feed</Button>} />
           <InlineMessage>Saved — visible on every device.</InlineMessage>
           <InlineMessage tone="error">Could not refresh — showing the saved list.</InlineMessage>
+        </Stack>
+      </Panel>
+      <Panel title="Level 2">
+        <Stack gap={12}>
+          <AreaChart values={[3, 5, 4, 7, 6, 9, 8]} height={100} label="Demo area" />
+          <Bars values={[2, 5, 3, 8, 6]} height={48} />
+          <Countdown seconds={754} caption="Demo countdown" />
+          <DateField label="Due" />
+          <MarkdownView markdown={"# Demo\\nSome **bold** and \`code\`."} />
+          <CodeBlock code="createRoot(document.getElementById('app')).render(<App />);" caption="Mount" />
         </Stack>
       </Panel>
       <FormPanel title="Settings demo" error={err} onSubmit={() => setErr(name ? "" : "Give the workspace a name first.")} submitLabel="Save settings">
