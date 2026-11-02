@@ -87,7 +87,7 @@ function App() {
 }
 createRoot(document.getElementById("app")).render(<App />);`;
 
-const METRICS = `import { MetricsPanel, ListWithSearch, ListRow } from "@/components/ui/kit";
+const METRICS = `import { MetricsPanel, ListWithSearch, ListRow, AreaChart } from "@/components/ui/kit";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 const ROWS = [
@@ -101,6 +101,7 @@ function App() {
   return (
     <div className="flex flex-col gap-4">
       <MetricsPanel metrics={[{ value: "1,240", delta: "+4%", caption: "Reads" }, { value: "82", caption: "Saved" }, { value: "12", caption: "Feeds" }]} />
+      <AreaChart values={[4, 7, 5, 9, 8, 12, 11]} height={100} label="Reads this week" />
       <ListWithSearch query={q} onQuery={setQ} filter={filter} onFilter={setFilter}
         filters={[{ value: "all", label: "All" }]}
         empty={{ title: "No matches", hint: "Try a shorter search." }}>

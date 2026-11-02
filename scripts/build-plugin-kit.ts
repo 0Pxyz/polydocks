@@ -25,7 +25,7 @@ const KIT_FILES = [
 // Kit v2 primitives + patterns live in server/plugin-kit/kit/ and are
 // aliased as @/components/ui/kit so guest code imports one stable path.
 // They are read separately from the shadcn files above.
-const KIT_V2_SOURCES = ["kit/primitives.tsx", "kit/patterns.tsx"];
+const KIT_V2_SOURCES = ["kit/primitives.tsx", "kit/patterns.tsx", "kit/level2.tsx"];
 
 function extractCandidates(sources: string[]): string[] {
   const found = new Set<string>();
