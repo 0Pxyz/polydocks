@@ -120,3 +120,4 @@
 | 2026-11-02 | Command palette polish: honest workspace-backed listing, no mock rows, read-inline vs agent routing, catalog parity | [#276](https://github.com/0Pxyz/polymax/pull/276) |
 | 2026-11-02 | CI trim: check only on main push, parallel jobs, bun cache, check:fast + pre-push hook | [#277](https://github.com/0Pxyz/polymax/pull/277) |
 | 2026-11-02 | Single workspace scope, bar-order shortcuts, real bitcoin plugin (no mocks) | [#279](https://github.com/0Pxyz/polymax/pull/279) |
+| 2026-11-02 | Orchestrator jobs: durable events, concurrency cap, timeout, sandbox-aware cancel, resumable SSE | [#280](https://github.com/0Pxyz/polymax/pull/280) [#281](https://github.com/0Pxyz/polymax/pull/281) |
