@@ -21,9 +21,10 @@ import {
 import { cn } from "@/lib/cn";
 import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import { Orb } from "./Orb";
+import { StepsTimeline } from "./StepsTimeline";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
-import { useConversationStore } from "@/lib/agent/conversationStore";
+import { useConversationStore, scopeKeyFor } from "@/lib/agent/conversationStore";
 import { cancelSpeech } from "@/lib/agent/speech";
 import { useThemeStore } from "@/lib/theme";
 import {
@@ -98,33 +99,52 @@ function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; st
   const visible = cards
     .filter((c) => c.status === "queued" || c.status === "running" || c.status === "failed" || c.status === "interrupted")
     .sort((a, b) => (a.taskId < b.taskId ? -1 : 1));
+  const stepsByTask = useConversationStore((s) => s.messageSteps);
+  const [expanded, setExpanded] = useState<string | null>(null);
   if (visible.length === 0) return null;
   return (
     <div className="mb-1.5 flex flex-col gap-1" aria-live="polite" aria-label="Background jobs">
-      {visible.map((card) => (
+      {visible.map((card) => {
+        const steps = stepsByTask[scopeKeyFor(card.taskId)] || [];
+        const isOpen = expanded === card.taskId;
+        return (
         <div
           key={card.taskId}
-          className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-1.5 text-xs text-white/80"
+          className="rounded-xl bg-white/[0.04] px-3 py-1.5 text-xs text-white/80"
         >
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CARD_DOT[card.status] || "bg-white/40"}`} aria-hidden />
-          <span className="min-w-0 flex-1 truncate" title={card.title}>
-            {card.title}
-          </span>
-          <span className="shrink-0 text-white/40">{CARD_LABEL[card.status] || card.status}</span>
-          {(card.status === "queued" || card.status === "running") && (
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CARD_DOT[card.status] || "bg-white/40"}`} aria-hidden />
             <button
               type="button"
-              onClick={() => {
-                void fetch(`/api/tasks/${encodeURIComponent(card.taskId)}/cancel`, { method: "POST" }).catch(() => {});
-              }}
-              className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer"
-              aria-label={`Cancel ${card.title}`}
+              onClick={() => setExpanded(isOpen ? null : card.taskId)}
+              className="min-w-0 flex-1 truncate text-left hover:text-white transition-colors cursor-pointer"
+              title={card.title}
+              aria-expanded={isOpen}
             >
-              Cancel
+              {card.title}
             </button>
+            <span className="shrink-0 text-white/40">{CARD_LABEL[card.status] || card.status}</span>
+            {(card.status === "queued" || card.status === "running") && (
+              <button
+                type="button"
+                onClick={() => {
+                  void fetch(`/api/tasks/${encodeURIComponent(card.taskId)}/cancel`, { method: "POST" }).catch(() => {});
+                }}
+                className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer"
+                aria-label={`Cancel ${card.title}`}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {isOpen && steps.length > 0 && (
+            <div className="pt-1.5 pl-3.5">
+              <StepsTimeline steps={steps} defaultOpen />
+            </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -152,7 +172,10 @@ export function AgentConversation({
     soundEnabled,
     audioLevel,
     orbState,
-    taskCards,    isHydratingThread,
+    taskCards,
+    messageSteps,
+    messageThinking,
+    isHydratingThread,
     isLoadingOlder,
     hasOlderMessages,
     setLayoutState,
@@ -989,6 +1012,7 @@ export function AgentConversation({
                 data-msg-id={msg.id}
                 className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
+                <StepsTimeline steps={messageSteps[msg.id] || []} thinking={messageThinking[msg.id]} />
                 <AssistantMarkdown content={msg.content} />
 
                 {/* Hover actions: Copy & Retry on last message */}

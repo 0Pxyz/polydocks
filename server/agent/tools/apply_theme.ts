@@ -25,7 +25,7 @@ const urlOrDataUrl = z
 export const apply_theme: AgentTool<ApplyThemeArgs> = {
   name: "apply_theme",
   description:
-    "Applies a theme change to the Polymax UI: wallpaper/background image (by attachmentId for user-attached images, or wallpaperUrl for remote images), base theme id, custom accent color, wallpaper fit/opacity/blur, dock style or position. Use for ALL appearance change requests. Never use web research for theme edits.",
+    "Applies a theme change to the Polymax UI: wallpaper/background image (by attachmentId for user-attached images, or wallpaperUrl for remote images), base theme id, custom accent color, wallpaper fit/opacity/blur, dock style or position. Remote wallpaper URLs are verified to load as images before anything applies (unreachable or non-image URLs fail clearly with nothing changed). If only a wallpaper is given without theme/accent, the UI auto-complements the theme from the image; specify theme/accent explicitly to override. Use for ALL appearance change requests. Never use web research for theme edits.",
   schema: z
     .object({
       wallpaperUrl: urlOrDataUrl.optional().describe("Remote https:// image URL for the wallpaper"),
@@ -68,7 +68,69 @@ export const apply_theme: AgentTool<ApplyThemeArgs> = {
     }),
   execute: async (args) => {
     const applied: Record<string, unknown> = {};
-    if (args.wallpaperUrl !== undefined) applied.wallpaperUrl = args.wallpaperUrl;
+    if (args.wallpaperUrl !== undefined) {
+      const { validateUrlForSsrf } = await import("../../plugins/ssrf");
+      const verdict = validateUrlForSsrf(args.wallpaperUrl);
+      if (!verdict.safe) {
+        return {
+          success: false,
+          error: `Wallpaper URL rejected: ${verdict.reason}`,
+          retryable: false,
+          code: "unsafe_url",
+        };
+      }
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        let res: Response;
+        try {
+          // GET, not HEAD (many image hosts reject HEAD). The body is
+          // cancelled as soon as headers arrive; only metadata crosses.
+          res = await fetch(args.wallpaperUrl, { signal: controller.signal, redirect: "follow" });
+        } catch (err: any) {
+          clearTimeout(timer);
+          const reason = err?.name === "AbortError" ? "timed out after 8s" : err?.message || String(err);
+          return {
+            success: false,
+            error: `Wallpaper URL could not be loaded (${reason}) — nothing was changed.`,
+            retryable: true,
+            code: "wallpaper_unreachable",
+          };
+        }
+        clearTimeout(timer);
+        try {
+          await res.body?.cancel();
+        } catch {
+          // Best-effort socket release.
+        }
+        if (!res.ok) {
+          return {
+            success: false,
+            error: `Wallpaper URL returned HTTP ${res.status} — nothing was changed.`,
+            retryable: true,
+            code: "wallpaper_unreachable",
+          };
+        }
+        const contentType = res.headers.get("content-type") || "";
+        if (!/^image\//.test(contentType)) {
+          return {
+            success: false,
+            error: `Wallpaper URL is not an image (content-type: ${contentType || "unknown"}) — nothing was changed.`,
+            retryable: false,
+            code: "wallpaper_not_image",
+          };
+        }
+        applied.wallpaperContentType = contentType.split(";")[0];
+      } catch (err: any) {
+        return {
+          success: false,
+          error: `Wallpaper check failed (${err?.message || String(err)}) — nothing was changed.`,
+          retryable: true,
+          code: "wallpaper_unreachable",
+        };
+      }
+      applied.wallpaperUrl = args.wallpaperUrl;
+    }
     if (args.theme !== undefined) applied.theme = args.theme;
     if (args.accentColor !== undefined) applied.accentColor = args.accentColor;
     if (args.wallpaperFit !== undefined) applied.wallpaperFit = args.wallpaperFit;

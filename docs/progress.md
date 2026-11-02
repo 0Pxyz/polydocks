@@ -128,3 +128,4 @@
 | 2026-11-02 | Kit button fix: shared class extractor + default theme import, kit.css 11.7KB to 40KB | [#292](https://github.com/0Pxyz/polymax/pull/292) |
 | 2026-11-02 | Chat refinement: progressive responses, no Thinking label, chips removed, resize/touch/IME polish | [#295](https://github.com/0Pxyz/polymax/pull/295) |
 | 2026-11-02 | MCP client+server: PolyDocks serves its bus at POST /mcp, one manager connects external MCPs with progressive discovery (#293) | [#293](https://github.com/0Pxyz/polymax/pull/293) |
+| 2026-11-02 | Durable thinking/research timeline on the SSE stream: friendly steps, collapsible narration, replay-safe dedup, isolated test harness | [#296](https://github.com/0Pxyz/polymax/pull/296) |

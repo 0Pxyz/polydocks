@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { streamAgentLoop } from "./client";
-import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus } from "./events";
+import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus, adaptBackendEvent } from "./events";
 import { feedThoughtEvent, pushThought, shouldNudge } from "./thoughtStream";
+import { applyOrchestratorAction } from "./orchestratorActions";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
@@ -98,6 +99,17 @@ export interface ActivityRow {
   tool?: string;
 }
 
+/** One step in the per-message / per-job thinking timeline. */
+export interface AgentStep {
+  /** Stable id for replay dedup (tool call id or event id). */
+  id: string;
+  kind: "search" | "read" | "build" | "save" | "think";
+  label: string;
+  status: "running" | "done" | "error";
+  detail?: string;
+  at: number;
+}
+
 /** Background job card: updated by the resumable job SSE stream. */
 export interface TaskCard {
   taskId: string;
@@ -153,8 +165,12 @@ interface ConversationStoreState {
   orchestratorSessionId: string | null;
   /** Live background-job cards keyed by task id (resumable SSE). */
   taskCards: Record<string, TaskCard>;
-  /** Open (or reuse) the job-event stream for a session. */
-  ensureTaskStream: (sessionId: string) => void;
+  /** Thinking steps per message/job id (durable, replay-safe, id-keyed). */
+  messageSteps: Record<string, AgentStep[]>;
+  /** Collapsed pre-tool narration per message id (the "thinking" block). */
+  messageThinking: Record<string, string>;
+  /** Open (or reuse) the job-event stream for a session. Returns the live instance. */
+  ensureTaskStream: (sessionId: string) => EventSource | null;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -309,6 +325,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   pendingVoiceStart: false,
   orchestratorSessionId: loadOrchestratorSession(),
   taskCards: {},
+  messageSteps: {},
+  messageThinking: {},
 
   setLayoutState: (layoutState) => set({ layoutState }),
   requestVoiceStart: () => set({ pendingVoiceStart: true }),
@@ -480,8 +498,12 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   closeReader: () => set({ readerView: null }),
 
   ensureTaskStream: (sessionId) => {
-    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
-    if (taskEventSource && taskStreamSession === sessionId) return;
+    if (typeof window === "undefined" || typeof EventSource === "undefined") {
+      return null;
+    }
+    if (taskEventSource && taskStreamSession === sessionId) {
+      return taskEventSource;
+    }
     try {
       taskEventSource?.close();
     } catch {
@@ -495,7 +517,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const source = new EventSource(url);
     taskEventSource = source;
     // Named SSE events never hit onmessage: one listener per type,
-    // all funneled into the same ordered handler.
+    // all funneled into the same ordered handler. Loop side-effects ride
+    // the same durable stream under the message scope (tool.*, plugin.*,
+    // theme/dock/reader effects) so answer_quick turns render steps too.
     for (const type of [
       "job.queued",
       "job.started",
@@ -510,6 +534,19 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       "plugin.created",
       "plugin.updated",
       "plugin.published",
+      "plugin.operated",
+      "tool.start",
+      "tool.done",
+      "tab.created",
+      "tab.prime",
+      "tray.open",
+      "browser.open",
+      "sandbox.preview",
+      "dock.layout",
+      "theme.apply",
+      "source.added",
+      "agent.start",
+      "agent.finish",
     ]) {
       source.addEventListener(type, (ev: Event) => {
         const msg = ev as MessageEvent;
@@ -529,6 +566,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
         if (taskEventSource === source) taskEventSource = null;
       }
     };
+    return source;
   },
 
   sendMessage: async (promptToSend, callbacks, options) => {
@@ -1120,14 +1158,72 @@ async function sendViaOrchestrator(
   useConversationStore.getState().ensureTaskStream(sessionId);
 }
 
-/** Applies an orchestrator-routed dock action against the real dock store. */
-function applyOrchestratorDockAction(reply: { op?: string; id?: string }): void {
-  const dock = useDockStore.getState();
-  if (reply.op === "open" && reply.id) {
-    dock.openTool(reply.id);
-  } else if (reply.op === "close" && reply.id) {
-    dock.closeTool(reply.id);
+/** Map a tool name to a timeline step kind. Internal bookkeeping tools are skipped (null). */
+function stepKindForTool(toolName: string): AgentStep["kind"] | null {
+  switch (toolName) {
+    case "search_web":
+    case "search.web":
+      return "search";
+    case "fetch_page":
+    case "search.fetch":
+      return "read";
+    case "create_plugin":
+    case "modify_plugin":
+    case "operate_plugin":
+    case "promote_to_plugin":
+    case "publish_plugin":
+    case "sandbox_exec":
+      return "build";
+    case "apply_theme":
+    case "dock_search":
+    case "dock_pin":
+    case "dock_unpin":
+    case "dock_close":
+    case "dock_open":
+      return "save";
+    case "recall_memory":
+    case "record_memory":
+    case "list_files":
+    case "read_file":
+    case "inspect_experience":
+    case "dock_list":
+      return null;
+    default:
+      return "think";
   }
+}
+
+/** Scope key for steps/thinking: real background tasks use the raw task id,
+ * everything else (message-scoped loop events) shares the `m-` message key.
+ * Exported so cards and tests resolve the same bucket the stream writes to. */
+export function scopeKeyFor(taskId: string): string {
+  return taskId.startsWith("task_") ? taskId : `m-${taskId}`;
+}
+
+/** Idempotent step upsert: replay/resume never duplicates (match by stable id). */
+function upsertStep(scopeKey: string, step: AgentStep): void {
+  useConversationStore.setState((state) => {
+    const existing = state.messageSteps[scopeKey] || [];
+    const idx = existing.findIndex((s) => s.id === step.id);
+    const next =
+      idx >= 0 ? existing.map((s, i) => (i === idx ? { ...s, ...step } : s)) : [...existing, step];
+    return { messageSteps: { ...state.messageSteps, [scopeKey]: next } };
+  });
+}
+
+/** Mark every running step in a scope finished (done/error). */
+function finishScopeSteps(scopeKey: string, status: "done" | "error"): void {
+  useConversationStore.setState((state) => {
+    const existing = state.messageSteps[scopeKey];
+    if (!existing || existing.length === 0) return state;
+    if (!existing.some((s) => s.status === "running")) return state;
+    return {
+      messageSteps: {
+        ...state.messageSteps,
+        [scopeKey]: existing.map((s) => (s.status === "running" ? { ...s, status } : s)),
+      },
+    };
+  });
 }
 
 /**
@@ -1147,8 +1243,69 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
     return;
   }
 
-  if (type === "plugin.created" || type === "plugin.updated" || type === "plugin.published") {
-    mountPluginFromPayload(data);
+  // Loop side-effects (tools, dock/theme/reader, plugin registrations) ride
+  // the same durable stream: apply through the shared handler so the
+  // orchestrator path behaves exactly like the legacy turn.
+  try {
+    const adapted = adaptBackendEvent({ type, payload: (data || {}) as Record<string, any> });
+    if (adapted) {
+      void applyOrchestratorAction(adapted, pendingPluginCallbacks).catch(() => {});
+    }
+  } catch {
+    // A bad payload must never break the event stream.
+  }
+
+  // Thinking timeline for job cards: tool.start opens a step, tool.done
+  // closes it. Labels come from getFriendlyToolStatus — technical tool ids
+  // never reach the DOM. Message-scoped loop events share the message key.
+  const scopeKey = scopeKeyFor(taskId);
+  if (type === "tool.start" && typeof data?.name === "string") {
+    const kind = stepKindForTool(data.name);
+    if (kind) {
+      const label = getFriendlyToolStatus(data.name, (data?.arguments || {}) as Record<string, unknown>) || "Working…";
+      upsertStep(scopeKey, {
+        id: typeof data?.id === "string" && data.id ? data.id : `${type}-${id ?? Date.now()}`,
+        kind,
+        label,
+        status: "running",
+        at: Date.now(),
+      });
+    }
+  } else if (type === "tool.done" && typeof data?.name === "string") {
+    const stepId = typeof data?.id === "string" && data.id ? data.id : null;
+    const failed = Boolean(
+      data?.result && typeof data.result === "object" && (data.result as Record<string, unknown>).success === false
+    );
+    if (stepId) {
+      useConversationStore.setState((state) => {
+        const existing = state.messageSteps[scopeKey] || [];
+        if (!existing.some((s) => s.id === stepId)) return state;
+        return {
+          messageSteps: {
+            ...state.messageSteps,
+            [scopeKey]: existing.map((s) => (s.id === stepId ? { ...s, status: failed ? "error" : "done" } : s)),
+          },
+        };
+      });
+    }
+  } else if (type === "plugin.created" || type === "plugin.updated" || type === "plugin.published") {
+    const title =
+      typeof data?.title === "string" ? data.title : typeof data?.name === "string" ? data.name : "tool";
+    upsertStep(scopeKey, {
+      id: `${type}-${id ?? Date.now()}`,
+      kind: "build",
+      label: type === "plugin.published" ? `Published "${title}".` : `Mounted "${title}" in the dock.`,
+      status: "done",
+      at: Date.now(),
+    });
+  } else if (type === "theme.apply") {
+    upsertStep(scopeKey, {
+      id: `${type}-${id ?? Date.now()}`,
+      kind: "save",
+      label: "Theme updated.",
+      status: "done",
+      at: Date.now(),
+    });
   }
 
   const status = typeof data?.status === "string" ? data.status : type.replace(/^job\./, "");
@@ -1170,9 +1327,13 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
 
   if (terminal && !alreadyTerminal && !announcedJobs.has(taskId)) {
     announcedJobs.add(taskId);
+    finishScopeSteps(scopeKey, status === "completed" ? "done" : "error");
+    // Honest completion: announce the real effect summary carried on
+    // job.completed, never the original prompt.
+    const summary = typeof data?.summary === "string" && data.summary ? data.summary : null;
     const label =
       status === "completed"
-        ? `Done: ${title}.`
+        ? summary || `Done: ${title}.`
         : status === "failed"
           ? `The background job failed${data?.error ? `: ${data.error}` : "."}`
           : status === "cancelled"
@@ -1189,6 +1350,16 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
   const key = `m-${messageId}`;
   const set = useConversationStore.setState;
   if (type === "message.delta" && typeof data?.text === "string") {
+    // Pre-tool narration rides as thinking: collapsible, never chat text.
+    if ((data as Record<string, unknown>)?.thinking === true) {
+      set((state) => ({
+        messageThinking: {
+          ...state.messageThinking,
+          [key]: (state.messageThinking[key] || "") + data.text,
+        },
+      }));
+      return;
+    }
     set((state) => {
       const existing = state.messages.find((m) => m.id === key);
       if (existing) {
@@ -1205,8 +1376,12 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
     return;
   }
   if (type === "message.done") {
+    finishScopeSteps(key, "done");
     if (data && typeof data === "object" && (data as any).action) {
-      applyOrchestratorDockAction((data as any).action);
+      const reply = (data as any).action as { op?: string; id?: string };
+      const dock = useDockStore.getState();
+      if (reply.op === "open" && reply.id) dock.openTool(reply.id);
+      else if (reply.op === "close" && reply.id) dock.closeTool(reply.id);
     }
     if (data && typeof data === "object" && typeof (data as any).taskId === "string") {
       const tid = (data as any).taskId as string;
@@ -1240,20 +1415,6 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
         : [...state.messages, { id: key, role: "assistant" as const, content: text, timestamp: Date.now() }];
       return { messages: next };
     });
-  }
-}
-
-/** A registered plugin created in the background mounts in the real dock. */
-function mountPluginFromPayload(data: any): void {
-  const pluginId = typeof data?.pluginId === "string" ? data.pluginId : typeof data?.id === "string" ? data.id : null;
-  if (!pluginId || !pendingPluginCallbacks) return;
-  const title = typeof data?.name === "string" ? data.name : typeof data?.title === "string" ? data.title : pluginId;
-  const icon = typeof data?.icon === "string" ? data.icon : undefined;
-  try {
-    pendingPluginCallbacks.onExperienceCreated?.({ id: pluginId, title, icon });
-    pendingPluginCallbacks.onOpenExperience?.(pluginId);
-  } catch {
-    // A stale callback must never break the event stream.
   }
 }
 
