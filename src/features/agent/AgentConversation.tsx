@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { AssistantMarkdown, StreamingText } from "./StreamingText";
 import {
   X,
   Maximize2,
@@ -60,7 +59,6 @@ function shortSummary(
   statusText: string
 ): string {
   if (isStreaming && statusText) return statusText;
-  if (isStreaming) return "Thinking…";
   if (isHydrating && messages.length === 0) return "Restoring your conversation…";
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -498,6 +496,7 @@ export function AgentConversation({
   }, [pendingVoiceStart, consumeVoiceStart, toggleVoice]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       // Never blocked: the orchestrator queues per session and answers fast.
@@ -506,26 +505,42 @@ export function AgentConversation({
     }
   };
 
-  // Drag-to-resize side width
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // Drag-to-resize side width (pointer capture: reliable across
+  // window edges, touch-friendly; clamped to usable bounds).
+  const startResize = (clientX: number) => {
     setIsDraggingWidth(true);
-    const startX = e.clientX;
+    const startX = clientX;
     const startWidth = sideWidth;
+    const MIN_W = 320;
+    const maxW = () => Math.max(MIN_W + 40, window.innerWidth - 120);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
-      setSideWidth(startWidth + deltaX);
+      setSideWidth(Math.min(maxW(), Math.max(MIN_W, startWidth + deltaX)));
     };
 
     const handleMouseUp = () => {
       setIsDraggingWidth(false);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleMouseUp);
+    };
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      const t = moveEvent.touches[0];
+      if (!t) return;
+      setSideWidth(Math.min(maxW(), Math.max(MIN_W, startWidth + (t.clientX - startX))));
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleMouseUp);
+  };
+
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    startResize(e.clientX);
   };
 
   if (layoutState === "closed") return null;
@@ -566,7 +581,6 @@ export function AgentConversation({
                 {isStreaming && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
-                    <span>Thinking…</span>
                   </span>
                 )}
               </div>
@@ -711,25 +725,6 @@ export function AgentConversation({
             )}
 
             {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript) */}
-            {!draft.trim() && stagedAttachments.length === 0 && !isStreaming && (
-              <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
-                {[
-                  "Show notes and sources side by side",
-                  "Start a focus session",
-                  "Research a topic for me",
-                  "Change my background",
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setDraft(suggestion)}
-                    className="px-2.5 py-1 rounded-full text-[11px] text-white/60 bg-white/[0.05] hover:bg-white/[0.1] hover:text-white border border-white/[0.06] transition-colors cursor-pointer font-sans"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            )}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -819,8 +814,12 @@ export function AgentConversation({
       {isSide && (
         <div
           onMouseDown={handleMouseDownResize}
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            if (t) startResize(t.clientX);
+          }}
           className={cn(
-            "absolute top-0 bottom-0 -right-1.5 w-3 cursor-col-resize z-50 group hover:bg-[var(--accent-lime)]/20 transition-colors",
+            "absolute top-0 bottom-0 -right-1.5 w-3 cursor-col-resize z-50 group hover:bg-[var(--accent-lime)]/20 transition-colors touch-none select-none",
             isDraggingWidth && "bg-[var(--accent-lime)]/30"
           )}
           title="Drag to resize chat width"
@@ -990,57 +989,7 @@ export function AgentConversation({
                 data-msg-id={msg.id}
                 className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    // The custom `code` renderer draws its own code block; let it
-                    // through without the default <pre> wrapper (and prose styling)
-                    pre: ({ children }) => <>{children}</>,
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--accent-lime)] hover:underline underline-offset-4"
-                      >
-                        {children}
-                      </a>
-                    ),
-                    code({ className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || "");
-                      const isInline = !match && !String(children).includes("\n");
-                      if (isInline) {
-                        return (
-                          <code
-                            className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-xs text-[var(--accent-lime)]"
-                            {...props}
-                          >
-                            {children}
-                          </code>
-                        );
-                      }
-                      return (
-                        <div className="relative my-3 rounded-xl bg-black/60 border border-white/10 overflow-hidden font-mono text-xs">
-                          <div className="flex items-center justify-between px-3.5 py-1.5 bg-white/5 border-b border-white/5 text-muted-foreground text-[11px]">
-                            <span>{match?.[1] || "code"}</span>
-                            <button
-                              type="button"
-                              onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ""))}
-                              className="hover:text-white transition-colors cursor-pointer"
-                            >
-                              Copy
-                            </button>
-                          </div>
-                          <pre className="p-3.5 overflow-x-auto text-[#e2e8f0]">
-                            <code>{children}</code>
-                          </pre>
-                        </div>
-                      );
-                    },
-                  }}
-                >
-                  {msg.content}
-                </ReactMarkdown>
+                <AssistantMarkdown content={msg.content} />
 
                 {/* Hover actions: Copy & Retry on last message */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
@@ -1079,9 +1028,7 @@ export function AgentConversation({
           {isStreaming && (
             <div className="flex flex-col gap-1 py-1" aria-live="polite">
               {streamingText && (
-                <div className="w-full leading-relaxed whitespace-pre-wrap text-[15px] text-foreground/90 font-sans pb-1">
-                  {streamingText}
-                </div>
+                <StreamingText text={streamingText} streaming />
               )}
               {activity.map((row) => {
                 const elapsed = Math.max(
@@ -1139,7 +1086,7 @@ export function AgentConversation({
                       ✦
                     </span>
                   )}
-                  <span>{statusText || currentPhase || "Thinking…"}</span>
+                  <span>{statusText || currentPhase}</span>
                 </div>
               )}
               {isStuck && (
