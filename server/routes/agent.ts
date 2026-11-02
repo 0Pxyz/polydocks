@@ -99,15 +99,15 @@ agentRouter.post("/message", async (c) => {
   if (!prompt) {
     return c.json({ error: "Missing required 'prompt' field" }, 400);
   }
-  const { handleMessage } = await import("../agent/orchestrator");
-  const out = await handleMessage({
+  const { queueMessage } = await import("../agent/orchestrator");
+  const out = queueMessage({
     sessionId: typeof body?.sessionId === "string" ? body.sessionId : undefined,
     workspaceId:
       typeof body?.workspaceId === "string" ? body.workspaceId : ctxFrom(c, body).workspaceId,
     prompt,
     origin: body?.origin === "dock-add" ? "dock-add" : "chat",
   });
-  return c.json({ success: true, ...out });
+  return c.json({ success: true, ...out }, 202);
 });
 
 /** POST /api/agent/memory — { op: recall|record, ...params }. */

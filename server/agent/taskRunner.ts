@@ -427,12 +427,9 @@ export class TaskExecutionEngine {
     };
   }
 
-  /** Delivers one durable job event row to live session subscribers. */
-  public fanOutSessionJob(sessionId: string, taskId: string, status: TaskStatus): void {
-    const rows = listJobEvents({ sessionId, jobId: taskId, limit: 1, order: "desc" });
-    const row = rows[0];
-    if (!row) return;
-    const set = this.jobSubscribers.get(sessionId);
+  /** Delivers a durable job event row to live session subscribers. */
+  public announceRow(row: JobEventRow): void {
+    const set = this.jobSubscribers.get(row.sessionId);
     if (!set) return;
     for (const listener of set) {
       try {
@@ -441,6 +438,14 @@ export class TaskExecutionEngine {
         // Non-fatal if subscriber handler throws.
       }
     }
+  }
+
+  /** Delivers one durable job event row to live session subscribers. */
+  public fanOutSessionJob(sessionId: string, taskId: string, status: TaskStatus): void {
+    const rows = listJobEvents({ sessionId, jobId: taskId, limit: 1, order: "desc" });
+    const row = rows[0];
+    if (!row) return;
+    this.announceRow(row);
   }
 
   /**
@@ -625,7 +630,10 @@ export class TaskExecutionEngine {
             output: res ? (res as Record<string, unknown>) : { completed: true },
           });
         } else {
-          // Default: execute runAgentLoop with task input
+          // Default: execute runAgentLoop with task input. Plugin
+          // lifecycle events are also written durably so the resumable
+          // SSE stream carries them: a finished synthesis mounts in the
+          // dock without the client polling.
           const prompt = String(task.input?.prompt || "");
           const origin = task.input?.origin === "dock-add" ? "dock-add" : "chat";
 
@@ -636,6 +644,20 @@ export class TaskExecutionEngine {
             taskId: task.id,
             origin,
             signal: controller.signal,
+            onEvent: async (ev) => {
+              await emit(ev);
+              if (
+                ev.type === "plugin.created" ||
+                ev.type === "plugin.updated" ||
+                ev.type === "plugin.published"
+              ) {
+                const row = insertJobEvent(task.id, task.sessionId, ev.type, {
+                  ...(ev.payload as Record<string, unknown>),
+                  taskType: task.type,
+                });
+                this.announceRow(row);
+              }
+            },
           });
 
           if (controller.signal.aborted) {

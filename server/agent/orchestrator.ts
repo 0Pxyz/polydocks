@@ -1,18 +1,19 @@
-import { runAgentLoop } from "./loop";
+import { runAgentLoop, type AgentStepEvent } from "./loop";
 import { matchDeterministicCommand } from "./dispatcher";
 import { searchDockCatalog } from "./tools/dockCatalog";
 import { TaskService } from "../services/taskService";
-import { createSession, getSession } from "./taskRunner";
+import { createSession, getSession, taskExecutionEngine } from "./taskRunner";
+import { insertJobEvent } from "../workspace/sessions";
 import { db } from "../workspace/db";
 
 /**
- * Non-blocking orchestrator (slice 3).
+ * Non-blocking orchestrator (slice 3 + 3b).
  *
- * Every user message lands in a persisted per-session FIFO and is handled
- * fast: light turns answer inline, heavy turns (code/tool synthesis) become
- * engine jobs and return an ack with a taskId. The orchestrator never
- * awaits a job, so "como está?" and "abre o bitcoin" answer while a 30s
- * generation runs. Job results arrive later through job_events + SSE.
+ * POST /api/agent/message returns 202 + { messageId, sessionId } at once.
+ * Every outcome travels as a durable message.* event on the session SSE
+ * stream (same table + Last-Event-ID resume as job events): thoughts and
+ * text stream per message, heavy turns become engine jobs with an ack, and
+ * the input never waits for a 30s generation.
  */
 
 export type RouteKind =
@@ -41,7 +42,7 @@ export interface RouterState {
   sessionId: string;
   /** Real dock ids (builtins + installed, never store-only). */
   dockIds: string[];
-  activeTasks: Array<{ id: string; type: string; status: string }>;
+  activeTasks: Array<{ id: string; type: string; status: string; prompt?: string }>;
 }
 
 export interface IntentRouter {
@@ -59,6 +60,11 @@ function cleanId(text: string): string {
     .trim();
 }
 
+const CANCEL_WORDS = /\b(cancel|cancela|pare|stop|interromp|abort|mata|mate)\b/i;
+const TASK_WORDS = /\b(task|job|tarefa|trabalho|build|gera[cç][aã]o|generation|geração|processo)\b/i;
+const AFFIRMATIVE = /^(sim|pode|confirmo|confirmar|vai|faz isso|manda|yes|ok)\b/i;
+const NEGATIVE = /^(n[aã]o|deixa|esquece|no)\b/i;
+
 /**
  * Keyword router: deterministic today, model-backed later. Pure function
  * of (message, state) — no I/O, no side effects — so tests and a future
@@ -69,16 +75,18 @@ export class KeywordRouter implements IntentRouter {
     const text = (message || "").trim();
     const lower = text.toLowerCase();
 
-    // Cancel / steer name a running job. Recognized but unsupported yet.
-    if (
-      /\b(cancel|pare|para|stop|interromp|abort)/i.test(lower) &&
-      /\b(task|job|tarefa|trabalho|build|gera[cç][aã]o|generation)\b/i.test(lower)
-    ) {
-      return { kind: "cancel_task", confidence: 0.6, reason: "cancel keywords + task noun" };
+    if (CANCEL_WORDS.test(lower) && (TASK_WORDS.test(lower) || /\b(o|a|os|as|um|uma|the|esse|essa|este|esta|ele|ela)\b/i.test(lower))) {
+      const ref = cleanId(
+        lower
+          .replace(CANCEL_WORDS, " ")
+          .replace(TASK_WORDS, " ")
+          .replace(/\b(o|a|os|as|um|uma|the|esse|essa|este|esta|ele|ela|do|da|dos|das|de|por favor|porfavor)\b/gi, " ")
+      );
+      return { kind: "cancel_task", confidence: ref ? 0.75 : 0.6, reason: "cancel keywords", args: ref ? { targetTaskRef: ref } : undefined };
     }
     if (
       /\b(muda|altera|ajusta|steer|continua|change)\b/i.test(lower) &&
-      /\b(task|job|tarefa|trabalho|build|gera[cç][aã]o)\b/i.test(lower)
+      TASK_WORDS.test(lower)
     ) {
       return { kind: "steer_task", confidence: 0.55, reason: "steer keywords + task noun" };
     }
@@ -119,7 +127,7 @@ export class KeywordRouter implements IntentRouter {
 
     // Heavy work: explicit build/create asks become engine jobs.
     if (
-      /\b(cri[ea](r| um| uma)?|crie|build|make|monte|monta|gere|gerar|desenvolva|desenvolver|plugin|ferramenta|tool|app|tela|dashboard|viewer|site)\b/i.test(
+      /\b(cri[ea](r| uma)?|crie|build|make|monte|monta|gere|gerar|desenvolva|desenvolver|plugin|ferramenta|tool|app|tela|dashboard|viewer|site)\b/i.test(
         lower
       ) && lower.length > 12
     ) {
@@ -139,11 +147,17 @@ export function getRouter(): IntentRouter {
   return activeRouter;
 }
 
+export interface StreamEvent {
+  type: "delta" | "progress";
+  text: string;
+}
+
 export interface AnswerContext {
   prompt: string;
   workspaceId: string;
   sessionId: string;
   llmClient?: unknown;
+  onEvent?: (ev: StreamEvent) => void;
 }
 
 async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
@@ -162,6 +176,13 @@ async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
     sessionId: ctx.sessionId,
     history: [{ role: "system", content: snapshot } as any],
     ...(ctx.llmClient ? { llmClient: ctx.llmClient as any } : {}),
+    onEvent: async (ev: AgentStepEvent) => {
+      if (ev.type === "agent.text_delta" && typeof (ev.payload as any)?.delta === "string") {
+        ctx.onEvent?.({ type: "delta", text: (ev.payload as any).delta });
+      } else if (ev.type === "tool.start" && typeof (ev.payload as any)?.name === "string") {
+        ctx.onEvent?.({ type: "progress", text: `Running ${(ev.payload as any).name}…` });
+      }
+    },
   });
   return result.text || "Done.";
 }
@@ -192,13 +213,6 @@ async function defaultStartHeavy(task: {
   return { id: created.id };
 }
 
-export type OrchestratorReply =
-  | { type: "reply"; text: string; decision: RouteDecision }
-  | { type: "ack"; taskId: string; text: string; decision: RouteDecision }
-  | { type: "dock_action"; op: "open" | "close" | "list"; id?: string; text: string; decision: RouteDecision }
-  | { type: "unsupported"; text: string; decision: RouteDecision }
-  | { type: "error"; text: string; decision: RouteDecision };
-
 const QUEUE_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS message_queue (
     id TEXT PRIMARY KEY,
@@ -214,7 +228,7 @@ const QUEUE_TABLE_SQL = `
   CREATE INDEX IF NOT EXISTS idx_message_queue_session ON message_queue(session_id, status, created_at);
 `;
 
-function ensureQueueTable(): void {
+export function ensureQueueTable(): void {
   db.exec(QUEUE_TABLE_SQL);
 }
 
@@ -225,6 +239,10 @@ function newId(prefix: string): string {
 /** In-process per-session chains: order within a session, never across. */
 const sessionChains = new Map<string, Promise<unknown>>();
 
+/** Pending destructive confirmations / disambiguation choices per session. */
+const pendingConfirms = new Map<string, { taskId: string }>();
+const pendingChoices = new Map<string, { options: Array<{ id: string; label: string }> }>();
+
 async function realDockIds(workspaceId: string): Promise<string[]> {
   try {
     const entries = await searchDockCatalog({ workspaceId });
@@ -234,14 +252,41 @@ async function realDockIds(workspaceId: string): Promise<string[]> {
   }
 }
 
-function activeSnapshot(workspaceId: string): Array<{ id: string; type: string; status: string }> {
+export interface ActiveTaskSnapshot {
+  id: string;
+  type: string;
+  status: string;
+  prompt?: string;
+}
+
+function activeSnapshot(workspaceId: string): ActiveTaskSnapshot[] {
   try {
     return TaskService.listTasks({ workspaceId })
       .filter((t) => t.status === "running" || t.status === "queued")
-      .map((t) => ({ id: t.id, type: t.type, status: t.status }));
+      .map((t) => ({
+        id: t.id,
+        type: t.type,
+        status: t.status,
+        prompt: typeof t.input?.prompt === "string" ? (t.input.prompt as string).slice(0, 80) : undefined,
+      }));
   } catch {
     return [];
   }
+}
+
+function statusText(tasks: ActiveTaskSnapshot[]): string {
+  if (tasks.length === 0) return "Nothing running right now — the dock is idle.";
+  const lines = tasks.map(
+    (t, i) => `${i + 1}. ${t.id} — ${t.type} (${t.status})${t.prompt ? `: ${t.prompt}` : ""}`
+  );
+  return `Right now (${tasks.length} active):\n${lines.join("\n")}`;
+}
+
+/** Deterministic status questions answered without any model call. */
+export function isStatusQuestion(message: string): boolean {
+  return /^(como\s+est[aá]|status|andamento|o\s+que\s+(est[aá]|t[aá]|estao|estão)\s+(rolando|acontecendo|fazendo)|alguma\s+novidade|tudo\s+bem|how\s+is\s+it\s+going|what.*\brunning\b)/i.test(
+    message.trim()
+  );
 }
 
 export interface HandleMessageInput {
@@ -253,14 +298,23 @@ export interface HandleMessageInput {
   deps?: OrchestratorDeps;
 }
 
+/** Publish one message.* event durably + live (same resume as job events). */
+function publishMessage(
+  sessionId: string,
+  messageId: string,
+  type: "message.delta" | "message.done" | "message.error",
+  payload: Record<string, unknown>
+): void {
+  const row = insertJobEvent(messageId, sessionId, type, payload);
+  taskExecutionEngine.announceRow(row);
+}
+
 /**
- * Enqueues one message and processes the session FIFO. Returns as soon as
- * THIS message is handled — light turns answer inline, heavy turns return
- * an ack. Never awaits a job.
+ * Enqueues one message and returns its ids at once (HTTP 202). Processing
+ * runs detached in session order; every outcome arrives as a durable
+ * message.* event. Never awaits a job.
  */
-export async function handleMessage(input: HandleMessageInput): Promise<
-  OrchestratorReply & { sessionId: string; messageId: string }
-> {
+export function queueMessage(input: HandleMessageInput): { messageId: string; sessionId: string } {
   ensureQueueTable();
   const workspaceId = input.workspaceId || "default";
   let sessionId = input.sessionId;
@@ -275,24 +329,20 @@ export async function handleMessage(input: HandleMessageInput): Promise<
      VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
   ).run(messageId, sessionId, workspaceId, input.prompt, input.origin || "chat", now, now);
 
-  const chain = (sessionChains.get(sessionId!) ?? Promise.resolve()).then(() =>
+  const chain = (sessionChains.get(sessionId) ?? Promise.resolve()).then(() =>
     processOne(messageId, input)
   );
-  sessionChains.set(sessionId!, chain.catch(() => {}));
-  const reply = (await chain) as OrchestratorReply;
-  return { ...reply, sessionId: sessionId!, messageId };
+  sessionChains.set(sessionId, chain.catch(() => {}));
+  // Detached: the HTTP layer already answered 202.
+  void chain.catch(() => {});
+  return { messageId, sessionId };
 }
 
-async function processOne(
-  messageId: string,
-  input: HandleMessageInput
-): Promise<OrchestratorReply> {
+async function processOne(messageId: string, input: HandleMessageInput): Promise<void> {
   const row = db
     .prepare("SELECT * FROM message_queue WHERE id = ?")
     .get(messageId) as any;
-  if (!row || row.status !== "queued") {
-    return { type: "error", text: "Message already handled.", decision: { kind: "answer_quick", confidence: 0, reason: "stale" } };
-  }
+  if (!row || row.status !== "queued") return;
   db.prepare("UPDATE message_queue SET status = 'processing', updated_at = ? WHERE id = ?").run(
     new Date().toISOString(),
     messageId
@@ -301,76 +351,226 @@ async function processOne(
   const deps = input.deps ?? {};
   const answerQuick = deps.answerQuick ?? defaultAnswerQuick;
   const startHeavy = deps.startHeavy ?? defaultStartHeavy;
+  const done = (payload: Record<string, unknown>) => {
+    db.prepare("UPDATE message_queue SET status = 'done', updated_at = ? WHERE id = ?").run(
+      new Date().toISOString(),
+      messageId
+    );
+    publishMessage(row.session_id, messageId, "message.done", payload);
+  };
+  const fail = (text: string) => {
+    db.prepare("UPDATE message_queue SET status = 'failed', error = ?, updated_at = ? WHERE id = ?").run(
+      text,
+      new Date().toISOString(),
+      messageId
+    );
+    publishMessage(row.session_id, messageId, "message.error", { text });
+  };
 
   try {
     const dockIds = await realDockIds(row.workspace_id);
+    const active = activeSnapshot(row.workspace_id);
+
+    // 1. Pending destructive confirmation ("sim" / "não").
+    const pending = pendingConfirms.get(row.session_id);
+    if (pending) {
+      pendingConfirms.delete(row.session_id);
+      const text = row.prompt.trim().toLowerCase();
+      if (AFFIRMATIVE.test(text)) {
+        const target = active.find((t) => t.id === pending.taskId);
+        if (!target) {
+          done({ text: "That job already finished — nothing to cancel." });
+          return;
+        }
+        TaskService.cancelTask(pending.taskId, row.workspace_id, "user" as any);
+        done({ text: `Cancelled ${pending.taskId}.`, taskId: pending.taskId });
+        return;
+      }
+      done({ text: "Kept it running — shout if you change your mind." });
+      return;
+    }
+
+    // 2. Pending disambiguation choice ("1", "o do bitcoin", ...).
+    const choice = pendingChoices.get(row.session_id);
+    if (choice) {
+      const pick = resolveChoice(row.prompt, choice.options);
+      pendingChoices.delete(row.session_id);
+      if (pick) {
+        const target = active.find((t) => t.id === pick);
+        if (target) {
+          TaskService.cancelTask(pick, row.workspace_id, "user" as any);
+          done({ text: `Cancelled ${pick}.`, taskId: pick });
+          return;
+        }
+      }
+      // Fell through: treat as a fresh message below.
+    }
+
+    // 3. Deterministic status: no model call, straight from the snapshot.
+    if (isStatusQuestion(row.prompt)) {
+      done({ text: statusText(active) });
+      return;
+    }
+
     const decision = await activeRouter.route(row.prompt, {
       workspaceId: row.workspace_id,
       sessionId: row.session_id,
       dockIds,
-      activeTasks: activeSnapshot(row.workspace_id),
+      activeTasks: active,
     });
 
-    let reply: OrchestratorReply;
-    if (decision.kind === "steer_task" || decision.kind === "cancel_task") {
-      reply = {
-        type: "unsupported",
-        text: "Steering and cancelling running jobs isn't supported yet — it lands right after this cut.",
+    if (decision.kind === "steer_task") {
+      done({
+        text: "Steering a running job isn't supported yet — cancel it and start a new one with the adjustment.",
         decision,
-      };
-    } else if (decision.kind === "dock_action") {
+      });
+      return;
+    }
+
+    if (decision.kind === "cancel_task") {
+      handleCancel(row, decision, active, done);
+      return;
+    }
+
+    if (decision.kind === "dock_action") {
       const op = decision.args?.dockOp ?? "list";
       const id = decision.args?.dockId;
       if ((op === "open" || op === "close") && id && !dockIds.includes(id)) {
-        reply = {
-          type: "error",
+        publishMessage(row.session_id, messageId, "message.error", {
           text: `Nothing called "${id}" is in your dock. Install it from the Library first.`,
           decision,
-        };
-      } else {
-        const label = op === "list" ? "Here is your dock." : op === "open" ? `Opening "${id}".` : `Closing "${id}".`;
-        reply = { type: "dock_action", op, ...(id ? { id } : {}), text: label, decision };
+        });
+        db.prepare("UPDATE message_queue SET status = 'failed', error = ?, updated_at = ? WHERE id = ?").run(
+          `unknown dock id ${id}`,
+          new Date().toISOString(),
+          messageId
+        );
+        return;
       }
-    } else if (decision.kind === "create_tool") {
+      const label = op === "list" ? "Here is your dock." : op === "open" ? `Opening "${id}".` : `Closing "${id}".`;
+      done({ text: label, action: { op, ...(id ? { id } : {}) }, decision });
+      return;
+    }
+
+    if (decision.kind === "create_tool") {
       const started = await startHeavy({
         sessionId: row.session_id,
         workspaceId: row.workspace_id,
         type: "plugin_synthesis",
         input: { prompt: row.prompt, origin: row.origin },
       });
-      reply = {
-        type: "ack",
-        taskId: started.id,
+      done({
         text: `On it — building in the background (job ${started.id}). I'll post the result here when it lands.`,
-        decision,
-      };
-    } else {
-      const text = await answerQuick({
+        taskId: started.id,
         prompt: row.prompt,
-        workspaceId: row.workspace_id,
-        sessionId: row.session_id,
-        llmClient: input.llmClient,
+        decision,
       });
-      reply = { type: "reply", text, decision };
+      return;
     }
 
-    db.prepare("UPDATE message_queue SET status = 'done', updated_at = ? WHERE id = ?").run(
-      new Date().toISOString(),
-      messageId
-    );
-    return reply;
+    let full = "";
+    const text = await answerQuick({
+      prompt: row.prompt,
+      workspaceId: row.workspace_id,
+      sessionId: row.session_id,
+      llmClient: input.llmClient,
+      onEvent: (ev) => {
+        if (ev.type === "delta" && ev.text) {
+          full += ev.text;
+          publishMessage(row.session_id, messageId, "message.delta", { text: ev.text });
+        } else if (ev.type === "progress" && ev.text) {
+          publishMessage(row.session_id, messageId, "message.delta", { text: `\n_${ev.text}_\n` });
+        }
+      },
+    });
+    if (!full && text) {
+      publishMessage(row.session_id, messageId, "message.delta", { text });
+    }
+    done({ text });
   } catch (err: any) {
-    db.prepare("UPDATE message_queue SET status = 'failed', error = ?, updated_at = ? WHERE id = ?").run(
-      err?.message || String(err),
-      new Date().toISOString(),
-      messageId
-    );
-    return {
-      type: "error",
-      text: "Couldn't handle that just now — try again.",
-      decision: { kind: "answer_quick", confidence: 0, reason: "handler threw" },
-    };
+    fail(err?.message || "Couldn't handle that just now — try again.");
   }
+}
+
+/** Match "1", "o segundo", "bitcoin", id prefixes against options. */
+function resolveChoice(message: string, options: Array<{ id: string; label: string }>): string | null {
+  const lower = message.trim().toLowerCase();
+  const num = /^\W*(\d+)\W*$/.exec(lower);
+  if (num) {
+    const idx = Number(num[1]) - 1;
+    if (idx >= 0 && idx < options.length) return options[idx].id;
+    return null;
+  }
+  const cleaned = cleanId(lower);
+  const matches = options.filter(
+    (o) =>
+      o.id.toLowerCase().startsWith(cleaned) ||
+      cleaned.includes(o.id.toLowerCase()) ||
+      o.label.toLowerCase().includes(cleaned)
+  );
+  return matches.length === 1 ? matches[0].id : null;
+}
+
+function findCancelTarget(
+  ref: string | undefined,
+  active: ActiveTaskSnapshot[]
+): ActiveTaskSnapshot | null {
+  if (active.length === 0) return null;
+  if (!ref) return active.length === 1 ? active[0] : null;
+  const r = ref.toLowerCase();
+  const matches = active.filter(
+    (t) =>
+      t.id.toLowerCase() === r ||
+      t.id.toLowerCase().startsWith(r) ||
+      t.type.toLowerCase().includes(r) ||
+      (t.prompt || "").toLowerCase().includes(r)
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function ambiguousOptions(active: ActiveTaskSnapshot[]): Array<{ id: string; label: string }> {
+  return active.map((t, i) => ({
+    id: t.id,
+    label: `${i + 1}. ${t.id} [${t.type}]${t.prompt ? `: ${t.prompt}` : ""}`,
+  }));
+}
+
+function handleCancel(
+  row: any,
+  decision: RouteDecision,
+  active: ActiveTaskSnapshot[],
+  done: (payload: Record<string, unknown>) => void
+): void {
+  if (active.length === 0) {
+    done({ text: "Nothing running right now — the dock is idle.", decision });
+    return;
+  }
+  const target = findCancelTarget(decision.args?.targetTaskRef, active);
+  if (!target) {
+    pendingChoices.set(
+      row.session_id,
+      { options: ambiguousOptions(active) }
+    );
+    done({
+      text:
+        `Which one?\n` +
+        ambiguousOptions(active)
+          .map((o) => o.label)
+          .join("\n"),
+      decision,
+    });
+    return;
+  }
+  if (decision.confidence < 0.7) {
+    pendingConfirms.set(row.session_id, { taskId: target.id });
+    done({
+      text: `Cancel ${target.id} [${target.type}]? Reply "sim" to confirm.`,
+      decision,
+    });
+    return;
+  }
+  TaskService.cancelTask(target.id, row.workspace_id, "user" as any);
+  done({ text: `Cancelled ${target.id}.`, taskId: target.id, decision });
 }
 
 /** Boot recovery: queued/processing rows outlive their HTTP calls. */
