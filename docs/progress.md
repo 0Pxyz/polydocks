@@ -127,3 +127,4 @@
 | 2026-11-02 | Plugin UI Kit v2.1: Level 2 essentials, seeds split, shipped migration (bitcoin/pomodoro/feed), per-theme contrast QA | [#292](https://github.com/0Pxyz/polymax/pull/292) |
 | 2026-11-02 | Kit button fix: shared class extractor + default theme import, kit.css 11.7KB to 40KB | [#292](https://github.com/0Pxyz/polymax/pull/292) |
 | 2026-11-02 | Chat refinement: progressive responses, no Thinking label, chips removed, resize/touch/IME polish | [#295](https://github.com/0Pxyz/polymax/pull/295) |
+| 2026-11-02 | MCP client+server: PolyDocks serves its bus at POST /mcp, one manager connects external MCPs with progressive discovery (#293) | [#293](https://github.com/0Pxyz/polymax/pull/293) |

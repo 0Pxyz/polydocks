@@ -35,6 +35,10 @@ import { inspect_session } from "./inspect_session";
 import { list_tasks } from "./list_tasks";
 import { list_artifacts } from "./list_artifacts";
 import { read_artifact } from "./read_artifact";
+import { mcp_connect } from "./mcp_connect";
+import { mcp_list_servers } from "./mcp_list_servers";
+import { mcp_search_tools } from "./mcp_search_tools";
+import { mcp_disconnect } from "./mcp_disconnect";
 import {
   sandbox_exec,
   sandbox_write_file,
@@ -93,6 +97,10 @@ export {
   list_tasks,
   list_artifacts,
   read_artifact,
+  mcp_connect,
+  mcp_list_servers,
+  mcp_search_tools,
+  mcp_disconnect,
   sandbox_exec,
   sandbox_write_file,
   sandbox_read_file,
@@ -175,6 +183,10 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: list_tasks, surfaces: ["full"] },
   { tool: list_artifacts, surfaces: ["full"] },
   { tool: read_artifact, surfaces: ["full"] },
+  { tool: mcp_connect, surfaces: ["full"] },
+  { tool: mcp_list_servers, surfaces: ["full"] },
+  { tool: mcp_search_tools, surfaces: ["full"] },
+  { tool: mcp_disconnect, surfaces: ["full"] },
   { tool: sandbox_exec, surfaces: ["full"] },
   { tool: sandbox_write_file, surfaces: ["full"] },
   { tool: sandbox_read_file, surfaces: ["full"] },

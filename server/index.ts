@@ -7,6 +7,7 @@ import path from "node:path";
 import { config, isLoopbackHost } from "./config";
 import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
+import { mcpRouter } from "./mcp/route";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
@@ -152,6 +153,10 @@ app.get("/api/health", (c) => {
 // Mount Plugins and Capabilities router
 app.route("/api/plugins", pluginsRouter);
 app.route("/api/capabilities", capabilitiesRouter);
+
+// PolyDocks as an MCP server (Streamable HTTP, stateless): any MCP
+// client connects at /mcp.
+app.route("/mcp", mcpRouter);
 
 // Mount PolyDocks V2 Workspaces router
 app.route("/api/workspaces", workspacesRouter);

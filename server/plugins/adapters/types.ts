@@ -28,7 +28,7 @@ export const McpAdapterConfigSchema = z.object({
   server: z.string().optional(),
   serverUrl: z.string().optional(),
   tool: z.string().optional(),
-  transport: z.enum(["http", "sse", "stdio"]).default("http"),
+  transport: z.enum(["http", "sse", "stdio", "streamable"]).default("http"),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
   allowStdio: z.boolean().default(false),
