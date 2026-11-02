@@ -9,7 +9,7 @@ import {
 } from "../server/agent/skills/index";
 import { THREAD_CONTEXT_MAX_MESSAGES, THREAD_CONTEXT_TOKEN_BUDGET } from "../server/workspace/thread";
 import { runAgentLoop } from "../server/agent/loop";
-import { defaultTools, minimalTools } from "../server/agent/tools/index";
+import { fullTools, minimalTools } from "../server/agent/tools/index";
 
 function mockLlm(capture: { system: string }) {
   return {
@@ -33,9 +33,11 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     expect(fastCapture.system).not.toContain("Installed Plugins");
     expect(fastCapture.system).not.toContain("Mounted Plugins");
     expect(fastCapture.system).not.toContain("Recalled Agent Memory");
-    // Fast path still carries the fixed core: base prompt + app map + guidelines.
+    // Fast path carries the fixed core only: base prompt + guidelines.
+    // The app map is on-demand now (#209): pulled via read_skill when
+    // the model needs it, never injected up front.
     expect(fastCapture.system).toContain("Polymax Agent");
-    expect(fastCapture.system).toContain("App Map");
+    expect(fastCapture.system).not.toContain("App Map");
 
     const fullCapture = { system: "" };
     await runAgentLoop({
@@ -106,7 +108,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
 
   it("denylists are minimal and contain no stale entries", () => {
     // No denylist may name a tool that does not exist.
-    const known = new Set(defaultTools.map((t) => t.name));
+    const known = new Set(fullTools.map((t) => t.name));
     // Verb tools are also offerable (minimal surface).
     for (const t of minimalTools) known.add(t.name);
     for (const [intent, denied] of Object.entries(INTENT_TOOL_DENYLIST)) {

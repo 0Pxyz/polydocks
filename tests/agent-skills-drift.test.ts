@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { defaultTools } from "../server/agent/tools/index";
+import { fullTools, minimalTools } from "../server/agent/tools/index";
 import { skillTokens, stripSkillMetadata, selectDomainSkills } from "../server/agent/skills/index";
 
 const SKILLS_DIR = path.resolve("server/agent/skills");
@@ -109,7 +109,7 @@ describe("Skill drift guard: budgets", () => {
 
 describe("Skill drift guard: tools, tables, identifiers", () => {
   it("every snake_case name in a skill is a tool, arg, table, column, or tool result", async () => {
-    const toolNames = new Set(defaultTools.map((t) => t.name));
+    const toolNames = new Set([...fullTools.map((t) => t.name), ...minimalTools.map((t) => t.name)]);
     const { tables, columns } = await schemaNames();
     // Zod schema keys (tool argument names like domain_type) from tools/.
     const argNames = new Set<string>();

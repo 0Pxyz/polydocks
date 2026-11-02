@@ -82,3 +82,38 @@
 | 2026-10-31 | Native Browser via Atrium (first-party plugin, host-rendered surface): real Chromium sessions, lateral tab rail, blank start, perf pass (STEALTH=0 ~0.4s cold start), token-expiry grace, design-system refactor (surface uses semantic tokens; slop gate bans opaque static backgrounds; plugin skill teaches kit-only UI) |
 | 2026-10-31 | Thought stream + non-blocking agent UI (#185): fading ThoughtStream above the home orb, provider-agnostic event contract + adapter, orb job indicator with cancel, dev fake-job emitter, queue/adapter unit tests |
 | 2026-10-31 | ThoughtStream sheet-only (#185 follow-up): thoughts render above the bottom sheet instead of the home orb; sidebar/full keep transcript only |
+| 2026-10-31 | Native tool search replaces custom find_capabilities (#222): deferred namespaces + single tool_search on Responses path, capability bus stays the execution backend; Chat fallback keeps flat catalog; eval 18/18 identical to baseline | [#227](https://github.com/0Pxyz/polymax/pull/227) |
+| 2026-10-31 | Unified full/minimal tool catalogs into canonicalCatalog with surface filters (#204): derived views, plugins.install on every surface, MIGRATION.md Slice 1 reference fixed | [#228](https://github.com/0Pxyz/polymax/pull/228) |
+| 2026-10-31 | Agent as first-party plugin under same policy (#207): AGENT_MANIFEST with explicit fs permissions, loop-level fail-closed gate before validation/execution, revocation blocks + duplicate-breaker safety | [#230](https://github.com/0Pxyz/polymax/pull/230) |
+| 2026-10-31 | Core de-city slice A (#153): dynamic catalog honors enabled plugins, cityId/list_tabs vocabulary fixed, core vocabulary boundary test | [#231](https://github.com/0Pxyz/polymax/pull/231) |
+| 2026-10-31 | Activate/deactivate slice B (#153): persisted registry flag via shared facade, explicit API routes, agent verbs, CLI commands, route round-trip test | [#232](https://github.com/0Pxyz/polymax/pull/232) |
+| 2026-10-31 | Activation acceptance slice C (#153): deactivate closes dock views, skill teaches activate-first flow, facade-level acceptance test | [#233](https://github.com/0Pxyz/polymax/pull/233) |
+| 2026-10-31 | Agent runtime audit (#155): memory/guidelines/compaction/usage probes green, no soul file needed, no dead code, doc agrees with code | [#234](https://github.com/0Pxyz/polymax/pull/234) |
+| 2026-10-31 | Principle-based system prompt (#208): versioned prompts/main.md (identity, mental model, invariants, decision style, economy), no procedures, pinned tests updated | [#235](https://github.com/0Pxyz/polymax/pull/235) |
+| 2026-10-31 | On-demand skills (#209): read_skill/skills.read loader, app map behind dock-add or model pull, pinned tests updated | [#236](https://github.com/0Pxyz/polymax/pull/236) |
+| 2026-10-31 | Provider-agnostic role config (#210): orchestrator role, canonical ORCHESTRATOR_MODEL/AGENT_MODEL names, per-role effort map, env docs | [#237](https://github.com/0Pxyz/polymax/pull/237) |
+| 2026-10-31 | Escalation contract (#212): handoff payload, heavy runner with relayed events, escalate tool, orchestrator-to-heavy e2e | [#238](https://github.com/0Pxyz/polymax/pull/238) |
+| 2026-10-31 | Orchestrator loop (#211): fast-model triage on dock verbs plus escalate, own prompt file, missed-escalation build gate | [#239](https://github.com/0Pxyz/polymax/pull/239) |
+| 2026-10-31 | Routing policy (#213): documented return-control thresholds, partial synthesis returns ok, trigger tests | [#240](https://github.com/0Pxyz/polymax/pull/240) |
+| 2026-10-31 | Routing metrics (#214): orchestrator-vs-heavy eval harness with escalation rate and mismatch gate | [#241](https://github.com/0Pxyz/polymax/pull/241) |
+| 2026-10-31 | Risk ladder server slice (#180): stated tiers, install envelope permissions, grant list/revoke routes, tiering tests | [#242](https://github.com/0Pxyz/polymax/pull/242) |
+| 2026-10-31 | Sandbox trust tiers doc (#183): stated model with verified enforcement pointers, doc-rot guard | [#244](https://github.com/0Pxyz/polymax/pull/244) |
+| 2026-10-31 | Approval lifecycle spec (#167): state diagram + envelope shapes verified against dev, no runtime change (closes #167) | [#245](https://github.com/0Pxyz/polymax/pull/245) |
+| 2026-10-31 | Deploy-mode local guard (#191 slice 1): DEPLOY_MODE flag, health reports mode, fixed-owner resolution, non-loopback refuse (fork keeps slices 2-5) | [#246](https://github.com/0Pxyz/polymax/pull/246) |
+| 2026-10-31 | Memory single-entry delete backend (#105): deleteMemoryEntry + DELETE /api/agent/memory/entry with validation, 4 tests (UI surface stays open) | [#248](https://github.com/0Pxyz/polymax/pull/248) |
+| 2026-10-31 | Deterministic dispatcher fast path (#178 slice 1): zero-model-call open/close/list/theme with manifest gate + fallback, 7 tests (jobs stay open) | [#249](https://github.com/0Pxyz/polymax/pull/249) |
+| 2026-10-31 | Voice frame counters (#177 slice): isSilentPcm16LE + MicFrameStats wired via onStats, 4 tests (mic repro stays open) | [#251](https://github.com/0Pxyz/polymax/pull/251) |
+| 2026-10-31 | Inspect row contract (#181 slice): SSE-to-row mapping with shapes-only redaction, 4 tests (live surface stays open) | [#252](https://github.com/0Pxyz/polymax/pull/252) |
+| 2026-10-31 | Docker sandbox smoke (#254): pinned multi-stage image, fixed-owner local mode, 25/25 packaging/persistence/isolation checks + README local-run section | [#254](https://github.com/0Pxyz/polymax/pull/254) |
+| 2026-11-01 | Live onboarding dock tab + authentic marketing assets (#250): first-party plugin, overlay choreography, capture script, media | [#250](https://github.com/0Pxyz/polymax/pull/250) |
+| 2026-11-01 | Onboarding dock-first lifecycle (#256): every entry opens the dock tab, close removes + persists no-reopen, agent bridge, creative copy/UI untouched | [#256](https://github.com/0Pxyz/polymax/pull/256) |
+| 2026-11-01 | Onboarding takeover-pause (#259): manual dock switch pauses the tour instead of focus-stealing, ghost-thought cleanup, tested predicate | [#259](https://github.com/0Pxyz/polymax/pull/259) |
+| 2026-11-01 | Cinematic onboarding tab, video flow (#260): orb + live thought + narration auto-play in the dock tab, overlay unmounted, creative copy/UI intact | [#260](https://github.com/0Pxyz/polymax/pull/260) |
+| 2026-11-01 | Onboarding engine mounted, cinematic stage in tab (#262): runtime survives focus switches, verified headless in a real browser | [#262](https://github.com/0Pxyz/polymax/pull/262) |
+| 2026-11-01 | Media re-record on cinematic engine (#263): walkthrough mp4 + spotlights + gifs | [#263](https://github.com/0Pxyz/polymax/pull/263) |
+| 2026-11-01 | Theme control reachable on minimal surface (#264): apply_theme ships on minimal, namespace-guess resolution, live-verified background set | [#264](https://github.com/0Pxyz/polymax/pull/264) |
+| 2026-11-01 | README documents AGENT_SURFACE flag (#267): full vs minimal catalog switch | [#267](https://github.com/0Pxyz/polymax/pull/267) |
+| 2026-11-01 | Full tool surface by default (#269): AGENT_SURFACE default full, minimal stays one env line away | [#269](https://github.com/0Pxyz/polymax/pull/269) |
+| 2026-11-01 | Core plugin suite ADR + reconciliation audit (#271): cities/writing/workspace absent from code, notes/files gaps named | [#271](https://github.com/0Pxyz/polymax/pull/271) |
+| 2026-11-01 | Core suite ships in dev (#272): files + notes contract plugins, core trust on search/browser/sandbox, live-verified over HTTP | [#272](https://github.com/0Pxyz/polymax/pull/272) |
+| 2026-11-01 | Media refresh: Bitcoin viewer tour replaces flashcards, walkthrough + GIFs regenerated | [#275](https://github.com/0Pxyz/polymax/pull/275) |

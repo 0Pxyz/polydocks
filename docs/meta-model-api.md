@@ -99,3 +99,15 @@ The agent synthesizes UI plugins using the canonical `create-tab.md` skill promp
    - Typography: Syne (headers), Inter (body), Geist Mono (code)
 3. **Host Bridge:** Use `window.polymax` for persistence and communication.
 4. **Manifest:** Write a corresponding `manifest.json` (`id`, `title`, `icon`, `scope`).
+
+---
+
+## 5. Addendum: prefer Meta built-ins (verified 2026-10-31)
+
+Before writing any new capability, check whether the Meta Model API already provides it. If it does, use it — do not re-implement. Source: [dev.meta.ai/docs](https://dev.meta.ai/docs) (`/tool-calling`, `/tool-search`, `/protocols`, `/protocols/responses`, `/models`, `/agent-frameworks`, `/reasoning`, `/prompt-caching`, `/search-grounding`, `/structured-output`).
+
+- **Responses API is the recommended path** for tool loops and multi-turn agents: it preserves reasoning across turns (encrypted replay or `previous_response_id`). Chat Completions tool calling is fully supported but carries no reasoning across turns (`reasoning_content` is redacted to empty for external callers). `tool_search` and built-in `web_search` run only on Responses/Messages, never on Chat Completions.
+- **Reuse before you build:** native `tool_search` (deferred namespace tools) instead of hand-rolled progressive disclosure; built-in `web_search` (server-side grounding, `url_citation`, opt-in `web_search_call.results`) instead of a custom search pipeline; automatic prefix prompt caching instead of manual cache keys; `reasoning.effort` (Responses) / `reasoning_effort` (Chat Completions) instead of custom depth heuristics; `text.format` (Responses) / `response_format` (Chat Completions) for guaranteed JSON.
+- **Hard API constraints:** `tool_choice` supports only `"auto"` (named/required choices are HTTP 400). Function names allow at most one dot — group plugin-scoped functions under namespace tools. `tool_search` rules: one per request; hosted mode needs at least one deferred tool; a deferred tool without `tool_search` is HTTP 400; not combinable with structured output; requires reasoning effort other than `"none"`; keep the loaded tool set stable once loaded or the cache breaks. `web_search` reserves `browser.search` / `browser.open` / `browser.find` in the same request. `reasoning: "none"` is unsupported on Spark/Wonder (HTTP 400). On Responses, `instructions`, `tools` and `reasoning.effort` do not persist across `previous_response_id` — resend every turn.
+- **Prompt caching is automatic prefix matching:** stable system prompt + tool prefix first, variable content last; watch `usage.input_tokens_details.cached_tokens`; `prompt_cache_key` only at scale; `prompt_cache_retention: "24h"` for bursty workloads.
+- **Model roles (env only):** orchestrator `muse-spark-1.3` with low effort; heavy agent `muse-wonder-1.0` (preview) with higher effort. No second provider unless a concrete need appears with justification. The Claude Agent SDK spike (Messages API, `opus` -> Wonder / `sonnet+haiku+subagents` -> Spark) is evaluation-only until gates are proven preservable.

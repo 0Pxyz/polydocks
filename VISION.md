@@ -27,13 +27,13 @@ Our focus is teaching the agent to control the dock and to build good plugins. A
 - Community registry: publish shares to the on-machine registry with history, one-click install into any workspace (`server/plugins/communityRegistry.ts:136,232`, `tests/plugin-store.test.ts`).
 - Native Browser as a first-party plugin surface: real remote-Chromium sessions with a lateral tab rail, graceful Reader fallback without a worker secret, strict-referrer video embeds (`src/features/browser/NativeBrowserView.tsx:63`, green `tests/browser/reader-smoke.ts` in CI for PRs to `main`).
 - Agent execution sandbox exists as an opt-in Modal backend (`sandbox_*` tools in the full catalog); unset credentials disable it with a setup hint. Per-user tenancy is still absent (see TARGET).
+- Intent-scoped minimal surface is the default: `AGENT_SURFACE=minimal` (`.env.example:56`), minimal verbs + `find_capabilities` with `plugins.install` on every surface (`server/agent/tools/index.ts:168-189`), per-turn capability-derived `cap.<id>` tools (`server/agent/tools/catalog.ts`), progressive disclosure by intent (`server/agent/skills/index.ts`).
 
 ## What TARGET (not built)
 
 - Per-user isolation and auth. Today: single-tenant local process / one Docker service (`docker-compose.yml`), no auth (`server/identity.ts` falls back to `"local"`, self-asserted header).
 - UI = only dock + chat + plugin surfaces. The retired knowledge-map views live on the `future/city-experience` branch, not in core. No other core views may grow beside them.
 - Agent as a first-party plugin under the same policy. Today: the agent is core code with a hardcoded 43-tool catalog.
-- Intent-scoped minimal surface by default. Today: `AGENT_SURFACE` defaults to `full`.
 - Opaque `workspaceId`. Scope is a plain workspace id everywhere: routes, tools, tables, and the front.
 
 ## Adopted decisions (from archived work, now on main)

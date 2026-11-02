@@ -26,6 +26,20 @@ export function sanitizeUserId(raw?: string | null): string {
 }
 
 /**
+ * Resolves the caller's user id for an explicit deploy mode (#191 slice 1).
+ * Local mode always returns the fixed owner so every request scopes to the
+ * single-user demo identity; cloud mode keeps the header/query/body logic
+ * (session enforcement itself is fork-only per ADR 0002).
+ */
+export function resolveUserIdForMode(
+  input: { header?: string | null; query?: string | null; body?: unknown },
+  mode: "local" | "cloud" = "local"
+): string {
+  if (mode === "local") return DEFAULT_USER_ID;
+  return resolveUserId(input);
+}
+
+/**
  * Resolves the caller's user id from the request header, then the query
  * string, then an optional body value, falling back to {@link DEFAULT_USER_ID}.
  */

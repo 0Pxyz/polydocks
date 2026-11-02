@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { llm, MODEL_ID } from "./llm";
-import { defaultTools } from "./tools";
+import { defaultTools, resolveTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
 import { classifyIntent, INTENT_TOOL_DENYLIST } from "./intent";
@@ -17,6 +17,17 @@ import { maybeCompactAgentThread } from "./threadCompaction";
 import { getMemoryContext } from "./memory";
 import { AGENT_GUIDELINES_EXTRACT } from "./guidelines";
 import { extractUsage, recordTurnUsage } from "./usage";
+import {
+  createResponsesTurn,
+  hasResponsesSurface,
+  normalizeCallId,
+  toResponsesName,
+  toResponsesUserContent,
+} from "./responses";
+import { buildResponsesTools, hasReservedWebSearchCollision, resolveResponsesToolName } from "./namespaces";
+import { AGENT_MANIFEST, checkAgentPermission } from "./manifest";
+import { getMainPrompt } from "./prompts/index";
+import type { PluginManifest } from "../plugins/manifest";
 import {
   getSession,
   createSession,
@@ -89,6 +100,9 @@ export interface AgentLoopOptions {
   signal?: AbortSignal;
   /** Rewind the last completed turn before appending the same prompt again. */
   retryLast?: boolean;
+  /** Agent manifest override for the permission gate (#207). Defaults to
+   *  AGENT_MANIFEST; tests pass a revoked copy to prove the gate blocks. */
+  agentManifest?: PluginManifest;
 }
 
 export interface AgentLoopResult {
@@ -179,46 +193,21 @@ async function createModelResponse(input: {
   };
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are the Polymax Agent, an autonomous dock and workspace operator powered by Meta Muse Spark.
-The user's workspace is your primary operating environment: notes, files, terminal, browser, and dynamically synthesized tools.
+/**
+ * Principle-based main prompt (#208): versioned file, not an inline
+ * string. Emergency fallback only — the file is committed, so reaching it
+ * means the checkout is damaged; keep the turn alive with identity and
+ * the one hard rule (receipts are truth).
+ */
+function loadDefaultSystemPrompt(): string {
+  try {
+    return getMainPrompt().text;
+  } catch {
+    return "You are the Polymax Agent, a dock and workspace operator. A failed tool envelope (ok:false) is the answer — never invent success.";
+  }
+}
 
-## Core Operating Principles:
-
-1. Workspace as Default (Intent-Driven):
-- The general workspace is your default operating environment. Answer in place; build a plugin only when the user wants something to come back to.
-- Never assume an active project scope that was not selected or requested.
-- If an action requires a scope the user has not specified, ask a concise clarification instead of guessing or defaulting to an arbitrary one.
-
-2. Tool Economy & Intent-Driven Execution:
-- General conversation, greetings, and explanations (e.g. "Hey", "Explain how transformers work", "What is quantum computing?"): Answer directly, concisely, and helpfully in natural language WITHOUT calling any tools.
-- Existing workspace content: Retrieve only the specific document or resource requested (e.g. read_file).
-- Specific experiences & tools: Open or interact with an experience (dock.open) only when the user asks to use it.
-- Content creation & notes: Create or edit notes directly with write_file.
-- Autonomous Web Research & Discovery (TinyFish): Proactively use search_web and fetch_page to find authoritative primary sources when the user asks for research, sources, papers, or documentation.
-
-3. Zero Unsolicited Inspections:
-- NEVER run unsolicited bookkeeping tools (dock.list, etc.) on greetings, general questions, or normal conversational turns.
-- Reuse existing context and previously retrieved state. Do not repeat inspections without a concrete reason.
-
-4. Separate Internal State from User Responses:
-- Never dump mounted tool lists, dock experience IDs, internal inspection logs, resource sizes, or empty quest/feed scaffolding into your response unless specifically asked.
-- Provide direct, elegant, and useful answers reflecting the actual outcome.
-
-5. Organize and Integrate, Inline First:
-- Your role is to organize and integrate (capabilities, MCPs, APIs); you do not design from scratch.
-- Not everything becomes a tab: answer inline when words suffice, call a capability with no UI when an action suffices, and create a tab only when the user wants something to come back to.
-
-6. One Agent, One Dock (the product rule):
-- A plugin is an experience that lives in your dock: open (takes the screen or sits next to the chat), close (leaves the view, state kept), edit (new version, rollback kept), pin (stays, returns as it was).
-- Flow: dock.list first — open what exists, else install from the store (needs the user's yes first), else create (needs the user's yes first). Edit with a new version instead of duplicating. Operate capabilities; uninstall removes the mount, never the history.
-- Report only receipts: what the tool envelopes return (ids, versions, events). A failed envelope (ok:false) is the answer — never claim success, never invent an install or an approval.
-
-7. Talk Like a Product, Not a Debugger:
-- Speak about outcomes, never mechanisms. Ordinary responses never mention tool names, permission flags, execution codes, receipt details, or implementation identifiers.
-- Progress is optional and brief: at most one short line per step, only when the wait is noticeable. A simple question deserves a simple answer — no narration of your plan or process.
-- Final responses follow no rigid template. After actions, say what changed, what was preserved, whether the result is ready, and any limitation — in as few sentences as the case needs.
-- If a step cannot be confirmed, say so plainly and suggest verifying before relying on it. Never claim visual verification or preserved functionality without evidence from a result.
-- Errors become plain language: what happened, what it means for the request, what happens next. Codes and traces stay in logs, never in chat.`;
+const DEFAULT_SYSTEM_PROMPT = loadDefaultSystemPrompt();
 
 /**
  * Executes the Meta Model API tool-calling loop with SSE event streaming.
@@ -276,16 +265,31 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // Intent routing runs BEFORE tools are offered: classify the request,
   // then hide every tool the intent must never touch. Misrouting is
   // prevented at the catalog level, not by editing progress text later.
+  // Capability-derived tools resolve per turn so newly registered
+  // capabilities are exposed with no catalog file edit.
   const intent = classifyIntent(prompt, { hasImageAttachments: imageAttachments.length > 0 });
   const deniedTools = new Set(INTENT_TOOL_DENYLIST[intent] ?? []);
-  const scopedTools = tools.filter((tool) => !deniedTools.has(tool.name));
+  const baseTools = tools === defaultTools ? resolveTools(tools) : tools;
+  const scopedTools = baseTools.filter((tool) => !deniedTools.has(tool.name));
+  const agentManifest = options.agentManifest ?? AGENT_MANIFEST;
+
+  // Built-in search grounding (#223) rides the Responses request when the
+  // intent may research (the custom search_web alias is not denied) and
+  // no offered Responses function collides with the reserved browser.*
+  // names (checked on the sanitized names the API actually sees). The
+  // model decides whether to search; enabling never forces one.
+  // Defined here so both the system prompt and the turn parameters agree.
+  const builtinWebSearch =
+    !deniedTools.has("search_web") &&
+    !hasReservedWebSearchCollision(scopedTools.map((t) => toResponsesName(t.name)));
 
   // Progressive context: skill selection runs before the first model call so
   // the turn knows up front whether it needs workspace state at all. Pure
   // conversational turns (general/theme, no workspace skills,
   // no attachments, not a dock-add build) skip the registry list, mounts and
-  // memory recall entirely; find_capabilities stays available so the agent can
-  // still discover anything outside the immediate context.
+  // memory recall entirely; discovery (native tool search on Responses,
+  // find_capabilities on the Chat fallback) stays available so the agent
+  // can still reach anything outside the immediate context.
   const earlyDomainSkills = selectDomainSkills(prompt);
   const hasWorkspaceSignals =
     earlyDomainSkills.some((s) => s !== "theme") ||
@@ -303,19 +307,28 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   // check (the final answer may only claim what an ok:true envelope shows).
   const turnReceipts: Array<{ tool: string; args: Record<string, unknown>; output: unknown }> = [];
 
-  // Measured cost accounting: every Chat Completions response carries
-  // `usage`, accumulated here and reported in `agent.finish`.
+  // Measured cost accounting: every response carries `usage`,
+  // accumulated here and reported in `agent.finish` (#223 adds the
+  // prefix-cache hit count alongside the token totals).
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalCachedTokens = 0;
   const noteUsage = (response: unknown) => {
     const u = extractUsage(response);
     totalInputTokens += u.inputTokens;
     totalOutputTokens += u.outputTokens;
+    totalCachedTokens += u.cachedTokens;
   };
+  // Citations from built-in search grounding (#223): url_citation
+  // annotations arrive on the answer text; the model text is kept
+  // untouched and the cited sources ride the finish payload.
+  const turnCitations: Array<{ url: string; title: string }> = [];
+  const seenCitationUrls = new Set<string>();
   const finishPayload = async (text: string) => {
     const { turn, daily } = await recordTurnUsage({
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
+      cachedTokens: totalCachedTokens,
       steps: currentStep,
       skills: loadedSkills,
     });
@@ -326,10 +339,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       skills: loadedSkills,
       inputTokens: turn.inputTokens,
       outputTokens: turn.outputTokens,
+      cachedTokens: turn.cachedTokens,
+      citations: turnCitations,
       costUsd: turn.costUsd,
       dailyTurns: daily.turns,
       dailyInputTokens: daily.inputTokens,
       dailyOutputTokens: daily.outputTokens,
+      dailyCachedTokens: daily.cachedTokens,
       dailyCostUsd: daily.costUsd,
     };
   };
@@ -440,13 +456,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Context-aware dynamic skill injection and progressive disclosure
     let activeSystemPrompt = systemPrompt;
 
-    // App map: always loaded, hard budget ~700 tokens. Domain skills add detail.
-    try {
-      const overview = stripSkillMetadata(await loadSkill("app-overview"));
-      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
-      loadedSkills.push("app-overview");
-    } catch {
-      // Non-fatal
+    // App map (#209): no longer always loaded. Dock-add builds need the
+    // one-page map up front; every other turn pulls it through read_skill
+    // only when the model decides it needs it.
+    if (origin === "dock-add") {
+      try {
+        const overview = stripSkillMetadata(await loadSkill("app-overview"));
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
+        loadedSkills.push("app-overview");
+      } catch {
+        // Non-fatal
+      }
     }
 
     // Runtime extract of the operating guidelines (AGENTS.md). The full file
@@ -467,17 +487,32 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     // Progressive Disclosure: Summarize installed plugins. Skipped on the
     // fast path: general conversation never needs the registry list, and
-    // find_capabilities remains the discovery route when it does.
+    // discovery (native tool search on Responses, find_capabilities on the
+    // Chat fallback) remains the route when it does.
     if (!isFastPath) {
       const installedPlugins = pluginRegistry.list({ enabledOnly: true });
       if (installedPlugins.length > 0) {
         const summaryLines = installedPlugins.map(
           (p) => `- ${p.name} (${p.id}): ${p.manifest.description} [${(p.manifest.capabilities || []).map((c) => c.id).join(", ")}]`
         );
-        activeSystemPrompt = `${activeSystemPrompt}\n\n## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):\n${summaryLines.join("\n")}`;
+        // The discovery route differs per transport: native tool search
+        // over deferred namespaces on Responses (#222), the custom
+        // find_capabilities root on the Chat fallback. Name only the route
+        // the model can actually call so it never reaches for a missing tool.
+        const discoveryLine = hasResponsesSurface(llmClient)
+          ? "## Installed Plugins (Discover capability actions through native tool search over the namespaces - do NOT enumerate or summarize this list to the user unless explicitly asked):"
+          : "## Installed Plugins (Discoverable via find_capabilities & invoke_capability - do NOT enumerate or summarize this list to the user unless explicitly asked):";
+        activeSystemPrompt = `${activeSystemPrompt}\n\n${discoveryLine}\n${summaryLines.join("\n")}`;
       }
     }
 
+    // Built-in search grounding note (#223): on the Responses path with
+    // grounding enabled, the model searches by reasoning — not by calling
+    // a tool. Name the route so skill text that says "call search_web"
+    // never sends it hunting for a tool that is not offered.
+    if (hasResponsesSurface(llmClient) && builtinWebSearch) {
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Web Search (built-in, this turn)\nServer-side grounding is enabled: ask research questions in natural language and cited results arrive automatically. Do NOT look for a search_web tool (not offered on this path). For full-page reads use fetch_page (it saves to workspace sources); to show a link in the Browser surface use open_source.`;
+    }
     // Per-turn workspace mount state: id, version, enabled. The agent
     // organizes and integrates mounted tools; it does not redesign them.
     // Skipped on the fast path (no workspace signals this turn).
@@ -519,8 +554,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Reuses the pre-turn selection so the fast-path decision and the
     // injected skills never disagree.
     const domainSkills = earlyDomainSkills;
-    if (origin === "dock-add" && !domainSkills.includes("plugins") && !domainSkills.includes("dock-and-tabs")) {
-      domainSkills.unshift("dock-and-tabs");
+    if (origin === "dock-add" && !domainSkills.includes("plugins")) {
+      domainSkills.unshift("plugins");
     }
     for (const name of domainSkills.slice(0, 2)) {
       try {
@@ -533,7 +568,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     }
 
     if (origin === "dock-add") {
-      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request Instructions (origin: dock-add)\n1. Build exactly one tool for this request using create_plugin.\n2. If sources or information are needed, research first using search_web.\n3. Choose a fitting catalog icon name for the tool.\n4. Mount and open it with dock.open and pin it with dock.pin.\n5. In your final text response, reply with at most one sentence confirming the tool was mounted.`;
+      // Principle, not procedure: the plugins skill states the invariants
+      // (reuse before create, verify before publish, receipts are truth)
+      // and the install policy + receipts enforce them. No step order is
+      // prescribed here; the agent decides.
+      activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## Dock Add Request (origin: dock-add)\nBuild the one tool this request asks for and mount it in the dock. The plugins skill holds the governing principles; the install policy gate and receipts are the enforcement — a failed envelope (ok:false) is the answer, never a claimed success.`;
     }
 
     // Intent-selected domain skills (above) replaced the manifest-driven
@@ -618,6 +657,30 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       },
     ];
 
+    // Responses API input (stateless: instructions + full input resent every
+    // turn, store:false). History entries are plain { role, content } turns;
+    // the user turn carries converted text/image parts. Function calls and
+    // outputs are appended below as paired items per turn.
+    const responsesInput: any[] = [
+      ...effectiveHistory.map((h) => ({ role: h.role, content: h.content })),
+      { role: "user", content: toResponsesUserContent(userMessageContent) as any },
+    ];
+
+    // Responses input tools: the scoped set grouped into deferred
+    // namespaces with native tool search (#222). Coverage stays 1:1 with
+    // the scoped Chat tools minus the superseded roots (custom
+    // find_capabilities, custom search_web — the built-ins are the route);
+    // denylists are already applied to `scopedTools`, and the bus
+    // re-checks policy at invoke time. `builtinWebSearch` (defined above
+    // with scopedTools) decides grounding for the same request.
+    const builtResponses = buildResponsesTools(scopedTools, { builtinWebSearch });
+    const responsesTools = builtResponses.tools;
+    const responsesNameToOriginal = builtResponses.nameMap;
+
+    // Responses when the client exposes it (prod Meta client); Chat
+    // otherwise (test doubles, eval scripted LLM, openweight endpoints).
+    const useResponses = hasResponsesSurface(llmClient);
+
     const retryCounts = new Map<string, number>();
     // Same tool with identical arguments already ran this turn: refuse the
     // duplicate so the model changes approach instead of looping.
@@ -686,34 +749,115 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       currentPhase = "thinking";
       currentTool = undefined;
-      // Streaming primary: text deltas are forwarded as agent.text_delta
-      // (first paint <1s instead of 6-15s of silence) and tool calls are
-      // accumulated from chunks. Legacy object responses (older mocks,
-      // non-streaming clients) are used as-is, so this degrades cleanly.
-      const response = await createModelResponse({
-        llmClient,
-        completionParams,
-        signal,
-        onTextDelta: (delta) =>
-          emit({
-            step: currentStep,
-            type: "agent.text_delta",
-            payload: { delta },
-          }),
-      });
-      noteUsage(response);
-      const choice = response.choices?.[0];
+      // Model turn: Responses API when the client exposes it (prod Meta
+      // client), Chat Completions otherwise (test doubles, eval scripted
+      // LLM, openweight endpoints). Both paths normalize to one shape so
+      // the tool-execution, receipt, and event logic below stays shared.
+      // Responses resends instructions/tools/reasoning.effort every turn
+      // (they do not persist across turns) with store:false.
+      let assistantContent = "";
+      let normalizedCalls: Array<{ id: string; name: string; namespace?: string; argsText: string }> = [];
+      let assistantMessage: any = null;
 
-      if (!choice || !choice.message) {
-        throw new Error("No response message returned from Meta Model API");
+      if (useResponses) {
+        const turn = await createResponsesTurn({
+          client: llmClient,
+          model: effectiveModel,
+          instructions: finalSystemPrompt,
+          inputItems: responsesInput,
+          tools: responsesTools,
+          effort: options.reasoningEffort,
+          webSearch: builtinWebSearch ? { enabled: true } : undefined,
+          signal,
+          onTextDelta: (delta) =>
+            emit({
+              step: currentStep,
+              type: "agent.text_delta",
+              payload: { delta },
+            }),
+        });
+        noteUsage({ usage: turn.usage });
+        assistantContent = turn.text;
+        normalizedCalls = turn.functionCalls.map((c, i) => ({
+          id: normalizeCallId(c.callId, i),
+          name: c.name,
+          ...(c.namespace ? { namespace: c.namespace } : {}),
+          argsText: c.argsText,
+        }));
+        // Record model outputs in the stateless input so the next turn
+        // replays the full conversation: hosted tool_search handshake
+        // items first (keeps the loaded set stable), then server-side
+        // web_search calls, then each function_call paired with the
+        // function_call_output appended after execution.
+        for (const ts of turn.toolSearchItems) responsesInput.push(ts);
+        for (const ws of turn.webSearchItems) responsesInput.push(ws);
+        for (const cite of turn.citations) {
+          if (!seenCitationUrls.has(cite.url)) {
+            seenCitationUrls.add(cite.url);
+            turnCitations.push(cite);
+          }
+        }
+        for (const c of normalizedCalls) {
+          responsesInput.push({
+            type: "function_call",
+            call_id: c.id,
+            ...(c.namespace ? { namespace: c.namespace } : {}),
+            name: c.name,
+            arguments: c.argsText,
+          });
+        }
+      } else {
+        const completionParams: any = {
+          model: effectiveModel,
+          messages,
+        };
+
+        if (formattedTools.length > 0) {
+          completionParams.tools = formattedTools;
+          completionParams.tool_choice = "auto";
+        }
+
+        if (effectiveEffort) {
+          completionParams.reasoning_effort = effectiveEffort;
+        }
+
+        // Streaming primary: text deltas are forwarded as agent.text_delta
+        // (first paint <1s instead of 6-15s of silence) and tool calls are
+        // accumulated from chunks. Legacy object responses (older mocks,
+        // non-streaming clients) are used as-is, so this degrades cleanly.
+        const response = await createModelResponse({
+          llmClient,
+          completionParams,
+          signal,
+          onTextDelta: (delta) =>
+            emit({
+              step: currentStep,
+              type: "agent.text_delta",
+              payload: { delta },
+            }),
+        });
+        noteUsage(response);
+        const choice = response.choices?.[0];
+
+        if (!choice || !choice.message) {
+          throw new Error("No response message returned from Meta Model API");
+        }
+
+        assistantMessage = choice.message;
+        assistantContent = assistantMessage.content || "";
+        const chatCalls = assistantMessage.tool_calls ?? [];
+        normalizedCalls = chatCalls.map((tc: any, i: number) => ({
+          id: normalizeCallId(tc.id, i),
+          name: tc.function?.name ?? tc.name ?? "",
+          argsText: typeof tc.function?.arguments === "string" ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}),
+        }));
       }
 
-      const assistantMessage = choice.message;
-      const toolCalls = assistantMessage.tool_calls;
+      const toolCalls = normalizedCalls.length > 0 ? normalizedCalls : undefined;
 
       // If no tool calls, the model provided its final textual answer
       if (!toolCalls || toolCalls.length === 0) {
-        let finalText = assistantMessage.content || "";
+        let finalText = assistantContent || "";
         // Receipt check: the answer may only claim installs, approvals or
         // creations with a matching ok:true envelope from this turn.
         // Violations are flagged in the finish payload and the text gains
@@ -762,20 +906,34 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         };
       }
 
-      // Append the full assistant message (mandatory per dev.meta.ai documentation)
-      messages.push(assistantMessage);
+      // Append the model outputs to the active history. Chat requires the
+      // full assistant message before tool messages; Responses pairs each
+      // function_call (already appended above) with a function_call_output.
+      if (!useResponses && assistantMessage) {
+        messages.push(assistantMessage);
+      }
 
       // Execute each tool call
       currentPhase = "running_tool";
       for (const call of toolCalls) {
-        const toolName = call.function.name;
-        const toolId = call.id;
+        const rawToolName = (call as any).name ?? (call as any).function?.name;
+        // Responses names are sanitized (≤1 dot) and may arrive with a
+        // namespace qualifier; map back to the registry name before
+        // execution so coverage never diverges (#221 → #222).
+        const toolName = useResponses
+          ? resolveResponsesToolName(responsesNameToOriginal, rawToolName, (call as any).namespace)
+          : rawToolName;
+        const toolId = normalizeCallId((call as any).id, 0);
         currentTool = toolName;
         const toolStart = Date.now();
         let rawArgs: Record<string, unknown> = {};
 
         try {
-          rawArgs = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+          const argsText =
+            typeof (call as any).argsText === "string"
+              ? (call as any).argsText
+              : ((call as any).function?.arguments ?? "");
+          rawArgs = argsText ? JSON.parse(argsText) : {};
         } catch {
           rawArgs = {};
         }
@@ -793,12 +951,24 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         const registeredTool = toolMap.get(toolName);
         let toolOutput: unknown;
 
+        // Agent-manifest gate (#207): the agent is a first-party plugin
+        // with explicit permissions. Direct tools are checked here,
+        // fail-closed, before validation and execution; capability-backed
+        // tools are additionally gated by the bus policy at invoke time.
+        const agentPolicy = checkAgentPermission(toolName, agentManifest);
+
         const callKey = `${toolName}:${JSON.stringify(rawArgs)}`;
         if (seenCalls.has(callKey)) {
           toolOutput = {
             error: `Duplicate tool call: "${toolName}" already ran this turn with the same arguments. Stop and change approach instead of retrying it.`,
             duplicate: true,
           };
+        } else if (!agentPolicy.allowed) {
+          // Fail-closed like every other refusal. Record the key so a
+          // stubborn retry hits the duplicate circuit breaker instead of
+          // spinning on the same denied call for the rest of the turn.
+          seenCalls.add(callKey);
+          toolOutput = { error: agentPolicy.reason, policyDenied: true };
         } else if (!registeredTool) {
           toolOutput = { error: `Tool "${toolName}" is not registered in catalog.` };
         } else {
@@ -838,12 +1008,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           }
         }
 
-        // Append role: tool message per call
-        messages.push({
-          role: "tool",
-          tool_call_id: toolId,
-          content: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
-        });
+        // Append tool result to the active history per call.
+        if (useResponses) {
+          responsesInput.push({
+            type: "function_call_output",
+            call_id: toolId,
+            output: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
+          });
+        } else {
+          messages.push({
+            role: "tool",
+            tool_call_id: toolId,
+            content: typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput),
+          });
+        }
 
         await emit({
           step: currentStep,
@@ -1026,25 +1204,48 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Reached maximum steps — synthesize progress gracefully rather than failing abruptly
     let fallbackText = "";
     try {
-      const fallbackMessages = [
-        ...messages,
-        {
-          role: "user",
-          content:
-            "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
-        },
-      ];
+      if (useResponses) {
+        const fallbackTurn = await createResponsesTurn({
+          client: llmClient,
+          model: effectiveModel,
+          instructions: finalSystemPrompt,
+          inputItems: [
+            ...responsesInput,
+            {
+              role: "user",
+              content:
+                "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
+            },
+          ],
+          tools: [],
+          effort: options.reasoningEffort,
+          webSearch: builtinWebSearch ? { enabled: true } : undefined,
+          signal,
+          onTextDelta: () => {},
+        });
+        noteUsage({ usage: fallbackTurn.usage });
+        if (fallbackTurn.text.trim()) fallbackText = fallbackTurn.text.trim();
+      } else {
+        const fallbackMessages = [
+          ...messages,
+          {
+            role: "user",
+            content:
+              "Please provide a helpful final synthesis summarizing what was accomplished (research gathered, tools built, notes or sources discovered) and what the user should explore next. Do not call any tools.",
+          },
+        ];
 
-      const fallbackResponse = await llmClient.chat.completions.create({
-        model: effectiveModel,
-        messages: fallbackMessages,
-        ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
-      });
-      noteUsage(fallbackResponse);
+        const fallbackResponse = await (llmClient as any).chat.completions.create({
+          model: effectiveModel,
+          messages: fallbackMessages,
+          ...(effectiveEffort ? { reasoning_effort: effectiveEffort } : {}),
+        });
+        noteUsage(fallbackResponse);
 
-      const fallbackChoice = fallbackResponse.choices?.[0];
-      if (fallbackChoice?.message?.content) {
-        fallbackText = fallbackChoice.message.content.trim();
+        const fallbackChoice = fallbackResponse.choices?.[0];
+        if (fallbackChoice?.message?.content) {
+          fallbackText = fallbackChoice.message.content.trim();
+        }
       }
     } catch {
       // Non-fatal

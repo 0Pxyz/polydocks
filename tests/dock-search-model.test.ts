@@ -135,7 +135,7 @@ describe("createItemsForQuery", () => {
 describe("getStaticCreateRows", () => {
   test("mirrors the original static suggestions", () => {
     const rows = getStaticCreateRows();
-    expect(rows.map((i) => i.label)).toEqual(["Flashcards", "A reading list", "A timeline"]);
+    expect(rows.map((i) => i.label)).toEqual(["Bitcoin price viewer", "A reading list", "A timeline"]);
   });
 });
 

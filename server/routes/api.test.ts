@@ -26,4 +26,72 @@ describe("Polymax REST API Endpoints", () => {
     const res = await app.fetch(new Request("http://localhost:3000/api/cities"));
     expect(res.status).toBe(404);
   });
+
+  it("grants are visible and revocable per permission", async () => {
+    const { pluginRegistry } = await import("../plugins/registry");
+    const grant = pluginRegistry.recordGrant("test-grant-plugin", "external", "workspace:ws-1", "allow_once");
+    try {
+      const listed = await app.fetch(new Request("http://localhost:3000/api/plugins/test-grant-plugin/grants"));
+      expect(listed.status).toBe(200);
+      const body = (await listed.json()) as any;
+      expect(body.grants.some((g: any) => g.grantId === grant.grantId)).toBe(true);
+
+      const revoked = await app.fetch(
+        new Request(`http://localhost:3000/api/plugins/grants/${grant.grantId}/revoke`, { method: "POST" })
+      );
+      expect(revoked.status).toBe(200);
+      expect(pluginRegistry.getGrants("test-grant-plugin")).toHaveLength(0);
+
+      const missing = await app.fetch(
+        new Request("http://localhost:3000/api/plugins/grants/no-such-grant/revoke", { method: "POST" })
+      );
+      expect(missing.status).toBe(404);
+    } finally {
+      pluginRegistry.revokeGrant(grant.grantId);
+    }
+  });
+
+  it("activate/deactivate flips the persisted flag and reports {id, active, version}", async () => {
+    const { pluginRegistry } = await import("../plugins/registry");
+    const manifest = {
+      apiVersion: 1,
+      id: "test-toggle-plugin",
+      name: "Toggle Probe",
+      version: "1.0.0",
+      description: "activate/deactivate route probe",
+      icon: "test",
+      trust: "first-party",
+      capabilities: [],
+      permissions: [],
+    };
+    expect(pluginRegistry.install(manifest).success).toBe(true);
+    try {
+      const deactivate = await app.fetch(
+        new Request("http://localhost:3000/api/plugins/test-toggle-plugin/deactivate", { method: "POST" })
+      );
+      expect(deactivate.status).toBe(200);
+      expect(await deactivate.json()).toMatchObject({ success: true, pluginId: "test-toggle-plugin", active: false });
+
+      // Persisted in SQLite: a fresh read sees the flag.
+      expect(pluginRegistry.get("test-toggle-plugin")?.enabled).toBe(false);
+
+      const activate = await app.fetch(
+        new Request("http://localhost:3000/api/plugins/test-toggle-plugin/activate", { method: "POST" })
+      );
+      expect(activate.status).toBe(200);
+      expect(await activate.json()).toMatchObject({ success: true, pluginId: "test-toggle-plugin", active: true, version: "1.0.0" });
+
+      const list = await app.fetch(new Request("http://localhost:3000/api/plugins"));
+      const body = (await list.json()) as any;
+      const entry = body.plugins.find((p: any) => p.id === "test-toggle-plugin");
+      expect(entry).toMatchObject({ id: "test-toggle-plugin", active: true, version: "1.0.0" });
+
+      const missing = await app.fetch(
+        new Request("http://localhost:3000/api/plugins/no-such-plugin/activate", { method: "POST" })
+      );
+      expect(missing.status).toBe(404);
+    } finally {
+      pluginRegistry.uninstall("test-toggle-plugin");
+    }
+  });
 });

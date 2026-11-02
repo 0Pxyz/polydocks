@@ -23,7 +23,10 @@
     "lint": "oxlint",
     "test": "bun test",
     "test:browser": "bun tests/browser/reader-smoke.ts",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
+    "eval": "bun scripts/eval/run.ts",
+    "eval:routing": "bun scripts/eval/routing.ts",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build",
+    "check:fast": "bun run typecheck && bun run lint"
   },
   "dependencies": {
     "@atriumjs/core": "^0.3.0",

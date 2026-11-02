@@ -5,6 +5,9 @@ import { tinyfish } from "../../discovery/tinyfish";
 import type { PluginManifest } from "../manifest";
 import { registerSourcesPlugin } from "../sources";
 import { registerSandboxPlugin } from "../sandbox";
+import { registerFilesPlugin } from "../files";
+import { registerNotesPlugin } from "../notes";
+import { registerOnboardingPlugin } from "./onboarding";
 
 /**
  * 1. Search Plugin
@@ -16,7 +19,7 @@ export const searchPluginManifest: PluginManifest = {
   version: "1.0.0",
   description: "Autonomous web and literature search powered by TinyFish API",
   icon: "Globe",
-  trust: "first-party",
+  trust: "core",
   capabilities: [
     {
       id: "search.web",
@@ -75,7 +78,7 @@ export const browserPluginManifest: PluginManifest = {
   version: "1.0.0",
   description: "Real Chromium browsing inside the dock",
   icon: "Globe",
-  trust: "first-party",
+  trust: "core",
   capabilities: [
     {
       id: "browser.open",
@@ -110,10 +113,13 @@ export const browserPluginManifest: PluginManifest = {
  * Register all first-party plugins and their executable handlers.
  */
 export function initializeFirstPartyPlugins(): void {
-  // Contract plugins (sources, sandbox): single definitions that generate
-  // the bus registration, HTTP route and CLI command.
+  // Contract plugins (sources, sandbox, files, notes): single definitions
+  // that generate the bus registration, HTTP route and CLI command.
   registerSourcesPlugin();
   registerSandboxPlugin();
+  registerFilesPlugin();
+  registerNotesPlugin();
+  registerOnboardingPlugin();
 
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);

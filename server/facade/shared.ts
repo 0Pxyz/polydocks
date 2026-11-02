@@ -295,7 +295,22 @@ export async function pluginLifecycle(
         if (!(installed as any)?.success) {
           return { ok: false, error: (installed as any)?.error || "Registry install failed.", retryable: true };
         }
-        return { ok: true, data: { pluginId, workspaceId, via: "registry" }, events: [{ type: eventName, payload: { pluginId } }] };
+        const { describePermission } = await import("../plugins/risk");
+        const declared = inRegistry.manifest?.permissions ?? [];
+        // Install-time display (#180): what the plugin may do + why, in
+        // the same honest style as the MCP pre-connect preview. Low-risk
+        // items stay quiet downstream; the data is here when UI asks.
+        return {
+          ok: true,
+          data: {
+            pluginId,
+            workspaceId,
+            via: "registry",
+            permissions: declared,
+            permissionLines: declared.map(describePermission),
+          },
+          events: [{ type: eventName, payload: { pluginId } }],
+        };
       }
       const mounted = WorkspaceService.addPluginToWorkspace(workspaceId, pluginId, {}, 0, ctx.actor || "user");
       return { ok: true, data: { pluginId, workspaceId, via: "workspace", mounted }, events: [{ type: eventName, payload: { pluginId } }] };
@@ -387,6 +402,54 @@ export async function pluginVersions(pluginId: string): Promise<FacadeEnvelope> 
     return { ok: true, data: { pluginId, versions: [...seen.values()] }, events: [] };
   } catch (err: any) {
     return { ok: false, error: err?.message || "Versions lookup failed.", retryable: false };
+  }
+}
+
+/**
+ * Activate/deactivate a plugin (#153 task 1): one canonical path for the
+ * HTTP routes, the CLI and the thin agent verbs. Flips the persisted
+ * registry flag (survives restart); deactivation hides the plugin's
+ * capabilities from the agent catalog (enabledOnly) without touching
+ * stored data, so reactivating brings everything back intact.
+ */
+export async function pluginSetActive(
+  pluginId: string,
+  active: boolean,
+  _ctx: FacadeContext = {}
+): Promise<FacadeEnvelope> {
+  if (!pluginId) {
+    return { ok: false, error: "activate needs { pluginId }.", retryable: false, code: "invalid_input" };
+  }
+  try {
+    const { pluginRegistry } = await import("../plugins/registry");
+    const existing = pluginRegistry.get(pluginId);
+    if (!existing) {
+      return { ok: false, error: `Plugin "${pluginId}" is not installed.`, retryable: false, code: "not_found" };
+    }
+    if (active) pluginRegistry.enable(pluginId);
+    else pluginRegistry.disable(pluginId);
+    const updated = pluginRegistry.get(pluginId);
+    if (!active) {
+      // Deactivating closes it in the dock (state kept, pins and stored
+      // data untouched) so a disabled plugin disappears from the UI the
+      // same way its capabilities leave the agent catalog. Reactivating
+      // brings data back; the agent or user re-opens the view.
+      try {
+        const { closeDockItem, listDockItems } = await import("../workspace/dockItems");
+        for (const item of listDockItems()) {
+          if (item.pluginId === pluginId) closeDockItem(item.id);
+        }
+      } catch {
+        // Non-fatal: the registry flag is the source of truth.
+      }
+    }
+    return {
+      ok: true,
+      data: { pluginId, active: updated?.enabled ?? active, version: updated?.version },
+      events: [{ type: active ? "plugin.activated" : "plugin.deactivated", payload: { pluginId } }],
+    };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Activate lookup failed.", retryable: false };
   }
 }
 

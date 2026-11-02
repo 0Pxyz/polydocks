@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import {
-  defaultTools,
+  canonicalTools,
   fullTools,
   minimalTools,
   open_source,
 } from "./index";
 
 describe("Agent Tool Catalog & Security Guards", () => {
-  it("should export all canonical tools in defaultTools catalog", () => {
-    expect(defaultTools.length).toBe(43);
-    const names = defaultTools.map((t) => t.name);
+  it("should export all canonical tools in fullTools catalog", () => {
+    expect(fullTools.length).toBe(44);
+    const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
     expect(names).toContain("dock_unpin");
@@ -34,6 +34,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("search_files");
     expect(names).toContain("recall_memory");
     expect(names).toContain("record_memory");
+    expect(names).toContain("read_skill");
     expect(names).toContain("apply_theme");
     expect(names).toContain("generate_image");
     expect(names).toContain("install_plugin");
@@ -90,15 +91,19 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "dock.pin",
         "dock.prev",
         "dock.unpin",
+        "find_capabilities",
+        "plugins.activate",
         "plugins.create",
+        "plugins.deactivate",
         "plugins.edit",
         "plugins.install",
         "plugins.operate",
         "plugins.rollback",
         "plugins.uninstall",
+        "skills.read",
       ].sort()
     );
-    expect(fullTools.length).toBe(43);
+    expect(fullTools.length).toBe(44);
     expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
   });
 
@@ -110,5 +115,26 @@ describe("Agent Tool Catalog & Security Guards", () => {
 
     expect(res.action).toBe("browser.open");
     expect(res.url).toBe("https://arxiv.org/abs/2301.12345");
+  });
+
+  it("unified catalog is the single source of truth (#204)", () => {
+    const canonical = canonicalTools();
+    const names = canonical.map((t) => t.name);
+    // Every static tool exactly once — no parallel-catalog drift.
+    expect(new Set(names).size).toBe(names.length);
+    const fullNames = new Set(fullTools.map((t) => t.name));
+    const minimalNames = new Set(minimalTools.map((t) => t.name));
+    // Derived views partition the canonical list (find_capabilities is
+    // the only tool offered on both surfaces).
+    expect(fullNames.size).toBe(44);
+    expect(minimalNames.size).toBe(20);
+    for (const n of names) {
+      expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
+    }
+    const both = [...fullNames].filter((n) => minimalNames.has(n));
+    expect(both).toEqual(["find_capabilities"]);
+    // plugins.install ships on every surface.
+    expect(fullNames.has("install_plugin")).toBe(true);
+    expect(minimalNames.has("plugins.install")).toBe(true);
   });
 });

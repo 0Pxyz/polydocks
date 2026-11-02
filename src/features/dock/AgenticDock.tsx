@@ -7,6 +7,7 @@ import {
   Toolbox,
   Hammer,
   Books,
+  PlayCircle,
 } from "@phosphor-icons/react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
@@ -48,6 +49,12 @@ export const CORE_DOCK_TOOLS: DockToolItem[] = [
     type: "icon",
     icon: Sparkle,
     isAgent: true,
+  },
+  {
+    id: "onboarding",
+    label: "Tour",
+    type: "icon",
+    icon: PlayCircle,
   },
   {
     id: "browser",

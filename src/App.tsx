@@ -5,7 +5,6 @@ import { AgenticDock, type DockToolItem } from "@/features/dock/AgenticDock";
 import { DockSurface } from "@/features/dock/DockSurface";
 import { DynamicPluginSandbox } from "@/features/dock/DynamicPluginSandbox";
 import { HomeScreen } from "@/features/home/HomeScreen";
-import { OnboardingModal } from "@/features/onboarding/OnboardingModal";
 import { AgentConversation } from "@/features/agent/AgentConversation";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useThemeStore } from "@/lib/theme";
@@ -15,6 +14,7 @@ import { useTabHostStore } from "@/lib/tabs/tabHostStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { ToolSurface } from "@/features/dock/ToolSurface";
 import { BesidePanel, type BesideTab } from "@/features/dock/BesidePanel";
+import { LiveOnboarding } from "@/features/onboarding/LiveOnboarding";
 import {
   matchDockShortcut,
   panelLayout,
@@ -571,7 +571,7 @@ export default function App() {
   // Tool hosted by the main viewport (single home per tool; beside tools
   // live in the beside panel).
   const MAIN_STATIC_IDS = useMemo(
-    () => new Set(["settings", "theme", "plugins", "creations", "store"]),
+    () => new Set(["settings", "theme", "plugins", "creations", "store", "onboarding", "deep-work-flashcards", "bitcoin-viewer"]),
     []
   );
   const mainToolId =
@@ -705,9 +705,6 @@ export default function App() {
             }
           />
 
-          {/* First-launch Guided Onboarding */}
-          <OnboardingModal />
-
           {/* Single Agent Conversation Instance */}
           <AgentConversation
             onExperienceCreated={(exp) => {
@@ -821,6 +818,11 @@ export default function App() {
               </DockSurface>
             )}
           </main>
+
+          {/* Onboarding tour engine (auto-advance, dock choreography, takeover
+              pause). Renders its own pill; the cinematic stage lives in the
+              onboarding dock tab. */}
+          <LiveOnboarding />
         </div>
       </RootLayout>
     </AppProviders>

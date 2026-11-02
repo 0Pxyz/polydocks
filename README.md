@@ -8,6 +8,9 @@
 <!-- HERO: a 10-15s GIF or video of the full flow (ask Poly → thoughts rise → browser, sources and terminal open in the dock). This is the first thing people see, so make it the best take. -->
 ![PolyDocks hero](docs/media/hero.gif)
 
+> 🎬 **Watch the Live Onboarding Demo:** [Full Product Walkthrough (MP4)](docs/media/videos/polydocks-product-walkthrough.mp4)  
+> **Feature Spotlights:** [01: Agentic Dock](docs/media/videos/feature-01-agentic-dock.mp4) • [02: Native Browser & TinyFish Research](docs/media/videos/feature-02-native-browser-research.mp4) • [03: Agent Builds Plugins](docs/media/videos/feature-03-agent-builds-plugins.mp4)
+
 PolyDocks is a way of using AI agents that feels like a place instead of a conversation. You talk (or type) to **Poly**, your agent, and it works inside **your dock**: it browses the web in a real browser, reads and saves sources, runs code in a sandbox, keeps your notes and files, and builds new tools for you on the spot. All of it sits side by side in a single, modern interface, instead of being scattered across a dozen tabs and apps.
 
 ---
@@ -149,22 +152,36 @@ One model per job, configured by environment only (`server/agent/modelRegistry.t
 
 ---
 
-## Quickstart
+## Run it locally
 
-Prerequisite: [Bun](https://bun.sh) v1.1+
+One container, one account. Docker is the simplest way to run PolyDocks;
+everything (app, DB, files, memory) lives in the container plus two volumes.
 
 ```bash
 git clone https://github.com/0Pxyz/polymax.git
 cd polymax
-cp .env.example .env      # add MODEL_API_KEY (+ TINYFISH_API_KEY for research)
-bun install
-bun run dev               # app on http://localhost:5173 (API on :3000)
-
-# in another terminal, for the real browser surface:
-ATRIUM_WORKER_SECRET=dev-secret-change-me npx atrium-worker
+cp .env.example .env      # add your keys (table below)
+docker compose up         # app on http://localhost:3000
 ```
 
-Or `docker compose up`. Docker instructions and contributor rules: [AGENTS.md](AGENTS.md).
+Your state persists in Docker volumes across restarts, and a second
+`docker run` with fresh volumes starts a fully isolated account. To verify:
+`./scripts/smoke-docker.sh` (build, health, persistence, isolation — 25 checks).
+
+Prefer Bun directly? `bun install && bun run dev` (app on
+http://localhost:5173, API on :3000).
+
+### Config: one required key, the rest optional
+
+| Variable | Needed for | Without it |
+|---|---|---|
+| `MODEL_API_KEY` | Poly answering anything | `model_unauthorized` (everything else still works) |
+| `TINYFISH_API_KEY` | Web / news / paper research | Research tools stay offline |
+| `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | Code execution in sandboxes | Sandbox tools fail closed with a setup hint |
+| `ATRIUM_WORKER_SECRET` (+ worker on `:7070`) | Real Chromium browser in the dock | Reader fallback for pages |
+| `AGENT_SURFACE` | Tool catalog: `full` (everything, default) or `minimal` (dock verbs + discovery) | Restart the server after changing; `minimal` keeps turns cheap, `full` exposes theme/files/sandbox directly |
+
+Details: [sandbox packaging](docs/docker-sandbox.md) · [model API](docs/meta-model-api.md) · [research API](docs/tinyfish.md) · [sandbox trust](docs/sandbox-trust.md). Contributor rules: [AGENTS.md](AGENTS.md).
 
 ---
 

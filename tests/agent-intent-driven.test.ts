@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { runAgentLoop, type AgentStepEvent } from "../server/agent/loop";
-import { defaultTools } from "../server/agent/tools";
+import { fullTools } from "../server/agent/tools";
 import { getFriendlyToolStatus } from "../src/lib/agent/events";
 
 describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () => {
@@ -40,10 +40,10 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
     expect(result.status).toBe("completed");
     expect(result.text).toBe("Hey! How can I help you in your workspace today?");
 
-    // Verify system prompt enforces workspace as default and forbids unsolicited scope assumptions
-    expect(capturedSystemPrompt).toContain("Workspace as Default (Intent-Driven)");
-    expect(capturedSystemPrompt).toContain("General conversation, greetings, and explanations");
-    expect(capturedSystemPrompt).toContain("Zero Unsolicited Inspections");
+    // Verify the principle-based prompt keeps workspace-default and no-unsolicited-inspection rules
+    expect(capturedSystemPrompt).toContain("Answer in place");
+    expect(capturedSystemPrompt).toContain("direct answers with no tools");
+    expect(capturedSystemPrompt).toContain("Never run unsolicited inspections");
     expect(capturedSystemPrompt).not.toContain("Workspace Scope");
 
     // Zero tool calls emitted
@@ -140,7 +140,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
     const result = await runAgentLoop({
       prompt: "Build me a small plugin.",
-      tools: defaultTools,
+      tools: fullTools,
       llmClient: mockLlm,
       onEvent: (ev) => {
         emittedEvents.push(ev);
@@ -232,7 +232,7 @@ describe("Intent-Driven Context-Aware Agent Execution Policy (Issue #90)", () =>
 
     const result = await runAgentLoop({
       prompt: "Research the latest developments in agentic coding and summarize the findings in a Markdown note.",
-      tools: defaultTools,
+      tools: fullTools,
       llmClient: mockLlm,
       onEvent: (ev) => {
         if (ev.type === "tool.start") {

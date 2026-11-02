@@ -8,7 +8,7 @@
 
 ## Next slices (in order)
 
-- [ ] **Slice 1 — `plugins.install` on the full surface.** Expose the existing minimal verb (`server/agent/tools/verbs/plugins.ts:53-65`) in `fullToolsList` (`server/agent/tools/index.ts:123`) behind the same `userApproved` gate (`server/agent/installPolicy.ts:27-34`). Revert: one-line removal. Verify: `bun test tests/agent-intent-driven.test.ts` + new case asserting `approval_required` without approval, success with it.
+- [ ] **Slice 1 — `plugins.install` on the full surface.** Expose the existing minimal verb (`server/agent/tools/verbs/plugins.ts:53-65`) in the unified catalog (`server/agent/tools/index.ts`, `canonicalCatalog`) with `surfaces: ["full", "minimal"]` behind the same `userApproved` gate (`server/agent/installPolicy.ts:27-34`). Revert: one-line removal. Verify: `bun test tests/agent-intent-driven.test.ts` + new case asserting `approval_required` without approval, success with it.
 - [x] **Slice 2 — knowledge-map experience removed, parked on `future/city-experience`.** No pilot extraction: the whole knowledge-map surface (routes, tools, views, tables, skills) left mainline in one reversible branch instead of being incrementally extracted.
 - [x] **Slice 3 — unified `sources` keyed by workspace + server `dock_pins`.** Reads go to the unified table; dead knowledge-map tables dropped with a data-preserving boot migration. Verify: `tests/issue-165-persistence.test.ts`.
 - [ ] **Slice 4 — minimum auth + per-user data.** Bearer check on all routes (MCP's `isAuthorizedMcpRequest` is the pattern), `resolveUserId` validates instead of falling back, `DATA_DIR/<userId>/` split. Document as single-user-until-then; no Modal yet. Revert: env flag off.

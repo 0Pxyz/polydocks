@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { config } from "../config";
 import { SessionService } from "../services/sessionService";
 import { TaskService } from "../services/taskService";
 import { taskExecutionEngine } from "../agent/taskRunner";
@@ -86,8 +87,11 @@ sessionsRouter.post("/:id/run", async (c) => {
     return c.json({ error: "Missing required 'prompt' string field" }, 400);
   }
 
-  const { resolveUserId } = await import("../identity");
-  const userId = resolveUserId({ header: c.req.header("x-polymax-user"), body: body.userId });
+  const { resolveUserIdForMode } = await import("../identity");
+  const userId = resolveUserIdForMode(
+    { header: c.req.header("x-polymax-user"), body: body.userId },
+    config.DEPLOY_MODE
+  );
 
   const task = await TaskService.createTask({
     sessionId,

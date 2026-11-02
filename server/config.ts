@@ -12,12 +12,27 @@ const envSchema = z.object({
   MODEL_VISION_ID: z.string().optional().default(""),
   MODEL_IMAGE_ID: z.string().default("muse-image-1.0"),
   MODEL_SEGMENTATION_ID: z.string().default("sam-3.1"),
+  // Orchestrator / heavy-agent role names (#210). Canonical names first,
+  // legacy per-role ids as fallback — either model fills either role by
+  // configuration only, no provider switch in code.
+  ORCHESTRATOR_MODEL: z.string().optional().default(""),
+  AGENT_MODEL: z.string().optional().default(""),
+  // Reasoning effort per role (#210): low for the orchestrator, higher for
+  // the heavy agent. Empty AGENT_EFFORT preserves today's behavior (the
+  // model decides unless a turn passes reasoningEffort explicitly).
+  ORCHESTRATOR_EFFORT: z.string().optional().default("low"),
+  AGENT_EFFORT: z.string().optional().default(""),
   // Open-weight toggle (Baseten / Modal / self-hosted OpenAI-compatible endpoint).
   // When AGENT_PROVIDER=openweight the agent role routes here instead of Meta.
   AGENT_PROVIDER: z.enum(["meta", "openweight"]).default("meta"),
   OPENWEIGHT_BASE_URL: z.string().optional().default(""),
   OPENWEIGHT_API_KEY: z.string().optional().default(""),
   OPENWEIGHT_MODEL_ID: z.string().default("meta-models/muse-spark-open-1026"),
+  // Deploy mode (ADR 0002, #191 slice 1): local stays single-user with a
+  // fixed owner and no auth; cloud is fork-only and requires a session.
+  // Demo guard: local refuses a non-loopback HOST (see server/index.ts).
+  DEPLOY_MODE: z.enum(["local", "cloud"]).default("local"),
+  HOST: z.string().optional().default(""),
   TINYFISH_API_KEY: z.string().optional().default(""),
   // Modal Sandboxes (agent code execution). The JS SDK reads MODAL_TOKEN_ID /
   // MODAL_TOKEN_SECRET from env, falling back to ~/.modal.toml (`modal setup`).
@@ -34,8 +49,9 @@ const envSchema = z.object({
   // Product surface: three APIs (/api/plugins, /api/dock, /api/agent).
   // facade = also mounts the thin facade routers (old routes stay untouched).
   PRODUCT_SURFACE: z.enum(["legacy", "facade"]).default("facade"),
-  // Agent tool surface: full = current catalog. minimal = verb tools only
-  // (dock.open/close/pin/unpin/list, plugins.create/edit/install/uninstall/operate).
+  // Agent tool surface: minimal = intent-scoped verb tools (default) plus
+  // find_capabilities; full = current catalog. Whole-tool and per-action
+  // denylists still apply on top (intent + surface filters).
   AGENT_SURFACE: z.enum(["full", "minimal"]).default("full"),
   // Install policy for agent-originated plugin lifecycle (create/install/
   // publish): ask = needs { userApproved: true } (default), auto = proceed,
@@ -65,3 +81,10 @@ function loadConfig() {
 
 export const config = loadConfig();
 export type Config = z.infer<typeof envSchema>;
+export type DeployMode = Config["DEPLOY_MODE"];
+
+/** Loopback allow-list for the local-mode serve guard (#191 slice 1). */
+export function isLoopbackHost(host: string | undefined | null): boolean {
+  const normalized = (host ?? "").trim().toLowerCase();
+  return normalized === "" || normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "::ffff:127.0.0.1";
+}

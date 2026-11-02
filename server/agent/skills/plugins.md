@@ -6,7 +6,7 @@
 
 `create_plugin`: `id` `^[a-z0-9_-]+$`, `name` `description` `code`; icon via `search_icons` (default `cards`); `workspaceId?` `idempotencyKey?` `capabilities?`. Emits `plugin.created`; duplicates refused; `verifyPluginState` gates.
 `modify_plugin`: `id` `changeSummary` + `patch {find, replace}`, full `code`, or metadata. Bumps version, keeps stored keys, emits `plugin.updated`.
-`inspect_experience({id, cityId?})`: `{success, errors (last 10), isHealthy, verification}` or not-found; history in `experience_errors`; inspect before fixing.
+`inspect_experience({id, workspaceId?})`: `{success, errors (last 10), isHealthy, verification}` or not-found; history in `experience_errors`; inspect before fixing.
 `operate_plugin({pluginId, action, ...})`: declared capability or fails; emits `plugin.operated`. `publish_plugin` / `promote_to_plugin` emit `plugin.published`.
 
 ## Design system (native by default, docs/design-slop.md)

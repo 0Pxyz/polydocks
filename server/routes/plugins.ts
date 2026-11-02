@@ -23,6 +23,7 @@ pluginsRouter.get("/", (c) => {
       icon: p.manifest.icon,
       trust: p.trust,
       enabled: p.enabled,
+      active: p.enabled,
       capabilitiesCount: p.manifest.capabilities?.length || 0,
       surfaces: p.manifest.surfaces || [],
       permissions: p.manifest.permissions || [],
@@ -53,6 +54,32 @@ pluginsRouter.post("/:id/toggle", (c) => {
 });
 
 /**
+ * POST /api/plugins/:id/activate - Enable a plugin (persisted; capabilities
+ * return to the agent catalog, stored data untouched).
+ */
+pluginsRouter.post("/:id/activate", async (c) => {
+  const { pluginSetActive } = await import("../facade/shared");
+  const out = await pluginSetActive(c.req.param("id"), true, { actor: "user" });
+  if (!out.ok) {
+    return c.json({ error: out.error, code: out.code }, out.code === "not_found" ? 404 : 400);
+  }
+  return c.json({ success: true, ...(out.data as Record<string, unknown>) });
+});
+
+/**
+ * POST /api/plugins/:id/deactivate - Disable a plugin (persisted; its
+ * capabilities leave the agent catalog, stored data kept for reactivation).
+ */
+pluginsRouter.post("/:id/deactivate", async (c) => {
+  const { pluginSetActive } = await import("../facade/shared");
+  const out = await pluginSetActive(c.req.param("id"), false, { actor: "user" });
+  if (!out.ok) {
+    return c.json({ error: out.error, code: out.code }, out.code === "not_found" ? 404 : 400);
+  }
+  return c.json({ success: true, ...(out.data as Record<string, unknown>) });
+});
+
+/**
  * DELETE /api/plugins/:id - Uninstall an external/generated plugin
  */
 pluginsRouter.delete("/:id", (c) => {
@@ -68,6 +95,24 @@ pluginsRouter.delete("/:id", (c) => {
 
   const ok = pluginRegistry.uninstall(id);
   return c.json({ success: ok, id });
+});
+
+/**
+ * GET /api/plugins/:id/grants - granted permissions, visible and revocable (#180).
+ */
+pluginsRouter.get("/:id/grants", (c) => {
+  const grants = pluginRegistry.getGrants(c.req.param("id"));
+  return c.json({ pluginId: c.req.param("id"), grants });
+});
+
+/**
+ * POST /api/plugins/grants/:grantId/revoke - revoke one grant.
+ * Uninstall removes all of a plugin's grants; this is the per-permission path.
+ */
+pluginsRouter.post("/grants/:grantId/revoke", (c) => {
+  const ok = pluginRegistry.revokeGrant(c.req.param("grantId"));
+  if (!ok) return c.json({ error: "Grant not found.", code: "not_found" }, 404);
+  return c.json({ success: true, grantId: c.req.param("grantId"), revoked: true });
 });
 
 /**

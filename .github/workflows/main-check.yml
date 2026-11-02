@@ -1,26 +1,80 @@
 name: main-check
 
-# Release-gate CI: runs ONLY for main. PRs targeting dev are unaffected.
+# Release-gate CI: runs ONLY on pushes to main (plus manual dispatch).
+# Feature branches and PRs never trigger Actions; validate locally with
+# `bun run check:fast` (typecheck + lint) before pushing. Full test + build
+# run here, in parallel jobs, once the change lands on main.
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'public/**']
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  check:
+  typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile --no-progress
-      - run: bun run check
+      - run: bun run typecheck
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile --no-progress
+      - run: bun run lint
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile --no-progress
+      - run: bun test
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile --no-progress
+      - run: bun run build
   browser-smoke:
     # Non-blocking by design: the script stays as the manual pre-demo /
     # pre-release validation path, but a pointer-timing flake must never
-    # hold up development or merges. `check` is the required gate.
+    # hold up development or merges.
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -29,6 +83,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile --no-progress
       - run: bunx playwright install --with-deps chromium
       - run: bun run build

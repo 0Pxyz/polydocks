@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defaultTools } from "../server/agent/tools/index";
+import { fullTools } from "../server/agent/tools/index";
 import { dock_search } from "../server/agent/tools/dock_search";
 import { dock_pin } from "../server/agent/tools/dock_pin";
 import { dock_unpin } from "../server/agent/tools/dock_unpin";
@@ -9,7 +9,7 @@ const ctx = { step: 0 } as any;
 
 describe("dock agent tools", () => {
   test("registers dock_search, dock_pin, dock_unpin and dock_close", () => {
-    const names = defaultTools.map((tool) => tool.name);
+    const names = fullTools.map((tool) => tool.name);
     for (const name of ["dock_search", "dock_pin", "dock_unpin", "dock_close"]) {
       expect(names).toContain(name);
     }

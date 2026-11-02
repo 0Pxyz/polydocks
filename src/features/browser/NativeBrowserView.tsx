@@ -70,9 +70,15 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
   const [error, setError] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState("");
   const [unavailable, setUnavailable] = useState(false);
+  const [fallbackMode, setFallbackMode] = useState(false);
   const viewerRef = useRef<RemoteBrowserHandle>(null);
   const ensuredRef = useRef(false);
   const reensuredRef = useRef(false);
+  // URL typed while no live viewer exists (or while recovering a dead worker
+  // session). The worker only materializes Chromium on viewer connection and
+  // server-side navigate 502s until then, so queue and flush on live instead
+  // of minting a fresh session per keystroke (about:blank tab sprawl).
+  const pendingNavigateRef = useRef<string | null>(null);
   const readerUrl = useConversationStore((s) => s.readerView?.url);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
@@ -193,9 +199,22 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
       setUrlInput(active.url);
       reensuredRef.current = false;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not start the browser session");
+      const msg = err instanceof Error ? err.message : "Could not start the browser session";
+      if (
+        msg.includes("503") ||
+        msg.includes("ECONNREFUSED") ||
+        msg.includes("worker_bootstrap_failed") ||
+        msg.includes("browser_create_") ||
+        msg.includes("worker_unreachable")
+      ) {
+        setFallbackMode(true);
+        setStatus("live");
+        setError(null);
+      } else {
+        setError(msg);
+      }
     }
-  }, [workspaceKey, initialUrl, tabs, activeTabId, setTabs, setActiveTabId, setCounter, ensureTabSession]);
+  }, [workspaceKey, initialUrl, tabs, activeTabId, setTabs, setActiveTabId, setCounter, ensureTabSession, urlInput]);
 
   useEffect(() => {
     if (ensuredRef.current) return;
@@ -225,7 +244,20 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not start the tab");
+        const msg = err instanceof Error ? err.message : "Could not start the tab";
+        if (
+          msg.includes("503") ||
+          msg.includes("ECONNREFUSED") ||
+          msg.includes("worker_bootstrap_failed") ||
+          msg.includes("browser_create_") ||
+          msg.includes("worker_unreachable")
+        ) {
+          setFallbackMode(true);
+          setStatus("live");
+          setError(null);
+        } else if (!cancelled) {
+          setError(msg);
+        }
       });
     return () => {
       cancelled = true;
@@ -250,49 +282,55 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
   }, [readerUrl, activeTab, session, workspaceKey, setTabUrl]);
 
   const handleNavigate = useCallback(async () => {
-    if (!activeTab || !session) return;
+    if (!activeTab) return;
     const normalized = normalizeUrl(urlInput);
     if (!normalized) return;
-    const attempt = async (sessionId: string) => {
-      await navigateBrowserSession(workspaceKey, sessionId, normalized);
-      viewerRef.current?.navigate(normalized);
-    };
+    if (fallbackMode || !session) {
+      setTabUrl(activeTab.id, normalized);
+      setUrlInput(normalized);
+      return;
+    }
     setError(null);
     setTabUrl(activeTab.id, normalized);
     setUrlInput(normalized);
-    // The worker only materializes the Chromium session on the first viewer
-    // connection, so a server-side navigate before `live` always 502s. Send
-    // it through the viewer channel and ask for patience instead of burning
-    // the one recovery round-trip.
-    if (status !== "live") {
+    // Fire through the live viewer channel when possible; the worker session
+    // may not exist yet (or died with a worker restart), in which case the
+    // HTTP navigate 502s. Queue for the live flush instead of retrying
+    // against a session with no Chromium behind it.
+    const attempt = async (sessionId: string) => {
       viewerRef.current?.navigate(normalized);
+      await navigateBrowserSession(workspaceKey, sessionId, normalized);
+    };
+    if (status === "live") {
       try {
         await attempt(session.sessionId);
+        pendingNavigateRef.current = null;
+        return;
       } catch {
-        setError("Connecting… try again in a moment.");
+        // Fall through to recovery below.
+      }
+    } else {
+      viewerRef.current?.navigate(normalized);
+      pendingNavigateRef.current = normalized;
+      setError("Connecting… it will load as soon as the session is live.");
+      return;
+    }
+    // Worker-side sessions die with the worker (restart wipes them) while
+    // our record survives. Re-ensure once, then let the fresh viewer's live
+    // flush do the navigation — an immediate HTTP navigate would 502 again
+    // because Chromium materializes on viewer connection, not on create.
+    if (!reensuredRef.current) {
+      reensuredRef.current = true;
+      try {
+        const created = await replaceSession(activeTab, normalized);
+        setSession(created);
+        pendingNavigateRef.current = normalized;
+      } catch (retryErr: unknown) {
+        setError(retryErr instanceof Error ? retryErr.message : "Navigation failed");
       }
       return;
     }
-    try {
-      await attempt(session.sessionId);
-    } catch (err: unknown) {
-      // Worker-side sessions die with the worker (restart wipes them) while
-      // our record survives. On a worker failure, re-ensure once and retry
-      // against the fresh session instead of stranding the user on a 502.
-      if (!reensuredRef.current) {
-        reensuredRef.current = true;
-        try {
-          const created = await replaceSession(activeTab, normalized);
-          setSession(created);
-          await attempt(created.sessionId);
-          return;
-        } catch (retryErr: unknown) {
-          setError(retryErr instanceof Error ? retryErr.message : "Navigation failed");
-          return;
-        }
-      }
-      setError(err instanceof Error ? err.message : "Navigation failed");
-    }
+    setError("Navigation failed. Retry to start a new session.");
   }, [urlInput, activeTab, session, status, workspaceKey, setTabUrl, replaceSession]);
 
   const handleNewTab = useCallback(async () => {
@@ -467,7 +505,7 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
                   {i + 1}
                 </span>
                 <span className="hidden md:block flex-1 truncate text-xs font-sans">
-                  {shortLabel(t.url, "New tab")}
+                  {t.url ? shortLabel(t.url, "New tab") : "New tab"}
                 </span>
                 <button
                   type="button"
@@ -513,6 +551,20 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
               style={{ flex: 1, minHeight: 0, minWidth: 0, display: "flex", flexDirection: "column" }}
               onControlChange={() => {
                 setStatus("live");
+                // Flush a URL queued while the viewer was not live (or while
+                // recovering a dead worker session). Viewer channel first —
+                // it targets the session Chromium that just materialized —
+                // then best-effort HTTP so the server record stays in sync.
+                const pending = pendingNavigateRef.current;
+                if (pending && session) {
+                  pendingNavigateRef.current = null;
+                  reensuredRef.current = false;
+                  setError(null);
+                  viewerRef.current?.navigate(pending);
+                  void navigateBrowserSession(workspaceKey, session.sessionId, pending).catch(
+                    () => undefined
+                  );
+                }
               }}
               onTerminated={(reason) => {
                 // A terminated stream usually means expiry or idle eviction.
@@ -545,6 +597,18 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
                 }
               }}
             />
+          ) : fallbackMode ? (
+            <div className="flex-1 min-h-0 w-full overflow-y-auto px-6 py-6 font-sans">
+              <div className="max-w-3xl mx-auto">
+                {activeUrl ? (
+                  <ReaderView url={activeUrl} />
+                ) : (
+                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <span className="text-xs">Type a URL above to read it here.</span>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             !error && (
               <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground" aria-live="polite">
