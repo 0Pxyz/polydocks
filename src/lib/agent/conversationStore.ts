@@ -26,6 +26,14 @@ const JOB_EVENT_CURSOR_KEY = "polymax-job-event-cursor";
 
 let taskEventSource: EventSource | null = null;
 let taskStreamSession: string | null = null;
+/** Latest send callbacks: plugin.created mounts through them (auto-open). */
+let pendingPluginCallbacks:
+  | {
+      onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
+      onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
+    }
+  | undefined;
 /** Terminal jobs already announced in chat (no duplicate "done" lines). */
 const announcedJobs = new Set<string>();
 
@@ -67,6 +75,8 @@ export interface ConversationMessage {
   origin?: "dock-add" | "chat";
   toolName?: string;
   timestamp: number;
+  /** Live-streaming placeholder for orchestrator replies (cleared on done). */
+  streaming?: boolean;
   /** Server sequence inside the single persistent thread. */
   seq?: number;
   attachments?: ChatAttachment[];
@@ -484,7 +494,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       (from !== undefined ? `&from=${from}` : "");
     const source = new EventSource(url);
     taskEventSource = source;
-    // Named SSE events never hit onmessage: one listener per job.* type,
+    // Named SSE events never hit onmessage: one listener per type,
     // all funneled into the same ordered handler.
     for (const type of [
       "job.queued",
@@ -494,6 +504,12 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       "job.failed",
       "job.cancelled",
       "job.interrupted",
+      "message.delta",
+      "message.done",
+      "message.error",
+      "plugin.created",
+      "plugin.updated",
+      "plugin.published",
     ]) {
       source.addEventListener(type, (ev: Event) => {
         const msg = ev as MessageEvent;
@@ -539,14 +555,17 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const isDockAdd = origin === "dock-add";
 
     cancelSpeech();
+    // The orchestrator path never holds the global thinking state: it
+    // appends the user message and returns, leaving the input enabled.
+    // Only legacy streaming turns (attachments/retries) set isStreaming.
     set({
       draft: isDockAdd ? get().draft : "",
       stagedAttachments: [],
-      isStreaming: true,
-      isBuildingTool: isDockAdd,
-      buildingToolName: isDockAdd ? prompt : "",
-      orbState: "thinking",
-      statusText: isDockAdd ? "Starting tool synthesis…" : "",
+      isStreaming: useOrchestrator ? false : true,
+      isBuildingTool: isDockAdd && !useOrchestrator,
+      buildingToolName: isDockAdd && !useOrchestrator ? prompt : "",
+      orbState: useOrchestrator ? get().orbState : "thinking",
+      statusText: isDockAdd && !useOrchestrator ? "Starting tool synthesis…" : "",
       activeApproval: null,
     });
 
@@ -1044,9 +1063,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 }));
 
 /**
- * Fast orchestrator turn: one POST, no streaming, input stays enabled.
- * Heavy work returns an ack; progress and results arrive through the
- * resumable job SSE stream (task cards + completion messages).
+ * Non-blocking send: POST returns 202 with ids at once, the reply streams
+ * back as durable message.* events. The input never waits — not for the
+ * POST, not for jobs.
  */
 async function sendViaOrchestrator(
   prompt: string,
@@ -1057,82 +1076,48 @@ async function sendViaOrchestrator(
     onCloseExperience?: (expId: string) => void;
   }
 ): Promise<void> {
-  const { set, get } = {
-    set: useConversationStore.setState,
-    get: useConversationStore.getState,
-  };
-  void callbacks;
-  set({ isStreaming: true, orbState: "thinking", currentPhase: "Thinking", statusText: "" });
-  let reply: any = null;
+  if (callbacks) {
+    pendingPluginCallbacks = callbacks;
+  }
+  let posted: { messageId: string; sessionId: string } | null = null;
   try {
     const res = await fetch("/api/agent/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt,
-        origin,
-        sessionId: get().orchestratorSessionId || undefined,
-      }),
+      body: JSON.stringify({ prompt, origin }),
     });
-    reply = await res.json().catch(() => null);
-  } catch {
-    reply = null;
-  }
-
-  if (!reply || reply.success !== true) {
-    const message = reply?.error || "Couldn't reach the orchestrator just now.";
-    set((state) => ({
-      isStreaming: false,
-      orbState: "idle",
-      messages: [...state.messages, { id: crypto.randomUUID(), role: "assistant", content: message, timestamp: Date.now() }],
-    }));
-    return;
-  }
-
-  if (typeof reply.sessionId === "string" && reply.sessionId !== get().orchestratorSessionId) {
-    set({ orchestratorSessionId: reply.sessionId });
-    try {
-      platformStorage.setItem(ORCH_SESSION_KEY, reply.sessionId);
-    } catch {
-      // Best-effort persistence.
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success && typeof json.messageId === "string") {
+      posted = { messageId: json.messageId, sessionId: json.sessionId };
     }
+  } catch {
+    posted = null;
   }
-  const sessionId = reply.sessionId || get().orchestratorSessionId;
-  if (sessionId) get().ensureTaskStream(sessionId);
 
-  if (reply.type === "ack" && typeof reply.taskId === "string") {
-    set((state) => ({
-      isStreaming: false,
-      orbState: "idle",
-      taskCards: {
-        ...state.taskCards,
-        [reply.taskId]: {
-          taskId: reply.taskId,
-          title: prompt.slice(0, 80),
-          status: "queued",
-          updatedAt: Date.now(),
-        },
-      },
+  if (!posted) {
+    useConversationStore.setState((state) => ({
       messages: [
         ...state.messages,
-        { id: crypto.randomUUID(), role: "assistant", content: reply.text, timestamp: Date.now() },
+        { id: crypto.randomUUID(), role: "assistant", content: "Couldn't reach the orchestrator just now.", timestamp: Date.now() },
       ],
     }));
     return;
   }
 
-  if (reply.type === "dock_action") {
-    applyOrchestratorDockAction(reply);
-  }
-
-  set((state) => ({
-    isStreaming: false,
-    orbState: "idle",
+  const { messageId, sessionId } = posted;
+  useConversationStore.setState((state) => ({
+    orchestratorSessionId: sessionId,
     messages: [
       ...state.messages,
-      { id: crypto.randomUUID(), role: "assistant", content: reply.text || "Done.", timestamp: Date.now() },
+      { id: `m-${messageId}`, role: "assistant", content: "", streaming: true, timestamp: Date.now() },
     ],
   }));
+  try {
+    platformStorage.setItem(ORCH_SESSION_KEY, sessionId);
+  } catch {
+    // Best-effort persistence.
+  }
+  useConversationStore.getState().ensureTaskStream(sessionId);
 }
 
 /** Applies an orchestrator-routed dock action against the real dock store. */
@@ -1146,32 +1131,40 @@ function applyOrchestratorDockAction(reply: { op?: string; id?: string }): void 
 }
 
 /**
- * One durable job event from the resumable stream. Cards update silently;
- * only a fresh terminal transition appends a chat message (replays and
- * reconnects never duplicate the announcement).
+ * One durable event from the resumable stream. Message events update the
+ * per-message placeholder (streaming text, then final); job events update
+ * cards silently and only a fresh terminal transition appends a chat
+ * message. Replays and reconnects never duplicate anything: every branch
+ * below is idempotent on (id, status).
  */
 function handleJobSseEvent(sessionId: string, type: string, data: any, id?: number): void {
   const taskId = typeof data?.jobId === "string" ? data.jobId : null;
   if (!taskId) return;
   if (id !== undefined) saveJobCursor(sessionId, id);
+
+  if (type.startsWith("message.")) {
+    handleMessageSseEvent(taskId, type, data);
+    return;
+  }
+
+  if (type === "plugin.created" || type === "plugin.updated" || type === "plugin.published") {
+    mountPluginFromPayload(data);
+  }
+
   const status = typeof data?.status === "string" ? data.status : type.replace(/^job\./, "");
   const known: TaskCard["status"][] = ["queued", "running", "completed", "failed", "cancelled", "interrupted"];
   if (!known.includes(status)) return;
 
   const store = useConversationStore.getState();
   const prev = store.taskCards[taskId];
+  const title = prev?.title || (typeof data?.prompt === "string" && data.prompt) || `Background job ${taskId.slice(0, 8)}`;
   const terminal = status === "completed" || status === "failed" || status === "cancelled" || status === "interrupted";
   const alreadyTerminal = prev && ["completed", "failed", "cancelled", "interrupted"].includes(prev.status);
 
   useConversationStore.setState((state) => ({
     taskCards: {
       ...state.taskCards,
-      [taskId]: {
-        taskId,
-        title: prev?.title || `Background job ${taskId.slice(0, 8)}`,
-        status,
-        updatedAt: Date.now(),
-      },
+      [taskId]: { taskId, title, status, updatedAt: Date.now() },
     },
   }));
 
@@ -1179,7 +1172,7 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
     announcedJobs.add(taskId);
     const label =
       status === "completed"
-        ? `Done: ${prev?.title || taskId}.`
+        ? `Done: ${title}.`
         : status === "failed"
           ? `The background job failed${data?.error ? `: ${data.error}` : "."}`
           : status === "cancelled"
@@ -1188,6 +1181,79 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
     useConversationStore.setState((state) => ({
       messages: [...state.messages, { id: crypto.randomUUID(), role: "assistant", content: label, timestamp: Date.now() }],
     }));
+  }
+}
+
+/** Streaming message placeholder keyed by server message id. */
+function handleMessageSseEvent(messageId: string, type: string, data: any): void {
+  const key = `m-${messageId}`;
+  const set = useConversationStore.setState;
+  if (type === "message.delta" && typeof data?.text === "string") {
+    set((state) => {
+      const existing = state.messages.find((m) => m.id === key);
+      if (existing) {
+        return {
+          messages: state.messages.map((m) =>
+            m.id === key ? { ...m, content: (m.content || "") + data.text, streaming: true } : m
+          ),
+        };
+      }
+      return {
+        messages: [...state.messages, { id: key, role: "assistant" as const, content: data.text, streaming: true, timestamp: Date.now() }],
+      };
+    });
+    return;
+  }
+  if (type === "message.done") {
+    if (data && typeof data === "object" && (data as any).action) {
+      applyOrchestratorDockAction((data as any).action);
+    }
+    if (data && typeof data === "object" && typeof (data as any).taskId === "string") {
+      const tid = (data as any).taskId as string;
+      const prompt = typeof (data as any)?.prompt === "string" ? (data as any).prompt.slice(0, 80) : undefined;
+      set((state) => ({
+        taskCards: {
+          ...state.taskCards,
+          [tid]: {
+            taskId: tid,
+            title: prompt || state.taskCards[tid]?.title || `Background job ${tid.slice(0, 8)}`,
+            status: state.taskCards[tid]?.status || ("queued" as const),
+            updatedAt: Date.now(),
+          },
+        },
+      }));
+    }
+    const text = typeof data?.text === "string" ? data.text : "Done.";
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === key ? { ...m, content: text, streaming: false } : m
+      ),
+    }));
+    return;
+  }
+  if (type === "message.error") {
+    const text = typeof data?.text === "string" ? data.text : "Something went wrong.";
+    set((state) => {
+      const exists = state.messages.some((m) => m.id === key);
+      const next = exists
+        ? state.messages.map((m) => (m.id === key ? { ...m, content: text, streaming: false } : m))
+        : [...state.messages, { id: key, role: "assistant" as const, content: text, timestamp: Date.now() }];
+      return { messages: next };
+    });
+  }
+}
+
+/** A registered plugin created in the background mounts in the real dock. */
+function mountPluginFromPayload(data: any): void {
+  const pluginId = typeof data?.pluginId === "string" ? data.pluginId : typeof data?.id === "string" ? data.id : null;
+  if (!pluginId || !pendingPluginCallbacks) return;
+  const title = typeof data?.name === "string" ? data.name : typeof data?.title === "string" ? data.title : pluginId;
+  const icon = typeof data?.icon === "string" ? data.icon : undefined;
+  try {
+    pendingPluginCallbacks.onExperienceCreated?.({ id: pluginId, title, icon });
+    pendingPluginCallbacks.onOpenExperience?.(pluginId);
+  } catch {
+    // A stale callback must never break the event stream.
   }
 }
 

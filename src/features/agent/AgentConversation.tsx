@@ -384,20 +384,13 @@ export function AgentConversation({
           if (!clean || sent) return;
           sent = true;
           stopSession();
-          const store = useConversationStore.getState();
-          if (store.isStreaming) {
-            // Never drop the user's words: park them in the draft so they
-            // can press send once the running turn finishes.
-            busyHandoff = true;
-            setDraft(clean);
-            setOrbState("idle");
-            setStatusText("Still working — your words are in the box, press send when ready.");
-            return;
-          }
+          // The orchestrator path never blocks, so voice input goes straight
+          // through instead of parking in the draft.
+          busyHandoff = false;
           setDraft("");
           setOrbState("idle");
           setStatusText("");
-          void store.sendMessage(clean, { onExperienceCreated, onOpenExperience, onCloseExperience });
+          void useConversationStore.getState().sendMessage(clean, { onExperienceCreated, onOpenExperience, onCloseExperience });
         },
         onLevel: (level) => setAudioLevel(level),
         onError: (message) => {
@@ -507,7 +500,8 @@ export function AgentConversation({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (isStreaming) return;
+      // Never blocked: the orchestrator queues per session and answers fast.
+      // Legacy streaming turns (attachments/retry) keep their own gate inside sendMessage.
       sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience });
     }
   };
@@ -1245,7 +1239,7 @@ export function AgentConversation({
                   <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-75" />
                 </button>
 
-                {isStreaming ? (
+                {isStreaming && (
                   <button
                     type="button"
                     onClick={abortStream}
@@ -1254,17 +1248,16 @@ export function AgentConversation({
                   >
                     <Square className="w-4 h-4 fill-current" />
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience })}
-                    disabled={!draft.trim() && stagedAttachments.length === 0}
-                    className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
-                    title="Send message"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                  disabled={!draft.trim() && stagedAttachments.length === 0}
+                  className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
+                  title="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
