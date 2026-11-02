@@ -7,6 +7,7 @@ import path from "node:path";
 import { config, isLoopbackHost } from "./config";
 import { runAgentLoop, type AgentStepEvent } from "./agent/loop";
 import { pluginsRouter, capabilitiesRouter } from "./routes/plugins";
+import { accountRouter } from "./routes/account";
 import { workspacesRouter } from "./routes/workspaces";
 import { registryRouter } from "./routes/registry";
 import { memoryRouter } from "./routes/memory";
@@ -17,6 +18,8 @@ import { sessionsRouter } from "./routes/sessions";
 import { tasksRouter } from "./routes/tasks";
 import { artifactsRouter } from "./routes/artifacts";
 import { taskExecutionEngine } from "./agent/taskRunner";
+import { auth, getAuthConfigSummary } from "./auth/index";
+import { getEffectiveCaller, hasWorkspaceAccess } from "./auth/session";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
@@ -68,6 +71,26 @@ if (config.NODE_ENV !== "test") {
 // Recover any interrupted background tasks from previous server instance
 taskExecutionEngine.recoverInterruptedTasks();
 
+// Identity foundation (Better Auth): additive-only tables for `user`,
+// `session`, `account`, `verification` plus PolyDocks-owned
+// `workspace_members`. Existing rows are never touched; a fresh database
+// also matches schema.sql. Skipped under bun test: tests that need auth
+// call ensureAuthTables() explicitly so the shared suite database is
+// unaffected unless a test opts in.
+if (config.NODE_ENV !== "test") {
+  try {
+    const { ensureAuthTables } = await import("./auth/membership");
+    const report = await ensureAuthTables();
+    if (report.created.length > 0 || report.added.length > 0) {
+      console.log(
+        `[PolyDocks Server] Auth migration: created [${report.created.join(", ")}] added [${report.added.join(", ")}]`
+      );
+    }
+  } catch (err) {
+    console.error("[PolyDocks Server] Auth migration failed (non-fatal):", err);
+  }
+}
+
 // Queued chat messages outlive their HTTP calls: mark them interrupted.
 try {
   const { recoverMessageQueue } = await import("./agent/orchestrator");
@@ -91,8 +114,9 @@ app.use(
       "http://127.0.0.1:5173",
       "http://127.0.0.1:3000",
     ],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization", "X-Polymax-User"],
+    credentials: true,
   })
 );
 
@@ -146,8 +170,17 @@ app.get("/api/health", (c) => {
     sqlite: {
       ok: sqliteOk,
     },
+    auth: getAuthConfigSummary(),
   });
 });
+
+// Better Auth handler: sign-up/sign-in/sign-out, email verification,
+// password reset, OAuth callbacks, session revocation. Mounted before the
+// product routers so /api/auth/* never collides with them.
+app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// Mount PolyDocks account helpers (membership joins; Better Auth owns /api/auth/*)
+app.route("/api/account", accountRouter);
 
 // Mount Plugins and Capabilities router
 app.route("/api/plugins", pluginsRouter);
@@ -263,13 +296,23 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
   }
 
-  const userId = resolveUserIdForMode(
-    {
-      header: c.req.header("x-polymax-user"),
-      body: body.userId,
-    },
-    config.DEPLOY_MODE
-  );
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const userId =
+    caller.kind === "user"
+      ? caller.user.id
+      : resolveUserIdForMode(
+          {
+            header: c.req.header("x-polymax-user"),
+            body: body.userId,
+          },
+          config.DEPLOY_MODE
+        );
+
+  // Never trust a client-supplied workspace id: the turn is refused when
+  // the caller may not access the workspace.
+  if (typeof workspaceId === "string" && !hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
 
   const requestedModel =
     typeof modelId === "string" && modelId.trim().length > 0
