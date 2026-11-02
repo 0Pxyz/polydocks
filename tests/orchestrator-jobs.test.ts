@@ -143,4 +143,54 @@ describe("Orchestrator jobs: concurrency, cancel, recovery (Slice 1)", () => {
     const events = listJobEvents({ jobId: task.id });
     expect(events.some((e) => e.type === "job.interrupted")).toBe(true);
   });
+
+  it("replays job history after Last-Event-ID with no loss or duplication", async () => {
+    const task = makeTask();
+    updateTaskState(task.id, "running");
+    updateTaskState(task.id, "completed", { output: { ok: true } });
+    const stored = listJobEvents({ jobId: task.id });
+    expect(stored.length).toBeGreaterThanOrEqual(2);
+    const firstId = stored[0].id;
+
+    const res = await app.fetch(
+      new Request(`http://localhost:3000/api/tasks/stream?sessionId=${task.sessionId}`, {
+        headers: { "Last-Event-ID": String(firstId) },
+        signal: AbortSignal.timeout(8000),
+      })
+    );
+    expect(res.status).toBe(200);
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    const deadline = Date.now() + 2500;
+    // Emit one live event after subscribing, then stop reading.
+    const live = (async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      updateTaskState(task.id, "completed", { output: { ok: true, again: true } });
+    })();
+    try {
+      while (Date.now() < deadline) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        const ids = [...text.matchAll(/^id: (\d+)$/gm)].map((m) => Number(m[1]));
+        if (ids.length >= stored.length) break;
+      }
+    } catch {
+      // Aborted on purpose once enough frames arrived.
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {}
+    }
+    await live;
+
+    const ids = [...text.matchAll(/^id: (\d+)$/gm)].map((m) => Number(m[1]));
+    // Every replayed id is strictly after the resume point, sorted, unique.
+    expect(ids.length).toBeGreaterThanOrEqual(stored.length - 1);
+    expect(ids[0]).toBeGreaterThan(firstId);
+    expect([...ids].sort((a, b) => a - b)).toEqual(ids);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

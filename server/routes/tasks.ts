@@ -1,5 +1,7 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { TaskService } from "../services/taskService";
+import { taskExecutionEngine } from "../agent/taskRunner";
 
 export const tasksRouter = new Hono();
 
@@ -22,6 +24,80 @@ tasksRouter.get("/", (c) => {
   });
 
   return c.json({ tasks });
+});
+
+/**
+ * GET /api/tasks/stream?sessionId=&jobId=
+ * Durable job-event stream with Last-Event-ID resume. Replays every stored
+ * row after the given id (header wins, ?from= fallback), then stays live.
+ * Reconnects never lose or duplicate events: ids are monotonic per process
+ * and the replay boundary is exclusive (id > last).
+ */
+tasksRouter.get("/stream", (c) => {
+  const sessionId = c.req.query("sessionId");
+  const jobId = c.req.query("jobId");
+  if (!sessionId && !jobId) {
+    return c.json({ error: "Provide sessionId and/or jobId." }, 400);
+  }
+
+  const headerId = c.req.header("last-event-id");
+  const queryFrom = c.req.query("from");
+  const parsedHeader = headerId !== undefined && headerId !== "" ? Number(headerId) : NaN;
+  const parsedQuery = queryFrom !== undefined && queryFrom !== "" ? Number(queryFrom) : NaN;
+  const afterId = Number.isInteger(parsedHeader)
+    ? parsedHeader
+    : Number.isInteger(parsedQuery)
+      ? parsedQuery
+      : undefined;
+
+  return streamSSE(c, async (stream) => {
+    await stream.writeSSE({
+      event: "connected",
+      data: JSON.stringify({ sessionId: sessionId ?? null, jobId: jobId ?? null }),
+    });
+
+    let active = true;
+    // Serialize writes: replay and live events share one FIFO so ids
+    // always arrive in ascending order (EventSource relies on it).
+    let chain: Promise<void> = Promise.resolve();
+    const send = (id: string, type: string, data: string) => {
+      chain = chain
+        .then(() => stream.writeSSE({ id, event: type, data }))
+        .catch(() => {
+          active = false;
+        });
+      return chain;
+    };
+    const unsubscribe = taskExecutionEngine.subscribeJobs(
+      // Live fan-out is keyed by session; job-only streams still replay
+      // their rows above, then follow the session channel filtered by job.
+      sessionId ?? "",
+      (row) => {
+        if (!active) return;
+        if (jobId && row.jobId !== jobId) return;
+        void send(String(row.id), row.type, JSON.stringify({ id: row.id, jobId: row.jobId, ...row.payload }));
+      },
+      afterId
+    );
+
+    // Replay and live share one subscription: set.add runs before the
+    // replay loop, so a row inserted mid-replay is delivered live (its id
+    // exceeds every replayed id). The boundary stays exactly-once.
+    c.req.raw.signal.addEventListener("abort", () => {
+      active = false;
+      unsubscribe();
+    });
+
+    while (active) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (c.req.raw.signal.aborted) {
+        active = false;
+        break;
+      }
+    }
+
+    unsubscribe();
+  });
 });
 
 /**
