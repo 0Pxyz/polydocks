@@ -23,12 +23,15 @@ export function isIOS(userAgent: string): boolean {
 }
 
 export function isStandaloneDisplay(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    (window.matchMedia?.("(display-mode: standalone)").matches ||
-      // Legacy iOS Safari flag
-      (window.navigator as { standalone?: boolean }).standalone === true)
-  );
+  if (typeof window === "undefined") return false;
+  try {
+    const w = window as any;
+    if (w.matchMedia?.("(display-mode: standalone)")?.matches) return true;
+    if (w.navigator?.standalone === true) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 type BeforeInstallPromptEvent = Event & {
@@ -60,7 +63,7 @@ function handleAppInstalled(): void {
   notifyStatus();
 }
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && typeof (window as any).addEventListener === "function") {
   window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   window.addEventListener("appinstalled", handleAppInstalled);
 }

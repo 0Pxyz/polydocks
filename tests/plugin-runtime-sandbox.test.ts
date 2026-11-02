@@ -33,7 +33,11 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     (globalThis as any).localStorage = mockStorage;
     ensureDefaultWorkspace();
     db.query("DELETE FROM workspace_plugins WHERE plugin_id LIKE 'test-%'").run();
+    db.query("DELETE FROM workspace_plugins WHERE workspace_id LIKE 'test-%'").run();
+    db.query("DELETE FROM workspaces WHERE id LIKE 'test-%'").run();
     db.query("DELETE FROM plugins WHERE id LIKE 'test-%'").run();
+    db.query("DELETE FROM plugin_files WHERE plugin_id LIKE 'test-%'").run();
+    db.query("DELETE FROM plugin_files WHERE workspace_id LIKE 'test-%'").run();
   });
 
   it("exports valid guest bridge script exposing window.polydocks with theme and storage", () => {

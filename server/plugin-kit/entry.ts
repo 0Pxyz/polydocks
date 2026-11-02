@@ -38,6 +38,9 @@ import * as sonner from "@/components/ui/sonner";
 import * as tabs from "@/components/ui/tabs";
 import * as textarea from "@/components/ui/textarea";
 import * as tooltip from "@/components/ui/tooltip";
+import * as primitives from "./kit/primitives";
+import * as patterns from "./kit/patterns";
+import * as level2 from "./kit/level2";
 
 const UI = {  ...badge,
   ...button,
@@ -56,6 +59,9 @@ const UI = {  ...badge,
   ...tabs,
   ...textarea,
   ...tooltip,
+  ...primitives,
+  ...patterns,
+  ...level2,
 };
 
 (globalThis as any).__polymaxKit = {

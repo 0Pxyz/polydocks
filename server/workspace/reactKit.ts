@@ -15,6 +15,33 @@ function readKitFile(name: string): string {
   return fs.readFileSync(path.join(kitDir(), name), "utf-8");
 }
 
+/**
+ * Tailwind class candidate extraction shared by the kit build and the
+ * per-publish guest CSS compiler. Matches each quoted string on its own
+ * (handling escapes and nested other-type quotes like [class*='size-']),
+ * so one apostrophe never corrupts tokenization of the rest of the file.
+ * Interpolations are blanked; the token charset covers arbitrary variants
+ * (has-[>svg]:, [&_svg]:, dark:, /opacity). Unknown candidates are ignored
+ * downstream by the Tailwind compiler — extraction stays permissive.
+ */
+const QUOTED_STRING_RE = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g;
+const TAILWIND_TOKEN_RE = /^[A-Za-z0-9_.:/[#\]%()>&*='+!",-]+$/;
+
+export function extractClassCandidates(sources: string[]): string[] {
+  const found = new Set<string>();
+  for (const src of sources) {
+    for (const m of src.matchAll(QUOTED_STRING_RE)) {
+      const raw = m[0].slice(1, -1).replace(/\$\{[^}]*\}/g, " ");
+      for (const token of raw.split(/\s+/)) {
+        if (token.length > 0 && token.length < 120 && TAILWIND_TOKEN_RE.test(token)) {
+          found.add(token);
+        }
+      }
+    }
+  }
+  return [...found];
+}
+
 export function getKitJs(): string {
   if (!kitJsCache) kitJsCache = readKitFile("kit.bundle.js");
   return kitJsCache;
@@ -40,6 +67,11 @@ export function getKitTokens(): string {
   return kitTokensCache;
 }
 
+export const KIT_VERSION = "2.0.0";
+
+/** Kit v2 composite import path (Level 1 parts + patterns, one stable path). */
+export const KIT_V2_IMPORT = "kit";
+
 export const UI_KIT_FILES = [
   "badge", "button", "command", "dialog", "dropdown-menu", "input", "popover",
   "progress", "scroll-area", "separator", "sheet", "skeleton", "slider",
@@ -62,7 +94,7 @@ export function codeHasImports(code: string): boolean {
 }
 
 export function allowedImportsMessage(): string {
-  return `Allowed imports: react, react-dom/client, @/components/ui/{${UI_KIT_FILES.join(", ")}}.`;
+  return `Allowed imports: react, react-dom/client, @/components/ui/{${UI_KIT_FILES.join(", ")}} + @/components/ui/${KIT_V2_IMPORT} (kit v${KIT_VERSION}: layout, text, actions, inputs, data, feedback + patterns).`;
 }
 
 /**
@@ -165,7 +197,7 @@ export function rewriteKitImports(tsCode: string): string {
   out = out.replace(
     /import\s+([^;]*?)\s+from\s+["']@\/components\/ui\/([a-z-]+)["']\s*;?/g,
     (_m, clause: string, subpath: string) => {
-      if (!(UI_KIT_FILES as readonly string[]).includes(subpath)) {
+      if (!(UI_KIT_FILES as readonly string[]).includes(subpath) && subpath !== KIT_V2_IMPORT) {
         throw new Error(
           `Security Violation: "@/components/ui/${subpath}" is not part of the UI kit. ${allowedImportsMessage()}`
         );
@@ -224,14 +256,7 @@ const guestCssCache = new Map<string, string>();
  * theme (same tokens as kit.css). Cached by candidate hash.
  */
 export async function compileGuestCss(tsCode: string): Promise<string> {
-  const candidates = new Set<string>();
-  for (const m of tsCode.matchAll(/["'`]([^"'`]{1,300})["'`]/g)) {
-    for (const token of m[1].split(/\s+/)) {
-      if (/^[A-Za-z0-9_.:/\[\]#][A-Za-z0-9_.:/\[\]#%()-]*$/.test(token) && token.length < 120) {
-        candidates.add(token);
-      }
-    }
-  }
+  const candidates = extractClassCandidates([tsCode]);
   const key = [...candidates].sort().join("\n");
   const cached = guestCssCache.get(key);
   if (cached !== undefined) return cached;

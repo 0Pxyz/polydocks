@@ -4,27 +4,31 @@
 
 ## Backend contract
 
-`create_plugin`: `id` `^[a-z0-9_-]+$`, `name` `description` `code`; icon via `search_icons` (default `cards`); `workspaceId?` `idempotencyKey?` `capabilities?`. Emits `plugin.created`; duplicates refused; `verifyPluginState` gates.
-`modify_plugin`: `id` `changeSummary` + `patch {find, replace}`, full `code`, or metadata. Bumps version, keeps stored keys, emits `plugin.updated`.
-`inspect_experience({id, workspaceId?})`: `{success, errors (last 10), isHealthy, verification}` or not-found; history in `experience_errors`; inspect before fixing.
-`operate_plugin({pluginId, action, ...})`: declared capability or fails; emits `plugin.operated`. `publish_plugin` / `promote_to_plugin` emit `plugin.published`.
+`create_plugin`: `id` `^[a-z0-9_-]+$`, `name` `description` `code`; icon via `search_icons`; `workspaceId?` `idempotencyKey?` `capabilities?`. Duplicates refused; emits `plugin.created`; `verifyPluginState` gates.
+`modify_plugin`: `id` `changeSummary` + `patch`/`code`/metadata. Bumps version, keeps keys; emits `plugin.updated`.
+`inspect_experience({id})`: `experience_errors` (last 10), health; inspect before fixing.
+`operate_plugin`: declared capability only. `publish_plugin`/`promote_to_plugin` emit published.
 
-## Design system (native by default, docs/design-slop.md)
+## Design system (kit v2 — choose, never recreate)
 
-Kit first, raw controls last; custom layouts welcome. Tokens
-(auto-theme): `background foreground card secondary muted muted-foreground
-primary accent border input ring popover destructive radius`. Sentence case. Every control: hover, active, focus ring, disabled,
-loading. Banned: hex, gradients, glows, opaque boxes, external sources, web iframes, decorative pills,
-borders, separators. Actions: `Button` (outline/ghost quiet, size icon).
-Type: 15px semibold, 13px, xs muted, mono tabular numbers. Live: `Badge` or
-dot + label. Group: `bg-card` step, whitespace. Select: `Tabs`. Load/empty:
-`Skeleton`, truth + one action. Input: `Input` `Textarea`. Help: `Tooltip`.
-Plain script: `.px-btn` `.px-text` `.px-badge` `.px-group`
-`.px-tabs` `.px-input` `.px-skeleton` `.px-empty`, `data-px-tip`. Icons: catalog ids, no emoji.
+Per request: `ui_catalog` → index → fichas needed → compose.
+Imports: `@/components/ui/kit` (Stack Inline Grid Panel Section Scroll;
+Heading Text Caption Mono Metric; Button IconButton Link; TextField
+SearchField TextAreaField Select Checkbox Switch SegmentedControl; List
+ListRow Card Avatar ProgressBar Spinner; EmptyState InlineMessage Dialog
+Tooltip Skeleton) + patterns (ListWithSearch ListDetail MetricsPanel
+FormPanel ReaderFeed NotesEditor SettingsForm SingleAction StateScreen)
++ L2 (AreaChart Bars Countdown DateField MarkdownView CodeBlock).
+
+One primary action; rows wholly clickable (44px); read state by
+dot/weight; no badges/tags, italic, serif, separators, bordered boxes,
+tool ids; human errors. Tokens only — no hex, `style=`, or custom CSS
+where a part exists. Gate rejects raw `<button>/<input>/<select>/
+<textarea>`, hex, inline style (fix and retry, max 2).
 
 ## Code, storage, verification
 
-One TSX file, SQLite `plugin_files`; imports `react`, `react-dom/client`, `@/components/ui/*`; mount `#app`. Bridge `window.polymax`: `storage`, `invoke`/`useCapability`, `openUrl`, `openContent`, `ui.expand/collapse`, `task`, `theme.get`; sandboxed.
+One TSX file; imports `react`, `react-dom/client`, `@/components/ui/*`; mount `#app`. Bridge `window.polymax`: `storage`, `invoke`/`useCapability`, `openContent`, `task`, `theme.get`; sandboxed.
 
 ## Host-owned lifecycle (read docs/plugins/lifecycle.md first)
 

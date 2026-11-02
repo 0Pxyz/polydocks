@@ -86,6 +86,8 @@ interface OnboardingStoreState {
   prevStep: () => void;
   skipDemo: () => void;
   completeDemo: () => void;
+  /** Backward-compat alias for completeDemo (older tests/callers). */
+  completeOnboarding: () => void;
   resetOnboarding: () => void;
 }
 
@@ -188,6 +190,10 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       hasCompleted: true,
     });
     useDockStore.getState().closeTool(ONBOARDING_TAB_ID);
+  },
+
+  completeOnboarding: () => {
+    get().completeDemo();
   },
 
   resetOnboarding: () => {

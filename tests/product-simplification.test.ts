@@ -30,8 +30,8 @@ describe("Product simplification — core dock and Discover", () => {
   it("fresh workspace pins the curated core", () => {
     expect(DEFAULT_PINNED_IDS).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
     const homeIds = HOME_DOCK_TOOLS.map((t) => t.id);
-    expect(homeIds).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
-    expect(new Set(homeIds).size).toBe(6);
+    expect(homeIds).toEqual(["agent", "onboarding", "browser", "plugins", "creations", "store", "settings"]);
+    expect(new Set(homeIds).size).toBe(7);
   });
 
   it("existing user pins are preserved, retired tools migrate out", () => {

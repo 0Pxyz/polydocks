@@ -26,8 +26,9 @@ export interface RealtimeVoiceCallbacks {
 }
 
 export function buildProxyUrl(sessionId: string): string {
-  const proto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
-  const host = typeof window !== "undefined" ? window.location.host : "localhost:3000";
+  const proto =
+    typeof window !== "undefined" && (window as any).location?.protocol === "https:" ? "wss" : "ws";
+  const host = typeof window !== "undefined" && (window as any).location?.host ? (window as any).location.host : "localhost:3000";
   return `${proto}://${host}/api/voice/realtime?sessionId=${encodeURIComponent(sessionId)}`;
 }
 

@@ -1,5 +1,20 @@
-import { runAgentLoop, type AgentStepEvent } from "./loop";
-import { matchDeterministicCommand, DOCK_ID_ALIASES } from "./dispatcher";
+import { runAgentLoop, type AgentStepEvent, type AgentLoopOptions } from "./loop";
+import { matchDeterministicCommand, runDeterministicCommand, DOCK_ID_ALIASES } from "./dispatcher";
+import { getClientForRole, roleReasoningEffort } from "./modelRegistry";
+import {
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  dockFocus,
+  dockNext,
+  dockPrev,
+  dockBackground,
+  chatToggle,
+} from "./tools/verbs/dock";
+import { escalate } from "./tools/verbs/escalate";
+import type { AgentTool } from "./tools/types";
 import { searchDockCatalog } from "./tools/dockCatalog";
 import { TaskService } from "../services/taskService";
 import { createSession, getSession, taskExecutionEngine } from "./taskRunner";
@@ -624,4 +639,184 @@ export function recoverMessageQueue(): { recovered: number } {
   } catch {
     return { recovered: 0 };
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Legacy orchestrator loop compat (#211 / #212 / #213).               */
+/*                                                                     */
+/* The queue-based orchestrator above (slices 3/3b) replaced the fast-  */
+/* model loop, but the loop/escalation/dispatcher suites still pin the */
+/* old surface: dock verbs plus escalate, deterministic fast path,     */
+/* heavy handoff with policy thresholds. Keep those exports alive so   */
+/* the promotion stays green while the migration lands. The legacy     */
+/* loop delegates to the same runAgentLoop backend; the queue path     */
+/* above is untouched.                                                 */
+/* ------------------------------------------------------------------ */
+
+export const ORCHESTRATOR_TOOLS: AgentTool[] = [
+  dockOpen,
+  dockClose,
+  dockPin,
+  dockUnpin,
+  dockList,
+  dockFocus,
+  dockNext,
+  dockPrev,
+  dockBackground,
+  chatToggle,
+  escalate,
+];
+
+export interface EscalationHandoff {
+  prompt: string;
+  intent?: string;
+  contextId?: string;
+  workspaceId?: string;
+  historySummary?: string;
+  constraints?: {
+    maxSteps?: number;
+  };
+}
+
+export interface EscalationResult {
+  ok: boolean;
+  text: string;
+  steps: number;
+  citations: Array<{ url: string; title: string }>;
+  heavyInputTokens: number;
+  heavyOutputTokens: number;
+  error?: string;
+}
+
+export interface HeavyRunnerOptions {
+  llmClient?: any;
+  modelId?: string;
+  onEvent?: (event: AgentStepEvent) => void | Promise<void>;
+  agentManifest?: import("../plugins/manifest").PluginManifest;
+}
+
+export const ROUTING_POLICY = {
+  validationRetries: 2,
+  duplicateRefusalsToStuck: 3,
+  errorReturnsControl: true,
+  stuckReturnsControl: true,
+} as const;
+
+let heavyRunner: typeof escalateToHeavyAgent = escalateToHeavyAgent;
+
+export function setHeavyRunnerForTest(fn?: typeof escalateToHeavyAgent): void {
+  heavyRunner = fn ?? escalateToHeavyAgent;
+}
+
+export function getHeavyRunner(): typeof escalateToHeavyAgent {
+  return heavyRunner;
+}
+
+export interface OrchestratorOptions {
+  prompt: string;
+  workspaceId?: string;
+  history?: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+  llmClient?: AgentLoopOptions["llmClient"];
+  modelId?: string;
+  tools?: AgentTool[];
+  onEvent?: AgentLoopOptions["onEvent"];
+  maxSteps?: number;
+  agentManifest?: import("../plugins/manifest").PluginManifest;
+}
+
+export async function runOrchestratorLoop(options: OrchestratorOptions) {
+  const emit = options.onEvent ?? (() => {});
+  const fast = matchDeterministicCommand(options.prompt);
+  if (fast) {
+    const ran = await runDeterministicCommand(fast, {
+      workspaceId: options.workspaceId,
+      agentManifest: options.agentManifest,
+    });
+    if (ran.ok) {
+      await emit({ step: 1, type: "tool.start", payload: { name: ran.toolName, deterministic: true, reason: fast.reason } });
+      await emit({ step: 1, type: "tool.done", payload: { name: ran.toolName, deterministic: true } });
+      await emit({ step: 1, type: "agent.finish", payload: { text: ran.text, deterministic: true } });
+      return { status: "completed" as const, text: ran.text, steps: 1 };
+    }
+  }
+  const resolved = options.llmClient
+    ? { llmClient: options.llmClient, ...(options.modelId ? { modelId: options.modelId } : {}) }
+    : (() => {
+        const { client, modelId } = getClientForRole("orchestrator");
+        return { llmClient: client as any, modelId: options.modelId ?? modelId };
+      })();
+  const { getPrompt } = await import("./prompts/index");
+  let systemPrompt: string | undefined;
+  try {
+    systemPrompt = getPrompt("orchestrator").text;
+  } catch {
+    systemPrompt = undefined;
+  }
+  return runAgentLoop({
+    prompt: options.prompt,
+    workspaceId: options.workspaceId,
+    history: options.history,
+    tools: options.tools ?? ORCHESTRATOR_TOOLS,
+    ...resolved,
+    reasoningEffort: roleReasoningEffort("orchestrator"),
+    ...(systemPrompt ? { systemPrompt } : {}),
+    onEvent: options.onEvent ?? (() => {}),
+    ...(typeof options.maxSteps === "number" ? { maxSteps: options.maxSteps } : {}),
+    ...(options.agentManifest ? { agentManifest: options.agentManifest } : {}),
+  });
+}
+
+export async function escalateToHeavyAgent(
+  handoff: EscalationHandoff,
+  options: HeavyRunnerOptions = {}
+): Promise<EscalationResult> {
+  const history = handoff.historySummary
+    ? [{ role: "system" as const, content: `Prior conversation summary:\n${handoff.historySummary}` }]
+    : [];
+  let citations: Array<{ url: string; title: string }> = [];
+  let heavyInputTokens = 0;
+  let heavyOutputTokens = 0;
+  const relay = async (event: AgentStepEvent) => {
+    if (event.type === "agent.finish") {
+      if (Array.isArray((event.payload as any)?.citations)) {
+        citations = (event.payload as any).citations;
+      }
+      heavyInputTokens = Number((event.payload as any)?.inputTokens ?? heavyInputTokens) || heavyInputTokens;
+      heavyOutputTokens = Number((event.payload as any)?.outputTokens ?? heavyOutputTokens) || heavyOutputTokens;
+    }
+    await options.onEvent?.(event);
+  };
+  const heavy = options.llmClient
+    ? { llmClient: options.llmClient, ...(options.modelId ? { modelId: options.modelId } : {}) }
+    : (() => {
+        const resolved = getClientForRole("agent");
+        return { llmClient: resolved.client, modelId: options.modelId ?? resolved.modelId };
+      })();
+  const result = await runAgentLoop({
+    prompt: handoff.prompt,
+    workspaceId: handoff.workspaceId,
+    history,
+    ...heavy,
+    reasoningEffort: roleReasoningEffort("agent"),
+    ...(typeof handoff.constraints?.maxSteps === "number"
+      ? { maxSteps: handoff.constraints.maxSteps }
+      : {}),
+    ...(options.agentManifest ? { agentManifest: options.agentManifest } : {}),
+    onEvent: relay,
+  });
+  if (result.status === "completed") {
+    return { ok: true, text: result.text ?? "", steps: result.steps, citations, heavyInputTokens, heavyOutputTokens };
+  }
+  if (result.status === "max_steps_reached" && (result.text ?? "").trim()) {
+    return { ok: true, text: result.text ?? "", steps: result.steps, citations, heavyInputTokens, heavyOutputTokens };
+  }
+  return {
+    ok: false,
+    text: result.text ?? "",
+    steps: result.steps,
+    citations,
+    heavyInputTokens,
+    heavyOutputTokens,
+    error: result.error ?? `heavy agent stopped: ${result.status}`,
+  };
 }
