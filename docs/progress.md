@@ -117,3 +117,4 @@
 | 2026-11-01 | Core plugin suite ADR + reconciliation audit (#271): cities/writing/workspace absent from code, notes/files gaps named | [#271](https://github.com/0Pxyz/polymax/pull/271) |
 | 2026-11-01 | Core suite ships in dev (#272): files + notes contract plugins, core trust on search/browser/sandbox, live-verified over HTTP | [#272](https://github.com/0Pxyz/polymax/pull/272) |
 | 2026-11-01 | Media refresh: Bitcoin viewer tour replaces flashcards, walkthrough + GIFs regenerated | [#275](https://github.com/0Pxyz/polymax/pull/275) |
+| 2026-11-02 | Command palette polish: honest workspace-backed listing, no mock rows, read-inline vs agent routing, catalog parity | [#276](https://github.com/0Pxyz/polymax/pull/276) |
