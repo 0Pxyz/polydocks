@@ -22,9 +22,11 @@ function sheetBlock(): string {
 describe("chat capsule sheet (voice-first, footer picker)", () => {
   const sheet = sheetBlock();
 
-  test("capsule header shows agent status with thinking indicator", () => {
+  test("capsule header shows agent status with a live dot, no Thinking label", () => {
     expect(sheet).not.toContain("Polymax Agent");
-    expect(sheet).toContain("Thinking…");
+    expect(sheet).not.toContain("Thinking");
+    // A live dot communicates work while streaming; words are redundant.
+    expect(sheet).toContain("animate-ping");
   });
 
   test("footer composer mounts the model picker", () => {
@@ -75,7 +77,26 @@ describe("chat full/side views", () => {
     expect(fullSide).toContain("overflow-y-auto");
     expect(fullSide).toContain("MessageAttachments");
     expect(fullSide).toContain("AttachmentStagingBar");
-    expect(fullSide).toContain("ReactMarkdown");
+    // Shared markdown + progressive reveal live in StreamingText (one
+    // renderer for finished and streaming replies, no duplication).
+    expect(fullSide).toContain("AssistantMarkdown");
+    expect(fullSide).toContain("StreamingText");
     expect(fullSide).not.toContain("ScrollArea");
+  });
+
+  test("streaming has no Thinking fallback text", () => {
+    expect(fullSide).not.toContain("Thinking");
+  });
+
+  test("resize edge is clamped, touch-friendly and keeps text selectable", () => {
+    expect(source).toContain("startResize");
+    expect(source).toContain("Math.max(MIN_W");
+    expect(fullSide).toContain("touch-none");
+    expect(fullSide).toContain("select-text");
+  });
+
+  test("composer sends on Enter, ignores IME composition", () => {
+    expect(source).toContain("isComposing");
+    expect(fullSide).toContain('placeholder="Ask anything"');
   });
 });
