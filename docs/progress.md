@@ -118,3 +118,4 @@
 | 2026-11-01 | Core suite ships in dev (#272): files + notes contract plugins, core trust on search/browser/sandbox, live-verified over HTTP | [#272](https://github.com/0Pxyz/polymax/pull/272) |
 | 2026-11-01 | Media refresh: Bitcoin viewer tour replaces flashcards, walkthrough + GIFs regenerated | [#275](https://github.com/0Pxyz/polymax/pull/275) |
 | 2026-11-02 | Command palette polish: honest workspace-backed listing, no mock rows, read-inline vs agent routing, catalog parity | [#276](https://github.com/0Pxyz/polymax/pull/276) |
+| 2026-11-02 | CI trim: check only on main push, parallel jobs, bun cache, check:fast + pre-push hook | [#277](https://github.com/0Pxyz/polymax/pull/277) |
