@@ -121,3 +121,4 @@
 | 2026-11-02 | CI trim: check only on main push, parallel jobs, bun cache, check:fast + pre-push hook | [#277](https://github.com/0Pxyz/polymax/pull/277) |
 | 2026-11-02 | Single workspace scope, bar-order shortcuts, real bitcoin plugin (no mocks) | [#279](https://github.com/0Pxyz/polymax/pull/279) |
 | 2026-11-02 | Orchestrator jobs: durable events, concurrency cap, timeout, sandbox-aware cancel, resumable SSE | [#280](https://github.com/0Pxyz/polymax/pull/280) [#281](https://github.com/0Pxyz/polymax/pull/281) |
+| 2026-11-02 | Orchestrator inbox: per-session queue, instant ack, real-dock routing, non-blocking front with job cards | [#283](https://github.com/0Pxyz/polymax/pull/283) [#284](https://github.com/0Pxyz/polymax/pull/284) |
