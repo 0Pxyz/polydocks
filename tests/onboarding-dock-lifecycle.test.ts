@@ -70,10 +70,10 @@ describe("onboarding dock lifecycle", () => {
     expect(useOnboardingStore.getState().paused).toBe(false);
   });
 
-  it("tour steps keep creative's choreography (TinyFish research, bitcoin viewer demo)", () => {
+  it("tour steps keep creative's choreography (TinyFish research, bitcoin plugin demo)", () => {
     const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]));
     expect(byId.get("research")?.dockTarget).toBe("browser");
-    expect(byId.get("tools")?.dockTarget).toBe("bitcoin-viewer");
+    expect(byId.get("tools")?.dockTarget).toBe("bitcoin");
     expect(byId.get("research")?.subtitle).toContain("TinyFish");
     for (const step of ONBOARDING_STEPS) {
       expect(step.title.length).toBeGreaterThan(0);

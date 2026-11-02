@@ -12,7 +12,6 @@ export const list_sessions: AgentTool<{ workspaceId?: string }> = {
   execute: async (args, ctx) =>
     agentSession("list", { workspaceId: args.workspaceId || ctx?.workspaceId }, {
       actor: "agent",
-      workspaceId: ctx?.workspaceId,
       workspaceId: args.workspaceId || ctx?.workspaceId,
       sessionId: ctx?.sessionId,
     }),

@@ -56,7 +56,7 @@ export const ONBOARDING_STEPS: {
     title: "Your Dock, Your Tools",
     subtitle: "Poly builds and mounts custom tools directly into the dock.",
     narration: "Building and mounting a live Bitcoin price viewer into your dock…",
-    dockTarget: "bitcoin-viewer",
+    dockTarget: "bitcoin",
     durationMs: 9000,
   },
   {

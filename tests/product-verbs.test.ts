@@ -42,7 +42,7 @@ describe("verb tools: dock.open/close/pin/unpin/list", () => {
   it("dock.pin persists across reads, dock.unpin clears it", async () => {
     const { isDockPinned } = await import("../server/workspace/workspaces");
     const pinned: any = await dockPin.execute({ id: "browser", workspaceId: WS } as any, {
-      step: 1, workspaceId: WS, workspaceId: WS,
+      step: 1, workspaceId: WS,
     });
     expect(pinned.ok).toBe(true);
     // Fresh read, no shared state: the durable record is the proof.
@@ -51,7 +51,7 @@ describe("verb tools: dock.open/close/pin/unpin/list", () => {
     expect(listed.ok).toBe(true);
 
     const unpinned: any = await dockUnpin.execute({ id: "browser", workspaceId: WS } as any, {
-      step: 1, workspaceId: WS, workspaceId: WS,
+      step: 1, workspaceId: WS,
     });
     expect(unpinned.ok).toBe(true);
     expect(isDockPinned(WS, "browser")).toBe(false);
@@ -222,7 +222,7 @@ describe("verb tools: plugins.create/edit/install/uninstall/operate", () => {
     const versions: any = await pluginVersions(PLUGIN);
     const first = (versions.data.versions as any[]).map((v: any) => v.version).sort()[0];
     const rolled: any = await pluginsRollback.execute({ pluginId: PLUGIN, version: first, workspaceId: WS } as any, {
-      step: 1, workspaceId: WS, workspaceId: WS,
+      step: 1, workspaceId: WS,
     });
     expect(rolled.ok).toBe(true);
     expect(rolled.data.restoredFrom).toBe(first);

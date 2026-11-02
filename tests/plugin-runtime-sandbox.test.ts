@@ -55,7 +55,6 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     const bridge = createHostBridge(mockWindow, {
       workspaceId: "ws-focus",
       tabId: "pomodoro-tool",
-      workspaceId: "ws-focus",
       pluginId: "pomodoro-tool",
       storagePrefix: "polydocks",
     });
