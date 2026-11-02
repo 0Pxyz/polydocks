@@ -16,7 +16,9 @@ Every capability declares `risk: read|write|destructive|external` (`server/plugi
 
 ## Wiring data sources
 
-Remote systems join as user-connected MCP servers (`POST /api/plugins/mcp/connect`, explicit permission grant in the Plugins UI); their tools appear as `mcp.<server>.<tool>` capabilities with `external` risk. HTTP and CLI adapters exist for fixed endpoints. The agent never connects servers itself and never fetches credentials or endpoints directly; it invokes the capability and passes `input` matching its schema.
+Remote systems join as user-connected MCP servers (`POST /api/plugins/mcp/connect`, explicit permission grant in the Plugins UI); their tools appear as `mcp.<server>.<tool>` capabilities with `external` risk. Transport order is Streamable HTTP first, SSE fallback, stdio denied unless `MCP_ALLOW_STDIO=1`. HTTP and CLI adapters exist for fixed endpoints. The agent connects only on explicit user intent via `mcp_connect({name, url})`, lists with `mcp_list_servers`, searches connected tools progressively with `mcp_search_tools({query})` (names first, full schema later), disconnects with `mcp_disconnect`, and never fetches credentials or endpoints directly; it invokes the capability and passes `input` matching its schema.
+
+PolyDocks is itself an MCP server: any external client connects at `POST /mcp` (Streamable HTTP, stateless) and gets the capability bus as tools plus `polymax://plugins` / `polymax://capabilities` resources. Details: `docs/mcp.md`.
 
 ## Common mistakes
 

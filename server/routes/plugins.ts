@@ -157,9 +157,12 @@ pluginsRouter.get("/:id/executions", (c) => {
  */
 pluginsRouter.post("/mcp/connect", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const { name, url, token } = body;
-  if (!name || typeof name !== "string" || !url || typeof url !== "string") {
-    return c.json({ error: "Both name and url are required." }, 400);
+  const { name, url, token, transport, headers, command, args, allowStdio } = body;
+  if (!name || typeof name !== "string") {
+    return c.json({ error: "Field 'name' is required." }, 400);
+  }
+  if (!url && !command) {
+    return c.json({ error: "Either 'url' (streamable/sse) or 'command' (stdio) is required." }, 400);
   }
 
   // Install policy: connecting an external MCP server registers a new
@@ -174,24 +177,36 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     return c.json({ ok: false, error: "MCP connect needs explicit user confirmation: retry with { confirmed: true }.", retryable: false, code: "approval_required" }, 400);
   }
 
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(url);
-  } catch {
-    return c.json({ error: "Invalid MCP server URL." }, 400);
+  let parsedUrl: URL | null = null;
+  if (url) {
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return c.json({ error: "Invalid MCP server URL." }, 400);
+    }
   }
 
   const cleanId = `mcp_${name.toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`;
 
-  // Try dynamic tool discovery via MCP adapter
+  // Try dynamic tool discovery via the shared MCP client manager
+  // (Streamable HTTP first, SSE fallback, stdio gated).
   let discoveredTools: any[] = [];
   let discoveryWarning: string | null = null;
   try {
-    const discovery = await connectMcpServer({ name, url, token });
+    const discovery = await connectMcpServer({
+      name,
+      url,
+      token,
+      transport: transport || (url ? "streamable" : "stdio"),
+      headers,
+      command,
+      args,
+      allowStdio,
+    });
     if (discovery.success && discovery.tools && discovery.tools.length > 0) {
       discoveredTools = discovery.tools;
     } else {
-      discoveryWarning = "Live tool discovery returned nothing; installed a generic invoke action instead.";
+      discoveryWarning = discovery.error || "Live tool discovery returned nothing; installed a generic invoke action instead.";
     }
   } catch {
     // Server might be offline during connect; fall back to a generic action
@@ -209,7 +224,7 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     id: cleanId,
     name: name.trim(),
     version: "1.0.0",
-    description: `External MCP server at ${parsedUrl.hostname}`,
+    description: `External MCP server at ${parsedUrl ? parsedUrl.hostname : command}`,
     icon: "PlugsConnected",
     trust: "external",
     capabilities: [
@@ -232,13 +247,17 @@ pluginsRouter.post("/mcp/connect", async (c) => {
       },
     ],
     permissions: [
-      {
-        type: "net",
-        hosts: [parsedUrl.hostname],
-      },
+      ...(parsedUrl
+        ? [
+            {
+              type: "net",
+              hosts: [parsedUrl.hostname],
+            },
+          ]
+        : []),
       {
         type: "mcp",
-        server: url,
+        server: url || command,
       },
       ...(token
         ? [{ type: "secret" as const, name: `MCP_TOKEN_${cleanId.toUpperCase()}` }]
@@ -255,6 +274,65 @@ pluginsRouter.post("/mcp/connect", async (c) => {
     plugin: installed.plugin,
     ...(discoveryWarning ? { discoveryWarning } : {}),
   }, 201);
+});
+
+/**
+ * GET /api/plugins/mcp/servers - connected MCP servers with tool counts.
+ */
+pluginsRouter.get("/mcp/servers", async (c) => {
+  const { McpClientManager } = await import("../mcp/manager");
+  return c.json({ servers: McpClientManager.getInstance().listServers() });
+});
+
+/**
+ * POST /api/plugins/mcp/refresh - re-list tools (list_changed refresh).
+ */
+pluginsRouter.post("/mcp/refresh", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { name } = body;
+  if (!name || typeof name !== "string") {
+    return c.json({ error: "Field 'name' is required." }, 400);
+  }
+  try {
+    const { McpClientManager } = await import("../mcp/manager");
+    const tools = await McpClientManager.getInstance().refreshTools(name);
+    return c.json({ success: true, tools });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+  }
+});
+
+/**
+ * POST /api/plugins/mcp/search - progressive discovery over connected tools.
+ */
+pluginsRouter.post("/mcp/search", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { query, limit, server } = body;
+  const { McpClientManager } = await import("../mcp/manager");
+  const results = McpClientManager.getInstance().searchTools(
+    typeof query === "string" ? query : "",
+    typeof limit === "number" ? limit : 10,
+    typeof server === "string" ? server : undefined
+  );
+  return c.json({ query: query || "", found: results.length, tools: results });
+});
+
+/**
+ * POST /api/plugins/mcp/disconnect - close a connection and uninstall its plugin.
+ */
+pluginsRouter.post("/mcp/disconnect", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { name, keepPlugin } = body;
+  if (!name || typeof name !== "string") {
+    return c.json({ error: "Field 'name' is required." }, 400);
+  }
+  const { McpClientManager } = await import("../mcp/manager");
+  await McpClientManager.getInstance().disconnect(name);
+  if (!keepPlugin) {
+    const cleanId = `mcp_${name.toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`;
+    pluginRegistry.uninstall(cleanId);
+  }
+  return c.json({ success: true, name });
 });
 /**
  * POST /api/plugins/lifecycle - Plugin synthesis lifecycle
