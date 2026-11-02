@@ -272,7 +272,7 @@ describe("Agent loop over Responses API", () => {
     expect(finish?.payload?.citations).toEqual([{ url: "https://example.com/spark", title: "Spark" }]);
   });
 
-  it("keeps the app map on demand: dock-add loads it, other turns pull via skills.read", async () => {
+  it("keeps the app map on demand: dock-add loads it, other turns pull via read_skill", async () => {
     let instructions = "";
     let flatNames: string[] = [];
     const mockClient: any = {
@@ -295,7 +295,7 @@ describe("Agent loop over Responses API", () => {
     await runAgentLoop({ prompt: "Hello", llmClient: mockClient, onEvent: () => {} });
     expect(instructions).not.toContain("App Map");
     // The on-demand route is offered instead of the injected map.
-    expect(flatNames).toContain("skills.read");
+    expect(flatNames).toContain("read_skill");
 
     await runAgentLoop({
       prompt: "Build me a habit tracker",

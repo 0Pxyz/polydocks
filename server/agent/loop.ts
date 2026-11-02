@@ -970,6 +970,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           seenCalls.add(callKey);
           toolOutput = { error: agentPolicy.reason, policyDenied: true };
         } else if (!registeredTool) {
+          // Record the key so a stubborn retry of an unknown tool hits the
+          // duplicate circuit breaker instead of looping forever (the
+          // escalation "stuck" test pins this: repeated dock.list on the
+          // heavy full surface, where dock.list is not offered).
+          seenCalls.add(callKey);
           toolOutput = { error: `Tool "${toolName}" is not registered in catalog.` };
         } else {
           // Validate arguments against strict Zod schema with auto-retry protocol

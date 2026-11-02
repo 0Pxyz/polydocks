@@ -17,11 +17,15 @@ describe("PolyDocks V2 Community Plugin Registry & Store", () => {
     ensureRegistrySchema();
     // Clean up test records (workspaces too: createWorkspace has no
     // upsert, so leftovers from a previous run collide on PRIMARY KEY).
+    // plugin_files is the canonical code store: stale rows make
+    // create_plugin refuse with "already exists" and publish falls back
+    // to the id as the name.
     db.query("DELETE FROM workspace_plugins WHERE workspace_id LIKE 'test-%'").run();
     db.query("DELETE FROM workspaces WHERE id LIKE 'test-%'").run();
     db.query("DELETE FROM registry_plugins WHERE id LIKE 'test-%'").run();
     db.query("DELETE FROM workspace_plugins WHERE plugin_id LIKE 'test-%'").run();
     db.query("DELETE FROM plugins WHERE id LIKE 'test-%'").run();
+    db.query("DELETE FROM plugin_files WHERE plugin_id LIKE 'test-%'").run();
   });
 
   it("seeds canonical default community plugins if registry is empty", () => {

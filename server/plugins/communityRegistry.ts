@@ -147,7 +147,12 @@ export async function publishToRegistry(input: {
 
   const registry = PluginRegistry.getInstance();
   const existingPlugin = registry.get(pluginId);
-  const existingFeature = await readFeature(workspaceId, pluginId);
+  let existingFeature: { manifest: any; code?: string } | null = null;
+  try {
+    existingFeature = await readFeature(workspaceId, pluginId);
+  } catch {
+    existingFeature = null;
+  }
 
   if (!existingPlugin && !existingFeature) {
     return {
@@ -156,7 +161,12 @@ export async function publishToRegistry(input: {
     };
   }
 
-  const name = existingPlugin?.name || existingFeature?.manifest.title || pluginId;
+  const featureManifest: any = (existingFeature as any)?.manifest || {};
+  const name =
+    existingPlugin?.name ||
+    featureManifest.title ||
+    featureManifest.name ||
+    pluginId;
   const description =
     existingPlugin?.manifest.description ||
     existingFeature?.manifest.description ||
