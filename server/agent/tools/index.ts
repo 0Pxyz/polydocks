@@ -51,6 +51,7 @@ import {
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
 import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback, pluginsActivate, pluginsDeactivate } from "./verbs/plugins";
 import { skillsRead } from "./verbs/skills";
+import { ui_catalog } from "./ui_catalog";
 import { config } from "../../config";
 import { buildDynamicCapabilityTools } from "./catalog";
 
@@ -120,6 +121,7 @@ export {
   pluginsActivate,
   pluginsDeactivate,
   skillsRead,
+  ui_catalog,
 };
 
 export type AgentSurface = "full" | "minimal";
@@ -200,6 +202,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: pluginsActivate, surfaces: ["minimal"] },
   { tool: pluginsDeactivate, surfaces: ["minimal"] },
   { tool: skillsRead, surfaces: ["minimal"] },
+  { tool: ui_catalog, surfaces: ["full", "minimal"] },
 ];
 
 function toolsFor(surface: AgentSurface): AgentTool[] {

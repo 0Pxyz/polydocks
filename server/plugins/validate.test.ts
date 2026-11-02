@@ -33,7 +33,7 @@ describe("Pre-publish validation", () => {
     expect(res.error).toContain("#app is empty");
   });
 
-  it("warns on hardcoded hex instead of hard-rejecting", async () => {
+  it("rejects hardcoded hex with a fixable kit error", async () => {
     expect(findHardcodedHex(`color: #C8FF57; border: 1px solid #fff;`)).toEqual(
       expect.arrayContaining(["#C8FF57", "#fff"])
     );
@@ -42,9 +42,8 @@ describe("Pre-publish validation", () => {
       code: `${GOOD}\nconst c = "#C8FF57";`,
       bundle: bundleFeatureCode,
     });
-    expect(res.ok).toBe(true);
-    expect(res.warnings.length).toBeGreaterThan(0);
-    expect(res.warnings[0]).toContain("#C8FF57");
+    expect(res.ok).toBe(false);
+    expect(res.error || "").toContain("Kit v2 violation");
   });
 
   it("warns on design slop instead of hard-rejecting", async () => {

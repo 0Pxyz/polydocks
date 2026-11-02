@@ -40,6 +40,11 @@ export function getKitTokens(): string {
   return kitTokensCache;
 }
 
+export const KIT_VERSION = "2.0.0";
+
+/** Kit v2 composite import path (Level 1 parts + patterns, one stable path). */
+export const KIT_V2_IMPORT = "kit";
+
 export const UI_KIT_FILES = [
   "badge", "button", "command", "dialog", "dropdown-menu", "input", "popover",
   "progress", "scroll-area", "separator", "sheet", "skeleton", "slider",
@@ -62,7 +67,7 @@ export function codeHasImports(code: string): boolean {
 }
 
 export function allowedImportsMessage(): string {
-  return `Allowed imports: react, react-dom/client, @/components/ui/{${UI_KIT_FILES.join(", ")}}.`;
+  return `Allowed imports: react, react-dom/client, @/components/ui/{${UI_KIT_FILES.join(", ")}} + @/components/ui/${KIT_V2_IMPORT} (kit v${KIT_VERSION}: layout, text, actions, inputs, data, feedback + patterns).`;
 }
 
 /**
@@ -165,7 +170,7 @@ export function rewriteKitImports(tsCode: string): string {
   out = out.replace(
     /import\s+([^;]*?)\s+from\s+["']@\/components\/ui\/([a-z-]+)["']\s*;?/g,
     (_m, clause: string, subpath: string) => {
-      if (!(UI_KIT_FILES as readonly string[]).includes(subpath)) {
+      if (!(UI_KIT_FILES as readonly string[]).includes(subpath) && subpath !== KIT_V2_IMPORT) {
         throw new Error(
           `Security Violation: "@/components/ui/${subpath}" is not part of the UI kit. ${allowedImportsMessage()}`
         );
