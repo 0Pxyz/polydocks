@@ -21,6 +21,43 @@ import { onboardingIntentFromTool } from "./onboardingBridge";
 import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
 import type { OrbState } from "@/features/agent/Orb";
 
+const ORCH_SESSION_KEY = "polymax-orchestrator-session";
+const JOB_EVENT_CURSOR_KEY = "polymax-job-event-cursor";
+
+let taskEventSource: EventSource | null = null;
+let taskStreamSession: string | null = null;
+/** Terminal jobs already announced in chat (no duplicate "done" lines). */
+const announcedJobs = new Set<string>();
+
+function loadOrchestratorSession(): string | null {
+  try {
+    const v = platformStorage.getItem<string | null>(ORCH_SESSION_KEY, null);
+    return typeof v === "string" && v ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadJobCursor(sessionId: string): number | undefined {
+  try {
+    const raw = platformStorage.getItem<Record<string, number>>(JOB_EVENT_CURSOR_KEY, {});
+    const n = raw?.[sessionId];
+    return typeof n === "number" ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveJobCursor(sessionId: string, id: number): void {
+  try {
+    const raw = platformStorage.getItem<Record<string, number>>(JOB_EVENT_CURSOR_KEY, {}) || {};
+    raw[sessionId] = id;
+    platformStorage.setItem(JOB_EVENT_CURSOR_KEY, raw);
+  } catch {
+    // Best-effort: resume just replays more.
+  }
+}
+
 export type LayoutState = "closed" | "sheet" | "full" | "side";
 
 export interface ConversationMessage {
@@ -49,6 +86,14 @@ export interface ActivityRow {
   finishedAt?: number;
   /** Machine tool name (used for provider branding, e.g. TinyFish). */
   tool?: string;
+}
+
+/** Background job card: updated by the resumable job SSE stream. */
+export interface TaskCard {
+  taskId: string;
+  title: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+  updatedAt: number;
 }
 
 interface ConversationStoreState {
@@ -94,6 +139,12 @@ interface ConversationStoreState {
   /** Model + intent actually executing the current turn (null when idle). */
   activeModel: string | null;
   activeIntent: string | null;
+  /** Orchestrator session for the non-blocking message queue (persisted). */
+  orchestratorSessionId: string | null;
+  /** Live background-job cards keyed by task id (resumable SSE). */
+  taskCards: Record<string, TaskCard>;
+  /** Open (or reuse) the job-event stream for a session. */
+  ensureTaskStream: (sessionId: string) => void;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -246,6 +297,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   activeModel: null,
   activeIntent: null,
   pendingVoiceStart: false,
+  orchestratorSessionId: loadOrchestratorSession(),
+  taskCards: {},
 
   setLayoutState: (layoutState) => set({ layoutState }),
   requestVoiceStart: () => set({ pendingVoiceStart: true }),
@@ -416,6 +469,52 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   closeReader: () => set({ readerView: null }),
 
+  ensureTaskStream: (sessionId) => {
+    if (typeof window === "undefined" || typeof EventSource === "undefined") return;
+    if (taskEventSource && taskStreamSession === sessionId) return;
+    try {
+      taskEventSource?.close();
+    } catch {
+      // Ignore close errors on a stale stream.
+    }
+    taskStreamSession = sessionId;
+    const from = loadJobCursor(sessionId);
+    const url =
+      `/api/tasks/stream?sessionId=${encodeURIComponent(sessionId)}` +
+      (from !== undefined ? `&from=${from}` : "");
+    const source = new EventSource(url);
+    taskEventSource = source;
+    // Named SSE events never hit onmessage: one listener per job.* type,
+    // all funneled into the same ordered handler.
+    for (const type of [
+      "job.queued",
+      "job.started",
+      "job.progress",
+      "job.completed",
+      "job.failed",
+      "job.cancelled",
+      "job.interrupted",
+    ]) {
+      source.addEventListener(type, (ev: Event) => {
+        const msg = ev as MessageEvent;
+        try {
+          const data = JSON.parse(msg.data);
+          const rawId = typeof msg.lastEventId === "string" && msg.lastEventId !== "" ? Number(msg.lastEventId) : undefined;
+          handleJobSseEvent(sessionId, type, data, Number.isInteger(rawId) ? (rawId as number) : undefined);
+        } catch {
+          // Malformed frames are ignored; the cursor only moves on parseable rows.
+        }
+      });
+    }
+    source.onerror = () => {
+      // EventSource reconnects on its own with Last-Event-ID; drop only a
+      // permanently closed stream so the next message reopens it.
+      if (source.readyState === EventSource.CLOSED) {
+        if (taskEventSource === source) taskEventSource = null;
+      }
+    };
+  },
+
   sendMessage: async (promptToSend, callbacks, options) => {
     const rawPrompt = (promptToSend ?? get().draft).trim();
     // Drop stale image previews without stored payloads: they render as
@@ -424,7 +523,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       (attachment) => !attachment.isImage || Boolean(attachment.dataUrl)
     );
     if (!rawPrompt && attachmentsToSend.length === 0) return;
-    if (get().isStreaming) {
+    // Text-only turns go through the non-blocking orchestrator: the input
+    // stays enabled while jobs run. Attachments/retries keep the legacy
+    // streaming turn (unchanged below).
+    const useOrchestrator = attachmentsToSend.length === 0 && options?.retry !== true;
+    if (!useOrchestrator && get().isStreaming) {
       // Never silently drop a request: the previous turn is still running,
       // so say so instead of leaving the user staring at stale progress.
       set({ statusText: "Still working on the previous request — wait for it or stop it first." });
@@ -459,6 +562,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     set((state) => ({
       messages: [...state.messages, userMsg],
     }));
+
+    if (useOrchestrator) {
+      await sendViaOrchestrator(prompt, origin, callbacks);
+      return;
+    }
 
     const abortCtrl = new AbortController();
     activeAbortController = abortCtrl;
@@ -934,6 +1042,154 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     }
   },
 }));
+
+/**
+ * Fast orchestrator turn: one POST, no streaming, input stays enabled.
+ * Heavy work returns an ack; progress and results arrive through the
+ * resumable job SSE stream (task cards + completion messages).
+ */
+async function sendViaOrchestrator(
+  prompt: string,
+  origin: "dock-add" | "chat",
+  callbacks?: {
+    onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
+    onOpenExperience?: (expId: string) => void;
+    onCloseExperience?: (expId: string) => void;
+  }
+): Promise<void> {
+  const { set, get } = {
+    set: useConversationStore.setState,
+    get: useConversationStore.getState,
+  };
+  void callbacks;
+  set({ isStreaming: true, orbState: "thinking", currentPhase: "Thinking", statusText: "" });
+  let reply: any = null;
+  try {
+    const res = await fetch("/api/agent/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        origin,
+        sessionId: get().orchestratorSessionId || undefined,
+      }),
+    });
+    reply = await res.json().catch(() => null);
+  } catch {
+    reply = null;
+  }
+
+  if (!reply || reply.success !== true) {
+    const message = reply?.error || "Couldn't reach the orchestrator just now.";
+    set((state) => ({
+      isStreaming: false,
+      orbState: "idle",
+      messages: [...state.messages, { id: crypto.randomUUID(), role: "assistant", content: message, timestamp: Date.now() }],
+    }));
+    return;
+  }
+
+  if (typeof reply.sessionId === "string" && reply.sessionId !== get().orchestratorSessionId) {
+    set({ orchestratorSessionId: reply.sessionId });
+    try {
+      platformStorage.setItem(ORCH_SESSION_KEY, reply.sessionId);
+    } catch {
+      // Best-effort persistence.
+    }
+  }
+  const sessionId = reply.sessionId || get().orchestratorSessionId;
+  if (sessionId) get().ensureTaskStream(sessionId);
+
+  if (reply.type === "ack" && typeof reply.taskId === "string") {
+    set((state) => ({
+      isStreaming: false,
+      orbState: "idle",
+      taskCards: {
+        ...state.taskCards,
+        [reply.taskId]: {
+          taskId: reply.taskId,
+          title: prompt.slice(0, 80),
+          status: "queued",
+          updatedAt: Date.now(),
+        },
+      },
+      messages: [
+        ...state.messages,
+        { id: crypto.randomUUID(), role: "assistant", content: reply.text, timestamp: Date.now() },
+      ],
+    }));
+    return;
+  }
+
+  if (reply.type === "dock_action") {
+    applyOrchestratorDockAction(reply);
+  }
+
+  set((state) => ({
+    isStreaming: false,
+    orbState: "idle",
+    messages: [
+      ...state.messages,
+      { id: crypto.randomUUID(), role: "assistant", content: reply.text || "Done.", timestamp: Date.now() },
+    ],
+  }));
+}
+
+/** Applies an orchestrator-routed dock action against the real dock store. */
+function applyOrchestratorDockAction(reply: { op?: string; id?: string }): void {
+  const dock = useDockStore.getState();
+  if (reply.op === "open" && reply.id) {
+    dock.openTool(reply.id);
+  } else if (reply.op === "close" && reply.id) {
+    dock.closeTool(reply.id);
+  }
+}
+
+/**
+ * One durable job event from the resumable stream. Cards update silently;
+ * only a fresh terminal transition appends a chat message (replays and
+ * reconnects never duplicate the announcement).
+ */
+function handleJobSseEvent(sessionId: string, type: string, data: any, id?: number): void {
+  const taskId = typeof data?.jobId === "string" ? data.jobId : null;
+  if (!taskId) return;
+  if (id !== undefined) saveJobCursor(sessionId, id);
+  const status = typeof data?.status === "string" ? data.status : type.replace(/^job\./, "");
+  const known: TaskCard["status"][] = ["queued", "running", "completed", "failed", "cancelled", "interrupted"];
+  if (!known.includes(status)) return;
+
+  const store = useConversationStore.getState();
+  const prev = store.taskCards[taskId];
+  const terminal = status === "completed" || status === "failed" || status === "cancelled" || status === "interrupted";
+  const alreadyTerminal = prev && ["completed", "failed", "cancelled", "interrupted"].includes(prev.status);
+
+  useConversationStore.setState((state) => ({
+    taskCards: {
+      ...state.taskCards,
+      [taskId]: {
+        taskId,
+        title: prev?.title || `Background job ${taskId.slice(0, 8)}`,
+        status,
+        updatedAt: Date.now(),
+      },
+    },
+  }));
+
+  if (terminal && !alreadyTerminal && !announcedJobs.has(taskId)) {
+    announcedJobs.add(taskId);
+    const label =
+      status === "completed"
+        ? `Done: ${prev?.title || taskId}.`
+        : status === "failed"
+          ? `The background job failed${data?.error ? `: ${data.error}` : "."}`
+          : status === "cancelled"
+            ? `The background job was cancelled.`
+            : `The background job was interrupted (server restarted).`;
+    useConversationStore.setState((state) => ({
+      messages: [...state.messages, { id: crypto.randomUUID(), role: "assistant", content: label, timestamp: Date.now() }],
+    }));
+  }
+}
 
 /**
  * Applies a reader.open UI event to the store. Exported so tests prove the
