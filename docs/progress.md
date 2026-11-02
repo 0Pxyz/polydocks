@@ -123,3 +123,4 @@
 | 2026-11-02 | Orchestrator jobs: durable events, concurrency cap, timeout, sandbox-aware cancel, resumable SSE | [#280](https://github.com/0Pxyz/polymax/pull/280) [#281](https://github.com/0Pxyz/polymax/pull/281) |
 | 2026-11-02 | Orchestrator inbox: per-session queue, instant ack, real-dock routing, non-blocking front with job cards | [#283](https://github.com/0Pxyz/polymax/pull/283) [#284](https://github.com/0Pxyz/polymax/pull/284) |
 | 2026-11-02 | Orchestrator stream: 202 + SSE answers, deterministic status, NL cancel, unlocked composer, plugin auto-mount | [#286](https://github.com/0Pxyz/polymax/pull/286) [#287](https://github.com/0Pxyz/polymax/pull/287) |
+| 2026-11-02 | Durable thinking/research timeline on the SSE stream: friendly steps, collapsible narration, replay-safe dedup, isolated test harness | [#296](https://github.com/0Pxyz/polymax/pull/296) |
