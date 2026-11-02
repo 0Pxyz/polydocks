@@ -67,6 +67,41 @@ export function visibleIds(snapshot: DockItemsSnapshot): string[] {
   });
 }
 
+/**
+ * The single shortcut order: exactly the bar's visual order minus the
+ * width cap — pinned first (pin order), then the rest in registration
+ * order. Stale pins (no record) are skipped: there is nothing to open.
+ * Pinned closed/background items are included (their icons render and
+ * focusing reopens them); other-context records never are.
+ * Keyboard, REST, CLI and agent verbs all read this one list, so the
+ * shortcuts can never land outside what the dock shows.
+ */
+export function barOrderIds(
+  snapshot: DockItemsSnapshot,
+  pinnedIds: string[] = []
+): string[] {
+  const visible = new Set(visibleIds(snapshot));
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  for (const id of pinnedIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const record = snapshot.items[id];
+    if (!record) continue;
+    if (record.contextId !== null && record.contextId !== snapshot.activeContextId) continue;
+    if (visible.has(id) || record.state === "closed" || record.state === "background") {
+      ordered.push(id);
+    }
+  }
+  for (const id of snapshot.order) {
+    if (!seen.has(id) && visible.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+    }
+  }
+  return ordered;
+}
+
 /** Register without disturbing order. New ids append; existing ids keep order. */
 export function registerItem(
   snapshot: DockItemsSnapshot,
@@ -183,19 +218,28 @@ export function focusItem(snapshot: DockItemsSnapshot, id: string): DockItemsSna
   return withFocus({ ...snapshot, items }, id);
 }
 
-export function focusByIndex(snapshot: DockItemsSnapshot, index: number): DockItemsSnapshot {
-  const visible = visibleIds(snapshot);
-  const id = visible[index];
+export function focusByIndex(
+  snapshot: DockItemsSnapshot,
+  index: number,
+  pinnedIds: string[] = []
+): DockItemsSnapshot {
+  const order = barOrderIds(snapshot, pinnedIds);
+  const id = order[index];
   if (!id) return snapshot;
   return focusItem(snapshot, id);
 }
 
-export function focusNext(snapshot: DockItemsSnapshot, direction: 1 | -1 = 1): DockItemsSnapshot {
-  const visible = visibleIds(snapshot);
-  if (visible.length === 0) return snapshot;
-  const current = snapshot.focusedId ? visible.indexOf(snapshot.focusedId) : -1;
-  const nextIndex = current < 0 ? 0 : (current + direction + visible.length) % visible.length;
-  return focusItem(snapshot, visible[nextIndex]);
+export function focusNext(
+  snapshot: DockItemsSnapshot,
+  direction: 1 | -1 = 1,
+  pinnedIds: string[] = []
+): DockItemsSnapshot {
+  const order = barOrderIds(snapshot, pinnedIds);
+  if (order.length === 0) return snapshot;
+  const current = snapshot.focusedId ? order.indexOf(snapshot.focusedId) : -1;
+  // Wrap around at the ends: arrows cycle the bar instead of stopping.
+  const nextIndex = current < 0 ? 0 : (current + direction + order.length) % order.length;
+  return focusItem(snapshot, order[nextIndex]);
 }
 
 /** Move the focused item to background: keeps running, frees its panel. */
@@ -279,21 +323,21 @@ export interface DockActionDef {
 export const DOCK_ACTIONS: DockActionDef[] = [
   {
     id: "tabs.focus",
-    description: "Focus the nth open item in the dock (visual order).",
+    description: "Focus the nth item in the bar order (pinned first). Out of range does nothing.",
     shortcut: { code: "Digit1", ctrl: true, shift: true },
     hint: "Ctrl+Shift+1…9",
     alternative: "Alt+1…9",
   },
   {
     id: "tabs.next",
-    description: "Focus the next dock item.",
+    description: "Focus the next dock item in bar order. Wraps around at the end.",
     shortcut: { code: "ArrowRight", ctrl: true, shift: true },
     hint: "Ctrl+Shift+→",
     alternative: "Alt+→",
   },
   {
     id: "tabs.prev",
-    description: "Focus the previous dock item.",
+    description: "Focus the previous dock item in bar order. Wraps around at the start.",
     shortcut: { code: "ArrowLeft", ctrl: true, shift: true },
     hint: "Ctrl+Shift+←",
     alternative: "Alt+←",
