@@ -1,0 +1,5 @@
+#!/bin/sh
+# Local fast gate: typecheck + lint before every push.
+# Full test + build run on main CI only.
+# Enable once per clone: git config core.hooksPath .githooks
+bun run check:fast
