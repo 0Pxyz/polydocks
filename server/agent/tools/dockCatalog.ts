@@ -18,6 +18,7 @@ export interface DockCatalogEntry {
 export const DOCK_BUILTINS: DockCatalogEntry[] = [
   { id: "agent", title: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin" },
   { id: "browser", title: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
+  { id: "onboarding", title: "Tour", description: "Tour: learn the dock", icon: "onboarding", kind: "builtin" },
   { id: "settings", title: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
   { id: "store", title: "Library", description: "Library: discover what others have built", icon: "store", kind: "builtin" },
   { id: "plugins", title: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
@@ -39,7 +40,6 @@ function scoreEntry(entry: DockCatalogEntry, q: string): number {
 
 export interface DockSearchOptions {
   query?: string;
-  workspaceId?: string;
   workspaceId?: string;
   limit?: number;
 }

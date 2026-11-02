@@ -3,7 +3,6 @@ import {
   Sparkle,
   Terminal,
   PlugsConnected,
-  ShieldWarning,
   CheckCircle,
   XCircle,
   X,
@@ -29,8 +28,8 @@ import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import {
   buildDockSections,
   createItemsForQuery,
-  getStaticCreateRows,
   visibleEmptyQuery,
+  capabilityNeedsInput,
   DOCK_CORE_CATALOG,
   type DockItem,
   type DockItemKind,
@@ -99,7 +98,6 @@ export function CommandPalette({
   const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [confirmingCap, setConfirmingCap] = useState<CapabilityItem | null>(null);
   const [executing, setExecuting] = useState(false);
   const [lastResult, setLastResult] = useState<{
     capabilityId: string;
@@ -108,12 +106,18 @@ export function CommandPalette({
   } | null>(null);
 
   const [query, setQuery] = useState("");
+  const [deferredQuery, setDeferredQuery] = useState("");
   const [browseStore, setBrowseStore] = useState(false);
-  const [tabItems, setTabItems] = useState<DockItem[]>([]);
   const [storeItems, setStoreItems] = useState<DockItem[]>([]);
   const [failedIds, setFailedIds] = useState<Map<string, string>>(new Map());
   const [installingId, setInstallingId] = useState<string | null>(null);
   const modifierHeld = useRef(false);
+
+  // Debounce the query so section ranking does not recompute per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDeferredQuery(query), 120);
+    return () => clearTimeout(t);
+  }, [query]);
 
   // Mirror UI pins to the server record (durable per-workspace truth).
   // Best-effort: the local pin already applied and stays on failure.
@@ -172,8 +176,6 @@ export function CommandPalette({
       }
     })();
 
-    const tabsPromise = (async (): Promise<DockItem[]> => [])();
-
     const storePromise = (async (): Promise<RegistryEntry[]> => {
       try {
         const res = await fetch("/api/registry");
@@ -186,22 +188,20 @@ export function CommandPalette({
       }
     })();
 
-    const [plugins, tabs, registry] = await Promise.all([
+    const [plugins, registry] = await Promise.all([
       pluginsPromise,
-      tabsPromise,
       storePromise,
     ]);
 
     const installedIds = new Set(plugins.map((wp) => wp.pluginId));
 
-    setTabItems(tabs);
     setStoreItems(
       registry
         .filter((entry) => !installedIds.has(entry.id))
         .map((entry) => ({
           id: entry.id,
           label: entry.name,
-          description: entry.description || "Community plugin",
+          description: entry.description || "",
           icon: entry.icon || entry.id,
           kind: "store" as DockItemKind,
         }))
@@ -240,8 +240,8 @@ export function CommandPalette({
 
   useEffect(() => {
     setLastResult(null);
-    setConfirmingCap(null);
     setQuery("");
+    setDeferredQuery("");
     setBrowseStore(false);
     reload();
   }, [reload]);
@@ -249,13 +249,13 @@ export function CommandPalette({
   const catalog = useMemo<DockItem[]>(() => {
     const seen = new Set<string>();
     const merged: DockItem[] = [];
-    for (const item of [...DOCK_CORE_CATALOG, ...tabItems, ...extraItems]) {
+    for (const item of [...DOCK_CORE_CATALOG, ...extraItems]) {
       if (seen.has(item.id)) continue;
       seen.add(item.id);
       merged.push(item);
     }
     return merged;
-  }, [tabItems, extraItems]);
+  }, [extraItems]);
 
   const installedPluginItems = useMemo<DockItem[]>(
     () =>
@@ -264,7 +264,7 @@ export function CommandPalette({
         .map((wp) => ({
           id: wp.pluginId,
           label: wp.plugin?.name || wp.pluginId,
-          description: wp.plugin?.description || "Installed workspace plugin",
+          description: wp.plugin?.description || "",
           icon: wp.plugin?.icon || wp.pluginId,
           kind: "plugin" as DockItemKind,
         })),
@@ -276,7 +276,7 @@ export function CommandPalette({
     [catalog, installedPluginItems]
   );
 
-  const trimmedQuery = query.trim();
+  const trimmedQuery = deferredQuery.trim();
   const isEmptyQuery = trimmedQuery === "";
 
   const sections = useMemo(
@@ -298,9 +298,8 @@ export function CommandPalette({
   const yoursItems = sections[1].items;
   const storeSectionItems = sections[2].items;
 
-  // Empty query stays small: open items, then unpinned tools, then three
-  // static create rows. Pinned non-open items are hidden here (already in
-  // the dock above) and appear once the user types.
+  // Empty query stays small: open items, then unpinned tools. No fake
+  // "create" rows and no capability dump here; both appear only on search.
   const showBrowseRow = storeItems.length > 0;
   const emptySliced = useMemo(
     () =>
@@ -312,14 +311,15 @@ export function CommandPalette({
       }),
     [dockedItems, yoursItems, openIds, showBrowseRow]
   );
-  const staticCreateRows = useMemo(() => getStaticCreateRows(), []);
 
+  // Capabilities only rank on a real query; the empty panel stays dock-only.
   const capMatches = useMemo(() => {
     const q = trimmedQuery.toLowerCase();
-    if (!q) return capabilities;
-    return capabilities.filter((cap) =>
+    if (!q) return [];
+    const matches = capabilities.filter((cap) =>
       `${cap.title} ${cap.id} ${cap.description} ${cap.pluginId}`.toLowerCase().includes(q)
     );
+    return matches.slice(0, 8);
   }, [capabilities, trimmedQuery]);
 
   const dockMatchCount = dockedItems.length + yoursItems.length + storeSectionItems.length;
@@ -594,16 +594,22 @@ export function CommandPalette({
     </CommandItem>
   );
 
-  // Execute a capability
+  // Execute a capability: read-only without required params runs directly.
+  // Anything else (write/destructive/external or needs input) delegates to
+  // the agent, which owns approvals and follow-up questions.
   const executeCapability = async (cap: CapabilityItem) => {
-    // If destructive or external, require confirmation first
-    if ((cap.risk === "destructive" || cap.risk === "external") && !confirmingCap) {
-      setConfirmingCap(cap);
+    const needsAgent = cap.risk !== "read" || capabilityNeedsInput(cap.inputSchema);
+    if (needsAgent) {
+      closePalette();
+      const reason =
+        cap.risk !== "read" ? `risk ${cap.risk}` : "needs input";
+      onSubmitToolPrompt?.(
+        `Run ${cap.title} (${cap.id}) from ${cap.pluginId} [${reason}]: ${cap.description || "no description"}. Ask me for any required inputs.`
+      );
       return;
     }
 
     setExecuting(true);
-    setConfirmingCap(null);
     try {
       const res = await fetch("/api/capabilities/invoke", {
         method: "POST",
@@ -611,7 +617,7 @@ export function CommandPalette({
         body: JSON.stringify({
           capabilityId: cap.id,
           input: {},
-                }),
+        }),
       });
 
       const data = await res.json();
@@ -639,8 +645,8 @@ export function CommandPalette({
     }
   };
 
-  // Group capabilities by pluginId
-  const capabilitiesByPlugin = capabilities.reduce<Record<string, CapabilityItem[]>>(
+  // Group the filtered matches (never the full catalog) by pluginId.
+  const capabilitiesByPlugin = capMatches.reduce<Record<string, CapabilityItem[]>>(
     (acc, cap) => {
       const group = cap.pluginId || "other";
       if (!acc[group]) acc[group] = [];
@@ -698,39 +704,6 @@ export function CommandPalette({
         className="text-[15px] placeholder:text-muted-foreground"
       />
 
-      {/* Confirmation Step for Destructive or External Actions */}
-      {confirmingCap && (
-        <div className="p-4 bg-amber-950/40 border-b border-amber-500/30 flex items-start gap-3">
-          <ShieldWarning className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" weight="bold" />
-          <div className="flex-1 text-xs">
-            <p className="font-semibold text-amber-200">
-              Confirm Action: {confirmingCap.title}
-            </p>
-            <p className="text-amber-300/80 mt-0.5">
-              This capability has risk level <span className="uppercase font-mono font-bold">{confirmingCap.risk}</span>.
-              Are you sure you want to proceed with execution?
-            </p>
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                type="button"
-                onClick={() => executeCapability(confirmingCap)}
-                disabled={executing}
-                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded text-xs transition-colors"
-              >
-                {executing ? "Executing..." : "Confirm Execution"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmingCap(null)}
-                className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white rounded text-xs transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Execution Feedback Notification */}
       {lastResult && (
         <div
@@ -739,6 +712,7 @@ export function CommandPalette({
               ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-200"
               : "bg-red-950/40 border-red-500/30 text-red-200"
           }`}
+          role={lastResult.success ? "status" : "alert"}
         >
           <div className="flex items-center gap-2 truncate">
             {lastResult.success ? (
@@ -808,9 +782,11 @@ export function CommandPalette({
                     {showBrowseRow && renderBrowseStoreRow()}
                   </CommandGroup>
                 )}
-                <CommandGroup key="create" heading="Create with agent">
-                  {staticCreateRows.map((item) => renderCreateRow(item, item.id))}
-                </CommandGroup>
+                {emptySliced.open.length === 0 && emptySliced.yours.length === 0 && (
+                  <div className="px-3 py-4 text-center text-xs text-white/40">
+                    No tools yet. Type to search, browse the store, or ask the agent to build one.
+                  </div>
+                )}
               </>
             ) : showNoMatchRow ? (
               renderNoMatchRow()
@@ -832,17 +808,20 @@ export function CommandPalette({
         {!loading && (
           <>
             <CommandEmpty className="py-6 text-center text-sm text-white/40">
-              No matching capabilities found.
+              {isEmptyQuery ? "No tools yet." : "No matches. Press Enter to ask the agent to build it."}
             </CommandEmpty>
 
-            {/* Agent Capabilities */}
+            {/* Agent Capabilities: filtered matches only, grouped by plugin */}
             {Object.entries(capabilitiesByPlugin).map(([pluginId, caps]) => (
               <CommandGroup key={pluginId} heading={`Capabilities · ${pluginId}`}>
-                {caps.map((cap) => (
+                {caps.map((cap) => {
+                  const needsAgent = cap.risk !== "read" || capabilityNeedsInput(cap.inputSchema);
+                  return (
                   <CommandItem
                     key={cap.id}
                     value={`${cap.title} ${cap.id} ${cap.description} ${pluginId}`}
                     onSelect={() => executeCapability(cap)}
+                    disabled={executing}
                     className="group flex w-full max-w-full items-center justify-between gap-2 py-2.5 px-3 rounded-lg hover:bg-white/10 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--accent-lime)]"
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
@@ -851,6 +830,9 @@ export function CommandPalette({
                         <span className="text-sm font-medium text-white/95 truncate" title={cap.title}>
                           {cap.title}
                         </span>
+                        {needsAgent && (
+                          <span className="text-[10px] text-white/40 shrink-0">→ Agent</span>
+                        )}
                       </div>
                       {cap.description && (
                         <span className="text-xs text-white/40 truncate pl-5.5" title={cap.description}>
@@ -866,7 +848,8 @@ export function CommandPalette({
                       </span>
                     </div>
                   </CommandItem>
-                ))}
+                  );
+                })}
               </CommandGroup>
             ))}
 
