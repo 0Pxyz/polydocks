@@ -304,4 +304,4 @@ export function bundleFeatureCode(tsCode: string): string {
 export const PLUGIN_CSP =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
   "img-src https: data: blob:; media-src https: data: blob:; font-src data:; " +
-  "connect-src https:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';";
+  "connect-src https: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';";

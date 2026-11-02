@@ -571,7 +571,7 @@ export default function App() {
   // Tool hosted by the main viewport (single home per tool; beside tools
   // live in the beside panel).
   const MAIN_STATIC_IDS = useMemo(
-    () => new Set(["settings", "theme", "plugins", "creations", "store", "onboarding", "deep-work-flashcards", "bitcoin-viewer"]),
+    () => new Set(["settings", "theme", "plugins", "creations", "store", "onboarding"]),
     []
   );
   const mainToolId =

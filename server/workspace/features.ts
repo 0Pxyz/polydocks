@@ -218,7 +218,7 @@ export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): s
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data: blob:; media-src https: data: blob:; font-src data:; connect-src https:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data: blob:; media-src https: data: blob:; font-src data:; connect-src https: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
   <title>${escapeHtml(manifest.title)}</title>
   <style>
 ${getVanillaTokens()}

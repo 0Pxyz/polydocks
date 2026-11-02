@@ -33,6 +33,7 @@ State in `polymax.storage`, work in `polymax.task`; FORBIDDEN: `location.reload(
 ## Common mistakes
 
 `create_plugin` for a fix; `modify_plugin` without inspecting; `operate_plugin` undeclared; clearing stored keys; raw `<button>` not kit `Button`; no early success claims.
+Mounting unregistered UI: every agent-built tool ships as a registered plugin via `create_plugin` (registry + verify + dock mount). Never render hardcoded tool screens in core surfaces and never mount ad-hoc tabs.
 
 <!--
 Source files (maintainer refs, stripped before injection):

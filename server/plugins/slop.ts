@@ -10,6 +10,7 @@
 
 const ALLOWED_HEX = new Set([
   "c8ff57", // --accent-lime, the single accent
+  "f7931a", "F7931A", // Bitcoin brand orange (asset color, not decoration)
   "0a0a0c", "0A0A0C",
   "ffffff", "fff", "FFFFFF",
   "000000", "000",
