@@ -87,6 +87,29 @@ agentRouter.post("/tasks/:id/cancel", async (c) => {
   return c.json(out);
 });
 
+/**
+ * POST /api/agent/message — non-blocking orchestrator turn.
+ * Enqueues one message in the session FIFO and answers fast: light turns
+ * reply inline, heavy turns return an ack with a taskId. Never awaits a
+ * job; results arrive later through job events (/api/tasks/stream).
+ */
+agentRouter.post("/message", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  if (!prompt) {
+    return c.json({ error: "Missing required 'prompt' field" }, 400);
+  }
+  const { handleMessage } = await import("../agent/orchestrator");
+  const out = await handleMessage({
+    sessionId: typeof body?.sessionId === "string" ? body.sessionId : undefined,
+    workspaceId:
+      typeof body?.workspaceId === "string" ? body.workspaceId : ctxFrom(c, body).workspaceId,
+    prompt,
+    origin: body?.origin === "dock-add" ? "dock-add" : "chat",
+  });
+  return c.json({ success: true, ...out });
+});
+
 /** POST /api/agent/memory — { op: recall|record, ...params }. */
 agentRouter.post("/memory", async (c) => {
   const body = await c.req.json().catch(() => ({}));

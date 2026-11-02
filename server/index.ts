@@ -68,6 +68,14 @@ if (config.NODE_ENV !== "test") {
 // Recover any interrupted background tasks from previous server instance
 taskExecutionEngine.recoverInterruptedTasks();
 
+// Queued chat messages outlive their HTTP calls: mark them interrupted.
+try {
+  const { recoverMessageQueue } = await import("./agent/orchestrator");
+  recoverMessageQueue();
+} catch {
+  // Non-fatal: the queue table self-heals on first use.
+}
+
 const app = new Hono();
 
 // Exported for facade-equivalence tests (app.request, no server needed).
