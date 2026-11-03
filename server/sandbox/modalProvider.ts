@@ -36,6 +36,8 @@ function tomlConfigured(): boolean {
 
 /** Real credentials present (env first, ~/.modal.toml fallback — same order as the SDK). */
 export function isModalConfigured(): boolean {
+  // Kill-switch (credits over, outage): forced off without touching creds.
+  if (config.MODAL_DISABLED.trim() === "1") return false;
   if (config.MODAL_TOKEN_ID.trim() && config.MODAL_TOKEN_SECRET.trim()) return true;
   return tomlConfigured();
 }
