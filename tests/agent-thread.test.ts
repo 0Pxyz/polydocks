@@ -20,6 +20,8 @@ const OTHER_USER = "thread_test_other";
 function clearAll() {
   clearAgentThread(TEST_USER);
   clearAgentThread(OTHER_USER);
+  // The HTTP test below exercises the shared single-user "local" thread.
+  clearAgentThread("local");
 }
 
 function requestThread(path = "/api/agent/thread", init?: RequestInit) {

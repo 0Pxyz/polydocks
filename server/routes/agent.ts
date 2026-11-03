@@ -10,12 +10,14 @@ import {
   type FacadeContext,
 } from "../facade/shared";
 import {
+  callerOf,
   denyUnlessArtifact,
   denyUnlessIdentified,
   denyUnlessSession,
   denyUnlessTask,
   denyUnlessWorkspace,
 } from "../auth/guard";
+import { effectiveUserId } from "../auth/session";
 
 export const agentRouter = new Hono();
 
@@ -136,6 +138,7 @@ agentRouter.post("/message", async (c) => {
   const out = queueMessage({
     sessionId,
     workspaceId,
+    userId: effectiveUserId(await callerOf(c)),
     prompt,
     origin: body?.origin === "dock-add" ? "dock-add" : "chat",
   });
