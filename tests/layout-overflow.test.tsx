@@ -46,11 +46,12 @@ const fileWindow = new Window({ url: "http://localhost:3000/" });
 (globalThis as any).KeyboardEvent = fileWindow.KeyboardEvent;
 (globalThis as any).Event = fileWindow.Event;
 (globalThis as any).getComputedStyle = fileWindow.getComputedStyle.bind(fileWindow);
+(globalThis as any).ResizeObserver = (fileWindow as any).ResizeObserver;
 (globalThis as any).requestAnimationFrame = (fn: FrameRequestCallback) => setTimeout(() => fn(Date.now()), 16);
 (fileWindow as any).matchMedia = () => ({
   matches: false,
   addListener() {},
-  removeEventListener() {},
+  removeListener() {},
   addEventListener() {},
   removeEventListener() {},
 });
