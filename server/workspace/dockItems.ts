@@ -105,14 +105,15 @@ export function setDockState(id: string, state: DockItemState, panel: "left" | "
 }
 
 export function openDockItem(id: string, contextId?: string | null): DockItemRow {
+  // Single focus invariant: opening anything demotes other focused rows,
+  // whether the opened row is new or already registered (#174).
+  for (const row of listDockItems()) {
+    if (row.state === "focused" && row.id !== id) saveRow({ ...row, state: "open" });
+  }
   const existing = getDockItem(id);
   if (!existing) {
     const created = registerDockItem(id, id, contextId ?? null);
     return saveRow({ ...created, state: "focused", panel: "left" });
-  }
-  // Demote any other focused record to open (single focus).
-  for (const row of listDockItems()) {
-    if (row.state === "focused" && row.id !== id) saveRow({ ...row, state: "open" });
   }
   return saveRow({ ...existing, state: "focused", panel: "left" });
 }
