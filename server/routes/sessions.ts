@@ -4,7 +4,7 @@ import { SessionService } from "../services/sessionService";
 import { TaskService } from "../services/taskService";
 import { taskExecutionEngine } from "../agent/taskRunner";
 import type { AgentStepEvent } from "../agent/loop";
-import { effectiveUserId, getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
+import { callerOf, denyUnlessSession, denyUnlessWorkspace, visibleTo } from "../auth/guard";
 
 export const sessionsRouter = new Hono();
 
@@ -14,14 +14,13 @@ export const sessionsRouter = new Hono();
  * to workspaces the caller may access: device-local plus owned-by-caller.
  */
 sessionsRouter.get("/", async (c) => {
-  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const caller = await callerOf(c);
   const workspaceId = c.req.query("workspaceId");
-  if (workspaceId && !hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ sessions: [] });
+  if (workspaceId) {
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return c.json({ sessions: [] });
   }
-  const sessions = SessionService.listSessions(workspaceId).filter((s) =>
-    hasWorkspaceAccess(s.workspaceId, caller)
-  );
+  const sessions = visibleTo(caller, SessionService.listSessions(workspaceId));
   return c.json({ sessions });
 });
 
@@ -38,10 +37,8 @@ sessionsRouter.post("/", async (c) => {
   }
 
   const workspaceId = body.workspaceId || "default";
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const session = await SessionService.createSession({
     workspaceId,
     title: body.title,
@@ -59,18 +56,10 @@ sessionsRouter.post("/", async (c) => {
  */
 sessionsRouter.get("/:id", async (c) => {
   const sessionId = c.req.param("id");
-  const workspaceId = c.req.query("workspaceId");
-  const session = SessionService.getSession(sessionId, workspaceId);
+  const stop = await denyUnlessSession(c, sessionId);
+  if (stop) return stop;
 
-  if (!session) {
-    return c.json({ error: `Session "${sessionId}" not found` }, 404);
-  }
-
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(session.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
-
+  const session = SessionService.getSession(sessionId);
   const transcript = await SessionService.getTranscript(sessionId);
 
   return c.json({
@@ -85,16 +74,9 @@ sessionsRouter.get("/:id", async (c) => {
  */
 sessionsRouter.post("/:id/run", async (c) => {
   const sessionId = c.req.param("id");
+  const stop = await denyUnlessSession(c, sessionId);
+  if (stop) return stop;
   const session = SessionService.getSession(sessionId);
-
-  if (!session) {
-    return c.json({ error: `Session "${sessionId}" not found` }, 404);
-  }
-
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(session.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
 
   let body: any = {};
   try {
@@ -108,11 +90,12 @@ sessionsRouter.post("/:id/run", async (c) => {
     return c.json({ error: "Missing required 'prompt' string field" }, 400);
   }
 
-  const userId = effectiveUserId(caller);
+  const caller = await callerOf(c);
+  const userId = caller.kind === "user" ? caller.user.id : "local";
 
   const task = await TaskService.createTask({
     sessionId,
-    workspaceId: session.workspaceId,
+    workspaceId: session!.workspaceId,
     type: body.type || "chat",
     input: {
       prompt: prompt.trim(),
@@ -139,16 +122,8 @@ sessionsRouter.post("/:id/run", async (c) => {
  */
 sessionsRouter.get("/:id/stream", async (c) => {
   const sessionId = c.req.param("id");
-  const session = SessionService.getSession(sessionId);
-
-  if (!session) {
-    return c.json({ error: `Session "${sessionId}" not found` }, 404);
-  }
-
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(session.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessSession(c, sessionId);
+  if (stop) return stop;
 
   const fromStepParam = c.req.query("fromStep");
   const fromStep = fromStepParam !== undefined ? parseInt(fromStepParam, 10) : undefined;

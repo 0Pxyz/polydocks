@@ -3,7 +3,7 @@ import { pluginRegistry } from "../plugins/registry";
 import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import { connectMcpServer } from "../plugins/adapters/mcp";
-import { getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
+import { denyUnlessWorkspace } from "../auth/guard";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -343,10 +343,13 @@ pluginsRouter.post("/mcp/disconnect", async (c) => {
 pluginsRouter.post("/lifecycle", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { op, ...params } = body ?? {};
+  const workspaceId = (body as any)?.workspaceId || c.req.query("workspaceId");
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const { pluginLifecycle } = await import("../facade/shared");
   const out = await pluginLifecycle(typeof op === "string" ? op : "", params ?? {}, {
     actor: "user",
-    workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
+    workspaceId,
   });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
@@ -369,8 +372,11 @@ pluginsRouter.get("/:id/versions", async (c) => {
  */
 pluginsRouter.post("/:id/rollback", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const workspaceId = (body as any)?.workspaceId || c.req.query("workspaceId");
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const { pluginRollback } = await import("../facade/shared");
-  const out = await pluginRollback(c.req.param("id"), (body as any)?.version, (body as any)?.workspaceId || c.req.query("workspaceId"));
+  const out = await pluginRollback(c.req.param("id"), (body as any)?.version, workspaceId);
   if (!out.ok) {
     const status = (out as any).code === "not_found" ? 404 : 400;
     return c.json(out, status as any);
@@ -401,14 +407,11 @@ pluginsRouter.post("/:pluginId/:capability", async (c) => {
       : undefined) ??
     c.req.query("workspaceId");
   const { invokeCapability } = await import("../facade/shared");
-  // #215: never trust a client-supplied workspace id on its own. Owned
-  // workspaces are isolated over HTTP; unowned (device-local) ones keep
-  // today's open behavior. The agent turn path validates the same way in
-  // server/index.ts; this closes the direct-invoke bypass.
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (workspaceId && !hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ ok: false, error: "Not available to this account", code: "forbidden" }, 403 as any);
-  }
+  // Ownership runs through the central guard: owned workspaces isolate
+  // over HTTP; unowned device-local ones keep today's open behavior.
+  // The agent turn path validates the same way in server/index.ts.
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const out = await invokeCapability(pluginId, capability, input, { actor: "user", workspaceId });
   if (!out.ok) {
     const status = (out as any).code === "unknown_capability" ? 404 : 400;
@@ -498,16 +501,14 @@ capabilitiesRouter.post("/invoke", async (c) => {
     return c.json({ error: "Missing capabilityId" }, 400);
   }
 
-  // #215: same ownership guard as the plugin invoke path (see above).
-  const caller = await getEffectiveCaller(c.req.raw.headers);
+  // Same central guard as the plugin invoke path (see above).
   const effectiveWorkspace =
     (typeof workspaceId === "string" && workspaceId) ||
     (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
       ? (input as any).workspaceId
       : undefined);
-  if (effectiveWorkspace && !hasWorkspaceAccess(effectiveWorkspace, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessWorkspace(c, effectiveWorkspace);
+  if (stop) return stop;
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
@@ -525,16 +526,14 @@ capabilitiesRouter.post("/:id/invoke", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { input, workspaceId } = body;
 
-  // #215: same ownership guard as above.
-  const caller = await getEffectiveCaller(c.req.raw.headers);
+  // Same central guard as above.
   const effectiveWorkspace =
     (typeof workspaceId === "string" && workspaceId) ||
     (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
       ? (input as any).workspaceId
       : undefined);
-  if (effectiveWorkspace && !hasWorkspaceAccess(effectiveWorkspace, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessWorkspace(c, effectiveWorkspace);
+  if (stop) return stop;
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",

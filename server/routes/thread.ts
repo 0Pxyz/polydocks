@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { effectiveUserId, getEffectiveCaller } from "../auth/session";
+import { denyUnlessIdentified } from "../auth/guard";
 import {
   clearAgentThread,
   getAgentThreadSnapshot,
@@ -34,6 +35,8 @@ function parseLimit(raw: string | undefined, fallback: number): number {
  * callers keep the legacy device-local thread.
  */
 threadRouter.get("/", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   const caller = await getEffectiveCaller(c.req.raw.headers);
   const userId = effectiveUserId(caller);
   const limit = parseLimit(c.req.query("limit"), 60);
@@ -60,6 +63,8 @@ threadRouter.get("/", async (c) => {
  * Older page for scroll-back inside the same thread. Never creates a section.
  */
 threadRouter.get("/messages", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   const caller = await getEffectiveCaller(c.req.raw.headers);
   const userId = effectiveUserId(caller);
   const before = Number.parseInt(c.req.query("before") || "", 10);
@@ -82,6 +87,8 @@ threadRouter.get("/messages", async (c) => {
  * Clears the transcript inside the same thread. No new thread is created.
  */
 threadRouter.delete("/", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   const caller = await getEffectiveCaller(c.req.raw.headers);
   const userId = effectiveUserId(caller);
 

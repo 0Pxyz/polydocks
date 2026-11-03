@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { DOCK_OPS, dockAction, type FacadeContext } from "../facade/shared";
+import { denyUnlessSession, denyUnlessWorkspace } from "../auth/guard";
 
 export const dockRouter = new Hono();
 
@@ -24,7 +25,15 @@ dockRouter.post("/action", async (c) => {
       400
     );
   }
-  const out = await dockAction(op, params ?? {}, ctxFrom(c, body));
+  const ctx = ctxFrom(c, body);
+  if (ctx.sessionId) {
+    const stop = await denyUnlessSession(c, ctx.sessionId);
+    if (stop) return stop;
+  } else if (ctx.workspaceId) {
+    const stop = await denyUnlessWorkspace(c, ctx.workspaceId);
+    if (stop) return stop;
+  }
+  const out = await dockAction(op, params ?? {}, ctx);
   if (!out.ok) {
     const status = (out as any).code === "not_found" ? 404 : 400;
     return c.json(out, status as any);
@@ -38,7 +47,15 @@ dockRouter.post("/action", async (c) => {
  */
 dockRouter.post("/appearance", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const out = await dockAction("appearance.apply", body ?? {}, ctxFrom(c, body));
+  const ctx = ctxFrom(c, body);
+  if (ctx.sessionId) {
+    const stop = await denyUnlessSession(c, ctx.sessionId);
+    if (stop) return stop;
+  } else if (ctx.workspaceId) {
+    const stop = await denyUnlessWorkspace(c, ctx.workspaceId);
+    if (stop) return stop;
+  }
+  const out = await dockAction("appearance.apply", body ?? {}, ctx);
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
 });

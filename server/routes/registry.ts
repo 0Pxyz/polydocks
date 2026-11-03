@@ -7,6 +7,7 @@ import {
 } from "../plugins/communityRegistry";
 import { describePermission, requiresInstallAcknowledge } from "../plugins/risk";
 import type { Permission } from "../plugins/manifest";
+import { denyUnlessWorkspace } from "../auth/guard";
 
 export const registryRouter = new Hono();
 
@@ -55,10 +56,13 @@ registryRouter.post("/publish", async (c) => {
     if (!body || typeof body.pluginId !== "string") {
       return c.json({ success: false, error: "pluginId is required" }, 400);
     }
+    const workspaceId = body.workspaceId || "default";
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return stop;
 
     const result = await publishToRegistry({
       pluginId: body.pluginId,
-      workspaceId: body.workspaceId || "default",
+      workspaceId,
       author: body.author,
       tags: body.tags,
     });
@@ -81,6 +85,8 @@ registryRouter.post("/:id/install", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const workspaceId = body.workspaceId || "default";
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return stop;
 
     const result = await installFromRegistry(id, workspaceId);
     if (!result.success) {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import app from "../server/index";
-import { db } from "../server/workspace/db";
 import { ensureAuthTables } from "../server/auth/membership";
+import { wipeRunPrefix } from "./isolation-db";
 
 const RUN = `cap-invoke-${Date.now()}`;
 const PASS = "correct-horse-8-x";
@@ -47,16 +47,16 @@ async function post(path: string, body: unknown, jar: string[] = []) {
   return { res, data, jar: harvestCookies(res, jar) };
 }
 
+async function get(path: string, jar: string[] = []) {
+  const res = await req(path, { method: "GET" }, jar);
+  const data = await res.json().catch(() => ({}));
+  return { res, data, jar: harvestCookies(res, jar) };
+}
+
 async function signIn(email: string, password: string) {
   return post("/api/auth/sign-in/email", { email, password });
 }
 
-function cleanupUsers() {
-  db.query(`DELETE FROM session WHERE userId IN (SELECT id FROM "user" WHERE email LIKE '${RUN}%')`).run();
-  db.query(`DELETE FROM account WHERE userId IN (SELECT id FROM "user" WHERE email LIKE '${RUN}%')`).run();
-  db.query(`DELETE FROM verification WHERE identifier LIKE '%${RUN}%'`).run();
-  db.query(`DELETE FROM "user" WHERE email LIKE '${RUN}%' OR id LIKE '${RUN}%'`).run();
-}
 
 /**
  * #215 (route-level slice): direct HTTP capability-invoke paths must honor
@@ -65,13 +65,12 @@ function cleanupUsers() {
  */
 describe("capability invoke workspace isolation (#215)", () => {
   beforeAll(async () => {
+    wipeRunPrefix(RUN);
     await ensureAuthTables();
   });
 
   afterAll(() => {
-    db.query(`DELETE FROM workspace_members WHERE workspace_id LIKE '${RUN}%'`).run();
-    db.query(`DELETE FROM workspaces WHERE id LIKE '${RUN}%'`).run();
-    cleanupUsers();
+    wipeRunPrefix(RUN);
   });
 
   it("denies cross-user and anonymous invokes in owned workspaces", async () => {
@@ -85,6 +84,12 @@ describe("capability invoke workspace isolation (#215)", () => {
     const created = await post("/api/workspaces", { id: OWNED, name: "Owned Lab", icon: "Flask" }, a.jar);
     expect(created.res.status).toBe(201);
 
+    // A session inside the owned workspace for the SSE checks below.
+    const ownedSession = await post("/api/sessions", { workspaceId: OWNED, title: "sse probe" }, a.jar);
+    expect(ownedSession.res.status).toBe(201);
+    const ownedSessionId = (ownedSession.data as any)?.session?.id as string;
+    expect(ownedSessionId).toBeTruthy();
+
     // Owner: allowed on all three invoke paths.
     const ownerBody = { capabilityId: "sandbox.status", input: {}, workspaceId: OWNED };
     const o1 = await post("/api/capabilities/invoke", ownerBody, a.jar);
@@ -96,15 +101,15 @@ describe("capability invoke workspace isolation (#215)", () => {
 
     // Other user: denied on all three paths.
     const f1 = await post("/api/capabilities/invoke", ownerBody, b.jar);
-    expect(f1.res.status).toBe(403);
+    expect(f1.res.status).toBe(404);
     const f2 = await post("/api/capabilities/sandbox.status/invoke", { input: {}, workspaceId: OWNED }, b.jar);
-    expect(f2.res.status).toBe(403);
+    expect(f2.res.status).toBe(404);
     const f3 = await post("/api/plugins/sandbox/status", { workspaceId: OWNED }, b.jar);
-    expect(f3.res.status).toBe(403);
+    expect(f3.res.status).toBe(404);
 
     // Anonymous: denied on the owned workspace.
     const n1 = await post("/api/capabilities/invoke", ownerBody, []);
-    expect(n1.res.status).toBe(403);
+    expect(n1.res.status).toBe(404);
 
     // Unowned device-local workspace stays open (no behavior change).
     const open = await post(
@@ -113,5 +118,39 @@ describe("capability invoke workspace isolation (#215)", () => {
       []
     );
     expect(open.res.status).toBe(200);
+
+    // SSE streams enforce the same rule before the stream starts.
+    const deniedStream = await req(`/api/sessions/${ownedSessionId}/stream`, { method: "GET" }, b.jar);
+    expect(deniedStream.status).toBe(404);
+    const deniedJobStream = await req(`/api/tasks/stream?sessionId=${ownedSessionId}`, { method: "GET" }, b.jar);
+    expect(deniedJobStream.status).toBe(404);
+  });
+
+  it("closes the device-local open path in cloud mode", async () => {
+    const { config } = await import("../server/config");
+    const prevMode = config.DEPLOY_MODE;
+    (config as any).DEPLOY_MODE = "cloud";
+    try {
+      // No identity at all: every workspace resource fails, uniformly 404.
+      const list = await get("/api/workspaces", []);
+      expect(list.res.ok).toBe(true);
+      expect(((list.data as any)?.data ?? []).some((w: any) => w.id === "default")).toBe(false);
+      const one = await get("/api/workspaces/default", []);
+      expect(one.res.status).toBe(404);
+      const sess = await post("/api/sessions", { workspaceId: "default", title: "anon" }, []);
+      expect(sess.res.status).toBe(404);
+      const anon = await post(
+        "/api/capabilities/invoke",
+        { capabilityId: "sandbox.status", input: {}, workspaceId: "default" },
+        []
+      );
+      expect(anon.res.status).toBe(404);
+      const mem = await post("/api/agent/memory/recall", { query: "x" }, []);
+      expect(mem.res.status).toBe(404);
+      const thread = await get("/api/agent/thread", []);
+      expect(thread.res.status).toBe(404);
+    } finally {
+      (config as any).DEPLOY_MODE = prevMode;
+    }
   });
 });

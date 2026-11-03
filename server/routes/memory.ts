@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { denyUnlessIdentified } from "../auth/guard";
 import {
   getMemoryOverview,
   updateMemoryMd,
@@ -14,6 +15,8 @@ export const memoryRouter = new Hono();
  * Retrieves current MEMORY.md and list of recent daily logs for user inspection.
  */
 memoryRouter.get("/", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   try {
     const overview = await getMemoryOverview();
     return c.json(overview);
@@ -27,6 +30,8 @@ memoryRouter.get("/", async (c) => {
  * Allows the user or UI to directly update or prune long-term MEMORY.md.
  */
 memoryRouter.put("/", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -51,6 +56,8 @@ memoryRouter.put("/", async (c) => {
  * Records a new memory entry.
  */
 memoryRouter.post("/record", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -80,6 +87,8 @@ memoryRouter.post("/record", async (c) => {
  * Queries memory with keyword and category scoring.
  */
 memoryRouter.post("/recall", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -105,6 +114,8 @@ memoryRouter.post("/recall", async (c) => {
  * Body: { content, scope?: curated|daily|all, date?: YYYY-MM-DD }.
  */
 memoryRouter.delete("/entry", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();

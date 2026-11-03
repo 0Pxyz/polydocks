@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { TaskService } from "../services/taskService";
 import { taskExecutionEngine } from "../agent/taskRunner";
-import { getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
+import { callerOf, denyUnlessSession, denyUnlessTask, denyUnlessWorkspace, visibleTo } from "../auth/guard";
 
 export const tasksRouter = new Hono();
 
@@ -12,23 +12,27 @@ export const tasksRouter = new Hono();
  * Only tasks in accessible workspaces are returned.
  */
 tasksRouter.get("/", async (c) => {
-  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const caller = await callerOf(c);
   const sessionId = c.req.query("sessionId");
   const workspaceId = c.req.query("workspaceId");
   const status = c.req.query("status");
   const limitParam = c.req.query("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-  if (workspaceId && !hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ tasks: [] });
+  if (workspaceId) {
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return c.json({ tasks: [] });
   }
 
-  const tasks = TaskService.listTasks({
-    sessionId,
-    workspaceId,
-    status,
-    limit,
-  }).filter((t) => hasWorkspaceAccess(t.workspaceId, caller));
+  const tasks = visibleTo(
+    caller,
+    TaskService.listTasks({
+      sessionId,
+      workspaceId,
+      status,
+      limit,
+    })
+  );
 
   return c.json({ tasks });
 });
@@ -47,23 +51,14 @@ tasksRouter.get("/stream", async (c) => {
     return c.json({ error: "Provide sessionId and/or jobId." }, 400);
   }
 
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  // Session-scoped streams check the session's workspace. Job-only streams
-  // resolve the task first so a job id can never escape its workspace.
+  // Session-scoped streams resolve the session's workspace; job-only
+  // streams resolve the task first, so neither id can escape its workspace.
   if (sessionId) {
-    const { SessionService } = await import("../services/sessionService");
-    const session = SessionService.getSession(sessionId);
-    if (!session) {
-      return c.json({ error: `Session "${sessionId}" not found` }, 404);
-    }
-    if (!hasWorkspaceAccess(session.workspaceId, caller)) {
-      return c.json({ error: "Not available to this account" }, 403);
-    }
+    const stop = await denyUnlessSession(c, sessionId);
+    if (stop) return stop;
   } else if (jobId) {
-    const task = TaskService.getTask(jobId);
-    if (task && !hasWorkspaceAccess(task.workspaceId, caller)) {
-      return c.json({ error: "Not available to this account" }, 403);
-    }
+    const stop = await denyUnlessTask(c, jobId);
+    if (stop) return stop;
   }
 
   const headerId = c.req.header("last-event-id");
@@ -131,17 +126,9 @@ tasksRouter.get("/stream", async (c) => {
  * Retrieve specific task details.
  */
 tasksRouter.get("/:id", async (c) => {
-  const taskId = c.req.param("id");
-  const task = TaskService.getTask(taskId);
-
-  if (!task) {
-    return c.json({ error: `Task "${taskId}" not found` }, 404);
-  }
-
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(task.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessTask(c, c.req.param("id"));
+  if (stop) return stop;
+  const task = TaskService.getTask(c.req.param("id"));
 
   return c.json({ task });
 });
@@ -160,14 +147,8 @@ tasksRouter.post("/:id/cancel", async (c) => {
   }
 
   const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
-  const existing = TaskService.getTask(taskId);
-  if (!existing) {
-    return c.json({ error: `Task "${taskId}" not found` }, 404);
-  }
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(existing.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessTask(c, taskId);
+  if (stop) return stop;
   const result = TaskService.cancelTask(taskId, workspaceId, "user");
 
   if (!result.cancelled && !result.task) {

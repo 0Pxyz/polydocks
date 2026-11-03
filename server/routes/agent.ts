@@ -9,6 +9,13 @@ import {
   agentTask,
   type FacadeContext,
 } from "../facade/shared";
+import {
+  denyUnlessArtifact,
+  denyUnlessIdentified,
+  denyUnlessSession,
+  denyUnlessTask,
+  denyUnlessWorkspace,
+} from "../auth/guard";
 
 export const agentRouter = new Hono();
 
@@ -52,6 +59,8 @@ agentRouter.post("/approvals/:id", async (c) => {
 
 /** GET /api/agent/sessions — list work sessions. */
 agentRouter.get("/sessions", async (c) => {
+  const stop = await denyUnlessWorkspace(c, c.req.query("workspaceId"));
+  if (stop) return c.json({ ok: true, data: [] });
   const out = await agentSession("list", {
     workspaceId: c.req.query("workspaceId") || ctxFrom(c, {}).workspaceId,
   });
@@ -61,6 +70,8 @@ agentRouter.get("/sessions", async (c) => {
 
 /** GET /api/agent/sessions/:id — resume (session + transcript tail). */
 agentRouter.get("/sessions/:id", async (c) => {
+  const stop = await denyUnlessSession(c, c.req.param("id"));
+  if (stop) return stop;
   const out = await agentSession("resume", {
     sessionId: c.req.param("id"),
     fromStep: c.req.query("fromStep") ? Number(c.req.query("fromStep")) : undefined,
@@ -71,10 +82,20 @@ agentRouter.get("/sessions/:id", async (c) => {
 
 /** GET /api/agent/tasks — list background tasks. */
 agentRouter.get("/tasks", async (c) => {
+  const sessionId = c.req.query("sessionId");
+  const workspaceId = c.req.query("workspaceId");
+  if (sessionId) {
+    const stop = await denyUnlessSession(c, sessionId);
+    if (stop) return c.json({ ok: true, data: [] });
+  }
+  if (workspaceId) {
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return c.json({ ok: true, data: [] });
+  }
   const out = await agentTask("list", {
     status: c.req.query("status"),
-    sessionId: c.req.query("sessionId"),
-    workspaceId: c.req.query("workspaceId"),
+    sessionId,
+    workspaceId,
   });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
@@ -82,6 +103,8 @@ agentRouter.get("/tasks", async (c) => {
 
 /** POST /api/agent/tasks/:id/cancel — cancel a background task. */
 agentRouter.post("/tasks/:id/cancel", async (c) => {
+  const stop = await denyUnlessTask(c, c.req.param("id"));
+  if (stop) return stop;
   const out = await agentTask("cancel", { taskId: c.req.param("id") });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
@@ -99,11 +122,20 @@ agentRouter.post("/message", async (c) => {
   if (!prompt) {
     return c.json({ error: "Missing required 'prompt' field" }, 400);
   }
+  const sessionId = typeof body?.sessionId === "string" ? body.sessionId : undefined;
+  const workspaceId =
+    typeof body?.workspaceId === "string" ? body.workspaceId : ctxFrom(c, body).workspaceId;
+  if (sessionId) {
+    const stop = await denyUnlessSession(c, sessionId);
+    if (stop) return stop;
+  } else if (workspaceId) {
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return stop;
+  }
   const { queueMessage } = await import("../agent/orchestrator");
   const out = queueMessage({
-    sessionId: typeof body?.sessionId === "string" ? body.sessionId : undefined,
-    workspaceId:
-      typeof body?.workspaceId === "string" ? body.workspaceId : ctxFrom(c, body).workspaceId,
+    sessionId,
+    workspaceId,
     prompt,
     origin: body?.origin === "dock-add" ? "dock-add" : "chat",
   });
@@ -112,6 +144,8 @@ agentRouter.post("/message", async (c) => {
 
 /** POST /api/agent/memory — { op: recall|record, ...params }. */
 agentRouter.post("/memory", async (c) => {
+  const stop = await denyUnlessIdentified(c);
+  if (stop) return stop;
   const body = await c.req.json().catch(() => ({}));
   const { op, ...params } = body ?? {};
   const out = await agentMemory(op, params ?? {}, ctxFrom(c, body));
@@ -121,9 +155,19 @@ agentRouter.post("/memory", async (c) => {
 
 /** GET /api/agent/artifacts — list artifacts (read-only facade over the store). */
 agentRouter.get("/artifacts", async (c) => {
+  const sessionId = c.req.query("sessionId");
+  const workspaceId = c.req.query("workspaceId");
+  if (sessionId) {
+    const stop = await denyUnlessSession(c, sessionId);
+    if (stop) return c.json({ ok: true, data: [] });
+  }
+  if (workspaceId) {
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return c.json({ ok: true, data: [] });
+  }
   const out = await agentArtifacts("list", {
-    workspaceId: c.req.query("workspaceId"),
-    sessionId: c.req.query("sessionId"),
+    workspaceId,
+    sessionId,
   });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
@@ -131,6 +175,8 @@ agentRouter.get("/artifacts", async (c) => {
 
 /** GET /api/agent/artifacts/:id — read one artifact. */
 agentRouter.get("/artifacts/:id", async (c) => {
+  const stop = await denyUnlessArtifact(c, c.req.param("id"));
+  if (stop) return stop;
   const out = await agentArtifacts("read", { artifactId: c.req.param("id") });
   if (!out.ok) {
     const status = (out as any).code === "not_found" ? 404 : 400;
