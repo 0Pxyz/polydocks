@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { ArtifactService } from "../services/artifactService";
-import { getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
+import { callerOf, denied, denyUnlessWorkspace, visibleTo } from "../auth/guard";
 
 export const artifactsRouter = new Hono();
 
@@ -10,12 +10,11 @@ export const artifactsRouter = new Hono();
  */
 artifactsRouter.get("/", async (c) => {
   const workspaceId = c.req.query("workspaceId") || "default";
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ artifacts: [] });
-  }
+  const caller = await callerOf(c);
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return c.json({ artifacts: [] });
   const sessionId = c.req.query("sessionId");
-  const artifacts = ArtifactService.listArtifacts(workspaceId, sessionId);
+  const artifacts = visibleTo(caller, ArtifactService.listArtifacts(workspaceId, sessionId));
   return c.json({ artifacts });
 });
 
@@ -36,10 +35,8 @@ artifactsRouter.post("/", async (c) => {
   }
 
   const workspaceId = body.workspaceId || "default";
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const artifact = await ArtifactService.createArtifact({
     workspaceId,
     sessionId: body.sessionId,
@@ -62,13 +59,9 @@ artifactsRouter.post("/", async (c) => {
 artifactsRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const artifact = ArtifactService.getArtifact(id);
-  if (!artifact) {
-    return c.json({ error: `Artifact "${id}" not found` }, 404);
-  }
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(artifact.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  if (!artifact) return denied(c);
+  const stop = await denyUnlessWorkspace(c, artifact.workspaceId);
+  if (stop) return stop;
   return c.json({ artifact });
 });
 
@@ -79,13 +72,9 @@ artifactsRouter.get("/:id", async (c) => {
 artifactsRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const artifact = ArtifactService.getArtifact(id);
-  if (!artifact) {
-    return c.json({ error: `Artifact "${id}" not found` }, 404);
-  }
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(artifact.workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
-  }
+  if (!artifact) return denied(c);
+  const stop = await denyUnlessWorkspace(c, artifact.workspaceId);
+  if (stop) return stop;
   const result = ArtifactService.deleteArtifact(id, "user");
   if (!result.success) {
     return c.json({ error: result.error || "Failed to delete artifact" }, 400);

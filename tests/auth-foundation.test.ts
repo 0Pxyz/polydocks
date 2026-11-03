@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import app from "../server/index";
-import { db } from "../server/workspace/db";
 import { ensureAuthTables } from "../server/auth/membership";
 import { clearAuthOutbox, readAuthOutbox } from "../server/auth/index";
+import { wipeRunPrefix } from "./isolation-db";
 import { listWorkspaces } from "../server/workspace/workspaces";
 
 const RUN = `auth-test-${Date.now()}`;
@@ -61,30 +61,16 @@ async function get(path: string, jar: string[] = []) {
   return { res, data, jar: harvestCookies(res, jar) };
 }
 
-function cleanupUsers() {
-  // Better Auth sqlite columns are camelCase (userId). User ids are random,
-  // so test rows are found by email; dependent rows go first.
-  db.query(
-    `DELETE FROM session WHERE userId IN (SELECT id FROM "user" WHERE email LIKE '${RUN}%')`
-  ).run();
-  db.query(
-    `DELETE FROM account WHERE userId IN (SELECT id FROM "user" WHERE email LIKE '${RUN}%')`
-  ).run();
-  db.query(`DELETE FROM verification WHERE identifier LIKE '%${RUN}%'`).run();
-  db.query(`DELETE FROM "user" WHERE email LIKE '${RUN}%' OR id LIKE '${RUN}%'`).run();
-}
 
 describe("Better Auth foundation (local-first)", () => {
   beforeAll(async () => {
+    wipeRunPrefix(RUN);
     await ensureAuthTables();
     clearAuthOutbox();
   });
 
   afterAll(() => {
-    db.query(`DELETE FROM workspace_members WHERE workspace_id LIKE '${RUN}%'`).run();
-    db.query(`DELETE FROM workspaces WHERE id LIKE '${RUN}%'`).run();
-    db.query(`DELETE FROM sessions WHERE id LIKE '${RUN}%'`).run();
-    cleanupUsers();
+    wipeRunPrefix(RUN);
   });
 
   it("migrates additively, idempotently, and preserves local workspaces", async () => {
@@ -227,19 +213,19 @@ describe("Better Auth foundation (local-first)", () => {
     expect(anonIds).toContain("default");
     expect(anonIds).not.toContain(`${RUN}-owned`);
     const anonGet = await get(`/api/workspaces/${RUN}-owned`);
-    expect(anonGet.res.status).toBe(403);
+    expect(anonGet.res.status).toBe(404);
 
     // A second user signs up and must be denied.
     await post("/api/auth/sign-up/email", { name: "Auth Test B", email: emailB, password: PASS });
     const b = await post("/api/auth/sign-in/email", { email: emailB, password: PASS });
     const forbidden = await get(`/api/workspaces/${RUN}-owned`, b.jar);
-    expect(forbidden.res.status).toBe(403);
+    expect(forbidden.res.status).toBe(404);
     const forbiddenSession = await post(
       "/api/sessions",
       { workspaceId: `${RUN}-owned`, title: "intruder" },
       b.jar
     );
-    expect(forbiddenSession.res.status).toBe(403);
+    expect(forbiddenSession.res.status).toBe(404);
 
     // The owner keeps full access.
     const allowed = await get(`/api/workspaces/${RUN}-owned`, a.jar);
@@ -253,7 +239,7 @@ describe("Better Auth foundation (local-first)", () => {
 
     // Non-owners cannot delete; the workspace stays owned by A.
     const deleteDenied = await req(`/api/workspaces/${RUN}-owned`, { method: "DELETE" }, b.jar);
-    expect(deleteDenied.status).toBe(403);
+    expect(deleteDenied.status).toBe(404);
   });
 
   it("denies cross-user conversation, task and artifact access", async () => {
@@ -269,7 +255,7 @@ describe("Better Auth foundation (local-first)", () => {
     expect(sessionId).toBeTruthy();
 
     const peek = await get(`/api/sessions/${sessionId}`, b.jar);
-    expect(peek.res.status).toBe(403);
+    expect(peek.res.status).toBe(404);
 
     const tasks = await get(`/api/tasks?sessionId=${sessionId}`, b.jar);
     expect((tasks.data as any)?.tasks).toEqual([]);
@@ -282,7 +268,7 @@ describe("Better Auth foundation (local-first)", () => {
     expect(artifact.res.status).toBe(201);
     const artifactId = (artifact.data as any)?.artifact?.id as string;
     const artifactPeek = await get(`/api/artifacts/${artifactId}`, b.jar);
-    expect(artifactPeek.res.status).toBe(403);
+    expect(artifactPeek.res.status).toBe(404);
   });
 
   it("reports OAuth providers as disabled without credentials", async () => {

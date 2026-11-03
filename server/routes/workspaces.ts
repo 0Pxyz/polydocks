@@ -1,24 +1,21 @@
 import { Hono } from "hono";
 import { WorkspaceService } from "../services/workspaceService";
 import { readFeature } from "../workspace/features";
-import { getEffectiveCaller, hasWorkspaceAccess, isWorkspaceOwner } from "../auth/session";
+import { callerOf, denied, denyUnlessWorkspace, visibleIds } from "../auth/guard";
+import { isWorkspaceOwner } from "../auth/session";
 import { addWorkspaceMember, countWorkspaceMembers, removeAllWorkspaceMembers } from "../auth/membership";
 
 export const workspacesRouter = new Hono();
 
 /**
- * Ownership guard. Unowned (legacy/device-local) workspaces stay open to
- * local callers (local-first compat). Owned workspaces require membership.
- * Returns null when access is granted, otherwise a 404/403 response.
+ * Ownership guard via the central point. Missing and foreign workspaces
+ * both yield the uniform 404 (no existence leak). Returns null when
+ * access is granted, otherwise the denial response.
  */
 async function guard(c: any, id: string) {
   const ws = WorkspaceService.getWorkspace(id);
-  if (!ws) return c.json({ success: false, error: "Workspace not found" }, 404);
-  const caller = await getEffectiveCaller(c.req.raw.headers);
-  if (!hasWorkspaceAccess(id, caller)) {
-    return c.json({ success: false, error: "Not available to this account" }, 403);
-  }
-  return null;
+  if (!ws) return denied(c);
+  return denyUnlessWorkspace(c, id);
 }
 
 /**
@@ -28,9 +25,10 @@ async function guard(c: any, id: string) {
  * they saw before Better Auth existed.
  */
 workspacesRouter.get("/", async (c) => {
-  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const caller = await callerOf(c);
   const all = WorkspaceService.listWorkspaces();
-  const data = all.filter((ws) => hasWorkspaceAccess(ws.id, caller));
+  const allowed = new Set(visibleIds(caller, all.map((ws) => ws.id)));
+  const data = all.filter((ws) => allowed.has(ws.id));
   return c.json({ success: true, count: data.length, data });
 });
 
@@ -56,7 +54,7 @@ workspacesRouter.post("/", async (c) => {
       idempotencyKey: body.idempotencyKey,
     });
 
-    const caller = await getEffectiveCaller(c.req.raw.headers);
+    const caller = await callerOf(c);
     if (caller.kind === "user") {
       addWorkspaceMember(ws.id, caller.user.id, "owner");
     }
@@ -114,9 +112,9 @@ workspacesRouter.delete("/:id", async (c) => {
   const denied = await guard(c, id);
   if (denied) return denied;
   if (countWorkspaceMembers(id) > 0) {
-    const caller = await getEffectiveCaller(c.req.raw.headers);
+    const caller = await callerOf(c);
     if (!isWorkspaceOwner(id, caller)) {
-      return c.json({ success: false, error: "Only the workspace owner can delete it" }, 403);
+      return denied(c);
     }
   }
   const result = WorkspaceService.deleteWorkspace(id, "user");
