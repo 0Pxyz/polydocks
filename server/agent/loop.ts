@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { llm, MODEL_ID } from "./llm";
+import { shouldForwardBusEvent } from "./loopEvents";
 import { defaultTools, resolveTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
@@ -950,6 +951,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         const registeredTool = toolMap.get(toolName);
         let toolOutput: unknown;
+        // Per-call dedup set: bus-forwarded capability events, the
+        // field-based special cases and envelope events share it, so
+        // doubles never emit for one tool call.
+        const forwardedTypes = new Set<string>();
 
         // Agent-manifest gate (#207): the agent is a first-party plugin
         // with explicit permissions. Direct tools are checked here,
@@ -1004,11 +1009,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
                 step: currentStep,
                 actor: toolActor,
                 onEvent: async (e) => {
-                  // Only approval.requested travels up from the bus: the
-                  // loop already emits its own tool.start/tool.done, and
-                  // forwarding the bus duplicates would double-report
-                  // every capability-backed tool in the stream.
-                  if (e.type !== "approval.requested") return;
+                  // The loop emits its own tool.start/tool.done around
+                  // every call; only those exact bus duplicates die here.
+                  // Everything else travels up — approval.requested plus
+                  // framework-emitted capability events (source.added…).
+                  if (!shouldForwardBusEvent(e.type)) return;
+                  forwardedTypes.add(e.type);
                   await emit({ type: e.type, payload: e.payload } as any);
                 },
               });
@@ -1086,6 +1092,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           };
         }
 
+        // Field-based special cases share the per-call dedup set with
+        // bus-forwarded and envelope events: the first emitter wins, so a
+        // capability that already announced itself mid-run is never
+        // re-announced from the tool result.
+        const emitOnce = async (type: string, payload: Record<string, unknown>) => {
+          if (forwardedTypes.has(type)) return;
+          forwardedTypes.add(type);
+          await emit({ step: currentStep, type, payload } as any);
+        };
+
         // Trigger reactive UI events when applicable
         // Sandbox previews must surface in the UI: sandbox_serve runs through
         // the sandbox.serve capability, so emit a preview event the same way
@@ -1097,11 +1113,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           (toolOutput as any).success === true &&
           typeof (toolOutput as any).previewUrl === "string"
         ) {
-          await emit({
-            step: currentStep,
-            type: "sandbox.preview",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("sandbox.preview", toolOutput as Record<string, unknown>);
         }
 
         // Browser opens must surface in the UI: open_source now runs through
@@ -1114,11 +1126,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           (toolOutput as any).success === true &&
           typeof (toolOutput as any).url === "string"
         ) {
-          await emit({
-            step: currentStep,
-            type: "browser.open",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("browser.open", toolOutput as Record<string, unknown>);
         }
 
 
@@ -1129,11 +1137,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           toolOutput &&
           typeof toolOutput === "object"
         ) {
-          await emit({
-            step: currentStep,
-            type: "dock.layout",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("dock.layout", toolOutput as Record<string, unknown>);
         }
 
         // Opening a tool must surface in the UI the same way on the loop
@@ -1144,11 +1148,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           typeof toolOutput === "object" &&
           (toolOutput as any).ok === true
         ) {
-          await emit({
-            step: currentStep,
-            type: "tray.open",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("tray.open", toolOutput as Record<string, unknown>);
         }
 
 
@@ -1164,11 +1164,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           (toolOutput as any).success === true &&
           typeof (toolOutput as any).pluginId === "string"
         ) {
-          await emit({
-            step: currentStep,
-            type: toolName === "create_plugin" ? "plugin.created" : "plugin.updated",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce(
+            toolName === "create_plugin" ? "plugin.created" : "plugin.updated",
+            toolOutput as Record<string, unknown>
+          );
         }
 
         if (
@@ -1178,11 +1177,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           (toolOutput as any).success === true &&
           typeof (toolOutput as any).pluginId === "string"
         ) {
-          await emit({
-            step: currentStep,
-            type: "plugin.published",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("plugin.published", toolOutput as Record<string, unknown>);
         }
 
         if (
@@ -1191,11 +1186,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           typeof toolOutput === "object" &&
           (toolOutput as any).success === true
         ) {
-          await emit({
-            step: currentStep,
-            type: "plugin.operated",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("plugin.operated", toolOutput as Record<string, unknown>);
         }
 
         if (
@@ -1204,11 +1195,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           typeof toolOutput === "object" &&
           (toolOutput as any).success === true
         ) {
-          await emit({
-            step: currentStep,
-            type: "theme.apply",
-            payload: toolOutput as Record<string, unknown>,
-          });
+          await emitOnce("theme.apply", toolOutput as Record<string, unknown>);
+        }
+
+        // Envelope events (facade lifecycle ops return {ok, events:[...]}):
+        // install_plugin has no field-based branch, so without this its
+        // plugin.installed dies here and the dock needs a reload to
+        // discover the install. Deduped against bus/special-case emits.
+        const envelopeEvents = (toolOutput as any)?.events;
+        if (Array.isArray(envelopeEvents)) {
+          for (const evt of envelopeEvents) {
+            if (!evt || typeof evt.type !== "string") continue;
+            await emitOnce(evt.type, (evt.payload as Record<string, unknown>) || {});
+          }
         }
       }
     }
