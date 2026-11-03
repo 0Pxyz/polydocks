@@ -6,6 +6,7 @@ import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { BitcoinViewer } from "@/features/dock/BitcoinViewer";
 import { OnboardingPluginView } from "@/features/onboarding/OnboardingPluginView";
+import { InspectView } from "@/features/inspect/InspectView";
 
 export interface SurfaceSandboxTab {
   id: string;
@@ -99,6 +100,15 @@ export function ToolSurface({
     return (
       <DockSurface frameless>
         <OnboardingPluginView onDismiss={() => onDismiss("onboarding")} />
+      </DockSurface>
+    );
+  }
+  if (toolId === "inspect") {
+    // Dev-only runtime inspector (#181): never mounted in production.
+    if (!import.meta.env.DEV) return null;
+    return (
+      <DockSurface frameless>
+        <InspectView />
       </DockSurface>
     );
   }

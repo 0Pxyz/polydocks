@@ -9,6 +9,7 @@ import { registerFilesPlugin } from "../files";
 import { registerNotesPlugin } from "../notes";
 import { registerOnboardingPlugin } from "./onboarding";
 import { registerKitGalleryPlugin } from "./kitGallery";
+import { registerInspectPlugin } from "./inspect";
 
 /**
  * 1. Search Plugin
@@ -122,6 +123,7 @@ export function initializeFirstPartyPlugins(): void {
   registerNotesPlugin();
   registerOnboardingPlugin();
   registerKitGalleryPlugin();
+  registerInspectPlugin();
 
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);

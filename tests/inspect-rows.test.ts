@@ -50,4 +50,51 @@ describe("inspect rows (#181)", () => {
     expect(buildInspectRows([{ type: "heartbeat" }, { type: "tray.open" }])).toEqual([]);
     expect(summarizeInspectEvent({ type: "agent.start", payload: {} }, 0)?.detail).toContain("0 chars");
   });
+
+  it("maps routing decisions without prompts or args", () => {
+    const rows = buildInspectRows([
+      { type: "message.done", payload: { decision: { kind: "create_tool", confidence: 0.8, reason: "explicit build verb" }, text: "secret prompt text" } },
+      { type: "message.error", payload: { decision: { kind: "cancel_task", reason: "cancel keywords" } } },
+      { type: "message.done", payload: { text: "plain answer, no decision" } },
+    ]);
+    expect(rows.map((r) => `${r.kind}:${r.label}`)).toEqual([
+      "decision:route: create_tool",
+      "decision:route: cancel_task",
+    ]);
+    expect(rows[0].detail).toContain("explicit build verb");
+    expect(rows[0].detail).toContain("80%");
+    const flat = JSON.stringify(rows);
+    expect(flat.includes("secret prompt text")).toBe(false);
+  });
+
+  it("maps job states, shapes only", () => {
+    const rows = buildInspectRows([
+      { type: "job.queued", payload: { jobId: "task_1234567890_abcdef12" } },
+      { type: "job.progress", payload: { jobId: "task_1234567890_abcdef12", progress: 0.5 } },
+      { type: "job.completed", payload: { jobId: "task_1234567890_abcdef12", summary: "secret summary text" } },
+      { type: "job.failed", payload: { jobId: "task_x", error: "secret failure detail" } },
+    ]);
+    expect(rows.map((r) => `${r.kind}:${r.label}`)).toEqual([
+      "action:job abcdef12 queued",
+      "action:job abcdef12 progress",
+      "result:job abcdef12 done",
+      "error:job x failed",
+    ]);
+    expect(rows[1].detail).toBe("50%");
+    const flat = JSON.stringify(rows);
+    expect(flat.includes("secret summary text")).toBe(false);
+    expect(flat.includes("secret failure detail")).toBe(false);
+  });
+
+  it("shows token counts and nonzero cost on finish", () => {
+    const row = summarizeInspectEvent(
+      { type: "agent.finish", payload: { text: "hi", inputTokens: 100, outputTokens: 20, costUsd: 0.0012 } },
+      0
+    );
+    expect(row?.detail).toContain("100 in");
+    expect(row?.detail).toContain("20 out");
+    expect(row?.detail).toContain("$0.0012");
+    const free = summarizeInspectEvent({ type: "agent.finish", payload: { text: "hi" } }, 0);
+    expect(free?.detail).not.toContain("$");
+  });
 });

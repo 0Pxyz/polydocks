@@ -308,6 +308,7 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
   store: "Library: discover what others have built",
   plugins: "Tools: your capabilities",
   creations: "Creations: your personal software",
+  inspect: "Inspect: live agent runtime (dev only)",
 };
 
 /**
@@ -322,6 +323,11 @@ export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "creations", label: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },
   { id: "store", label: "Library", description: "Library: discover what others have built", icon: "store", kind: "builtin" },
   { id: "settings", label: "Settings", description: "Dock appearance and theme", icon: "settings", kind: "builtin" },
+  // Dev-only runtime inspector (#181): excluded from production builds so
+  // the catalog never offers a tool whose surface renders nothing.
+  ...(import.meta.env.DEV
+    ? [{ id: "inspect", label: "Inspect", description: "Inspect: live agent runtime (dev only)", icon: "chartlineup", kind: "builtin" } as DockItem]
+    : []),
 ];
 
 /**
