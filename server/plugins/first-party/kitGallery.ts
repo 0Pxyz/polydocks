@@ -76,6 +76,10 @@ function App() {
 createRoot(document.getElementById("app")).render(<App />);`;
 
 export function registerKitGalleryPlugin(): void {
+  // QA fixture, not user content (#310): never install in production.
+  // Dev and test keep it for kit render validation.
+  const nodeEnv = typeof process !== "undefined" ? process.env.NODE_ENV : undefined;
+  if (nodeEnv === "production") return;
   const manifest: PluginManifest = {
     apiVersion: 1,
     id: "kit-gallery",
