@@ -31,7 +31,7 @@ One model per job. Plugins declare a `modelRole`; `server/agent/modelRegistry.ts
 
 | Role | Model | Status | Where it runs |
 | :--- | :--- | :--- | :--- |
-| `agent` | `muse-spark-1.3` (default; `MODEL_AGENT_ID` or `MODEL_ID` override, selector can pick `muse-wonder-1.0`) | Running | `runAgentLoop` in `server/agent/loop.ts`, SSE `POST /api/agent` |
+| `agent` | `muse-spark-1.3` (default; `MODEL_AGENT_ID` or `MODEL_ID` override; `muse-wonder-1.0` via env for hard tasks) | Running | `runAgentLoop` in `server/agent/loop.ts`, SSE `POST /api/agent` |
 | `fast` | `MODEL_FAST_ID` (default `muse-spark-1.3`) | Resolved, no dedicated caller yet | `getClientForRole("fast")` |
 | `vision` | agent model by default; `MODEL_VISION_ID` pins one | Running as fallback | `loop.ts` keeps Spark/Wonder for image attachments (both take image input natively), `MODEL_VISION_ID` overrides |
 | `voice` | `muse-voice-transcribe-1.0` (`MODEL_VOICE_MODEL`, `MODEL_REALTIME_URL`) | Running | `server/voice/proxy.ts` (`wss` realtime), key stays server-side |
@@ -83,22 +83,24 @@ Both `muse-spark-1.3` and `muse-wonder-1.0` are reasoning models (verified again
 - On Chat Completions, pass top-level `reasoning_effort` with one of `"minimal" | "low" | "medium" | "high" | "xhigh" | "max"`. Omitting it leaves depth to the model.
 - `"none"` returns **HTTP 400** on both models — never send it.
 - Reasoning tokens count toward the output-token budget and billing.
-- Polymax plumbing: `ModelSwitcher` (effort section) → `conversationStore.selectedEffort` (persisted in `polymax-agent-effort`) → `POST /api/agent { reasoningEffort }` (allowlisted in `server/index.ts`) → `runAgentLoop({ reasoningEffort })` → `reasoning_effort` on both the main and fallback `chat.completions.create` calls.
+- Polymax plumbing: `conversationStore.selectedEffort` (persisted in `polymax-agent-effort`; the picker UI was removed, the stored value and backend path stay) → `POST /api/agent { reasoningEffort }` (allowlisted in `server/index.ts`) → `runAgentLoop({ reasoningEffort })` → `reasoning_effort` on both the main and fallback `chat.completions.create` calls.
 
 ---
 
 ## 4. UI Synthesis Skill: Muse Generating Dock Plugins
 
-The agent synthesizes UI plugins using the canonical `create-tab.md` skill prompt:
-1. **Self-Contained:** Output a single HTML/CSS/JS file (`index.html`) with no external script CDNs.
-2. **Design Tokens:** Strict dark mode palette:
-   - Background: `#0A0A0C`
-   - Surface: `#131318`
-   - Accent: `#C8FF57`
-   - Border: `#23232E`
-   - Typography: Syne (headers), Inter (body), Geist Mono (code)
-3. **Host Bridge:** Use `window.polymax` for persistence and communication.
-4. **Manifest:** Write a corresponding `manifest.json` (`id`, `title`, `icon`, `scope`).
+The agent synthesizes UI plugins under the `plugins` skill prompt
+(`server/agent/skills/plugins.md`):
+
+1. **Self-contained:** one TSX file importing `react`, `react-dom/client`,
+   and `@/components/ui/*`, mounting `#app`. No external script CDNs.
+2. **Design tokens only:** kit v2 components and theme tokens — no hex
+   colors, inline styles, or raw form elements (validation rejects them
+   with a clear error, max 2 fix retries).
+3. **Host bridge:** `window.polymax` for storage (`polymax.storage`),
+   capabilities (`invoke`/`useCapability`), content, tasks, and theme.
+4. **Contract:** `apiVersion: 1` manifest (`id`, `title`, `icon`,
+   `scope`); host owns mounting, hiding, and hibernation.
 
 ---
 

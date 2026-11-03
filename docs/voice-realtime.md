@@ -1,5 +1,9 @@
 # Voice Realtime (Meta ASR)
 
+> Status: implemented and verified live (transport fixed; mute/unmute and
+> hands-free dock operation working). Transcription only — agent replies
+> stay on the client TTS path, and the browser never holds the key.
+>
 > Source of truth: `dev.meta.ai/docs/api-reference/voice/realtime` + `voice/schemas`.
 > Browser never holds `MODEL_API_KEY`. All Meta traffic goes through the
 > Bun proxy in `server/voice/proxy.ts`.

@@ -4,13 +4,15 @@
 
 *Software that adapts to your work.*
 
-![Poly opens the Bitcoin tool it built, in one turn](docs/assets/hero.gif)
+![Poly opens a note by title, selecting it in the dock](docs/assets/hero.gif)
 
 > 🎬 Watch: [Full product walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4)
 
+Most AI assistants are limited to the tools they are given. They answer inside a chat box and forget everything when you close the tab. PolyDocks starts from a different idea: **software should adapt to people's needs, not the other way around** — so the workspace itself is operated by the agent. You give Poly a task. It can research the web, rearrange your dock, run code in a sandbox — and when no existing tool fits, it can **create a new plugin, run it, and bring it directly into your workspace**. The bet is simple — what if an agent could build the tools it needs? That is PolyDocks.
+
 PolyDocks is an agentic workspace where AI doesn't stop at using existing tools. It can build new ones.
 
-> *You give Poly a task. It can create a new plugin, run it in an isolated environment, and bring it directly into your workspace. We're exploring a future where software doesn't have to be built for everyone in advance — what if an agent could build the tools it needs? The idea is simple: software should adapt to people's needs, not the other way around.*
+> *We're exploring a future where software doesn't have to be built for everyone in advance. It can be created around what each person actually needs.*
 
 ## What it does
 
@@ -19,6 +21,33 @@ PolyDocks is an agentic workspace where AI doesn't stop at using existing tools.
 - **Work.** Browser, research, files, notes, and code execution operate side by side in one dock, arranged around the task.
 - **Keep.** Generated tools persist in your workspace: reuse them, roll back when you don't like a change.
 - **Remember.** Notes autosave, memory carries preferences between sessions.
+
+## See it
+
+![The dock](docs/assets/dock.png)
+*The dock bar holds every panel Poly opened — here the Bitcoin tool it built, live with real prices.*
+
+![Poly at work](docs/assets/agent-working.png)
+*Short thoughts rise as Poly searches, reads, and opens things. Finished work lands as panels, not chat logs.*
+
+![A tool Poly built](docs/assets/plugin-built.png)
+*The Bitcoin viewer: generated, themed, live in the dock. Roll back if you don't like it.*
+
+![Notes that survive reload](docs/assets/notes.png)
+*Title and body autosave with a visible save state; flush on exit keeps the last keystrokes.*
+
+![Research that stays](docs/assets/browser.png)
+*The browser next to the sources feed: everything Poly reads is saved to the workspace with its brand mark.*
+
+## How Poly uses Meta technologies
+
+PolyDocks is built for the **Meta Global AI Developer Hackathon**, and Meta's platform is the agent's entire brain and voice:
+
+- **Reasoning + tool calling (`muse-spark-1.3`).** One loop over the Meta Model API drives everything: ~50 validated tools, deterministic fast paths for dock intents, harder tasks escalated to the model. Switching models is one env var, never a code change.
+- **Voice (`muse-voice-transcribe-1.0`).** Talk to the dock hands-free; the browser never holds the key, a server proxy relays the realtime stream.
+- **Media (`muse-image-1.0`).** Generated covers and share art, served from a daily-budgeted cache.
+
+Details: [docs/hackathon.md](docs/hackathon.md) (the judge's guide) · [docs/meta-model-api.md](docs/meta-model-api.md) (integration reference).
 
 ## Architecture
 
@@ -37,11 +66,7 @@ flowchart LR
     sandbox --> plugins
 ```
 
-The dock is the product surface: every item in it is a panel Poly opened. The capability bus is the only way tools touch the world (typed capabilities, risk policy, audit trail). Plugins are single files with a manifest, sandboxed in an iframe, versioned with rollback. The browser is real Chromium when the worker runs, otherwise the built-in reader — sites that block embedding get an honest fallback card with an Open in new tab action. One SQLite database plus workspace files; single-user local today, per-user sandboxes as target. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [docs/api.md](docs/api.md).
-
-## The agent
-
-One loop over the **Meta Model API** (`muse-spark-1.3`, env-swappable, never hardcoded). A deterministic router handles dock and skill intents without a model call; harder tasks escalate to the model turn, which calls ~50 zod-validated tools — every step streamed over SSE so you watch Poly work. Voice goes through realtime transcription with the key held server-side. Details: [docs/meta-model-api.md](docs/meta-model-api.md), [docs/hackathon.md](docs/hackathon.md).
+The dock is the product surface: every item in it is a panel Poly opened. The capability bus is the only way tools touch the world (typed capabilities with Zod schemas, risk levels, a 30s timeout, and an audit trail). Plugins are single files with a manifest, sandboxed in an iframe behind a `postMessage` bridge, versioned with rollback. The browser is real Chromium when the worker runs, otherwise the built-in reader — sites that block embedding get an honest fallback card with an Open in new tab action. One SQLite database plus workspace files; single-user local today, per-user sandboxes as target. Details: [ARCHITECTURE.md](ARCHITECTURE.md), [docs/api.md](docs/api.md).
 
 ## Try it
 
@@ -68,7 +93,7 @@ Prefer Bun directly? `bun install && bun run dev` (app on `http://localhost:5173
 | `TINYFISH_API_KEY` | Web / news / paper research | Research tools stay offline |
 | `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | Code execution in sandboxes | Sandbox tools fail closed with a setup hint |
 
-Details: [docs/meta-model-api.md](docs/meta-model-api.md) · [internal-docs/tinyfish.md](internal-docs/tinyfish.md).
+Details: [internal-docs/tinyfish.md](internal-docs/tinyfish.md) · contributor rules: [AGENTS.md](AGENTS.md).
 
 ## Status
 
@@ -77,21 +102,6 @@ Details: [docs/meta-model-api.md](docs/meta-model-api.md) · [internal-docs/tiny
 
 ---
 
-![The dock](docs/assets/dock.png)
-*The dock bar holds every panel Poly opened — here the Bitcoin tool it built, live with real prices.*
-
-![Poly at work](docs/assets/agent-working.png)
-*Short thoughts rise as Poly searches, reads, and opens things. Finished work lands as panels, not chat logs.*
-
-![A tool Poly built](docs/assets/plugin-built.png)
-*The Bitcoin viewer: generated, themed, live in the dock. Roll back if you don't like it.*
-
-![Notes that survive reload](docs/assets/notes.png)
-*Title and body autosave with a visible save state; flush on exit keeps the last keystrokes.*
-
-![Research that stays](docs/assets/browser.png)
-*The browser next to the sources feed: everything Poly reads is saved to the workspace with its brand mark.*
-
 ## Links
 
-Demo video: [full walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4) · Working material: [internal-docs/](internal-docs/) · License: [MIT](LICENSE)
+Demo video: [full walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4) · Judge's guide: [docs/hackathon.md](docs/hackathon.md) · Vision: [docs/product-philosophy.md](docs/product-philosophy.md) · Working material: [internal-docs/](internal-docs/) · License: [MIT](LICENSE)

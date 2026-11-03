@@ -44,13 +44,14 @@ Product routes delegate to one shared layer (`server/facade/shared.ts`); the HTT
 ## Modes
 
 ```bash
-PRODUCT_SURFACE=legacy  # default: current routes only
-PRODUCT_SURFACE=facade  # also mounts /api/dock + /api/agent/* aliases
-AGENT_SURFACE=full      # default: current 45-tool catalog
-AGENT_SURFACE=minimal   # verb tools only: dock.open/close/pin/unpin/list/focus/next/prev/background + plugins.create/edit/install/uninstall/operate
+PRODUCT_SURFACE=facade   # default: full routes plus /api/dock + /api/agent/* aliases
+PRODUCT_SURFACE=legacy   # current routes only
+AGENT_SURFACE=full       # default: the full 52-tool catalog
+AGENT_SURFACE=minimal    # verb tools only: dock.open/close/pin/unpin/list/focus/next/prev/background + plugins.create/edit/install/uninstall/operate
 ```
 
-The facade becomes the default only when it measures equal or better on the golden paths (TikTok request, Pomodoro benchmark, Bitcoin restyle) — comparison log lives with the release notes, not here.
+The facade became the default after measuring equal-or-better on the
+golden paths; the comparison log lives with the release notes, not here.
 
 ## Examples
 
@@ -60,8 +61,8 @@ curl -s -X POST localhost:3000/api/plugins/search/search.web \
   -H 'Content-Type: application/json' \
   -d '{"input":{"query":"raft consensus","domain_type":"research_paper"}}'
 
-# dock: list tabs, open a tool, apply appearance
-curl -s localhost:3000/api/agent/dock/action -X POST \
+# dock: list tabs, open a tool
+curl -s -X POST localhost:3000/api/dock/action \
   -H 'Content-Type: application/json' -d '{"op":"tabs.list"}'
 curl -s -X POST localhost:3000/api/dock/action \
   -H 'Content-Type: application/json' -d '{"op":"tabs.open","tabId":"browser"}'
