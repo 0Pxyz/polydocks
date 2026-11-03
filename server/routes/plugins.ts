@@ -3,6 +3,7 @@ import { pluginRegistry } from "../plugins/registry";
 import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import { connectMcpServer } from "../plugins/adapters/mcp";
+import { getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -400,6 +401,14 @@ pluginsRouter.post("/:pluginId/:capability", async (c) => {
       : undefined) ??
     c.req.query("workspaceId");
   const { invokeCapability } = await import("../facade/shared");
+  // #215: never trust a client-supplied workspace id on its own. Owned
+  // workspaces are isolated over HTTP; unowned (device-local) ones keep
+  // today's open behavior. The agent turn path validates the same way in
+  // server/index.ts; this closes the direct-invoke bypass.
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (workspaceId && !hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ ok: false, error: "Not available to this account", code: "forbidden" }, 403 as any);
+  }
   const out = await invokeCapability(pluginId, capability, input, { actor: "user", workspaceId });
   if (!out.ok) {
     const status = (out as any).code === "unknown_capability" ? 404 : 400;
@@ -489,6 +498,17 @@ capabilitiesRouter.post("/invoke", async (c) => {
     return c.json({ error: "Missing capabilityId" }, 400);
   }
 
+  // #215: same ownership guard as the plugin invoke path (see above).
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const effectiveWorkspace =
+    (typeof workspaceId === "string" && workspaceId) ||
+    (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
+      ? (input as any).workspaceId
+      : undefined);
+  if (effectiveWorkspace && !hasWorkspaceAccess(effectiveWorkspace, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
+
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
     workspaceId,
@@ -504,6 +524,17 @@ capabilitiesRouter.post("/:id/invoke", async (c) => {
   const capabilityId = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
   const { input, workspaceId } = body;
+
+  // #215: same ownership guard as above.
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const effectiveWorkspace =
+    (typeof workspaceId === "string" && workspaceId) ||
+    (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
+      ? (input as any).workspaceId
+      : undefined);
+  if (effectiveWorkspace && !hasWorkspaceAccess(effectiveWorkspace, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
