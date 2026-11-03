@@ -22,6 +22,8 @@ export const open_source: AgentTool<{ url: string; title?: string }> = {
       actor: "agent",
       workspaceId: targetWorkspace,
       step: (ctx as any)?.step,
+      taskId: (ctx as any)?.taskId,
+      onEvent: (ctx as any)?.onEvent,
     });
     if (!result.success) {
       return {

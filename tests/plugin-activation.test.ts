@@ -70,3 +70,45 @@ describe("plugin activation acceptance (#153)", () => {
     expect(out.ok).toBe(false);
   });
 });
+
+describe("plugin activation data survival (#153 task 6)", () => {
+  const WS = "ws-activation-data";
+
+  it("stored notes survive deactivate/reactivate with capabilities gated in between", async () => {
+    const { registerNotesPlugin } = await import("../server/plugins/notes");
+    registerNotesPlugin();
+    const { CapabilityBus } = await import("../server/plugins/bus");
+    const bus = CapabilityBus.getInstance();
+    const ctx = { actor: "user", workspaceId: WS, step: 1 } as any;
+
+    const added: any = await bus.invoke("notes.add", {
+      workspaceId: WS,
+      title: "activation probe note",
+      body: "stored before deactivation",
+    }, ctx);
+    expect(added.success).toBe(true);
+
+    try {
+      const off = await pluginSetActive("notes", false, { actor: "user" });
+      expect(off.ok).toBe(true);
+      const denied: any = await bus.invoke("notes.add", {
+        workspaceId: WS,
+        title: "blocked write",
+        body: "must not land",
+      }, ctx);
+      expect(denied.success).toBe(false);
+
+      const on = await pluginSetActive("notes", true, { actor: "user" });
+      expect(on.ok).toBe(true);
+      const listed: any = await bus.invoke("notes.list", { workspaceId: WS }, ctx);
+      expect(listed.success).toBe(true);
+      const items = (listed as any).data?.data?.items ?? [];
+      expect(items.some((n: any) => n.title === "activation probe note")).toBe(true);
+      expect(items.some((n: any) => n.title === "blocked write")).toBe(false);
+    } finally {
+      await pluginSetActive("notes", true, { actor: "user" });
+      const { db } = await import("../server/workspace/db");
+      db.query("DELETE FROM notes WHERE workspace_id = ?").run(WS);
+    }
+  });
+});

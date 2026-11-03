@@ -1,9 +1,11 @@
 import type { UIEvent } from "./events";
+import { buildMemoryChipContent } from "./events";
 import { useConversationStore } from "./conversationStore";
 import { useDockStore } from "../store/useDockStore";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import { useThemeStore, THEMES, type ThemeId, type DockStyleId, type DockPosition } from "@/lib/theme";
 import { DOCK_TOOL_DESCRIPTIONS } from "../dock/dockModel";
+import { chatPlacement } from "../dock/dockItems";
 import { applyReaderOpened } from "./conversationStore";
 
 export interface OrchestratorActionCallbacks {
@@ -61,7 +63,7 @@ export async function applyOrchestratorAction(
       });
       callbacks?.onOpenExperience?.(event.plugin.id);
       if (!isDockAdd) {
-        if (typeof window !== "undefined" && window.innerWidth >= 900) {
+        if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
           set({ layoutState: "side" });
         } else {
           set({ layoutState: "closed" });
@@ -89,7 +91,7 @@ export async function applyOrchestratorAction(
       set({ statusText: `Opening "${event.experienceId}"…` });
       callbacks?.onOpenExperience?.(event.experienceId);
       if (!isDockAdd) {
-        if (typeof window !== "undefined" && window.innerWidth >= 900) {
+        if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
           set({ layoutState: "side" });
         } else {
           set({ layoutState: "closed" });
@@ -136,6 +138,28 @@ export async function applyOrchestratorAction(
     case "theme.applied":
       await applyOrchestratorTheme(event);
       break;
+
+    case "tool.completed": {
+      // Memory badge (#105): one subtle transcript line when the agent
+      // records a memory. Ephemeral by design — thread persistence stays
+      // user/assistant/system. Id is stable so replays never duplicate.
+      if (event.name === "record_memory") {
+        const chip = buildMemoryChipContent(event.result);
+        if (chip) {
+          const id = `mem-${event.id || `${event.step}-${Date.now()}`}`;
+          set((state) => {
+            if (state.messages.some((m) => m.id === id)) return state;
+            return {
+              messages: [
+                ...state.messages,
+                { id, role: "tool" as const, toolName: event.name, content: chip, timestamp: Date.now() },
+              ],
+            };
+          });
+        }
+      }
+      break;
+    }
 
     default:
       break;

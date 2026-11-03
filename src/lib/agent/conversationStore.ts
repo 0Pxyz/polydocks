@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { streamAgentLoop } from "./client";
-import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus, adaptBackendEvent } from "./events";
+import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus, adaptBackendEvent, isBrandedActivity } from "./events";
 import { feedThoughtEvent, pushThought, shouldNudge } from "./thoughtStream";
 import { applyOrchestratorAction } from "./orchestratorActions";
 import { speakReply, cancelSpeech } from "./speech";
@@ -20,6 +20,7 @@ import { useDockStore } from "@/lib/store/useDockStore";
 import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 import { onboardingIntentFromTool } from "./onboardingBridge";
 import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
+import { chatPlacement } from "@/lib/dock/dockItems";
 import type { OrbState } from "@/features/agent/Orb";
 
 const ORCH_SESSION_KEY = "polymax-orchestrator-session";
@@ -114,7 +115,8 @@ export interface AgentStep {
 export interface TaskCard {
   taskId: string;
   title: string;
-  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+  status: "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "interrupted";
+  approvalId?: string;
   updatedAt: number;
 }
 
@@ -171,6 +173,13 @@ interface ConversationStoreState {
   messageThinking: Record<string, string>;
   /** Open (or reuse) the job-event stream for a session. Returns the live instance. */
   ensureTaskStream: (sessionId: string) => EventSource | null;
+  /**
+   * Resume active jobs after a reload (#178): reopens the stream (replay
+   * from the persisted cursor rebuilds cards/steps) and seeds queued/
+   * running cards from the API so jobs are visible before replay lands.
+   * Terminal states are never seeded — history already carries outcomes.
+   */
+  hydrateJobs: () => Promise<void>;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -467,8 +476,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     if (layoutState !== "closed") {
       set({ layoutState: "closed" });
     } else {
-      const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
-      if (currentActiveToolId && currentActiveToolId !== "agent" && isWide) {
+      const side = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
+      if (currentActiveToolId && currentActiveToolId !== "agent" && side) {
         set({ layoutState: "side" });
       } else {
         set({ layoutState: "sheet" });
@@ -528,6 +537,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       "job.failed",
       "job.cancelled",
       "job.interrupted",
+      "job.awaiting_approval",
       "message.delta",
       "message.done",
       "message.error",
@@ -567,6 +577,42 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       }
     };
     return source;
+  },
+
+  hydrateJobs: async () => {
+    const sessionId = get().orchestratorSessionId;
+    if (!sessionId || typeof window === "undefined") return;
+    // Reopen first: replay from the persisted cursor rebuilds cards and
+    // thinking steps for everything the stream already carries.
+    get().ensureTaskStream(sessionId);
+    // Then seed still-active jobs so they render before replay lands.
+    // Terminal states stay out: outcomes live in the thread history.
+    try {
+      const res = await fetch(`/api/tasks?sessionId=${encodeURIComponent(sessionId)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+      set((state) => {
+        const cards = { ...state.taskCards };
+        for (const t of tasks) {
+          if (t?.status !== "queued" && t?.status !== "running" && t?.status !== "awaiting_approval") continue;
+          const id = String(t.id);
+          if (cards[id]) continue;
+          const prompt = t?.input && typeof t.input.prompt === "string" ? t.input.prompt : "";
+          cards[id] = {
+            taskId: id,
+            title: prompt ? prompt.slice(0, 80) : `Background job ${id.slice(0, 8)}`,
+            status: t.status,
+            updatedAt: Date.now(),
+          };
+        }
+        return { taskCards: cards };
+      });
+    } catch {
+      // Offline-first: cards still rebuild from the stream replay above.
+    }
   },
 
   sendMessage: async (promptToSend, callbacks, options) => {
@@ -728,10 +774,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "tool.completed":
             set((state) => ({
-              activity: state.activity.map((row) =>
-                row.id === event.id ? { ...row, state: "done" as const, finishedAt: Date.now() } : row
-              ),
+              activity: dissolveCompletedActivity(state.activity, event.id),
             }));
+            // Memory badge shares the orchestrator path so legacy turns
+            // render the same line (id-guarded, replay-safe).
+            void applyOrchestratorAction(event, callbacks).catch(() => {});
             break;
 
           case "experience.created":
@@ -769,7 +816,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             });
             callbacks?.onOpenExperience?.(event.plugin.id);
             if (!isDockAdd) {
-              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+              if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
                 set({ layoutState: "side" });
               } else {
                 set({ layoutState: "closed" });
@@ -798,10 +845,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             callbacks?.onOpenExperience?.(event.experienceId);
 
             // Per specification: from sheet or full, the chat goes to side
-            // and the experience opens on the right (on >= 900px wide screens).
-            // But if origin is dock-add, chat stays closed!
+            // and the experience opens on the right (on wide screens, same
+            // threshold as the beside panel). But if origin is dock-add,
+            // chat stays closed!
             if (!isDockAdd) {
-              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+              if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
                 set({ layoutState: "side" });
               } else {
                 set({ layoutState: "closed" });
@@ -1196,6 +1244,22 @@ function stepKindForTool(toolName: string): AgentStep["kind"] | null {
 /** Scope key for steps/thinking: real background tasks use the raw task id,
  * everything else (message-scoped loop events) shares the `m-` message key.
  * Exported so cards and tests resolve the same bucket the stream writes to. */
+/**
+ * Applies a tool completion to the live activity list (#323). Branded
+ * provider pills dissolve — the durable transcript row and the steps
+ * timeline keep the history. Plain rows flip to done.
+ */
+export function dissolveCompletedActivity(
+  activity: ActivityRow[],
+  eventId: string
+): ActivityRow[] {
+  return activity
+    .filter((row) => row.id !== eventId || !isBrandedActivity(row.tool, row.label))
+    .map((row) =>
+      row.id === eventId ? { ...row, state: "done" as const, finishedAt: Date.now() } : row
+    );
+}
+
 export function scopeKeyFor(taskId: string): string {
   return taskId.startsWith("task_") ? taskId : `m-${taskId}`;
 }
@@ -1309,7 +1373,7 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
   }
 
   const status = typeof data?.status === "string" ? data.status : type.replace(/^job\./, "");
-  const known: TaskCard["status"][] = ["queued", "running", "completed", "failed", "cancelled", "interrupted"];
+  const known: TaskCard["status"][] = ["queued", "running", "awaiting_approval", "completed", "failed", "cancelled", "interrupted"];
   if (!known.includes(status)) return;
 
   const store = useConversationStore.getState();
@@ -1318,10 +1382,11 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
   const terminal = status === "completed" || status === "failed" || status === "cancelled" || status === "interrupted";
   const alreadyTerminal = prev && ["completed", "failed", "cancelled", "interrupted"].includes(prev.status);
 
+  const approvalId = typeof data?.approvalId === "string" && data.approvalId ? data.approvalId : prev?.approvalId;
   useConversationStore.setState((state) => ({
     taskCards: {
       ...state.taskCards,
-      [taskId]: { taskId, title, status, updatedAt: Date.now() },
+      [taskId]: { taskId, title, status, approvalId, updatedAt: Date.now() },
     },
   }));
 

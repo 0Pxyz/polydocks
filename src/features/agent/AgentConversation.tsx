@@ -32,7 +32,7 @@ import {
   createMicPcmStreamer,
   type MicPcmStreamer,
 } from "@/lib/agent/realtimeVoice";
-import { spring, prefersReducedMotion } from "@/lib/motion";
+import { spring, useReducedMotion } from "@/lib/motion";
 
 interface AgentConversationProps {
   onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
@@ -84,6 +84,7 @@ const CARD_DOT: Record<string, string> = {
   failed: "bg-rose-400",
   cancelled: "bg-white/40",
   interrupted: "bg-amber-400",
+  awaiting_approval: "bg-amber-300 animate-pulse",
 };
 
 const CARD_LABEL: Record<string, string> = {
@@ -93,11 +94,12 @@ const CARD_LABEL: Record<string, string> = {
   failed: "Failed",
   cancelled: "Cancelled",
   interrupted: "Interrupted",
+  awaiting_approval: "Needs approval",
 };
 
-function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; status: string }> }) {
+function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; status: string; approvalId?: string }> }) {
   const visible = cards
-    .filter((c) => c.status === "queued" || c.status === "running" || c.status === "failed" || c.status === "interrupted")
+    .filter((c) => c.status === "queued" || c.status === "running" || c.status === "awaiting_approval" || c.status === "failed" || c.status === "interrupted")
     .sort((a, b) => (a.taskId < b.taskId ? -1 : 1));
   const stepsByTask = useConversationStore((s) => s.messageSteps);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -135,6 +137,38 @@ function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; st
               >
                 Cancel
               </button>
+            )}
+            {card.status === "awaiting_approval" && card.approvalId && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void fetch(`/api/capabilities/approvals/${encodeURIComponent(card.approvalId as string)}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ decision: "allow_once" }),
+                    }).catch(() => {});
+                  }}
+                  className="shrink-0 text-[var(--accent-lime)] hover:underline cursor-pointer"
+                  aria-label={`Approve ${card.title}`}
+                >
+                  Allow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void fetch(`/api/capabilities/approvals/${encodeURIComponent(card.approvalId as string)}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ decision: "deny" }),
+                    }).catch(() => {});
+                  }}
+                  className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer"
+                  aria-label={`Deny ${card.title}`}
+                >
+                  Deny
+                </button>
+              </>
             )}
           </div>
           {isOpen && steps.length > 0 && (
@@ -194,6 +228,7 @@ export function AgentConversation({
     loadOlderMessages,
     clearConversation,
     consumeVoiceStart,
+    hydrateJobs,
   } = useConversationStore();
 
   const { dockPosition } = useThemeStore();
@@ -213,6 +248,19 @@ export function AgentConversation({
   // One-shot anchor: expanding to full/side lands on the last user message,
   // never at the top after a reload. Reset when leaving the expanded views.
   const anchoredRef = useRef(false);
+  // Set once the user scrolls away from the bottom on purpose.
+  const userScrolledRef = useRef(false);
+
+  // Focus lands on the composer whenever the panel opens or changes shape
+  // (#173): sheet input on sheet, textarea on side/full. Esc-to-close
+  // returns focus to the home orb (App owns that handoff).
+  useEffect(() => {
+    if (layoutState === "sheet") {
+      sheetInputRef.current?.focus({ preventScroll: true });
+    } else if (layoutState === "full" || layoutState === "side") {
+      textareaRef.current?.focus({ preventScroll: true });
+    }
+  }, [layoutState]);
 
   // Live clock for activity elapsed times + the stuck message. Ticks only
   // while a turn is streaming.
@@ -226,7 +274,7 @@ export function AgentConversation({
   const stuckSecs =
     isStreaming && lastEventAt > 0 ? Math.max(0, Math.floor((now - lastEventAt) / 1000)) : 0;
   const isStuck = stuckSecs >= 8;
-  const reduceMotion = prefersReducedMotion();
+  const reduceMotion = useReducedMotion();
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -269,6 +317,14 @@ export function AgentConversation({
     };
   }, []);
 
+  // Resume active background jobs after a reload (#178): the server keeps
+  // tasks and events durably, but cards and the stream are in-memory only.
+  // Hydrate reopens the stream (replay from the saved cursor) and seeds
+  // still-running cards from the API. Idempotent: safe to run on mount.
+  useEffect(() => {
+    void hydrateJobs();
+  }, [hydrateJobs]);
+
   // Tracks whether the current/last voice attempt showed an error: the
   // close handler must not wipe it, or failures look like silence.
   const voiceErrorShownRef = useRef(false);
@@ -287,28 +343,32 @@ export function AgentConversation({
   }, [draft, adjustTextareaHeight]);
 
   // Handle auto-scroll during streaming (expanded views only; the sheet
-  // shows a compact Orb + summary instead of a transcript)
+  // shows a compact Orb + summary instead of a transcript). Stickiness
+  // follows the user: only auto-scroll while already near the bottom,
+  // never yank a reader back down (#173).
   useEffect(() => {
     if (layoutState === "closed" || layoutState === "sheet") return;
     const el = transcriptRef.current;
     if (!el) return;
 
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (isNearBottom || isStreaming) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (isNearBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? "auto" : "smooth" });
       setShowScrollBottom(false);
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
   // Anchor expanded views on the last user message (once per open, after
-  // hydration). Reloads never start at the top of the history.
+  // hydration). Reloads never start at the top of the history. Never fires
+  // after the user has deliberately scrolled away (#173).
   useEffect(() => {
     if (layoutState !== "full" && layoutState !== "side") {
       anchoredRef.current = false;
+      userScrolledRef.current = false;
       return;
     }
     if (isHydratingThread || messages.length === 0 || isStreaming) return;
-    if (anchoredRef.current) return;
+    if (anchoredRef.current || userScrolledRef.current) return;
     const container = transcriptRef.current;
     if (!container) return;
     anchoredRef.current = true;
@@ -332,6 +392,9 @@ export function AgentConversation({
     const onViewportScroll = () => {
       const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       setShowScrollBottom(distanceToBottom > 150);
+      // The user deliberately left the bottom: stickiness and the open
+      // anchor must not pull them back (#173).
+      if (distanceToBottom > 150) userScrolledRef.current = true;
     };
 
     onViewportScroll();
@@ -576,11 +639,11 @@ export function AgentConversation({
       <AnimatePresence>
         <motion.div
           layoutId="polymax-agent-surface"
-          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 20, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
-          exit={{ opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 20, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
           className={cn(
-            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none flex flex-col items-center",
+            "agent-panel fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none flex flex-col items-center",
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
@@ -593,9 +656,9 @@ export function AgentConversation({
                   className={cn(
                     "w-2 h-2 rounded-full",
                     orbState === "listening" || orbState === "speaking"
-                      ? "bg-[var(--accent-lime)] animate-pulse"
+                      ? `bg-[var(--accent-lime)]${reduceMotion ? "" : " animate-pulse"}`
                       : orbState === "thinking"
-                        ? "bg-[var(--accent-lime)]/70 animate-ping"
+                        ? `bg-[var(--accent-lime)]/70${reduceMotion ? "" : " animate-ping"}`
                         : orbState === "error"
                           ? "bg-red-400"
                           : "bg-white/25"
@@ -603,7 +666,7 @@ export function AgentConversation({
                 />
                 {isStreaming && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
+                    <span className={reduceMotion ? "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)]" : "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping"} />
                   </span>
                 )}
               </div>
@@ -691,10 +754,12 @@ export function AgentConversation({
                 )}
                 title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
               >
-                {/* Shared with the home orb: opening chat morphs it here. */}
+                {/* Shared with the home orb: opening chat morphs it here.
+                    The id stays on both sides under reduced motion (zero
+                    duration instead), so no double-orb flash (#173). */}
                 <motion.div
-                  layoutId={reduceMotion ? undefined : "agent-orb-shared"}
-                  transition={{ duration: 0.28, ease: "easeOut" }}
+                  layoutId="agent-orb-shared"
+                  transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
                   className="flex items-center justify-center"
                 >
                   <Orb state={orbState} size="xs" audioLevel={audioLevel} />
@@ -718,7 +783,7 @@ export function AgentConversation({
               </button>
 
               {isStreaming && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping shrink-0" />
+                <span className={reduceMotion ? "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] shrink-0" : "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping shrink-0"} />
               )}
             </div>
 
@@ -822,11 +887,11 @@ export function AgentConversation({
     <motion.div
       layoutId="polymax-agent-surface"
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1, transition: spring.soft }}
+      animate={{ opacity: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       style={isSide ? { width: `${sideWidth}px` } : undefined}
       className={cn(
-        "relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
+        "agent-panel relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
         isSide
           ? "fixed top-0 bottom-0 left-0 z-40 border-r border-white/5 shadow-2xl"
           : "fixed inset-0 z-40 w-full",
@@ -905,7 +970,7 @@ export function AgentConversation({
       <div
         ref={transcriptRef}
         className={cn(
-          "relative z-0 flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-4 sm:px-6 [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]",
+          "relative z-0 flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]",
           !isSide && "max-w-[720px] mx-auto"
         )}
       >
@@ -958,9 +1023,9 @@ export function AgentConversation({
                     <img
                       src={TINYFISH_LOGO_SRC}
                       alt="TinyFish"
-                      width={14}
-                      height={14}
-                      className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4 rounded-full object-cover shrink-0"
                     />
                   ) : (
                     <span className="text-[var(--accent-lime)] text-[10px]">✦</span>
@@ -976,9 +1041,9 @@ export function AgentConversation({
                   key={msg.id}
                   data-msg-role="user"
                   data-msg-id={msg.id}
-                  className="flex flex-col items-end gap-1.5 w-full"
+                  className="flex flex-col items-end gap-1.5 w-full min-w-0"
                 >
-                  <div className="max-w-[75%] rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
+                  <div className="max-w-[75%] min-w-0 break-words rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
                     {msg.content}
                   </div>
                   <MessageAttachments attachments={msg.attachments} />
@@ -1010,13 +1075,13 @@ export function AgentConversation({
                 key={msg.id}
                 data-msg-role="assistant"
                 data-msg-id={msg.id}
-                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
+                className="group relative w-full min-w-0 break-words prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
                 <StepsTimeline steps={messageSteps[msg.id] || []} thinking={messageThinking[msg.id]} />
                 <AssistantMarkdown content={msg.content} />
 
                 {/* Hover actions: Copy & Retry on last message */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
+                <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
                   {msg.model && (
                     <span className="text-[10px] text-muted-foreground/60" title={`Answered by ${msg.model}`}>
                       {modelShortName(msg.model)}
@@ -1064,15 +1129,17 @@ export function AgentConversation({
                 return (
                   <div
                     key={row.id}
-                    className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
+                    className="activity-pill flex items-center gap-2 text-xs font-mono text-muted-foreground"
                   >
-                    {branded ? (
+                    {row.state === "error" ? (
+                      <X className="w-3 h-3 text-red-400" />
+                    ) : branded ? (
                       <img
                         src={TINYFISH_LOGO_SRC}
                         alt="TinyFish"
-                        width={14}
-                        height={14}
-                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                        width={16}
+                        height={16}
+                        className="w-4 h-4 rounded-full object-cover shrink-0"
                       />
                     ) : row.state === "running" ? (
                       <span
@@ -1099,9 +1166,9 @@ export function AgentConversation({
                     <img
                       src={TINYFISH_LOGO_SRC}
                       alt="TinyFish"
-                      width={14}
-                      height={14}
-                      className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4 rounded-full object-cover shrink-0"
                     />
                   ) : (
                     <span

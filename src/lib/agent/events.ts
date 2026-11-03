@@ -192,6 +192,15 @@ export function getToolBrand(toolName?: string | null): ToolBrand | null {
 }
 
 /**
+ * Whether an activity row carries a provider brand (#323). The live pill
+ * shows the mark while running and dissolves on completion — the durable
+ * transcript row and the steps timeline keep the history.
+ */
+export function isBrandedActivity(tool?: string | null, label?: string | null): boolean {
+  return getToolBrand(tool) !== null || getToolBrandByLabel(label ?? undefined) !== null;
+}
+
+/**
  * Brand fallback by label text, driven by the same registry: matches when
  * the status line names a registered brand (e.g. a capability path whose
  * tool name differs from the integration). No per-vendor checks at render.
@@ -291,6 +300,24 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     default:
       return null;
   }
+}
+
+/**
+ * Builds the transcript line shown when the agent records a memory (#105).
+ * Pure: returns null for anything that is not a successful record_memory
+ * result, so both turn paths share one honest gate. No secrets: the entry
+ * line itself is the user-visible preference text, truncated.
+ */
+export function buildMemoryChipContent(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null;
+  const r = result as { recorded?: unknown; entry?: unknown };
+  if (r.recorded !== true || typeof r.entry !== "string") return null;
+  const text = r.entry
+    .replace(/^-\s*\[[^\]]*\]\s*(\[[^\]]*\]\s*)?(\(workspace:[^)]*\)\s*)?:\s*/, "")
+    .trim();
+  if (!text) return null;
+  const short = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  return `Remembered: ${short}`;
 }
 
 /**

@@ -73,9 +73,9 @@ export function ThoughtStream({ className = "" }: { className?: string }) {
             <img
               src={brand.logoSrc}
               alt={brand.label}
-              width={14}
-              height={14}
-              className="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
+              width={16}
+              height={16}
+              className="h-4 w-4 shrink-0 rounded-full object-cover"
             />
           )}
           <span className="truncate">{line.text}</span>

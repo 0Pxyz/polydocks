@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { internalError } from "../errors";
+import { denyUnlessIdentified } from "../auth/guard";
 import {
   getMemoryOverview,
   updateMemoryMd,
@@ -14,11 +16,14 @@ export const memoryRouter = new Hono();
  * Retrieves current MEMORY.md and list of recent daily logs for user inspection.
  */
 memoryRouter.get("/", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   try {
     const overview = await getMemoryOverview();
     return c.json(overview);
   } catch (err: any) {
-    return c.json({ error: `Failed to retrieve memory overview: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to retrieve memory overview");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -27,6 +32,8 @@ memoryRouter.get("/", async (c) => {
  * Allows the user or UI to directly update or prune long-term MEMORY.md.
  */
 memoryRouter.put("/", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -42,7 +49,8 @@ memoryRouter.put("/", async (c) => {
     const result = await updateMemoryMd(body.content);
     return c.json({ success: true, ...result });
   } catch (err: any) {
-    return c.json({ error: `Failed to update MEMORY.md: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to update MEMORY.md");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -51,6 +59,8 @@ memoryRouter.put("/", async (c) => {
  * Records a new memory entry.
  */
 memoryRouter.post("/record", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -71,7 +81,8 @@ memoryRouter.post("/record", async (c) => {
     });
     return c.json(result);
   } catch (err: any) {
-    return c.json({ error: `Failed to record memory: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to record memory");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -80,6 +91,8 @@ memoryRouter.post("/record", async (c) => {
  * Queries memory with keyword and category scoring.
  */
 memoryRouter.post("/recall", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -95,7 +108,8 @@ memoryRouter.post("/recall", async (c) => {
     const memories = await recallMemory({ query, category, maxTokens });
     return c.json({ query, count: memories.length, memories });
   } catch (err: any) {
-    return c.json({ error: `Failed to recall memories: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to recall memories");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -105,6 +119,8 @@ memoryRouter.post("/recall", async (c) => {
  * Body: { content, scope?: curated|daily|all, date?: YYYY-MM-DD }.
  */
 memoryRouter.delete("/entry", async (c) => {
+  const blocked = await denyUnlessIdentified(c);
+  if (blocked) return blocked;
   let body: any = {};
   try {
     body = await c.req.json();
@@ -130,6 +146,7 @@ memoryRouter.delete("/entry", async (c) => {
     }
     return c.json({ removed: true, scope: result.scope });
   } catch (err: any) {
-    return c.json({ error: `Failed to delete memory entry: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to delete memory entry");
+    return c.json(out.body, out.status);
   }
 });

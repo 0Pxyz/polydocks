@@ -10,6 +10,7 @@ import {
   BESIDE_WIDTH_DEFAULT,
   BESIDE_WIDTH_MAX,
   BESIDE_WIDTH_MIN,
+  adoptServerDock,
   emptyDock,
   openItem,
   closeItem,
@@ -132,6 +133,12 @@ export interface DockState {
   pinTool: (toolId: string) => void;
   unpinTool: (toolId: string) => void;
   mergeServerPins: (ids: string[]) => void;
+  /**
+   * Adopt the server open set when the local read-cache is empty (#174).
+   * Fresh profiles and cleared storage boot from dock_items instead of an
+   * empty dock; existing local state is never overwritten. No-op offline.
+   */
+  hydrateDockFromServer: () => Promise<void>;
   openTool: (toolId: string, contextId?: string | null) => void;
   closeTool: (toolId: string) => void;
   focusTool: (toolId: string) => void;
@@ -329,6 +336,30 @@ export const useDockStore = create<DockState>((set, get) => {
         const derived = deriveLegacy(dock);
         return { dock, activeToolId: dock.focusedId, openIds: derived.openIds };
       }),
+
+    hydrateDockFromServer: async () => {
+      if (get().dock.order.length > 0) return;
+      try {
+        const res = await fetch("/api/dock/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ op: "tabs.list" }),
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const rows = Array.isArray(data?.data?.dockItems) ? data.data.dockItems : [];
+        if (rows.length === 0) return;
+        set((state) => {
+          const dock = adoptServerDock(state.dock, rows);
+          if (dock === state.dock) return state;
+          persistDockSnapshot(dock);
+          const derived = deriveLegacy(dock);
+          return { dock, activeToolId: dock.focusedId, openIds: derived.openIds };
+        });
+      } catch {
+        // Offline-first: boot with an empty dock, verbs re-register rows.
+      }
+    },
 
     closeTool: (toolId) =>
       set((state) => {

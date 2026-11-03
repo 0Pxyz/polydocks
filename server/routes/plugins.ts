@@ -3,6 +3,8 @@ import { pluginRegistry } from "../plugins/registry";
 import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import { connectMcpServer } from "../plugins/adapters/mcp";
+import { denyUnlessWorkspace } from "../auth/guard";
+import { safeMessage } from "../errors";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -298,7 +300,7 @@ pluginsRouter.post("/mcp/refresh", async (c) => {
     const tools = await McpClientManager.getInstance().refreshTools(name);
     return c.json({ success: true, tools });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    return c.json({ error: safeMessage(err, "Live tool refresh failed.") }, 400);
   }
 });
 
@@ -342,10 +344,13 @@ pluginsRouter.post("/mcp/disconnect", async (c) => {
 pluginsRouter.post("/lifecycle", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { op, ...params } = body ?? {};
+  const workspaceId = (body as any)?.workspaceId || c.req.query("workspaceId");
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const { pluginLifecycle } = await import("../facade/shared");
   const out = await pluginLifecycle(typeof op === "string" ? op : "", params ?? {}, {
     actor: "user",
-    workspaceId: (body as any)?.workspaceId || c.req.query("workspaceId"),
+    workspaceId,
   });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
@@ -368,8 +373,11 @@ pluginsRouter.get("/:id/versions", async (c) => {
  */
 pluginsRouter.post("/:id/rollback", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const workspaceId = (body as any)?.workspaceId || c.req.query("workspaceId");
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const { pluginRollback } = await import("../facade/shared");
-  const out = await pluginRollback(c.req.param("id"), (body as any)?.version, (body as any)?.workspaceId || c.req.query("workspaceId"));
+  const out = await pluginRollback(c.req.param("id"), (body as any)?.version, workspaceId);
   if (!out.ok) {
     const status = (out as any).code === "not_found" ? 404 : 400;
     return c.json(out, status as any);
@@ -400,6 +408,11 @@ pluginsRouter.post("/:pluginId/:capability", async (c) => {
       : undefined) ??
     c.req.query("workspaceId");
   const { invokeCapability } = await import("../facade/shared");
+  // Ownership runs through the central guard: owned workspaces isolate
+  // over HTTP; unowned device-local ones keep today's open behavior.
+  // The agent turn path validates the same way in server/index.ts.
+  const stop = await denyUnlessWorkspace(c, workspaceId);
+  if (stop) return stop;
   const out = await invokeCapability(pluginId, capability, input, { actor: "user", workspaceId });
   if (!out.ok) {
     const status = (out as any).code === "unknown_capability" ? 404 : 400;
@@ -489,6 +502,15 @@ capabilitiesRouter.post("/invoke", async (c) => {
     return c.json({ error: "Missing capabilityId" }, 400);
   }
 
+  // Same central guard as the plugin invoke path (see above).
+  const effectiveWorkspace =
+    (typeof workspaceId === "string" && workspaceId) ||
+    (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
+      ? (input as any).workspaceId
+      : undefined);
+  const stop = await denyUnlessWorkspace(c, effectiveWorkspace);
+  if (stop) return stop;
+
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",
     workspaceId,
@@ -504,6 +526,15 @@ capabilitiesRouter.post("/:id/invoke", async (c) => {
   const capabilityId = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));
   const { input, workspaceId } = body;
+
+  // Same central guard as above.
+  const effectiveWorkspace =
+    (typeof workspaceId === "string" && workspaceId) ||
+    (input && typeof input === "object" && typeof (input as any).workspaceId === "string"
+      ? (input as any).workspaceId
+      : undefined);
+  const stop = await denyUnlessWorkspace(c, effectiveWorkspace);
+  if (stop) return stop;
 
   const result = await capabilityBus.invoke(capabilityId, input, {
     actor: "user",

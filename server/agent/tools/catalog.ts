@@ -46,6 +46,8 @@ export function buildDynamicCapabilityTools(): AgentTool[] {
         actor: ctx?.actor === "cli" || ctx?.actor === "user" ? "user" : "agent",
         workspaceId: ctx?.workspaceId,
         step: ctx?.step,
+        taskId: ctx?.taskId,
+        onEvent: ctx?.onEvent,
       });
       return res;
     },

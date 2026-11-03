@@ -128,15 +128,33 @@ export function registerSandboxPlugin(): void {
       sandboxPluginManifest.capabilities.find((c) => c.id === capabilityId)!,
       async (input, ctx) => {
         if (MUTATING.has(capabilityId)) {
-          const { enforceInstallPolicy } = await import("../agent/installPolicy");
+          const { enforceInstallPolicy, requestTaskApproval } = await import("../agent/installPolicy");
           const denied = enforceInstallPolicy(ctx?.actor, (input as any)?.userApproved);
           if (denied) {
-            return {
-              ok: false as const,
-              error: denied.error,
-              retryable: false as const,
-              code: denied.code,
-            };
+            // Background tasks escalate to a real approval request (#315).
+            if (denied.code !== "approval_required") {
+              return {
+                ok: false as const,
+                error: denied.error,
+                retryable: false as const,
+                code: denied.code,
+              };
+            }
+            const ws = (input as any)?.workspaceId || ctx?.workspaceId || "default";
+            const ok = await requestTaskApproval(ctx as any, {
+              pluginId: "sandbox",
+              capabilityId,
+              scope: `workspace:${ws}`,
+              summary: `Background job needs approval to run ${capabilityId} in workspace "${ws}".`,
+            });
+            if (!ok) {
+              return {
+                ok: false as const,
+                error: denied.error,
+                retryable: false as const,
+                code: denied.code,
+              };
+            }
           }
         }
         const { userApproved: _dropped, ...rest } = (input || {}) as Record<string, unknown>;

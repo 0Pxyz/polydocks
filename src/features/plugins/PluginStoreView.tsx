@@ -20,6 +20,98 @@ export interface RegistryPluginCard {
   author: string;
   tags: string[];
   downloads: number;
+  /** Declared manifest permissions (install-time display, #180). */
+  permissions?: Array<{ type: string; [key: string]: any }>;
+  /** What + why lines, computed server-side in one place. */
+  permissionLines?: string[];
+  /** True unless every declared permission is quiet (own storage/UI). */
+  requiresAcknowledge?: boolean;
+}
+
+/**
+ * Install confirmation sheet (#180): shows exactly what the plugin may do
+ * (what + why, server-computed) and gates Install behind an acknowledge
+ * checkbox. Only used when requiresAcknowledge is true; quiet plugins keep
+ * the one-click install. Same honest style as the MCP pre-connect preview.
+ */
+export function InstallConfirmSheet({
+  pluginName,
+  permissionLines,
+  installing,
+  onConfirm,
+  onCancel,
+}: {
+  pluginName: string;
+  permissionLines: string[];
+  installing: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [acknowledged, setAcknowledged] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" role="dialog" aria-label={`Install ${pluginName}`}>
+      <div className="w-full max-w-md p-5 rounded-2xl bg-[#0c0e14] border border-white/15 shadow-2xl flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-white">Install {pluginName}</h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Cancel install"
+            className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-2 p-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/20">
+          <span className="text-xs font-medium text-amber-200/90">This plugin will be granted:</span>
+          <div className="flex flex-col gap-1.5">
+            {permissionLines.map((line) => (
+              <span key={line} className="text-xs text-white/80">
+                {line}
+              </span>
+            ))}
+          </div>
+          <label className="flex items-start gap-2 text-xs text-white/70 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(e) => setAcknowledged(e.target.checked)}
+              className="mt-0.5 accent-emerald-400"
+            />
+            <span>I understand these permissions. I can revoke them anytime by uninstalling this plugin.</span>
+          </label>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/60 hover:text-white cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={installing || !acknowledged}
+            title={!acknowledged ? "Review and confirm the permissions above first" : undefined}
+            onClick={onConfirm}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--accent-lime)] text-black disabled:opacity-50 transition-all cursor-pointer"
+          >
+            {installing ? (
+              <>
+                <CircleNotch size={11} className="animate-spin" />
+                Installing
+              </>
+            ) : (
+              <>
+                <Check size={11} weight="bold" />
+                Install
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface PluginStoreViewProps {
@@ -43,6 +135,7 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [confirmPlugin, setConfirmPlugin] = useState<RegistryPluginCard | null>(null);
 
   const fetchRegistry = useCallback(async () => {
     setLoading(true);
@@ -89,7 +182,18 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
     return ["All", ...rest];
   }, [plugins, selectedTag]);
 
-  const handleInstall = async (pluginId: string) => {
+  const handleInstall = (plugin: RegistryPluginCard) => {
+    if (installingId) return;
+    // Loud permissions need an explicit acknowledge first (#180); quiet
+    // plugins keep the one-click install with no new prompts.
+    if (plugin.requiresAcknowledge) {
+      setConfirmPlugin(plugin);
+      return;
+    }
+    void runInstall(plugin.id);
+  };
+
+  const runInstall = async (pluginId: string) => {
     if (installingId) return;
     setInstallingId(pluginId);
     setFailedId(null);
@@ -236,7 +340,7 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
                     if (isInstalled) {
                       onOpenPlugin?.(plugin.id);
                     } else {
-                      handleInstall(plugin.id);
+                      void handleInstall(plugin);
                     }
                   }}
                   onKeyDown={(e) => {
@@ -304,6 +408,19 @@ export function PluginStoreView({ onDismiss, onOpenPlugin }: PluginStoreViewProp
           </div>
         )}
       </div>
+      {confirmPlugin && (
+        <InstallConfirmSheet
+          pluginName={confirmPlugin.name}
+          permissionLines={confirmPlugin.permissionLines ?? []}
+          installing={installingId === confirmPlugin.id}
+          onConfirm={() => {
+            const target = confirmPlugin;
+            setConfirmPlugin(null);
+            void runInstall(target.id);
+          }}
+          onCancel={() => setConfirmPlugin(null)}
+        />
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ import { tasksRouter } from "./routes/tasks";
 import { artifactsRouter } from "./routes/artifacts";
 import { taskExecutionEngine } from "./agent/taskRunner";
 import { auth, getAuthConfigSummary } from "./auth/index";
-import { getEffectiveCaller, hasWorkspaceAccess } from "./auth/session";
+import { callerOf, denyUnlessWorkspace } from "./auth/guard";
 import { recordExperienceError, getExperienceErrors } from "./workspace/experienceErrors";
 import { initAgentHome } from "./system/agentHome";
 import { db } from "./workspace/db";
@@ -305,7 +305,12 @@ app.post("/api/agent", async (c) => {
     return c.json({ error: "Missing required 'prompt' field in request body" }, 400);
   }
 
-  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const caller = await callerOf(c);
+  // Cloud mode requires an identity for the agent: anonymous turns never
+  // run (uniform 404, no existence/oracle leak).
+  if (config.DEPLOY_MODE === "cloud" && caller.kind !== "user") {
+    return c.json({ error: "Not found" }, 404);
+  }
   const userId =
     caller.kind === "user"
       ? caller.user.id
@@ -318,9 +323,10 @@ app.post("/api/agent", async (c) => {
         );
 
   // Never trust a client-supplied workspace id: the turn is refused when
-  // the caller may not access the workspace.
-  if (typeof workspaceId === "string" && !hasWorkspaceAccess(workspaceId, caller)) {
-    return c.json({ error: "Not available to this account" }, 403);
+  // the caller may not access the workspace (uniform 404, no leak).
+  if (typeof workspaceId === "string") {
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return stop;
   }
 
   const requestedModel =

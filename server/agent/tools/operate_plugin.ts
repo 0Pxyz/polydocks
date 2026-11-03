@@ -53,6 +53,8 @@ export const operate_plugin: AgentTool<OperatePluginArgs> = {
       actor: "agent",
       workspaceId: input.workspaceId || ctx?.workspaceId || "default",
       step: ctx?.step,
+      taskId: ctx?.taskId,
+      onEvent: ctx?.onEvent,
     });
 
     if (!execResult.success) {

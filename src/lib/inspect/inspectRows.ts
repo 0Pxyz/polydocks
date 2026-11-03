@@ -13,6 +13,8 @@ export type InspectRowKind = "request" | "decision" | "action" | "result" | "err
 
 export interface InspectRow {
   seq: number;
+  /** Client arrival time (ms epoch), set by the view when pushing. */
+  at?: number;
   kind: InspectRowKind;
   /** Short human label (tool name, event name). Values never included. */
   label: string;
@@ -25,6 +27,8 @@ export interface InspectRow {
 export interface RawInspectEvent {
   type: string;
   step?: number;
+  /** Client arrival time (ms epoch). */
+  at?: number;
   payload?: Record<string, any>;
 }
 
@@ -42,6 +46,36 @@ function hostOf(url: unknown): string {
   } catch {
     return "invalid-url";
   }
+}
+
+/** Job ids are `task_<ts>_<rand>` — show the short tail, never input. */
+function shortJob(jobId: unknown): string {
+  if (typeof jobId !== "string" || jobId.length === 0) return "job";
+  const tail = jobId.replace(/^task_/, "");
+  return `job ${tail.slice(-8)}`;
+}
+
+/** Live job states from the tasks stream. Terminal states are results, not errors. */
+function summarizeJobEvent(status: string, payload: Record<string, any>, seq: number, step: number): InspectRow | null {
+  const job = shortJob((payload as any).jobId ?? (payload as any).taskId);
+  if (status === "completed") {
+    return { seq, kind: "result", label: `${job} done`, detail: "ok", step };
+  }
+  if (status === "failed") {
+    return { seq, kind: "error", label: `${job} failed`, detail: "failed", step };
+  }
+  if (status === "cancelled" || status === "interrupted") {
+    return { seq, kind: "result", label: `${job} ${status}`, detail: status, step };
+  }
+  if (status === "progress") {
+    const p = (payload as any).progress;
+    if (typeof p !== "number" || Number.isNaN(p)) return null;
+    return { seq, kind: "action", label: `${job} progress`, detail: `${Math.round(p * 100)}%`, step };
+  }
+  if (status === "queued" || status === "started" || status === "running") {
+    return { seq, kind: "action", label: `${job} ${status}`, detail: status, step };
+  }
+  return null;
 }
 
 /**
@@ -79,7 +113,10 @@ export function summarizeInspectEvent(raw: RawInspectEvent, seq: number): Inspec
     case "agent.finish": {
       const textLen = typeof payload.text === "string" ? payload.text.length : 0;
       const issues = Array.isArray((payload as any).receiptCheck?.issues) ? (payload as any).receiptCheck.issues.length : 0;
-      return { seq, kind: "result", label: "Finished", detail: `answer ${textLen} chars${issues > 0 ? ", verify-before-relying" : ""}`, step };
+      const inTok = typeof (payload as any).inputTokens === "number" ? `, ${(payload as any).inputTokens} in` : "";
+      const outTok = typeof (payload as any).outputTokens === "number" ? `, ${(payload as any).outputTokens} out` : "";
+      const cost = typeof (payload as any).costUsd === "number" && (payload as any).costUsd > 0 ? `, $${(payload as any).costUsd.toFixed(4)}` : "";
+      return { seq, kind: "result", label: "Finished", detail: `answer ${textLen} chars${inTok}${outTok}${cost}${issues > 0 ? ", verify-before-relying" : ""}`, step };
     }
     case "browser.open": {
       const host = hostOf((payload as any).url);
@@ -89,9 +126,28 @@ export function summarizeInspectEvent(raw: RawInspectEvent, seq: number): Inspec
       const message = typeof payload.message === "string" ? payload.message : "unknown error";
       return { seq, kind: "error", label: "Error", detail: truncate(message), step };
     }
+    case "message.done":
+    case "message.error": {
+      // Orchestrator outcomes carry the routing decision (reason only —
+      // prompts and args never reach a row).
+      const d = (payload as any).decision;
+      if (d && typeof d === "object") {
+        const kind = typeof d.kind === "string" ? d.kind : "unknown route";
+        const reason = typeof d.reason === "string" && d.reason ? `: ${d.reason}` : "";
+        const conf = typeof d.confidence === "number" ? ` (${Math.round(d.confidence * 100)}%)` : "";
+        return { seq, kind: "decision", label: `route: ${kind}`, detail: truncate(`dispatcher${reason}${conf}`), step };
+      }
+      if (raw.type === "message.error") {
+        return { seq, kind: "error", label: "Turn failed", detail: "see transcript", step };
+      }
+      return null;
+    }
     default: {
       if (raw.type.startsWith("plugin.")) {
         return { seq, kind: "action", label: raw.type, detail: typeof payload.pluginId === "string" ? `plugin ${payload.pluginId}` : "", step };
+      }
+      if (raw.type.startsWith("job.")) {
+        return summarizeJobEvent(raw.type.slice(4), payload, seq, step);
       }
       return null;
     }
@@ -101,6 +157,10 @@ export function summarizeInspectEvent(raw: RawInspectEvent, seq: number): Inspec
 /** Folds a raw event stream into Inspect rows, dropping the rest. */
 export function buildInspectRows(events: RawInspectEvent[]): InspectRow[] {
   return events
-    .map((event, index) => summarizeInspectEvent(event, index))
+    .map((event, index) => {
+      const row = summarizeInspectEvent(event, index);
+      if (row && typeof event.at === "number") row.at = event.at;
+      return row;
+    })
     .filter((row): row is InspectRow => row !== null);
 }

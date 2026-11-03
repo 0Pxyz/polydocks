@@ -74,3 +74,39 @@ textarea {
     animation: none;
   }
 }
+
+/* Touch targets (#173): coarse pointers get 44px panel controls and
+   16px composer text (no iOS focus zoom). Desktop is untouched. */
+@media (pointer: coarse) {
+  .agent-panel button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .agent-panel input,
+  .agent-panel textarea {
+    font-size: 16px;
+  }
+}
+
+/* Live activity pill entrance (#323): fade + slight rise on mount.
+   Static under reduced motion. */
+@keyframes activity-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.activity-pill {
+  animation: activity-pill-in 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-pill {
+    animation: none;
+  }
+}

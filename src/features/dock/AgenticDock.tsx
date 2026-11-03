@@ -12,7 +12,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/cn";
 import { DockIcon } from "@/components/icons/DockIcon";
-import { spring, prefersReducedMotion } from "@/lib/motion";
+import { spring, useReducedMotion } from "@/lib/motion";
 import type { IconComponent } from "@/components/icons/adapter";
 import { resolveUniqueIcon } from "@/components/icons/adapter";
 import { useThemeStore } from "@/lib/theme";
@@ -245,7 +245,7 @@ export function AgenticDock({
   // Ring "needs you" state: a pending approval pulses the agent glyph.
   const hasPendingApproval = useConversationStore((s) => s.activeApproval !== null);
   const currentStyle = DOCK_STYLES[dockStyle] || DOCK_STYLES.glass;
-  const isReducedMotion = prefersReducedMotion();
+  const isReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const el = baseHudRef.current || capsuleRef.current || headerRef.current;
@@ -571,7 +571,7 @@ export function AgenticDock({
                 currentStyle.enableLift && !isReducedMotion && "hover:scale-115"
               )}
             >
-              <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <svg className={isReducedMotion ? "w-5 h-5" : "w-5 h-5 animate-spin"} viewBox="0 0 24 24" fill="none">
                 <circle
                   cx="12"
                   cy="12"

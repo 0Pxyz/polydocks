@@ -76,7 +76,6 @@ const NAMESPACE_DESCRIPTIONS: Record<string, string> = {
   workspace: "Workspace state: context, sessions, tasks and saved artifacts.",
   inspect: "Execution introspection: inspect past tool and capability runs.",
   sources: "Research sources: save, list and open source URLs for a workspace.",
-  cities: "Structured demo content: cities, quests and notes.",
   general: "General utilities that fit no other namespace.",
 };
 
@@ -160,7 +159,6 @@ const CAPABILITY_PLUGIN_NAMESPACE: Record<string, string> = {
   workspace: "workspace",
   writing: "files",
   sandbox: "sandbox",
-  cities: "cities",
 };
 
 function capabilityNamespaceFor(originalName: string): string {

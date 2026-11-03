@@ -20,6 +20,8 @@ const OTHER_USER = "thread_test_other";
 function clearAll() {
   clearAgentThread(TEST_USER);
   clearAgentThread(OTHER_USER);
+  // The HTTP test below exercises the shared single-user "local" thread.
+  clearAgentThread("local");
 }
 
 function requestThread(path = "/api/agent/thread", init?: RequestInit) {
@@ -162,25 +164,31 @@ describe("Single persistent agent thread", () => {
   });
 
   it("serves, pages and clears the thread over HTTP", async () => {
-    // Per-user thread isolation is a cloud-mode behavior: local mode pins
-    // every request to the single-user demo identity (DEPLOY_MODE=local).
-    // Flip to cloud for this HTTP round-trip so the X-Polymax-User header
-    // scopes the thread, then restore.
-    const prevMode = config.DEPLOY_MODE;
-    (config as any).DEPLOY_MODE = "cloud";
+    // Local mode pins every request to the single-user demo identity:
+    // the header is ignored and the shared "local" thread is served.
+    // Cloud mode denies header-only callers: the thread needs a session
+    // identity, so anonymous callers get the uniform 404 (Tarefa 1).
+    appendThreadMessage("local", "user", "Hello");
+    appendThreadMessage("local", "assistant", "Hi");
     try {
-      appendThreadMessage(TEST_USER, "user", "Hello");
-      appendThreadMessage(TEST_USER, "assistant", "Hi");
-
       const getRes = await requestThread();
       expect(getRes.status).toBe(200);
       const snapshot = (await getRes.json()) as any;
-      expect(snapshot.thread.userId).toBe(TEST_USER);
+      expect(snapshot.thread.userId).toBe("local");
       expect(snapshot.messages).toHaveLength(2);
 
       const before = snapshot.messages[0].seq;
       const pageRes = await requestThread(`/api/agent/thread/messages?before=${before}&limit=1`);
       expect(pageRes.status).toBe(200);
+
+      const prevMode = config.DEPLOY_MODE;
+      (config as any).DEPLOY_MODE = "cloud";
+      try {
+        const anonRes = await requestThread();
+        expect(anonRes.status).toBe(404);
+      } finally {
+        (config as any).DEPLOY_MODE = prevMode;
+      }
 
       const delRes = await requestThread("/api/agent/thread", { method: "DELETE" });
       expect(delRes.status).toBe(200);
@@ -189,7 +197,7 @@ describe("Single persistent agent thread", () => {
       expect(after.messages).toHaveLength(0);
       expect(after.thread.id).toBe(snapshot.thread.id);
     } finally {
-      (config as any).DEPLOY_MODE = prevMode;
+      clearAgentThread("local");
     }
   });
 });

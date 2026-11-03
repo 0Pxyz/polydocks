@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { prefersReducedMotion } from "@/lib/motion";
+import { useReducedMotion } from "@/lib/motion";
 
 /**
  * Shared assistant markdown: links, fenced code blocks with copy, inline
@@ -70,7 +70,7 @@ export function AssistantMarkdown({ content }: { content: string }) {
  * users get the caret state change with no animation.
  */
 export function StreamingText({ text, streaming }: { text: string; streaming: boolean }) {
-  const reduceMotion = prefersReducedMotion();
+  const reduceMotion = useReducedMotion();
   const blocks = text.split(/\n{2,}/);
   const head = blocks.slice(0, -1).join("\n\n");
   const tail = blocks[blocks.length - 1] ?? "";

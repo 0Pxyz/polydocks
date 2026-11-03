@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from "react";
 import { RotateCcw, Plus, Check, Ban, Upload, Clipboard, Download } from "lucide-react";
 import { motion, AnimatePresence, type Variants } from "motion/react";
-import { THEMES, useThemeStore } from "@/lib/theme";
+import { PRESET_WALLPAPERS, MAX_UPLOAD_BYTES, THEMES, useThemeStore } from "@/lib/theme";
+export { PRESET_WALLPAPERS };
 import { DOCK_STYLES, type DockStyleId } from "@/features/dock/styles";
 import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 import { Button } from "@/components/ui/button";
@@ -31,25 +32,6 @@ export const PRESET_ACCENTS = [
   { label: "Electric Blue", color: "#1D68FE" },
 ];
 
-export const PRESET_WALLPAPERS = [
-  {
-    name: "Cyber Grid",
-    url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1600&q=80",
-  },
-  {
-    name: "Deep Space",
-    url: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1600&q=80",
-  },
-  {
-    name: "Abstract Neon",
-    url: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1600&q=80",
-  },
-  {
-    name: "Dark Matrix",
-    url: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80",
-  },
-];
-
 interface ThemeCustomizerViewProps {
   onDismiss?: () => void;
 }
@@ -66,6 +48,8 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     theme,
     customAccentColor,
     wallpaperUrl,
+    customWallpapers,
+    wallpaperError,
     wallpaperOpacity,
     wallpaperBlur,
     dockStyle,
@@ -73,6 +57,9 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     setTheme,
     setCustomAccentColor,
     setWallpaper,
+    removeWallpaper,
+    reportWallpaperError,
+    clearWallpaperError,
     setWallpaperOpacity,
     setWallpaperBlur,
     setDockStyle,
@@ -129,18 +116,35 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onDismiss]);
 
+  const failWallpaper = (message: string) => {
+    reportWallpaperError(message);
+    showTransientLabel(message);
+  };
+
   const processImageFile = (file: File) => {
-    if (file.type.startsWith("image/") || /\.(gif|png|jpe?g|webp|svg|bmp)$/i.test(file.name)) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setWallpaper(reader.result, { fit: "cover" });
-          setIsWallpaperPopoverOpen(false);
-          showTransientLabel(file.name ? `Wallpaper: ${file.name}` : "Custom Wallpaper");
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!(file.type.startsWith("image/") || /\.(gif|png|jpe?g|webp|svg|bmp)$/i.test(file.name))) {
+      failWallpaper("That file is not an image. Pick a PNG, JPG, GIF or WebP.");
+      return;
     }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      const mb = (file.size / (1024 * 1024)).toFixed(1);
+      failWallpaper(`Image too large (${mb}MB) to save — pick one under ~4MB.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => failWallpaper("Couldn't read that file. Try another image.");
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        clearWallpaperError();
+        setWallpaper(reader.result, { fit: "cover" });
+        const err = useThemeStore.getState().wallpaperError;
+        setIsWallpaperPopoverOpen(false);
+        showTransientLabel(err ?? (file.name ? `Wallpaper: ${file.name}` : "Custom Wallpaper"));
+      } else {
+        failWallpaper("Couldn't read that file. Try another image.");
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
@@ -640,6 +644,57 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
             );
           })}
 
+          {/* Custom uploads: durable list alongside presets (#309) */}
+          {customWallpapers.map((url, idx) => {
+            const isSelected = wallpaperUrl === url;
+            return (
+              <div key={`custom-${idx}`} className="relative">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`Custom wallpaper ${idx + 1}`}
+                  tabIndex={isSelected ? 0 : -1}
+                  onKeyDown={(e) =>
+                    handleRowKeyNavigation(
+                      e,
+                      PRESET_WALLPAPERS.length + 1 + idx,
+                      PRESET_WALLPAPERS.length + customWallpapers.length + 2,
+                      wallpaperRowRef
+                    )
+                  }
+                  onClick={() => {
+                    clearWallpaperError();
+                    setWallpaper(url, { fit: "cover" });
+                    showTransientLabel(
+                      useThemeStore.getState().wallpaperError ?? `Custom ${idx + 1}`
+                    );
+                  }}
+                  onMouseEnter={() => showTransientLabel(`Custom ${idx + 1}`)}
+                  className={cn(
+                    "w-[50px] h-[50px] rounded-xl transition-all duration-150 cursor-pointer overflow-hidden border bg-cover bg-center backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-lime)] focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    isSelected
+                      ? "border-transparent ring-2 ring-[var(--accent-lime)] ring-offset-2 ring-offset-background shadow-[0_0_12px_rgba(200,255,87,0.4)]"
+                      : "border-white/15 opacity-80 hover:opacity-100 hover:scale-105"
+                  )}
+                  style={{ backgroundImage: `url(${url})` }}
+                />
+                <button
+                  type="button"
+                  aria-label={`Remove custom wallpaper ${idx + 1}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeWallpaper(url);
+                    showTransientLabel("Custom wallpaper removed");
+                  }}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/80 border border-white/20 text-white/70 hover:text-white hover:border-white/50 flex items-center justify-center cursor-pointer text-[11px] leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+
           {/* Custom Upload / URL Tile */}
           <Popover
             open={isWallpaperPopoverOpen}
@@ -721,6 +776,21 @@ export function ThemeCustomizerView({ onDismiss }: ThemeCustomizerViewProps) {
             </PopoverContent>
           </Popover>
         </motion.div>
+
+        {/* Wallpaper errors are explicit, never silent (#309) */}
+        {wallpaperError && (
+          <div className="w-full flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2" role="alert">
+            <p className="flex-1 text-xs text-red-200">{wallpaperError}</p>
+            <button
+              type="button"
+              onClick={clearWallpaperError}
+              className="shrink-0 text-xs text-red-200/70 hover:text-red-100 hover:underline cursor-pointer"
+              aria-label="Dismiss wallpaper error"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Row 4: Conditional Wallpaper Controls (Opacity & Blur) */}
         <AnimatePresence>

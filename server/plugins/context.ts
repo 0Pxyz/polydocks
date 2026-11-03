@@ -36,6 +36,8 @@ export interface ScopedSecretsContext {
 export interface ScopedExecutionContext {
   actor: "agent" | "user";
   workspaceId?: string;
+  /** Background task awaiting this run, if any (drives approval UX). */
+  taskId?: string;
   pluginId: string;
   signal?: AbortSignal;
   log: (msg: string) => void;
@@ -55,11 +57,12 @@ export function createScopedExecutionContext(params: {
   manifest: PluginManifest;
   actor: "agent" | "user";
   workspaceId?: string;
+  taskId?: string;
   signal?: AbortSignal;
   log?: (msg: string) => void;
   emit?: (event: { type: string; payload: Record<string, unknown> }) => Promise<void> | void;
 }): ScopedExecutionContext {
-  const { pluginId, manifest, actor, workspaceId, signal, log, emit } = params;
+  const { pluginId, manifest, actor, workspaceId, taskId, signal, log, emit } = params;
 
   // 1. Filesystem confinement
   const workspaceRoot = path.resolve(process.cwd(), "workspace");
@@ -291,6 +294,7 @@ export function createScopedExecutionContext(params: {
   return {
     actor,
     workspaceId,
+    taskId,
     pluginId,
     signal,
     log: (msg: string) => {

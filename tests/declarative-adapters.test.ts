@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pluginRegistry } from "../server/plugins/registry";
 import { capabilityBus } from "../server/plugins/bus";
@@ -18,6 +20,44 @@ import {
 import type { ExecutionContext } from "../server/plugins/bus";
 
 describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
+  /**
+   * #311: the repo no longer ships plugins-examples/ (dead weight, no
+   * runtime consumers). Discovery coverage stages equivalent fixtures in
+   * a temp dir instead of depending on repo fixture dirs.
+   */
+  const FIXTURES: Record<string, unknown> = {
+    hello: {
+      apiVersion: 1, id: "hello", name: "Hello World", version: "1.0.0",
+      description: "Minimal reference plugin.", icon: "HandWaving", trust: "first-party",
+      surfaces: [{ id: "hello.view", title: "Hello Card", icon: "HandWaving", variant: "floating", entry: "index.html" }],
+      capabilities: [{ id: "hello.greet", title: "Greet User", description: "Return a friendly greeting.", risk: "read",
+        adapter: { http: { method: "GET", urlTemplate: "https://en.wikipedia.org/api/rest_v1/page/summary/{name}", byteCap: 1048576 } },
+        input: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } }],
+      permissions: [{ type: "net", hosts: ["en.wikipedia.org"] }],
+    },
+    wikipedia: {
+      apiVersion: 1, id: "wikipedia", name: "Wikipedia Summary", version: "1.0.0",
+      description: "Fetch concise Wikipedia summaries.", icon: "BookOpen", trust: "first-party",
+      permissions: [{ type: "net", hosts: ["en.wikipedia.org"] }],
+      capabilities: [{ id: "wikipedia.summary", title: "Wikipedia Summary", description: "Fetch the summary of an article.", risk: "read",
+        adapter: { http: { method: "GET", urlTemplate: "https://en.wikipedia.org/api/rest_v1/page/summary/{title}", byteCap: 1048576,
+          headers: { "User-Agent": "Polymax/1.0 (https://github.com/0Pxyz/polymax)" } } },
+        input: { type: "object", properties: { title: { type: "string" } }, required: ["title"] } }],
+    },
+    "git-status": {
+      apiVersion: 1, id: "git-status", name: "Git Status", version: "1.0.0",
+      description: "Safe read-only CLI plugin.", icon: "GitBranch", trust: "first-party",
+      permissions: [{ type: "exec", commands: ["git"] }, { type: "fs", scope: "workspace", mode: "read" }],
+      capabilities: [{ id: "git-status.check", title: "Git Status Check", description: "Run git status porcelain.", risk: "read",
+        adapter: { cli: { bin: "git", args: ["status", "--porcelain"], workingDir: "workspace" } },
+        input: { type: "object", properties: {} } }],
+    },
+  };
+  const stagedDir = fs.mkdtempSync(path.join(os.tmpdir(), "example-plugins-"));
+  for (const [id, manifest] of Object.entries(FIXTURES)) {
+    fs.mkdirSync(path.join(stagedDir, id), { recursive: true });
+    fs.writeFileSync(path.join(stagedDir, id, "plugin.json"), JSON.stringify(manifest, null, 2));
+  }
   beforeEach(() => {
     db.query("DELETE FROM executions WHERE plugin_id LIKE 'ext_%' OR plugin_id LIKE 'test_%' OR plugin_id LIKE 'mcp_%' OR plugin_id IN ('wikipedia', 'git-status', 'hello')").run();
     db.query("DELETE FROM plugin_grants WHERE plugin_id LIKE 'ext_%' OR plugin_id LIKE 'test_%' OR plugin_id LIKE 'mcp_%' OR plugin_id IN ('wikipedia', 'git-status', 'hello')").run();
@@ -354,7 +394,7 @@ describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
 
   describe("Example Plugins Discovery & Execution", () => {
     it("discovers all example plugins from plugins-examples/ directory", () => {
-      const examplesDir = path.resolve(process.cwd(), "plugins-examples");
+      const examplesDir = stagedDir;
       const discovery = pluginRegistry.discoverFromDirectory(examplesDir);
 
       expect(discovery.discovered).toBeGreaterThanOrEqual(3);
@@ -381,7 +421,7 @@ describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
     });
 
     it("executes wikipedia.summary capability end-to-end via CapabilityBus", async () => {
-      const examplesDir = path.resolve(process.cwd(), "plugins-examples");
+      const examplesDir = stagedDir;
       pluginRegistry.discoverFromDirectory(examplesDir);
 
       // Register capability on bus
@@ -419,7 +459,7 @@ describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
     });
 
     it("executes git-status.check capability end-to-end via CapabilityBus", async () => {
-      const examplesDir = path.resolve(process.cwd(), "plugins-examples");
+      const examplesDir = stagedDir;
       pluginRegistry.discoverFromDirectory(examplesDir);
 
       const gitPlugin = pluginRegistry.get("git-status")!;

@@ -1,12 +1,26 @@
 import { Hono } from "hono";
+import { internalError } from "../errors";
 import {
   listRegistryPlugins,
   getRegistryPlugin,
   publishToRegistry,
   installFromRegistry,
 } from "../plugins/communityRegistry";
+import { describePermission, requiresInstallAcknowledge } from "../plugins/risk";
+import type { Permission } from "../plugins/manifest";
+import { denyUnlessWorkspace } from "../auth/guard";
 
 export const registryRouter = new Hono();
+
+/** Install-time permission envelope (#180): what + why + whether to ask. */
+function permissionEnvelope(manifest: { permissions?: Permission[] } | null | undefined) {
+  const permissions = manifest?.permissions ?? [];
+  return {
+    permissions,
+    permissionLines: permissions.map(describePermission),
+    requiresAcknowledge: requiresInstallAcknowledge(permissions),
+  };
+}
 
 /**
  * GET /api/registry - Lists all plugins in the community registry
@@ -15,7 +29,11 @@ registryRouter.get("/", (c) => {
   const search = c.req.query("search");
   const tag = c.req.query("tag");
   const plugins = listRegistryPlugins({ search, tag });
-  return c.json({ success: true, count: plugins.length, data: plugins });
+  return c.json({
+    success: true,
+    count: plugins.length,
+    data: plugins.map((p) => ({ ...p, ...permissionEnvelope(p.manifest) })),
+  });
 });
 
 /**
@@ -39,10 +57,13 @@ registryRouter.post("/publish", async (c) => {
     if (!body || typeof body.pluginId !== "string") {
       return c.json({ success: false, error: "pluginId is required" }, 400);
     }
+    const workspaceId = body.workspaceId || "default";
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return stop;
 
     const result = await publishToRegistry({
       pluginId: body.pluginId,
-      workspaceId: body.workspaceId || "default",
+      workspaceId,
       author: body.author,
       tags: body.tags,
     });
@@ -53,7 +74,8 @@ registryRouter.post("/publish", async (c) => {
 
     return c.json({ success: true, data: result.item }, 201);
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Publishing failed" }, 500);
+    const out = internalError("registry", err, "Failed to publish plugin");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
 
@@ -65,6 +87,8 @@ registryRouter.post("/:id/install", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const workspaceId = body.workspaceId || "default";
+    const stop = await denyUnlessWorkspace(c, workspaceId);
+    if (stop) return stop;
 
     const result = await installFromRegistry(id, workspaceId);
     if (!result.success) {
@@ -75,8 +99,10 @@ registryRouter.post("/:id/install", async (c) => {
       success: true,
       message: `Plugin "${id}" installed to workspace "${workspaceId}".`,
       data: result.plugin,
+      ...permissionEnvelope(result.plugin),
     });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Failed to install plugin" }, 500);
+    const out = internalError("registry", err, "Failed to install plugin");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });

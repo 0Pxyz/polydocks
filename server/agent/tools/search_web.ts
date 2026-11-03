@@ -32,6 +32,8 @@ export const search_web: AgentTool<{
       actor: "agent",
       workspaceId: targetWorkspace,
       step: (ctx as any)?.step,
+      taskId: (ctx as any)?.taskId,
+      onEvent: (ctx as any)?.onEvent,
     });
     if (!result.success) {
       return {

@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { ChevronRight, X, PanelLeft } from "lucide-react";
 import { CaretDown } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { spring } from "@/lib/motion";
+import { spring, useReducedMotion } from "@/lib/motion";
 import { PanelHeader } from "@/components/ui/panel-header";
 import { IconButton } from "@/components/ui/icon-button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -69,6 +69,7 @@ export function BesidePanel({
   onClear,
   children,
 }: BesidePanelProps) {
+  const reduceMotion = useReducedMotion();
   const dockPosition = useThemeStore((s) => s.dockPosition);
   const isBottom = dockPosition === "bottom";
   const visible = expanded && hasTools;
@@ -96,7 +97,7 @@ export function BesidePanel({
       layoutId="polymax-beside-surface"
       data-beside-panel="true"
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1, transition: spring.soft }}
+      animate={{ opacity: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       hidden={!visible}
       aria-hidden={!visible}

@@ -56,8 +56,12 @@ export function effectiveUserId(caller: EffectiveCaller): string {
  * Server-side workspace ownership check. NEVER trust a client-supplied
  * workspace id on its own:
  * - Cloud mode without a session: deny everything (ADR 0002 fork rule).
- * - Unowned (legacy/device-local) workspace: allow (local-first compat;
- *   anyone with access to the device/server keeps today's behavior).
+ * - Cloud mode device-local (unowned) workspace: deny everything too —
+ *   the "default stays open" rule is local-only (Tarefa 1). Every
+ *   workspace resource in cloud requires an authenticated member.
+ * - Local unowned (legacy/device-local) workspace: allow (local-first
+ *   compat; anyone with access to the device/server keeps today's
+ *   behavior).
  * - Owned workspace: allow only to members.
  */
 export function hasWorkspaceAccess(
@@ -66,7 +70,7 @@ export function hasWorkspaceAccess(
 ): boolean {
   if (config.DEPLOY_MODE === "cloud" && caller.kind === "local") return false;
   const owned = countWorkspaceMembers(workspaceId) > 0;
-  if (!owned) return true;
+  if (!owned) return config.DEPLOY_MODE === "local";
   if (caller.kind !== "user") return false;
   return getWorkspaceMember(workspaceId, caller.user.id) !== null;
 }

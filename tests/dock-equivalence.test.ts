@@ -88,3 +88,14 @@ describe("dock equivalence: keyboard, REST, CLI, agent verbs", () => {
     }
   });
 });
+
+describe("dock single focus (#174 follow-up)", () => {
+  test("opening a new item demotes the previously focused one", async () => {
+    await dockAction("tabs.open", { tabId: "eq-focus-a", workspaceId: "ws-eq" }, { actor: "user" });
+    await dockAction("tabs.open", { tabId: "eq-focus-b", workspaceId: "ws-eq" }, { actor: "user" });
+    const listed: any = await dockAction("tabs.list", { workspaceId: "ws-eq" }, { actor: "user" });
+    expect(listed.ok).toBe(true);
+    const focused = listed.data.dockItems.filter((r: any) => r.state === "focused");
+    expect(focused.map((r: any) => r.id)).toEqual(["eq-focus-b"]);
+  });
+});
