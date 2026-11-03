@@ -52,7 +52,9 @@ describe("tools page state (#382)", () => {
     const onboarding = readFileSync(onboardingPath, "utf-8");
     expect(onboarding).toContain("Replay walkthrough");
     expect(onboarding).toContain("startDemo(true)");
-    expect(onboarding).not.toContain('currentStep === "idle") return null');
+    // Mounted tab never blanks: no null render on any state (#384).
+    expect(onboarding).not.toContain("return null");
+    expect(onboarding).toContain('if (!isOpen || currentStep === "idle")');
   });
 
   test("session tools survive refresh (open items stay in dock + viewport)", () => {
