@@ -13,10 +13,12 @@ import {
   ensureSandbox,
   execInSandbox,
   sandboxStatus,
+  sweepWorkspaceDuplicates,
   terminateSandbox,
   previewUrlFor,
   waitForPort,
 } from "./modalProvider";
+import { withKeyLock } from "./mutex";
 
 export interface SandboxReceipt {
   ok: boolean;
@@ -35,6 +37,19 @@ function fail(error: string, code = "sandbox_unavailable", retryable = false): S
 
 function toArgs(command: string): string[] {
   return ["bash", "-c", command];
+}
+
+/** Best-effort duplicate sweep after a fresh create/adopt (rare path only). */
+async function sweepOthers(workspaceId: string, keepSandboxId: string): Promise<void> {
+  if (!keepSandboxId) return;
+  try {
+    const { ModalClient } = await import("modal");
+    const modal = new ModalClient() as any;
+    const app = await modal.apps.fromName("polydocks-sandboxes", { createIfMissing: true });
+    await sweepWorkspaceDuplicates(modal, app, workspaceId, keepSandboxId);
+  } catch {
+    // Sweeping never breaks the op.
+  }
 }
 
 /** Sandbox workdir-relative path guard: no absolutes, no escapes. */
@@ -64,21 +79,36 @@ async function withSandbox<T>(
   if (!isModalConfigured()) return fail(modalNotConfiguredError(), "modal_not_configured", false);
   const name = sandboxNameFor(workspaceId);
   const volume = volumeNameFor(workspaceId);
-  const stored = getSandboxRecord(workspaceId);
-  let handle: { sandbox: any; reused: boolean };
-  try {
-    handle = await ensureSandbox(workspaceId, name, volume, { knownSandboxId: stored?.sandboxId });
-  } catch (err: any) {
-    return fail(`Sandbox ensure failed: ${redactSecrets(err?.message || String(err))}`, "sandbox_ensure_failed", true);
-  }
-  try {
-    const result = await fn(handle.sandbox);
-    const sid = String(handle.sandbox.sandboxId || stored?.sandboxId || "");
-    if (sid && (!stored || stored.sandboxId !== sid)) {
+  // Serialized per workspace (#308): concurrent ops must not double-create.
+  const ensured = await withKeyLock(workspaceId, async () => {
+    const stored = getSandboxRecord(workspaceId);
+    let handle: { sandbox: any; reused: boolean };
+    try {
+      handle = await ensureSandbox(workspaceId, name, volume, { knownSandboxId: stored?.sandboxId });
+    } catch (err: any) {
+      return { error: fail(`Sandbox ensure failed: ${redactSecrets(err?.message || String(err))}`, "sandbox_ensure_failed", true) };
+    }
+    const sid = String(handle.sandbox?.sandboxId || stored?.sandboxId || "");
+    if (!handle.reused) {
+      // Structured creation log (#308 acceptance): every spawn records
+      // the stable key it serves, so runaway creation is traceable.
+      console.log(`[sandbox] created ${sid || "(id pending)"} for workspace "${workspaceId}" (name "${name}")`);
+    }
+    const recordChanged = Boolean(sid && (!stored || stored.sandboxId !== sid));
+    if (recordChanged) {
       upsertSandboxRecord({ workspaceId, sandboxId: sid, name, volume, status: "running" });
     } else if (stored && handle.reused) {
       updateSandboxStatus(workspaceId, "running");
     }
+    // A changed record means create-or-adopt: sweep leaked twins now,
+    // while the common reuse path stays a single id lookup (#308).
+    if (recordChanged) await sweepOthers(workspaceId, sid);
+    return { handle, sid };
+  });
+  if ("error" in ensured) return ensured.error;
+  const { handle, sid } = ensured as { handle: { sandbox: any; reused: boolean }; sid: string };
+  try {
+    const result = await fn(handle.sandbox);
     return { result, sandboxId: sid, reused: handle.reused };
   } catch (err: any) {
     return fail(`Sandbox op failed: ${redactSecrets(err?.message || String(err))}`, "sandbox_op_failed", true);
