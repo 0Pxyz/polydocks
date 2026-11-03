@@ -306,6 +306,11 @@ app.post("/api/agent", async (c) => {
   }
 
   const caller = await callerOf(c);
+  // Cloud mode requires an identity for the agent: anonymous turns never
+  // run (uniform 404, no existence/oracle leak).
+  if (config.DEPLOY_MODE === "cloud" && caller.kind !== "user") {
+    return c.json({ error: "Not found" }, 404);
+  }
   const userId =
     caller.kind === "user"
       ? caller.user.id

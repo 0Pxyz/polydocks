@@ -24,7 +24,14 @@ export const list_recent_executions: AgentTool<ListRecentExecutionsArgs> = {
     limit: z.number().int().min(1).max(50).optional().default(10),
   }),
   execute: async (args, ctx) => {
-    const targetWorkspace = args.workspaceId || ctx.workspaceId;
+    // The listing scope comes from the session, never from a model arg:
+    // a turn lists only its own workspace's runs. An explicit cross-scope
+    // filter is denied; otherwise the filter is pinned to the session.
+    const sessionScope = ctx?.workspaceId;
+    if (args.workspaceId && sessionScope && args.workspaceId !== sessionScope) {
+      return { success: false, error: "Not found" };
+    }
+    const targetWorkspace = sessionScope || args.workspaceId;
     const limit = args.limit || 10;
 
     let query = "SELECT execution_id, capability_id, plugin_id, actor, workspace_id, status, duration_ms, error, created_at FROM executions WHERE 1=1";
