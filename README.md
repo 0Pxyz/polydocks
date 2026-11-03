@@ -1,6 +1,8 @@
 # PolyDocks
 
-### Your own workspace, run by Poly.
+### Tell Poly what you need. It builds the tools to do it.
+
+*Software that adapts to your work.*
 
 [![Meta Model API](https://img.shields.io/badge/Meta_Model_API-muse--spark--1.3-blue?style=flat-square)](https://dev.meta.ai/docs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -11,22 +13,26 @@
 > 🎬 **Watch the Live Onboarding Demo:** [Full Product Walkthrough (MP4)](docs/media/videos/polydocks-product-walkthrough.mp4)  
 > **Feature Spotlights:** [01: Agentic Dock](docs/media/videos/feature-01-agentic-dock.mp4) • [02: Native Browser & TinyFish Research](docs/media/videos/feature-02-native-browser-research.mp4) • [03: Agent Builds Plugins](docs/media/videos/feature-03-agent-builds-plugins.mp4)
 
-PolyDocks is a way of using AI agents that feels like a place instead of a conversation. You talk (or type) to **Poly**, your agent, and it works inside **your dock**: it browses the web in a real browser, reads and saves sources, runs code in a sandbox, keeps your notes and files, and builds new tools for you on the spot. All of it sits side by side in a single, modern interface, instead of being scattered across a dozen tabs and apps.
+PolyDocks is an agentic workspace where AI doesn't stop at using existing tools. It can build new ones.
+
+Ask Poly to research a topic, set up an environment, or create a tool for a specific task. Poly works across a browser, research sources, files and an isolated code sandbox. When existing capabilities aren't enough, it can build a new plugin, run it and add it to your dock.
+
+The result isn't just another conversation with an AI. It's a workspace that changes as your work changes.
+
+The idea is simple: software should adapt to people's needs, not the other way around.
 
 ---
 
-## Why this exists
+## What makes Poly different?
 
-Software is becoming personal.
+Most AI agents are limited by the tools they're given. We built PolyDocks around a different idea: what if an agent could build the tools it needs?
 
-For decades we adapted ourselves to apps built for everyone: we learned their menus, their limits, their way of organizing things. Agents change the equation. If an agent can build and operate tools in seconds, then your software can finally be shaped around **you**: what you read, how you think, what you're working on this week.
+> *You give Poly a task. It can create a new plugin, run it in an isolated environment, and bring it directly into your workspace. Then it uses that tool to get the job done. We're exploring a future where software doesn't have to be built for everyone in advance. It can be created around what each person actually needs. That's PolyDocks.*
 
-PolyDocks is our bet on that future, made as something beautiful to actually use every day:
-
-- **One place for what's usually scattered.** Research, reading, notes, code, and tools live together in one dock, laid out the way you want.
-- **An agent that does, not just says.** Poly opens the page, saves the source, starts the server, opens the tool. You watch it work in a calm stream of short thoughts, and the result is something you can use right away.
-- **AI-native from the ground up.** The agent isn't a sidebar bolted onto an app. The app is built so Poly can operate everything a person can: the same actions, the same surface.
-- **Yours to reshape.** Ask for a new tool and it appears, themed like the rest of the app. Change the theme and everything follows.
+- **Build.** Poly creates tools when existing capabilities aren't enough — a new plugin, generated, verified and versioned.
+- **Use.** Generated tools become functional panels inside the workspace, live next to the browser, sources feed and notes.
+- **Work.** Browser, research, files, notes, and code execution operate side by side in one dock, arranged around the task.
+- **Keep.** Generated tools persist in your workspace: reuse them, roll back when you don't like a change.
 
 ---
 
