@@ -40,6 +40,7 @@ export function AccountSettingsView() {
 
   // Sign-in / sign-up form state (local mode: hidden until the user opts in)
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [showAuthForm, setShowAuthForm] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -116,19 +117,41 @@ export function AccountSettingsView() {
     return <p className="text-sm text-muted-foreground">Checking account status…</p>;
   }
 
-  // ---- Signed-out: local mode + optional sign in ----
+  // ---- Signed-out: compact local row, form expands in place (#326) ----
   if (!user) {
+    if (!showAuthForm) {
+      return (
+        <div className="grid gap-2 px-1 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Local workspace</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                No account — everything stays on this device.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowAuthForm(true)}>
+              Sign in / Create account
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="grid gap-4">
-        <div className="rounded-lg border p-4">
-          <h3 className="text-sm font-semibold">Local workspace</h3>
+        <div className="px-1 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Local workspace</h3>
+            <Button size="sm" variant="ghost" onClick={() => setShowAuthForm(false)}>
+              Dismiss
+            </Button>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">
             You are using PolyDocks without an account. Your workspace, plugins and conversations
             stay on this device. Create an account to get an identity, own isolated workspaces,
             and manage sessions across devices later.
           </p>
         </div>
-        <div className="grid gap-3 rounded-lg border p-4">
+        <div className="grid gap-3 px-1 py-2">
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -166,7 +189,7 @@ export function AccountSettingsView() {
               placeholder="At least 8 characters"
             />
           </Field>
-          {notice && <p className={`text-sm ${notice.ok ? "text-green-500" : "text-destructive"}`}>{notice.text}</p>}
+          {notice && <p className={`text-sm ${notice.ok ? "text-[var(--accent-lime)]" : "text-destructive"}`}>{notice.text}</p>}
           <div className="flex flex-wrap gap-2">
             {mode === "signup" ? (
               <Button
@@ -269,10 +292,10 @@ export function AccountSettingsView() {
   return (
     <div className="grid gap-4">
       {notice && (
-        <p className={`text-sm ${notice.ok ? "text-green-500" : "text-destructive"}`}>{notice.text}</p>
+        <p className={`text-sm ${notice.ok ? "text-[var(--accent-lime)]" : "text-destructive"}`}>{notice.text}</p>
       )}
 
-      <section className="grid gap-3 rounded-lg border p-4">
+      <section className="grid gap-3 px-1 py-2">
         <h3 className="text-sm font-semibold">Profile</h3>
         <Field label="Name">
           <div className="flex gap-2">
@@ -295,12 +318,12 @@ export function AccountSettingsView() {
         <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
       </section>
 
-      <section className="grid gap-3 rounded-lg border p-4">
+      <section className="grid gap-3 px-1 py-2">
         <h3 className="text-sm font-semibold">Email</h3>
         <p className="text-sm">
           {user.email}{" "}
           {user.emailVerified ? (
-            <span className="text-green-500">(verified)</span>
+            <span className="text-[var(--accent-lime)]">(verified)</span>
           ) : (
             <span className="text-amber-500">(unverified)</span>
           )}
@@ -345,7 +368,7 @@ export function AccountSettingsView() {
         </Field>
       </section>
 
-      <section className="grid gap-3 rounded-lg border p-4">
+      <section className="grid gap-3 px-1 py-2">
         <h3 className="text-sm font-semibold">Connected accounts</h3>
         {accounts.length === 0 && <p className="text-sm text-muted-foreground">Password sign-in only.</p>}
         {accounts.map((a) => (
@@ -394,7 +417,7 @@ export function AccountSettingsView() {
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-lg border p-4">
+      <section className="grid gap-3 px-1 py-2">
         <h3 className="text-sm font-semibold">Password</h3>
         <Field label="Current password">
           <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
@@ -427,7 +450,7 @@ export function AccountSettingsView() {
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-lg border p-4">
+      <section className="grid gap-3 px-1 py-2">
         <h3 className="text-sm font-semibold">Active sessions</h3>
         {sessions.length === 0 && <p className="text-sm text-muted-foreground">No sessions found.</p>}
         {sessions.map((s) => (
@@ -480,7 +503,7 @@ export function AccountSettingsView() {
         </div>
       </section>
 
-      <section className="grid gap-3 rounded-lg border p-4">
+      <section className="grid gap-3 px-1 py-2">
         <h3 className="text-sm font-semibold">Workspace membership</h3>
         {memberships.length === 0 && (
           <p className="text-sm text-muted-foreground">
