@@ -215,3 +215,24 @@ describe("shortcuts read the bar order (pinned first, no ghosts)", () => {
     expect(focusNext(first, -1, []).focusedId).toBe("c");
   });
 });
+
+describe("boot restore from server (#174 slice B)", () => {
+  test("empty local cache adopts server open set in server order", async () => {
+    const { adoptServerDock } = await import("../src/lib/dock/dockItems");
+    const adopted = adoptServerDock(emptyDock(), [
+      { id: "browser", state: "open", order: 2 },
+      { id: "notes", state: "focused", order: 1 },
+      { id: "dead", state: "closed", order: 0 },
+    ]);
+    expect(adopted.order).toEqual(["notes", "browser"]);
+    expect(adopted.focusedId).toBe("notes");
+    expect(adopted.items["dead"]).toBeUndefined();
+  });
+
+  test("non-empty local cache always wins; empty server leaves it alone", async () => {
+    const { adoptServerDock } = await import("../src/lib/dock/dockItems");
+    const local = openItem(emptyDock(), "store", null);
+    expect(adoptServerDock(local, [{ id: "browser", state: "focused", order: 0 }])).toBe(local);
+    expect(adoptServerDock(emptyDock(), [])).toEqual(emptyDock());
+  });
+});
