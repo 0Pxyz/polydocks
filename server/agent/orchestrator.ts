@@ -632,9 +632,23 @@ function handleCancel(
 export function recoverMessageQueue(): { recovered: number } {
   try {
     ensureQueueTable();
+    const stuck = db
+      .prepare("SELECT id, session_id FROM message_queue WHERE status IN ('queued', 'processing')")
+      .all() as Array<{ id: string; session_id: string }>;
     const res = db
       .prepare("UPDATE message_queue SET status = 'interrupted', updated_at = ? WHERE status IN ('queued', 'processing')")
       .run(new Date().toISOString());
+    // A flipped row without an event leaves the turn silent forever: the
+    // client replays the stream, finds no outcome, and never answers (#178).
+    for (const row of stuck) {
+      try {
+        publishMessage(row.session_id, row.id, "message.error", {
+          text: "Interrupted by a restart before it could run. Please resend your message.",
+        });
+      } catch {
+        // One bad row must not block the rest of the recovery.
+      }
+    }
     return { recovered: Number((res as any).changes ?? 0) };
   } catch {
     return { recovered: 0 };
