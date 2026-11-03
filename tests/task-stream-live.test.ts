@@ -37,7 +37,7 @@ const FRAMES: Array<{ type: string; id: number; data: any }> = [
   {
     type: "tool.start",
     id: 2,
-    data: { jobId: "msg_probe_1", id: "call_1", name: "invoke_capability", arguments: { id: "search.web" } },
+    data: { jobId: "msg_probe_1", id: "call_1", name: "invoke_capability", arguments: { id: "search.web", input: { query: "box breathing" } } },
   },
   {
     type: "tool.done",
@@ -45,13 +45,33 @@ const FRAMES: Array<{ type: string; id: number; data: any }> = [
     data: { jobId: "msg_probe_1", id: "call_1", name: "invoke_capability", result: { success: true } },
   },
   {
-    type: "source.added",
+    type: "tool.start",
     id: 4,
+    data: { jobId: "msg_probe_1", id: "call_2", name: "invoke_capability", arguments: { id: "sources.add", input: { url: "https://example.com/a" } } },
+  },
+  {
+    type: "source.added",
+    id: 5,
     data: { jobId: "msg_probe_1", id: "src_1", capability: "sources.add", url: "https://example.com/a", title: "A" },
   },
   {
+    type: "tool.done",
+    id: 6,
+    data: { jobId: "msg_probe_1", id: "call_2", name: "invoke_capability", result: { success: true } },
+  },
+  {
+    type: "tool.start",
+    id: 7,
+    data: { jobId: "msg_probe_1", id: "call_3", name: "list_artifacts", arguments: { workspaceId: "default" } },
+  },
+  {
+    type: "tool.done",
+    id: 8,
+    data: { jobId: "msg_probe_1", id: "call_3", name: "list_artifacts", result: { success: true } },
+  },
+  {
     type: "message.done",
-    id: 5,
+    id: 9,
     data: { jobId: "msg_probe_1", text: "Saved 1 article as a source." },
   },
 ];
@@ -82,6 +102,10 @@ class FakeEventSource {
       for (const fn of this.listeners.get(f.type) || []) fn(ev);
     }
   }
+  emit(type: string, data: any, id = 99) {
+    const ev = { type, data: JSON.stringify(data), lastEventId: String(id) };
+    for (const fn of this.listeners.get(type) || []) fn(ev);
+  }
   close() {
     this.readyState = 2;
   }
@@ -94,13 +118,15 @@ describe("live task stream (#387)", () => {
     (globalThis as any).EventSource = FakeEventSource as any;
     FakeEventSource.lastInstance = null;
     const { useConversationStore } = await import("../src/lib/agent/conversationStore");
-    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {} } as any);
+    // Clear any in-flight turn leaked by an earlier file in this process.
+    useConversationStore.getState().abortStream();
+    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {}, isStreaming: false, statusText: "" } as any);
   });
 
   afterEach(async () => {
     (globalThis as any).EventSource = REAL_ES;
     const { useConversationStore } = await import("../src/lib/agent/conversationStore");
-    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {} } as any);
+    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {}, isStreaming: false, statusText: "" } as any);
   });
 
   it("renders steps as tool events arrive (no reload)", async () => {
@@ -109,10 +135,9 @@ describe("live task stream (#387)", () => {
     await new Promise((r) => setTimeout(r, 50));
     const state = useConversationStore.getState();
     const steps = state.messageSteps["m-msg_probe_1"] || [];
-    expect(steps.length).toBeGreaterThan(0);
-    // invoke_capability is save-kind via stepKindForTool? invoke_capability
-    // is not in the map -> default think; still recorded as a step.
-    expect(steps.some((s) => s.status === "done")).toBe(true);
+    expect(steps.length).toBe(3);
+    // invoke_capability pairs close by call id; list_artifacts too.
+    expect(steps.every((s) => s.status === "done")).toBe(true);
   });
 
   it("appends the completion message and never duplicates on replay", async () => {
@@ -135,6 +160,28 @@ describe("live task stream (#387)", () => {
     await new Promise((r) => setTimeout(r, 50));
     const second = useConversationStore.getState().messages.length;
     expect(second).toBe(first);
+  });
+
+  it("signals busy while a turn is in flight, refcounted across turns (#387)", async () => {
+    const { useConversationStore } = await import("../src/lib/agent/conversationStore");
+    useConversationStore.getState().ensureTaskStream("sess_busy");
+    await new Promise((r) => setTimeout(r, 50));
+    // Recorded frames completed: busy must be off.
+    expect(useConversationStore.getState().isStreaming).toBe(false);
+    const es = FakeEventSource.lastInstance!;
+    es.emit("agent.start", { jobId: "msg_busy_1", prompt: "one" }, 100);
+    es.emit("agent.start", { jobId: "msg_busy_2", prompt: "two" }, 101);
+    expect(useConversationStore.getState().isStreaming).toBe(true);
+    es.emit("message.done", { jobId: "msg_busy_1", text: "first" }, 102);
+    // One turn still in flight: refcount keeps the signal on.
+    expect(useConversationStore.getState().isStreaming).toBe(true);
+    es.emit("message.done", { jobId: "msg_busy_2", text: "second" }, 103);
+    expect(useConversationStore.getState().isStreaming).toBe(false);
+    // Errors settle too.
+    es.emit("agent.start", { jobId: "msg_busy_3", prompt: "three" }, 104);
+    expect(useConversationStore.getState().isStreaming).toBe(true);
+    es.emit("message.error", { jobId: "msg_busy_3", text: "boom" }, 105);
+    expect(useConversationStore.getState().isStreaming).toBe(false);
   });
 
   it("subscribes with the session cursor for resume", async () => {
