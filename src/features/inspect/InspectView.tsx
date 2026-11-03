@@ -53,6 +53,11 @@ function Section({ title, rows }: { title: string; rows: InspectRow[] }) {
             {row.kind === "error" ? "!" : "·"}
           </span>
           <span className="text-white/85 truncate">{row.label}</span>
+          {typeof row.at === "number" && (
+            <span className="text-white/30 shrink-0">
+              {new Date(row.at).toLocaleTimeString([], { hour12: false })}
+            </span>
+          )}
           {row.detail && <span className="text-white/40 truncate">{row.detail}</span>}
         </div>
       ))}
@@ -131,7 +136,7 @@ export function InspectView() {
             }));
           }
         }
-        setEvents((prev) => [...prev.slice(-399), { type, step: 0, payload }]);
+        setEvents((prev) => [...prev.slice(-399), { type, step: 0, at: Date.now(), payload }]);
       } catch {
         // Malformed frames never break the inspector.
       }
@@ -206,7 +211,7 @@ export function InspectView() {
                   <span className="text-[var(--accent-lime)] shrink-0">·</span>
                   <span className="text-white/85 truncate">{j.type}</span>
                   <span className="text-white/40 truncate">
-                    {shortId(j.id)} · {j.status}
+                    {shortId(j.id)} · {j.status} · {new Date(j.updatedAt).toLocaleTimeString([], { hour12: false })}
                     {typeof j.progress === "number" ? ` · ${Math.round(j.progress * 100)}%` : ""}
                   </span>
                 </div>

@@ -6,6 +6,7 @@ import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { OnboardingPluginView } from "@/features/onboarding/OnboardingPluginView";
 import { InspectView } from "@/features/inspect/InspectView";
+import { SurfaceErrorBoundary } from "@/components/ui/surface-error-boundary";
 
 export interface SurfaceSandboxTab {
   id: string;
@@ -30,8 +31,36 @@ interface ToolSurfaceProps {
  * One definition for every tool surface, rendered by both hosts (main
  * viewport and beside panel). A tool id mounts in exactly one host:
  * switching hosts remounts, switching tabs inside a host never does.
+ *
+ * Never renders blank: unknown ids and dev-only surfaces outside DEV get
+ * an explicit message, and every surface sits behind a visual error
+ * boundary (#319).
  */
 export function ToolSurface({
+  toolId,
+  sandboxTabs,
+  sandboxActiveId,
+  onDismiss,
+  onOpenPlugin,
+  onSelectTool,
+  pluginsInitialTab,
+}: ToolSurfaceProps) {
+  return (
+    <SurfaceErrorBoundary toolId={toolId ?? "none"}>
+      <ToolSurfaceInner
+        toolId={toolId}
+        sandboxTabs={sandboxTabs}
+        sandboxActiveId={sandboxActiveId}
+        onDismiss={onDismiss}
+        onOpenPlugin={onOpenPlugin}
+        onSelectTool={onSelectTool}
+        pluginsInitialTab={pluginsInitialTab}
+      />
+    </SurfaceErrorBoundary>
+  );
+}
+
+function ToolSurfaceInner({
   toolId,
   sandboxTabs,
   sandboxActiveId,
@@ -96,13 +125,32 @@ export function ToolSurface({
     );
   }
   if (toolId === "inspect") {
-    // Dev-only runtime inspector (#181): never mounted in production.
-    if (!import.meta.env.DEV) return null;
+    // Dev-only runtime inspector (#181): outside DEV builds the surface
+    // explains itself instead of mounting blank (#319).
+    if (!import.meta.env.DEV) {
+      return (
+        <DockSurface frameless>
+          <div className="w-full max-w-2xl px-4 py-8" aria-label="Inspect unavailable">
+            <p className="text-sm font-medium text-white/90">Inspect is a dev-only surface.</p>
+            <p className="mt-1 text-xs text-white/50">
+              Run a dev build to watch the live agent runtime here.
+            </p>
+          </div>
+        </DockSurface>
+      );
+    }
     return (
       <DockSurface frameless>
         <InspectView />
       </DockSurface>
     );
   }
-  return null;
+  return (
+    <DockSurface frameless>
+      <div className="w-full max-w-2xl px-4 py-8" aria-label={`No view for ${toolId ?? "none"}`}>
+        <p className="text-sm font-medium text-white/90">No view component registered for &ldquo;{toolId}&rdquo;.</p>
+        <p className="mt-1 text-xs text-white/50">Pick another tool from the dock.</p>
+      </div>
+    </DockSurface>
+  );
 }
