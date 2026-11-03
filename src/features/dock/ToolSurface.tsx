@@ -4,6 +4,7 @@ import { SettingsView } from "@/features/settings/SettingsView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
+import { NotesView } from "@/features/notes/NotesView";
 import { OnboardingPluginView } from "@/features/onboarding/OnboardingPluginView";
 import { InspectView } from "@/features/inspect/InspectView";
 import { SurfaceErrorBoundary } from "@/components/ui/surface-error-boundary";
@@ -113,6 +114,15 @@ function ToolSurfaceInner({
       <DockSurface frameless className="pb-0">
         <div className="w-full flex-1 min-w-0 flex flex-col min-h-0">
           <NativeBrowserView workspaceKey="home" />
+        </div>
+      </DockSurface>
+    );
+  }
+  if (toolId === "notes") {
+    return (
+      <DockSurface frameless className="pb-0">
+        <div className="w-full flex-1 min-w-0 flex flex-col min-h-0">
+          <NotesView workspaceKey="home" />
         </div>
       </DockSurface>
     );

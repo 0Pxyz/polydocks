@@ -130,4 +130,64 @@ export function registerNotesPlugin(): void {
       trust: "core",
     });
   }
+
+  defineCapability({
+    plugin: "notes",
+    name: "append",
+    title: "Append To Note",
+    description:
+      "Appends text to the end of a note without touching existing content. Use to continue a note (agent synthesis or manual edits) without overwriting.",
+    scope: "workspace",
+    input: z.object({
+      id: z.string().min(1).describe("Note id from notes.list"),
+      text: z.string().min(1).describe("Markdown text to append"),
+      workspaceId: z.string().optional(),
+    }),
+    output: NoteOutput,
+    emits: [],
+    risk: "write",
+    handler: async (input, ctx) => {
+      const row = db.query("SELECT * FROM notes WHERE id = ?").get(input.id) as any;
+      const targetWorkspace = input.workspaceId || ctx.workspaceId;
+      if (!row || (targetWorkspace && row.workspace_id !== targetWorkspace)) {
+        return { ok: false as const, error: `Note "${input.id}" not found.`, retryable: false as const };
+      }
+      const separator = row.body && !row.body.endsWith("\n") ? "\n\n" : row.body ? "\n" : "";
+      const body = `${row.body}${separator}${input.text}`;
+      const now = new Date().toISOString();
+      db.query("UPDATE notes SET body = ?, updated_at = ? WHERE id = ?").run(body, now, input.id);
+      const updated = db.query("SELECT * FROM notes WHERE id = ?").get(input.id) as any;
+      return { ok: true as const, id: updated.id, data: rowToNote(updated) };
+    },
+  });
+
+  defineCapability({
+    plugin: "notes",
+    name: "update",
+    title: "Update Note",
+    description: "Sets a note's title and/or body. Omitted fields keep their values.",
+    scope: "workspace",
+    input: z.object({
+      id: z.string().min(1).describe("Note id from notes.list"),
+      title: z.string().min(1).optional().describe("New title (kept when omitted)"),
+      body: z.string().optional().describe("New body (kept when omitted)"),
+      workspaceId: z.string().optional(),
+    }),
+    output: NoteOutput,
+    emits: [],
+    risk: "write",
+    handler: async (input, ctx) => {
+      const row = db.query("SELECT * FROM notes WHERE id = ?").get(input.id) as any;
+      const targetWorkspace = input.workspaceId || ctx.workspaceId;
+      if (!row || (targetWorkspace && row.workspace_id !== targetWorkspace)) {
+        return { ok: false as const, error: `Note "${input.id}" not found.`, retryable: false as const };
+      }
+      const title = input.title ?? row.title;
+      const body = input.body ?? row.body;
+      const now = new Date().toISOString();
+      db.query("UPDATE notes SET title = ?, body = ?, updated_at = ? WHERE id = ?").run(title, body, now, input.id);
+      const updated = db.query("SELECT * FROM notes WHERE id = ?").get(input.id) as any;
+      return { ok: true as const, id: updated.id, data: rowToNote(updated) };
+    },
+  });
 }
