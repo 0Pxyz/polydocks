@@ -131,3 +131,4 @@
 | 2026-11-02 | Durable thinking/research timeline on the SSE stream: friendly steps, collapsible narration, replay-safe dedup, isolated test harness | [#296](https://github.com/0Pxyz/polymax/pull/296) |
 | 2026-11-03 | Release: Better Auth, kit v2, MCP, chat refinement, thinking timeline, #277 hardening promoted to main | [#298](https://github.com/0Pxyz/polymax/pull/298) |
 | 2026-11-03 | CI fix: hermetic OpenAI mock in model-registry tests, test-only secret for browser-smoke; production fail-closed auth unchanged | [#299](https://github.com/0Pxyz/polymax/pull/299) [#300](https://github.com/0Pxyz/polymax/pull/300) |
+| 2026-11-03 | Reopen fixes: inspect blank (#319), chat history plumbing (#307), sandbox dedup (#308), wallpaper persistence (#309), TinyFish pill (#323), layout overflow (#306), settings sheet (#326) + awaiting_approval (#315), route boundary (#322), registry hygiene (#310) | TBD |
