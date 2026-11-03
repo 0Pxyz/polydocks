@@ -89,6 +89,21 @@ export function parseCuratedMemory(md: string): { groups: CuratedGroup[]; lines:
   return { groups: groups.filter((g) => g.lineIndices.length > 0), lines };
 }
 
+/**
+ * Baseline system sections that must never appear as user memories (#326).
+ * group headers are matched case-insensitively after stripping #'s.
+ */
+export const SYSTEM_MEMORY_HEADERS = new Set([
+  "architectural guidelines",
+  "system",
+  "system prompt",
+  "architecture",
+]);
+
+export function isSystemMemoryGroup(header: string): boolean {
+  return SYSTEM_MEMORY_HEADERS.has(header.replace(/^#+\s*/, "").trim().toLowerCase());
+}
+
 /** Episodic `- [time] [category]...: text` lines from a daily log. Pure, exported for tests. */
 export function parseDailyEntries(content: string): string[] {
   return content
@@ -185,6 +200,7 @@ export function MemoryInspectorView() {
   const visibleGroups = useMemo(
     () =>
       groups
+        .filter((g) => !isSystemMemoryGroup(g.header))
         .filter((g) => filter === "all" || g.category === filter)
         .map((g) => ({
           ...g,
@@ -210,7 +226,7 @@ export function MemoryInspectorView() {
 
   if (loading) {
     return (
-      <section className="grid gap-3 rounded-lg border p-4" aria-label="Agent memory">
+      <section className="grid gap-3 px-1 py-2" aria-label="Agent memory">
         <h3 className="text-sm font-semibold">Agent memory</h3>
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-16 w-full" />
@@ -221,7 +237,7 @@ export function MemoryInspectorView() {
 
   if (error) {
     return (
-      <section className="grid gap-3 rounded-lg border p-4" aria-label="Agent memory">
+      <section className="grid gap-3 px-1 py-2" aria-label="Agent memory">
         <h3 className="text-sm font-semibold">Agent memory</h3>
         <p className="text-sm text-destructive">{error}</p>
         <div>
@@ -234,7 +250,7 @@ export function MemoryInspectorView() {
   }
 
   return (
-    <section className="grid gap-4 rounded-lg border p-4" aria-label="Agent memory">
+    <section className="grid gap-4 px-1 py-2" aria-label="Agent memory">
       <div>
         <h3 className="text-sm font-semibold">Agent memory</h3>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -242,7 +258,7 @@ export function MemoryInspectorView() {
         </p>
       </div>
 
-      {notice && <p className={`text-sm ${notice.ok ? "text-green-500" : "text-destructive"}`}>{notice.text}</p>}
+      {notice && <p className={`text-sm ${notice.ok ? "text-[var(--accent-lime)]" : "text-destructive"}`}>{notice.text}</p>}
 
       <div className="flex flex-wrap gap-2">
         <Input
