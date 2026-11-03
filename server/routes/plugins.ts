@@ -16,6 +16,40 @@ export const capabilitiesRouter = new Hono();
 pluginsRouter.get("/", (c) => {
   const enabledOnly = c.req.query("enabled") === "true";
   const plugins = pluginRegistry.list({ enabledOnly });
+  // Batch last-run signal (#177 follow-up): the Tools view rendered one
+  // /executions request PER plugin on every mount (N+1 spam in devtools).
+  // ?withLastRun=1 embeds a single latest row per plugin for the status
+  // dots; the detail sheet still fetches full history on selection.
+  const withLastRun = c.req.query("withLastRun") === "1";
+  let lastByPlugin: Record<string, any> = {};
+  if (withLastRun && plugins.length > 0) {
+    try {
+      const ids = plugins.map((p) => p.id);
+      const placeholders = ids.map(() => "?").join(",");
+      const rows = db
+        .query(
+          `SELECT plugin_id, execution_id, capability_id, status, duration_ms, error, created_at
+           FROM executions WHERE plugin_id IN (${placeholders})
+           ORDER BY created_at DESC`
+        )
+        .all(...ids) as any[];
+      const seen = new Set<string>();
+      for (const r of rows) {
+        if (seen.has(r.plugin_id)) continue;
+        seen.add(r.plugin_id);
+        lastByPlugin[r.plugin_id] = {
+          executionId: r.execution_id,
+          capabilityId: r.capability_id,
+          status: r.status,
+          durationMs: r.duration_ms,
+          error: r.error,
+          createdAt: r.created_at,
+        };
+      }
+    } catch {
+      // Dots are progressive enhancement; the list works without them.
+    }
+  }
   return c.json({
     plugins: plugins.map((p) => ({
       id: p.id,
@@ -31,6 +65,7 @@ pluginsRouter.get("/", (c) => {
       permissions: p.manifest.permissions || [],
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
+      ...(withLastRun ? { lastExecution: lastByPlugin[p.id] || null } : {}),
     })),
   });
 });
