@@ -72,9 +72,9 @@ export function StepsTimeline({
                       <img
                         src={TINYFISH_LOGO_SRC}
                         alt="TinyFish"
-                        width={14}
-                        height={14}
-                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                        width={16}
+                        height={16}
+                        className="w-4 h-4 rounded-full object-cover shrink-0"
                       />
                     ) : step.status === "running" ? (
                       <span
