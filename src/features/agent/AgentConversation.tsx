@@ -22,7 +22,6 @@ import { cn } from "@/lib/cn";
 import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import { Orb } from "./Orb";
 import { StepsTimeline } from "./StepsTimeline";
-import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
 import { useConversationStore, scopeKeyFor } from "@/lib/agent/conversationStore";
 import { cancelSpeech } from "@/lib/agent/speech";
@@ -896,7 +895,7 @@ export function AgentConversation({
                 )}
               </div>
               <div className="flex items-center justify-start pl-1">
-                <ModelSwitcher align="start" />
+                {/* Model selector removed from the UI temporarily; logic intentionally kept (ModelSwitcher, models store, backend routing). */}
               </div>
             </form>
           </div>
@@ -1328,7 +1327,7 @@ export function AgentConversation({
 
             {/* Footer toolbar: model/effort picker left, attachments right — coexists with input via grid */}
             <div className="flex items-center justify-between gap-2 px-1.5 pb-0.5">
-              <ModelSwitcher align="start" />
+              {/* Model selector removed from the UI temporarily; logic intentionally kept (ModelSwitcher, models store, backend routing). */}
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"

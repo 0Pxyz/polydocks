@@ -29,8 +29,11 @@ describe("chat capsule sheet (voice-first, footer picker)", () => {
     expect(sheet).toContain("animate-ping");
   });
 
-  test("footer composer mounts the model picker", () => {
-    expect(sheet).toContain("<ModelSwitcher");
+  test("footer composer hides the model picker (logic kept)", () => {
+    // UI removal is temporary: the picker component, models store and
+    // backend routing stay intact (see ModelSwitcher.tsx).
+    expect(sheet).not.toContain("<ModelSwitcher");
+    expect(sheet).toContain("Model selector removed from the UI temporarily");
   });
 
   test("model picker offers end-to-end reasoning effort", () => {
