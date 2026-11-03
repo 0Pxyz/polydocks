@@ -83,6 +83,7 @@ function ToolSurfaceInner({
         <PluginsView
           key={toolId === "creations" ? "created" : pluginsInitialTab}
           initialTab={pluginsInitialTab}
+          lockTrust={toolId === "creations" ? "generated" : undefined}
           onOpenPlugin={(id) => onSelectTool(id)}
           onDismiss={() => onDismiss(toolId)}
         />

@@ -45,14 +45,14 @@ describe("plugins open state (#380)", () => {
 
   test("row click falls back to Details for viewless plugins", () => {
     const view = readFileSync(viewPath, "utf-8");
-    expect(view).toContain("canOpenPluginView(plugin)");
+    expect(view).toContain("resolveRowAction(plugin)");
     expect(view).toContain("else onSelect(plugin)");
     expect(view).toContain("No preview surface — opens details");
   });
 
   test("detail sheet offers an explicit Open action for openable plugins", () => {
     const view = readFileSync(viewPath, "utf-8");
-    expect(view).toContain("canOpenPluginView(selectedPlugin)");
+    expect(view).toContain('resolveRowAction(selectedPlugin) === "open"');
     expect(view).toContain("onOpenPlugin(selectedPlugin.id)");
   });
 });

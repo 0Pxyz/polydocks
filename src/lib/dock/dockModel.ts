@@ -81,6 +81,18 @@ export function canOpenPluginView(plugin: {
   return plugin.enabled && (plugin.surfaces.length > 0 || MAIN_VIEW_STATIC_IDS.has(plugin.id));
 }
 
+/** Row click contract (#382): open what has a view, enable disabled ones, detail the rest. */
+export type RowAction = "open" | "enable" | "details";
+
+export function resolveRowAction(plugin: {
+  id: string;
+  enabled: boolean;
+  surfaces: Array<unknown>;
+}): RowAction {
+  if (!plugin.enabled) return "enable";
+  return canOpenPluginView(plugin) ? "open" : "details";
+}
+
 /** Builtin ids retired with the knowledge-map experience (never valid pins).
  * "notes" is back as a first-party surface (#351) so it survives migration. */
 export const RETIRED_PIN_IDS = new Set([
