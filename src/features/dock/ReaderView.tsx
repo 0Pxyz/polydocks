@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
 import { VideoEmbed } from "@/features/video/VideoEmbed";
+import { siteNameOf } from "@/features/browser/browserTabs";
 
 export interface ReaderViewProps {
   url: string;
@@ -96,15 +97,26 @@ export function ReaderView({ url, onBack, onOpenExternal, className = "", initia
       )}
 
       {!loading && error && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-xs text-[#9aa5b8] px-6 text-center">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => (onOpenExternal ? onOpenExternal(url) : window.open(url, "_blank", "noopener,noreferrer"))}
-            className="text-[var(--accent-lime)] hover:underline cursor-pointer"
-          >
-            Try the original page instead
-          </button>
+        <div className="flex-1 flex flex-col items-center justify-center px-6" aria-live="polite">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-muted/30 px-6 py-8 flex flex-col items-center gap-3 text-center">
+            <span className="text-sm font-semibold text-foreground font-sans">
+              {siteNameOf(url)} can&apos;t be shown here
+            </span>
+            <p className="text-xs text-muted-foreground font-sans leading-relaxed">
+              This site blocks embedding (X-Frame-Options / CSP) or the reader
+              couldn&apos;t extract it. Nothing is broken — open it in a new tab instead.
+            </p>
+            <button
+              type="button"
+              onClick={() => (onOpenExternal ? onOpenExternal(url) : window.open(url, "_blank", "noopener,noreferrer"))}
+              className="mt-1 h-9 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold hover:brightness-110 cursor-pointer font-sans"
+            >
+              Open in new tab
+            </button>
+            <span className="text-[11px] text-muted-foreground/70 font-mono truncate max-w-full" title={error}>
+              {error}
+            </span>
+          </div>
         </div>
       )}
 

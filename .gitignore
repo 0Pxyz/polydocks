@@ -13,7 +13,7 @@ internal-docs/
 .internal/
 brainstorm/
 scratch/
-notes/
+/notes/
 *.draft.md
 *.scratch.*
 

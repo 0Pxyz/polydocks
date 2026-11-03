@@ -94,4 +94,52 @@ describe("Polymax REST API Endpoints", () => {
       pluginRegistry.uninstall("test-toggle-plugin");
     }
   });
+
+  it("GET /api/plugins?withLastRun=1 embeds one latest execution per plugin (no N+1)", async () => {
+    const { pluginRegistry } = await import("../plugins/registry");
+    pluginRegistry.install({
+      apiVersion: 1,
+      id: "test-lastrun-plugin",
+      name: "LastRun Probe",
+      version: "1.0.0",
+      description: "batch probe",
+      icon: "Layers",
+      trust: "generated",
+      capabilities: [],
+      surfaces: [],
+    });
+    try {
+      const { capabilityBus } = await import("../plugins/bus");
+      const { initializeFirstPartyPlugins } = await import("../plugins/first-party/index");
+      initializeFirstPartyPlugins();
+      await capabilityBus.invoke(
+        "notes.list",
+        { workspaceId: "ws-lastrun-probe" },
+        { actor: "agent", workspaceId: "ws-lastrun-probe" }
+      );
+      const plain = await app.fetch(new Request("http://localhost:3000/api/plugins"));
+      const plainBody = (await plain.json()) as any;
+      expect(plainBody.plugins[0].lastExecution).toBeUndefined();
+
+      const batched = await app.fetch(new Request("http://localhost:3000/api/plugins?withLastRun=1"));
+      expect(batched.status).toBe(200);
+      const body = (await batched.json()) as any;
+      expect(Array.isArray(body.plugins)).toBe(true);
+      for (const p of body.plugins) {
+        expect("lastExecution" in p).toBe(true);
+      }
+      // notes ran above: its dot carries the latest row.
+      const notes = body.plugins.find((p: any) => p.id === "notes");
+      expect(notes?.lastExecution?.capabilityId).toBe("notes.list");
+    } finally {
+      pluginRegistry.uninstall("test-lastrun-plugin");
+      const { db } = await import("../workspace/db");
+      try {
+        db.query("DELETE FROM executions WHERE plugin_id = ?").run("notes");
+      } catch {}
+      try {
+        db.query("DELETE FROM notes WHERE workspace_id = ?").run("ws-lastrun-probe");
+      } catch {}
+    }
+  });
 });

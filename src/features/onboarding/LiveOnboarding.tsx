@@ -10,8 +10,11 @@ import {
 import {
   useOnboardingStore,
   ONBOARDING_STEPS,
+  ONBOARDING_STEP_PROMPTS,
 } from "@/lib/store/useOnboardingStore";
 import { pushThought } from "@/lib/agent/thoughtStream";
+import { useConversationStore } from "@/lib/agent/conversationStore";
+import { chatPlacement } from "@/lib/dock/dockItems";
 import { useDockStore } from "@/lib/store/useDockStore";
 import { shouldPauseTourOnTakeover } from "@/lib/onboarding/tourTakeover";
 import { useThemeStore } from "@/lib/theme";
@@ -67,15 +70,40 @@ export function LiveOnboarding() {
     if (!isOpen) return;
 
     const dock = useDockStore.getState();
-    const force = (toolId: string) => {
-      forcedToolRef.current = toolId || null;
-      dock.setActiveTool(toolId);
-    };
+    // The tour honors the step metadata (dockTarget) on EVERY entry — auto
+    // advance and manual jumps alike. Before this the engine only forced
+    // settings/home, so generation steps left the dock wherever it was
+    // while the narration promised a build: empty chat, blank viewport.
+    const target = stepDef.dockTarget;
+    if (target === "agent") {
+      // The agent is the chat panel, not a ToolSurface id: focus the dock
+      // record and raise the panel so the composer is actually visible.
+      // Seeded below with the scripted build prompt; the user still sends.
+      dock.openTool("agent");
+      const convo = useConversationStore.getState();
+      if (convo.layoutState === "closed") {
+        const wide = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
+        convo.setLayoutState(wide ? "side" : "sheet");
+      }
+    } else if (target) {
+      dock.openTool(target);
+    } else {
+      dock.setActiveTool("");
+    }
+    forcedToolRef.current = target || null;
+
+    // Scripted composer draft for the build steps: the walkthrough shows
+    // the feature instead of an empty chat. Never auto-sends.
+    const prompt = ONBOARDING_STEP_PROMPTS[currentStep];
+    if (prompt) useConversationStore.getState().setDraft(prompt);
 
     switch (currentStep) {
-      case "intro":
-        force("");
+      case "home":
         pushThought("Poly is active and ready");
+        break;
+
+      case "customize":
+        pushThought("Applying theme tokens across the workspace…");
         break;
 
       case "research":
@@ -96,25 +124,19 @@ export function LiveOnboarding() {
         );
         break;
 
-      case "workspace":
-        force("browser");
-        pushThought("Opening primary source in native Browser surface", {
-          tool: "browser",
-        });
+      case "breathe":
+        pushThought("Send the prefilled prompt and watch Poly build it live…");
         break;
 
-      case "tools":
-        force("bitcoin");
-        pushThought("Synthesizing bitcoin plugin…");
-        thoughtTimersRef.current.push(
-          setTimeout(() => {
-            pushThought("Mounted and pinned bitcoin in dock");
-          }, 3000)
-        );
+      case "coin":
+        pushThought("Send the prefilled prompt and watch Poly build it live…");
+        break;
+
+      case "focus":
+        pushThought("The timer will keep counting in the background…");
         break;
 
       case "handoff":
-        force("");
         pushThought("Your workspace is ready");
         break;
     }

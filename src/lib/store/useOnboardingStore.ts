@@ -12,10 +12,12 @@ export const ONBOARDING_TAB_ID = "onboarding";
 
 export type OnboardingStep =
   | "idle"
-  | "intro"
+  | "home"
+  | "customize"
   | "research"
-  | "workspace"
-  | "tools"
+  | "breathe"
+  | "coin"
+  | "focus"
   | "handoff";
 
 export const ONBOARDING_STEPS: {
@@ -28,46 +30,76 @@ export const ONBOARDING_STEPS: {
   durationMs: number;
 }[] = [
   {
-    id: "intro",
-    title: "Welcome to PolyDocks",
+    id: "home",
+    title: "Home Screen & Dock",
     subtitle: "Your personal workspace operated by an autonomous agent.",
-    narration: "Welcome to your new workspace. Let me show you what we can do together.",
+    narration: "Welcome to your workspace. This is Poly, and this is your dock.",
     dockTarget: "agent",
     durationMs: 7000,
   },
   {
+    id: "customize",
+    title: "Make It Yours",
+    subtitle: "Theme tokens adapt live; backgrounds persist across restarts.",
+    narration: "Change the theme to match this background — everything follows.",
+    dockTarget: "settings",
+    durationMs: 8000,
+  },
+  {
     id: "research",
-    title: "Agents That Do Real Work",
+    title: "Deep Web Research via TinyFish",
     subtitle: "Poly searches and synthesizes primary sources via TinyFish.",
     narration: "Watch the dock: querying primary sources via TinyFish…",
     dockTarget: "browser",
     durationMs: 9000,
   },
   {
-    id: "workspace",
-    title: "Your Workspace Comes Alive",
-    subtitle: "Real Chromium browser and research sources mounted in parallel.",
-    narration: "Opening real Chromium browser and research notes side by side…",
-    dockTarget: "browser",
-    durationMs: 8000,
+    id: "breathe",
+    title: "Poly Builds: Box Breathing",
+    subtitle: "Live code generation, mounted straight into the dock.",
+    narration: "Poly builds a breathing exercise plugin — live, in your dock.",
+    dockTarget: "agent",
+    durationMs: 9000,
   },
   {
-    id: "tools",
-    title: "Your Dock, Your Tools",
-    subtitle: "Poly builds and mounts custom tools directly into the dock.",
-    narration: "Building and mounting a live Bitcoin price viewer into your dock…",
-    dockTarget: "bitcoin",
+    id: "coin",
+    title: "Poly Builds: Decision Coin",
+    subtitle: "User input, animation, and durable flip history.",
+    narration: "A decision coin with a flip animation and a history that persists.",
+    dockTarget: "agent",
+    durationMs: 9000,
+  },
+  {
+    id: "focus",
+    title: "Poly Builds: Focus Timer",
+    subtitle: "Keeps counting in the background; restores on return.",
+    narration: "A focus timer that survives tab switches and restores on return.",
+    dockTarget: "agent",
     durationMs: 9000,
   },
   {
     id: "handoff",
     title: "Your Workspace, Your Rules",
-    subtitle: "This is your workspace. Tell me what you want to build next.",
+    subtitle: "Personalized theme, research feed, and new plugins live in the dock.",
     narration: "This is your workspace. Tell me what you want to build next.",
     dockTarget: "agent",
     durationMs: 6000,
   },
 ];
+
+/**
+ * Scripted composer drafts the tour pre-fills per build step (#373): the
+ * walkthrough demonstrates the feature instead of an empty chat, and the
+ * user still sends (consent-preserving — the tour never auto-submits).
+ * Steps without an entry leave the draft untouched.
+ */
+export const ONBOARDING_STEP_PROMPTS: Partial<Record<OnboardingStep, string>> = {
+  breathe:
+    "Build me a breathing exercise plugin: a circle that expands and contracts on a 4-4-4-4 box breathing cycle with start/pause, a round counter, and a calm dark design. Call it Box Breathing.",
+  coin: "Build me a decision coin plugin: a coin flipper with a flip animation and a timestamped history that persists. Call it Decision Coin.",
+  focus:
+    "Build me a focus timer plugin: a 25-minute countdown that keeps counting in the background and restores on return. Call it Focus Timer.",
+};
 
 interface OnboardingStoreState {
   isOpen: boolean;
@@ -99,7 +131,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
   isOpen: !loadInitialStatus(),
   hasCompleted: loadInitialStatus(),
   isPlaying: !loadInitialStatus(),
-  currentStep: loadInitialStatus() ? "idle" : "intro",
+  currentStep: loadInitialStatus() ? "idle" : "home",
   currentStepIndex: 0,
   paused: false,
 
@@ -122,7 +154,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
     set({
       isOpen: true,
       isPlaying: true,
-      currentStep: "intro",
+      currentStep: "home",
       currentStepIndex: 0,
       hasCompleted: false,
       paused: false,
@@ -201,7 +233,7 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
     set({
       isOpen: true,
       isPlaying: true,
-      currentStep: "intro",
+      currentStep: "home",
       currentStepIndex: 0,
       hasCompleted: false,
       paused: false,

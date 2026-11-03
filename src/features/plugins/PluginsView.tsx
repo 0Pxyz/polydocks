@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { resolveSurfaceIcon } from "../dock/surfaceResolver";
+import { resolveRowAction } from "@/lib/dock/dockModel";
 import { PluginStoreView } from "./PluginStoreView";
 
 export interface PluginItem {
@@ -58,6 +59,12 @@ interface PluginsViewProps {
   className?: string;
   initialTab?: "installed" | "discover";
   onOpenPlugin?: (pluginId: string) => void;
+  /**
+   * Locks the page to one origin trust (#382): Creations shows
+   * generated-only instead of duplicating the full Installed list.
+   * Tabs hide — a single-purpose page needs no tab bar.
+   */
+  lockTrust?: PluginItem["trust"];
 }
 
 interface InstalledListProps {
@@ -207,11 +214,16 @@ function InstalledPluginList({
                     : lastRun?.status === "failed"
                       ? "Needs attention"
                       : "Connected";
-                  // One click zone per row: opens enabled tools, enables
-                  // disabled ones. Everything else lives in the hover menu.
+                  // One click zone per row: opens what has a view, enables
+                  // disabled ones, details the rest. Capability-only
+                  // plugins (search, sources, …) have no surface — opening
+                  // them was a silent no-op, so they open Details (#380).
+                  const action = resolveRowAction(plugin);
+                  const canOpen = action === "open";
                   const primaryAction = () => {
-                    if (plugin.enabled) onOpenPlugin?.(plugin.id);
-                    else onToggle(plugin.id);
+                    if (action === "enable") onToggle(plugin.id);
+                    else if (action === "open") onOpenPlugin?.(plugin.id);
+                    else onSelect(plugin);
                   };
 
                   return (
@@ -220,6 +232,7 @@ function InstalledPluginList({
                       role="button"
                       tabIndex={0}
                       onClick={primaryAction}
+                      title={plugin.enabled && !canOpen ? "No preview surface — opens details" : undefined}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
@@ -333,7 +346,7 @@ function InstalledPluginList({
   );
 }
 
-export function PluginsView({ onDismiss, className = "", initialTab = "installed", onOpenPlugin }: PluginsViewProps) {
+export function PluginsView({ onDismiss, className = "", initialTab = "installed", onOpenPlugin, lockTrust }: PluginsViewProps) {
   const [plugins, setPlugins] = useState<PluginItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"installed" | "discover">(initialTab);
@@ -349,6 +362,10 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   const [connectingMcp, setConnectingMcp] = useState(false);
   const [mcpWarning, setMcpWarning] = useState<string | null>(null);
   const [mcpAcknowledged, setMcpAcknowledged] = useState(false);
+
+  // Creations (#382): generated-only instead of a second Installed list.
+  const visiblePlugins = lockTrust ? plugins.filter((p) => p.trust === lockTrust) : plugins;
+  const isLocked = lockTrust !== undefined;
 
   // Client-side preview of exactly what connecting will grant (mirrors the
   // server install: net:hostname, mcp:server, plus a stored secret when a
@@ -376,14 +393,19 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
 
   const fetchPlugins = async () => {
     try {
-      const res = await fetch("/api/plugins");
+      // Single request: last-run dots ride the list response (?withLastRun=1)
+      // instead of one /executions call per plugin (devtools spam).
+      const res = await fetch("/api/plugins?withLastRun=1");
       if (res.ok) {
         const data = await res.json();
         setPlugins(data.plugins || []);
-        // Fetch executions for each plugin
-        for (const p of data.plugins || []) {
-          fetchExecutions(p.id);
-        }
+        setExecutions((prev) => {
+          const next = { ...prev };
+          for (const p of data.plugins || []) {
+            if (p.lastExecution && !next[p.id]?.length) next[p.id] = [p.lastExecution];
+          }
+          return next;
+        });
       }
     } catch (err) {
       console.error("Failed to fetch plugins", err);
@@ -411,14 +433,15 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
     fetchPlugins();
   }, []);
 
-  // Live grants for the open detail sheet (#180): what the plugin may do
-  // right now, revocable per permission. Manifest chips below are the
-  // static request; this is the enforced state.
+  // Detail sheet data (grants + run history) loads on selection only:
+  // the list dots come from ?withLastRun=1, so opening Tools costs a
+  // bounded 2 requests instead of one /executions call per plugin.
   useEffect(() => {
     if (!selectedPlugin) {
       setGrants([]);
       return;
     }
+    fetchExecutions(selectedPlugin.id);
     let cancelled = false;
     (async () => {
       try {
@@ -578,10 +601,12 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
       <div className="flex items-center justify-between pb-4 border-b border-white/10">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-white/95">
-            Plugins & Extensions
+            {isLocked ? "Creations" : "Plugins & Extensions"}
           </h2>
           <p className="text-xs text-white/50 font-sans mt-0.5">
-            Manage capabilities, system permissions, and external MCP servers.
+            {isLocked
+              ? "Built with the agent, mounted in your dock."
+              : "Manage capabilities, system permissions, and external MCP servers."}
           </p>
         </div>
 
@@ -611,7 +636,8 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
         </div>
       </div>
 
-      {/* Tabs: Installed + Discover */}
+      {/* Tabs: Installed + Discover (single-purpose locked pages skip the bar) */}
+      {!isLocked && (
       <div className="flex items-center gap-1 rounded-full bg-white/[0.04] border border-[var(--border-subtle)] p-0.5 self-start">
         {(["installed", "discover"] as const).map((tab) => (
           <button
@@ -628,6 +654,7 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
           </button>
         ))}
       </div>
+      )}
 
       {actionError && (
         <div className="w-full px-3.5 py-2.5 rounded-xl bg-red-500/[0.08] border border-red-500/20 text-xs text-red-200/90">
@@ -635,11 +662,11 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
         </div>
       )}
 
-      {activeTab === "discover" ? (
+      {activeTab === "discover" && !isLocked ? (
         <PluginStoreView onOpenPlugin={onOpenPlugin} />
       ) : (
         <InstalledPluginList
-          plugins={plugins}
+          plugins={visiblePlugins}
           loading={loading}
           executions={executions}
           selectedId={selectedPlugin?.id ?? null}
@@ -647,7 +674,7 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
           onToggle={handleToggle}
           onUninstall={handleUninstall}
           onOpenPlugin={onOpenPlugin}
-          onBrowseLibrary={() => setActiveTab("discover")}
+          onBrowseLibrary={isLocked ? undefined : () => setActiveTab("discover")}
         />
       )}
 
@@ -689,6 +716,15 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
                 >
                   <Trash className="w-3.5 h-3.5" />
                   <span>Uninstall</span>
+                </button>
+              )}
+              {resolveRowAction(selectedPlugin) === "open" && onOpenPlugin && (
+                <button
+                  type="button"
+                  onClick={() => onOpenPlugin(selectedPlugin.id)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/25 transition-colors"
+                >
+                  <span>Open</span>
                 </button>
               )}
               <button

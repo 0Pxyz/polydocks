@@ -3,6 +3,8 @@ import { RemoteBrowser, type RemoteBrowserHandle } from "@atriumjs/react";
 import { useTabState } from "@/lib/tabs/useTabState";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { ReaderView } from "@/features/dock/ReaderView";
+import { normalizeUrl, shortLabel, resolveAgentTab } from "./browserTabs";
+import { SourcesView } from "@/features/sources/SourcesView";
 import {
   browserHealth,
   createBrowserSession,
@@ -28,28 +30,6 @@ interface BrowserTab {
 
 /** One Chromium per tab (worker cap); the sidebar is the only tab UI. */
 const MAX_TABS = 5;
-
-function normalizeUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.toLowerCase() === "about:blank") return "about:blank";
-  try {
-    if (/^https?:\/\//i.test(trimmed)) return new URL(trimmed).toString();
-    return new URL(`https://${trimmed}`).toString();
-  } catch {
-    return null;
-  }
-}
-
-function shortLabel(url: string, fallback: string): string {
-  if (!url) return fallback;
-  try {
-    const u = new URL(url);
-    return u.hostname.replace(/^www\./, "") || fallback;
-  } catch {
-    return url.length > 18 ? `${url.slice(0, 18)}…` : url;
-  }
-}
 
 /**
  * Native PolyDocks browser surface: real Chromium via Atrium worker,
@@ -266,20 +246,49 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
   }, [activeTabId]);
 
   // Agent integration: browser.open / open_source emits reader.open with a URL.
-  // Show it in the active tab's remote session — one surface for all web
-  // content, including video (remote playback for now; audio is the open goal).
+  // Dedup first (#350): an already-open URL focuses its tab instead of
+  // clobbering the active one — 3 consecutive opens yield 3 tabs, reopening
+  // a URL focuses it. Retargeted tabs navigate live when possible, otherwise
+  // queue for the live flush (tab-switch effect ensures the fresh session).
   const lastAgentUrlRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!readerUrl || !activeTab || !session) return;
+    if (!readerUrl || !activeTab) return;
     if (lastAgentUrlRef.current === readerUrl) return;
     lastAgentUrlRef.current = readerUrl;
     const normalized = normalizeUrl(readerUrl);
     if (!normalized) return;
+    const resolution = resolveAgentTab(tabs, activeTabId, normalized, MAX_TABS);
+    if (!resolution) return;
+    if (resolution.action === "focus") {
+      setActiveTabId(resolution.tabId);
+      return;
+    }
+    if (resolution.action === "create") {
+      const n = counter + 1;
+      setCounter(n);
+      const fresh: BrowserTab = { id: `tab-${n}`, url: normalized, session: null };
+      setTabs((prev) => [...prev, fresh]);
+      setActiveTabId(fresh.id);
+      setUrlInput(normalized);
+      pendingNavigateRef.current = normalized;
+      return;
+    }
+    const targetId = resolution.tabId;
+    setTabUrl(targetId, normalized);
     setUrlInput(normalized);
-    setTabUrl(activeTab.id, normalized);
-    void navigateBrowserSession(workspaceKey, session.sessionId, normalized).catch(() => undefined);
+    if (targetId !== activeTabId) {
+      // Tab switch ensures the session; the live flush navigates it.
+      pendingNavigateRef.current = normalized;
+      setActiveTabId(targetId);
+      return;
+    }
+    if (fallbackMode || !session) {
+      pendingNavigateRef.current = normalized;
+      return;
+    }
     viewerRef.current?.navigate(normalized);
-  }, [readerUrl, activeTab, session, workspaceKey, setTabUrl]);
+    void navigateBrowserSession(workspaceKey, session.sessionId, normalized).catch(() => undefined);
+  }, [readerUrl, tabs, activeTabId, activeTab, session, fallbackMode, counter, workspaceKey, setTabs, setActiveTabId, setCounter, setTabUrl]);
 
   const handleNavigate = useCallback(async () => {
     if (!activeTab) return;
@@ -343,6 +352,27 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
     setError(null);
   }, [tabs.length, counter, setCounter, setTabs, setActiveTabId]);
 
+  /** Sources feed handoff (#352): a feed click loads the URL in the active
+   * tab (creating one when boot has not yet), so ReaderView renders it —
+   * no live session needed in the no-worker branches. */
+  const openFeedUrl = useCallback(
+    (url: string) => {
+      const normalized = normalizeUrl(url);
+      if (!normalized) return;
+      if (!activeTab) {
+        const fresh: BrowserTab = { id: "tab-1", url: normalized, session: null };
+        setCounter(1);
+        setTabs([fresh]);
+        setActiveTabId(fresh.id);
+        setUrlInput(normalized);
+        return;
+      }
+      setTabUrl(activeTab.id, normalized);
+      setUrlInput(normalized);
+    },
+    [activeTab, setTabs, setActiveTabId, setCounter, setTabUrl]
+  );
+
   const handleCloseTab = useCallback(
     async (id: string) => {
       const closing = tabs.find((t) => t.id === id);
@@ -388,7 +418,7 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
           reader instead. Start the worker:{" "}
           <code className="text-primary">ATRIUM_WORKER_SECRET=dev-secret-change-me npx atrium-worker</code>
         </div>
-        <ReaderView url={activeUrl || "https://example.com/"} />
+        {activeUrl ? <ReaderView url={activeUrl} /> : <SourcesView onOpenUrl={openFeedUrl} />}
       </div>
     );
   }
@@ -603,9 +633,7 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
                 {activeUrl ? (
                   <ReaderView url={activeUrl} />
                 ) : (
-                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                    <span className="text-xs">Type a URL above to read it here.</span>
-                  </div>
+                  <SourcesView onOpenUrl={openFeedUrl} />
                 )}
               </div>
             </div>

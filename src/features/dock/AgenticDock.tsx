@@ -341,7 +341,10 @@ export function AgenticDock({
       orderedIds.push(id);
     }
   };
-  // Pinned first (pinned order), then visible in stable registration order.
+  // Pinned first (pinned order), then visible in stable registration
+  // order. Opened items stay "open" forever, so the width cap below can
+  // push a just-opened tool behind every stale open — the focused swap
+  // after the slice guarantees what is open on screen shows in the bar.
   for (const id of pinnedToolIds) {
     const record = dockSnapshot.items[id];
     if (!record || dockVisible.includes(id)) take(id);
@@ -351,7 +354,11 @@ export function AgenticDock({
     if (dockVisible.includes(id)) take(id);
   }
   for (const id of pinnedToolIds) take(id);
-  const cappedIds = orderedIds.slice(0, Math.max(1, visibleCap));
+  let cappedIds = orderedIds.slice(0, Math.max(1, visibleCap));
+  const focusedId = dockSnapshot.focusedId;
+  if (focusedId && byId.has(focusedId) && !cappedIds.includes(focusedId)) {
+    cappedIds = [...cappedIds.slice(0, Math.max(0, visibleCap - 1)), focusedId];
+  }
   const visibleTools = cappedIds
     .map((id) => byId.get(id))
     .filter((tool): tool is DockToolItem => tool !== undefined);

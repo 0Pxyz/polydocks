@@ -94,6 +94,17 @@ export function isSilentPcm16LE(buf: ArrayBuffer, threshold = 64): boolean {
   return true;
 }
 
+/** Hint when the mic path captures sustained all-silence (#177): the
+ * permission is granted and frames flow, but nothing audible ever arrives
+ * (muted device, wrong input, OS-level mute). Returns the status hint, or
+ * null while the capture still looks alive. Pure so tests pin it. */
+export function micSilenceHint(stats: MicFrameStats, minFrames = 50): string | null {
+  if (stats.frames >= minFrames && stats.silentFrames >= stats.frames) {
+    return "Mic sounds silent — check your input device and OS-level mute.";
+  }
+  return null;
+}
+
 /** Fold one emitted PCM frame into the running counters (mutates, returns). */
 export function noteMicFrame(stats: MicFrameStats, buf: ArrayBuffer): MicFrameStats {
   stats.frames += 1;

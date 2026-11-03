@@ -36,9 +36,16 @@ describe("First-Party AGENT_ONBOARDING Plugin", () => {
     expect(res).toBeDefined();
     expect(res.success).toBe(true);
     expect((res.data as any)?.status).toBe("started");
-    expect((res.data as any)?.step).toBe("intro");
-    expect((res.data as any)?.steps).toContain("research");
-    expect((res.data as any)?.steps).toContain("tools");
+    expect((res.data as any)?.step).toBe("home");
+    expect((res.data as any)?.steps).toEqual([
+      "home",
+      "customize",
+      "research",
+      "breathe",
+      "coin",
+      "focus",
+      "handoff",
+    ]);
   });
 
   it("invokes onboarding.step across choreography sequence", async () => {
@@ -53,12 +60,12 @@ describe("First-Party AGENT_ONBOARDING Plugin", () => {
 
     const res2 = await capabilityBus.invoke(
       "onboarding.step",
-      { stepId: "tools", autoAdvance: true },
+      { stepId: "breathe", autoAdvance: true },
       opts
     );
     expect(res2.success).toBe(true);
     expect((res2.data as any)?.status).toBe("active");
-    expect((res2.data as any)?.step).toBe("tools");
+    expect((res2.data as any)?.step).toBe("breathe");
   });
 
   it("invokes onboarding.skip to gracefully complete demo", async () => {
@@ -72,6 +79,6 @@ describe("First-Party AGENT_ONBOARDING Plugin", () => {
     const res = await capabilityBus.invoke("onboarding.replay", {}, opts);
     expect(res.success).toBe(true);
     expect((res.data as any)?.status).toBe("replayed");
-    expect((res.data as any)?.step).toBe("intro");
+    expect((res.data as any)?.step).toBe("home");
   });
 });

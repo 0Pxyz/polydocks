@@ -128,7 +128,12 @@ export function initializeFirstPartyPlugins(): void {
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);
   capabilityBus.register("search", searchPluginManifest.capabilities[0], async (input) => {
-    return await tinyfish.search(input.query, input.domainType || "web", input.limit || 5);
+    const hits = await tinyfish.search(input.query, input.domainType || "web", input.limit || 5);
+    // Quality gates ride the canonical path (#348): kind tags, primary
+    // sources first, and an explicit note for requested media types that
+    // came back empty. Pure curation — the raw API contract is unchanged.
+    const { curateSearchResults } = await import("../../discovery/sourceQuality");
+    return curateSearchResults(hits, input.query, input.domainType || "web");
   });
   capabilityBus.register("search", searchPluginManifest.capabilities[1], async (input) => {
     return await tinyfish.fetch([input.url]);

@@ -45,10 +45,58 @@ export const SYSTEM_TOOL_IDS = new Set(["agent"]);
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
 export const DEFAULT_PINNED_IDS = ["agent", "browser", "plugins", "creations", "store", "settings"];
 
-/** Builtin ids retired with the knowledge-map experience (never valid pins). */
+/**
+ * Tool ids the main viewport renders without a manifest surface (#380):
+ * first-party ToolSurface routes (the agent chat panel is excluded — it
+ * is a panel, not a ToolSurface id). App's viewport routing and
+ * PluginsView's row-open contract share this set so they cannot drift
+ * apart the way notes did (#373).
+ */
+export const MAIN_VIEW_STATIC_IDS = new Set([
+  "settings",
+  "theme",
+  "plugins",
+  "creations",
+  "store",
+  "notes",
+  "inspect",
+  "onboarding",
+  "browser",
+  "deep-work-flashcards",
+  "bitcoin-viewer",
+]);
+
+/**
+ * Whether a Tools row can open a viewport (#380). Generated plugins open
+ * through their manifest surfaces; static tools through their ToolSurface
+ * route. Capability-only plugins (search, sources, files, sandbox: real
+ * caps, zero surfaces, no route) have no view — the row must offer
+ * Details instead of a no-op open.
+ */
+export function canOpenPluginView(plugin: {
+  id: string;
+  enabled: boolean;
+  surfaces: Array<unknown>;
+}): boolean {
+  return plugin.enabled && (plugin.surfaces.length > 0 || MAIN_VIEW_STATIC_IDS.has(plugin.id));
+}
+
+/** Row click contract (#382): open what has a view, enable disabled ones, detail the rest. */
+export type RowAction = "open" | "enable" | "details";
+
+export function resolveRowAction(plugin: {
+  id: string;
+  enabled: boolean;
+  surfaces: Array<unknown>;
+}): RowAction {
+  if (!plugin.enabled) return "enable";
+  return canOpenPluginView(plugin) ? "open" : "details";
+}
+
+/** Builtin ids retired with the knowledge-map experience (never valid pins).
+ * "notes" is back as a first-party surface (#351) so it survives migration. */
 export const RETIRED_PIN_IDS = new Set([
   "maps",
-  "notes",
   "files",
   "quests",
   "flashcards",
@@ -318,6 +366,7 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
 export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "agent", label: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin", system: true },
   { id: "browser", label: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
+  { id: "notes", label: "Notes", description: "Notes: write and keep workspace notes", icon: "notes", kind: "builtin" },
   { id: "onboarding", label: "Tour", description: "Tour: learn the dock", icon: "onboarding", kind: "builtin" },
   { id: "plugins", label: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
   { id: "creations", label: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },

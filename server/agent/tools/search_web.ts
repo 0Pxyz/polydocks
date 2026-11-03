@@ -9,7 +9,7 @@ export const search_web: AgentTool<{
 }> = {
   name: "search_web",
   description:
-    "Finds candidate URLs across web, news, or research papers. Use to discover sources; it reads nothing (use fetch_page).",
+    "Finds candidate URLs across web, news, or research papers (kind-tagged, primary sources first, with a coverage note for requested media types that came back empty). Use to discover sources; it reads nothing (use fetch_page).",
   schema: z.object({
     query: z.string().min(1).describe("Search query string (e.g. 'Raft consensus algorithm visual tutorial')"),
     domain_type: z
@@ -51,6 +51,9 @@ export const search_web: AgentTool<{
       domain_type: args.domain_type || "web",
       count: list.length,
       results: list,
+      // Explicit media coverage (#348): when non-null, state the missing
+      // types to the user instead of implying the brief was fully covered.
+      coverage: !Array.isArray(result.data) ? (result.data as any)?.coverage ?? null : null,
     };
   },
 };

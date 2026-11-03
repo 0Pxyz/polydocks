@@ -1,6 +1,8 @@
 # PolyDocks
 
-### Your own workspace, run by Poly.
+### Tell Poly what you need. It builds the tools to do it.
+
+*Software that adapts to your work.*
 
 [![Meta Model API](https://img.shields.io/badge/Meta_Model_API-muse--spark--1.3-blue?style=flat-square)](https://dev.meta.ai/docs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -11,22 +13,26 @@
 > 🎬 **Watch the Live Onboarding Demo:** [Full Product Walkthrough (MP4)](docs/media/videos/polydocks-product-walkthrough.mp4)  
 > **Feature Spotlights:** [01: Agentic Dock](docs/media/videos/feature-01-agentic-dock.mp4) • [02: Native Browser & TinyFish Research](docs/media/videos/feature-02-native-browser-research.mp4) • [03: Agent Builds Plugins](docs/media/videos/feature-03-agent-builds-plugins.mp4)
 
-PolyDocks is a way of using AI agents that feels like a place instead of a conversation. You talk (or type) to **Poly**, your agent, and it works inside **your dock**: it browses the web in a real browser, reads and saves sources, runs code in a sandbox, keeps your notes and files, and builds new tools for you on the spot. All of it sits side by side in a single, modern interface, instead of being scattered across a dozen tabs and apps.
+PolyDocks is an agentic workspace where AI doesn't stop at using existing tools. It can build new ones.
+
+Ask Poly to research a topic, set up an environment, or create a tool for a specific task. Poly works across a browser, research sources, files and an isolated code sandbox. When existing capabilities aren't enough, it can build a new plugin, run it and add it to your dock.
+
+The result isn't just another conversation with an AI. It's a workspace that changes as your work changes.
+
+The idea is simple: software should adapt to people's needs, not the other way around.
 
 ---
 
-## Why this exists
+## What makes Poly different?
 
-Software is becoming personal.
+Most AI agents are limited by the tools they're given. We built PolyDocks around a different idea: what if an agent could build the tools it needs?
 
-For decades we adapted ourselves to apps built for everyone: we learned their menus, their limits, their way of organizing things. Agents change the equation. If an agent can build and operate tools in seconds, then your software can finally be shaped around **you**: what you read, how you think, what you're working on this week.
+> *You give Poly a task. It can create a new plugin, run it in an isolated environment, and bring it directly into your workspace. Then it uses that tool to get the job done. We're exploring a future where software doesn't have to be built for everyone in advance. It can be created around what each person actually needs. That's PolyDocks.*
 
-PolyDocks is our bet on that future, made as something beautiful to actually use every day:
-
-- **One place for what's usually scattered.** Research, reading, notes, code, files and terminals live together in one dock, laid out the way you want.
-- **An agent that does, not just says.** Poly opens the page, saves the source, starts the server, opens the tool. You watch it work in a calm stream of short thoughts, and the result is something you can use right away.
-- **AI-native from the ground up.** The agent isn't a sidebar bolted onto an app. The app is built so Poly can operate everything a person can: the same actions, the same surface.
-- **Yours to reshape.** Ask for a new tool and it appears, themed like the rest of the app. Change the theme and everything follows.
+- **Build.** Poly creates tools when existing capabilities aren't enough — a new plugin, generated, verified and versioned.
+- **Use.** Generated tools become functional panels inside the workspace, live next to the browser, sources feed and notes.
+- **Work.** Browser, research, files, notes, and code execution operate side by side in one dock, arranged around the task.
+- **Keep.** Generated tools persist in your workspace: reuse them, roll back when you don't like a change.
 
 ---
 
@@ -37,7 +43,7 @@ PolyDocks is our bet on that future, made as something beautiful to actually use
 ### The dock
 
 ![The dock](docs/media/dock.png)
-*Everything you see is a panel Poly opened: browser, sources, notes, quests, files, terminal, and tools it built for you. Pin what you use, background the rest.*
+*Everything you see is a panel Poly opened: browser, sources feed, notes, and tools it built for you. Pin what you use, background the rest.*
 
 ### Poly at work
 
@@ -47,12 +53,11 @@ PolyDocks is our bet on that future, made as something beautiful to actually use
 ### A real browser, inside the dock
 
 ![Native browser](docs/media/browser.gif)
-*Real Chromium tabs with a URL bar, back/forward and lateral tabs. Sites that block embedding open fine. Poly navigates it, and so can you.*
+*Chromium tabs with a URL bar, back/forward and lateral tabs (Atrium worker). Without the worker, pages open in the built-in reader — sites that block embedding get an honest fallback card with an Open in new tab action. Poly navigates it, and so can you.*
 
 ### Research that stays with you
 
-![Research and sources](docs/media/research.gif)
-*Web, news and paper search with full-text reading. Everything Poly reads is saved as a source in your workspace, with the site's brand mark.*
+*Web, news and paper search with full-text reading. Everything Poly reads is saved as a source in your workspace, with the site's brand mark. See it move in [02: Native Browser & TinyFish Research](docs/media/videos/feature-02-native-browser-research.mp4).*
 
 ### Code running next to your thinking
 
@@ -81,7 +86,7 @@ PolyDocks is our bet on that future, made as something beautiful to actually use
 You tap Poly and say: *"Look into state-space models vs transformers, open the strongest paper, and set up somewhere I can run their code."*
 
 1. Thoughts drift up from Poly: *Searching papers… Reading sources…*
-2. A **browser** tab opens with the paper, a real page, not a stripped-down reader.
+2. A **browser** tab opens with the paper — the live page when the Atrium worker runs, the built-in reader otherwise (frame-blocked sites offer Open in new tab).
 3. A **sources** panel fills with what Poly read, saved to the workspace.
 4. A **terminal** comes up in a sandbox with the repo cloned and a preview tunneled back to you.
 
@@ -111,7 +116,7 @@ The interface has three simple ideas.
 
 **The dock.** The bar that holds your workspace. Every item in it is a panel Poly opened, and Poly curates it with the same verbs you have: open, close, pin, focus, send to background. It reuses what's already open rather than duplicating it.
 
-**Panels.** Everything you see in the dock. Browser, notes, sources, quests, files, terminal, and any tool built for you. Panels read the app's theme, so they always look like part of it.
+**Panels.** Everything you see in the dock. Browser, sources feed, notes, and any tool built for you. Panels read the app's theme, so they always look like part of it.
 
 <!-- Optional: annotated screenshot with Poly, the dock and a couple of panels labeled. -->
 ![Environment map](docs/media/environment-map.png)
@@ -119,6 +124,16 @@ The interface has three simple ideas.
 ---
 
 ## Architecture
+
+PolyDocks is a **microkernel**: the core stays minimal — **dock + capability bus + plugin lifecycle/policy + sandbox bridge** — and everything else is a plugin.
+
+- **Dock.** The product surface: a persistent control bar of tool panels (browser, sources feed, notes, store, settings, agent-built tools). Tools mount in the main or beside host, stay alive hidden, and hibernate past the live-tab limit. First-party surfaces: [browser](src/features/browser/NativeBrowserView.tsx), [sources feed](src/features/sources/SourcesView.tsx), [notes](src/features/notes/NotesView.tsx).
+- **Capability bus.** The only way tools touch the world: typed capabilities (`server/plugins/bus.ts`) with a risk policy, 30s timeout, and an `executions` audit trail. The agent reaches them through `find_capabilities` / `invoke_capability`; the front end through `POST /api/plugins/:pluginId/:capability`.
+- **Plugin lifecycle.** One file + manifest, sandboxed (`<iframe sandbox="allow-scripts" srcdoc>`, `window.polymax` bridge), versioned with rollback. Contract plugins (search, browser, notes, sources, files) are kernel-enforced; community tools install from the store.
+- **Agent.** One loop over the Meta Model API (`muse-spark-1.3`, `server/agent/loop.ts`): deterministic dock/skill routers first, model turns with zod-validated tool calls, every step streamed over SSE. No multi-agent graph, no verifier.
+- **Data.** One SQLite database (`bun:sqlite`, workspace-scoped tables for notes and sources) plus workspace files. Single-user local today; per-user sandboxes are the target.
+
+Today vs target, with evidence, lives in [ARCHITECTURE.md](ARCHITECTURE.md) (Today / Target / Gaps). Product status in one line: **runs today** as a single-user local runtime (`docker compose up`); **not built yet** — per-user sandboxes, auth/multi-tenancy, remote tool store (see [Status](#status)).
 
 ---
 
@@ -132,7 +147,7 @@ Once it's running, ask Poly to build your day:
 - **"Build me a tool that tracks what I read this week."** A tool made for you, open in the dock.
 - **"Clone this repo, start it, and show me the preview."** Sandbox, tunnel and browser tab in one go.
 - **"Change my background and apply a cyber theme."** The whole workspace, including tools Poly made, follows.
-- **"Turn this topic into learning quests."** Structured quests with XP progression.
+- **"Research state-space models, save the best sources, and keep appending your notes."** The sources feed fills live while your note autosaves beside it.
 
 ---
 
@@ -149,6 +164,7 @@ One model per job, configured by environment only (`server/agent/modelRegistry.t
 - **Runs today:** a single-user local runtime. You bring `MODEL_API_KEY` (plus `TINYFISH_API_KEY` and `MODAL_*` for the full experience). Without a model key Poly answers `model_unauthorized`.
 - **Not built yet:** per-user sandboxes, auth / multi-tenancy, a remote store for tools.  Until those ship, **don't expose the server beyond localhost.**
 - **Retired:** the knowledge-map experience was removed from the core and parked on the `future/city-experience` branch.
+- **Target:** per-user sandboxes with the agent as a privileged first-party plugin — see [ARCHITECTURE.md](ARCHITECTURE.md) (§2 Target, §3 Gaps).
 
 ---
 

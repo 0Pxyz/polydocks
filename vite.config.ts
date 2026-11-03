@@ -17,6 +17,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        // Voice realtime rides WebSocket upgrades through /api: without
+        // this the browser socket never opens on the Vite port (#177).
+        ws: true,
       },
     },
   },

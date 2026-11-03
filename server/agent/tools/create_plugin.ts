@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentTool } from "./types";
 import { PluginService } from "../../services/pluginService";
-import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync } from "../../plugins/verify";
+import { isPluginIdTaken, normalizePluginId, verifyPluginStateAsync, findEquivalentPlugins } from "../../plugins/verify";
 import { isValidIconId, findCloseMatches } from "../../icons/catalog";
 
 export interface CreatePluginArgs {
@@ -25,7 +25,7 @@ export interface CreatePluginArgs {
 export const create_plugin: AgentTool<CreatePluginArgs> = {
   name: "create_plugin",
   description:
-    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin). UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
+    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin). Before creating, dock_search for an existing equivalent: creating a plugin whose name matches an installed one is refused — update it with modify_plugin or mount it with dock_pin/dock.open instead. UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
   schema: z.object({
     id: z
       .string()
@@ -137,6 +137,24 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
       return {
         success: false,
         error: `Plugin "${normalized}" already exists (${taken.namespaces.join(", ")}). Use modify_plugin to update the existing plugin instead of recreating it.`,
+      };
+    }
+
+    // Equivalence guard (#346): same normalized name under a different slug
+    // is still a duplicate. The agent only sees pinned dock items, so this
+    // registry check — not the agent's memory — stops repeat synthesis.
+    // Runs before any write, so a refusal creates nothing.
+    const equivalents = [
+      ...findEquivalentPlugins(args.name, normalized),
+      ...findEquivalentPlugins(args.id, normalized),
+    ];
+    if (equivalents.length > 0) {
+      const first = equivalents[0];
+      return {
+        success: false,
+        code: "duplicate_plugin",
+        error: `An equivalent plugin already exists: "${first.name}" (id "${first.id}"). Update it with modify_plugin, or mount it with dock_pin/dock.open — do not create a duplicate.`,
+        existingPluginId: first.id,
       };
     }
 

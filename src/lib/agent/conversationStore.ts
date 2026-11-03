@@ -39,6 +39,47 @@ let pendingPluginCallbacks:
 /** Terminal jobs already announced in chat (no duplicate "done" lines). */
 const announcedJobs = new Set<string>();
 
+/**
+ * Orchestrator turns currently in flight, keyed by message id (#387).
+ * `isStreaming` is the busy contract every working indicator in the chat
+ * UI already respects, but the orchestrator path never set it — turns
+ * looked dead until reload. Refcounted: overlapping turns keep the
+ * signal on until the last one settles.
+ */
+const activeOrchestratorTurns = new Set<string>();
+
+function syncOrchestratorBusy(): void {
+  const busy = activeOrchestratorTurns.size > 0;
+  useConversationStore.setState((state) => {
+    if (busy) {
+      return {
+        isStreaming: true,
+        lastEventAt: Date.now(),
+        statusText: state.statusText || "Working…",
+        orbState: state.orbState === "idle" ? ("thinking" as const) : state.orbState,
+      };
+    }
+    // A legacy streaming turn (attachments/retry) still owns the flag.
+    if (activeAbortController) return { isStreaming: true };
+    return {
+      isStreaming: false,
+      statusText: state.statusText === "Working…" ? "" : state.statusText,
+      orbState: state.orbState === "thinking" ? ("idle" as const) : state.orbState,
+    };
+  });
+}
+
+function markOrchestratorTurnStart(id: string): void {
+  if (!id) return;
+  activeOrchestratorTurns.add(id);
+  syncOrchestratorBusy();
+}
+
+function markOrchestratorTurnDone(id: string): void {
+  if (!id) return;
+  if (activeOrchestratorTurns.delete(id)) syncOrchestratorBusy();
+}
+
 function loadOrchestratorSession(): string | null {
   try {
     const v = platformStorage.getItem<string | null>(ORCH_SESSION_KEY, null);
@@ -173,6 +214,13 @@ interface ConversationStoreState {
   messageThinking: Record<string, string>;
   /** Open (or reuse) the job-event stream for a session. Returns the live instance. */
   ensureTaskStream: (sessionId: string) => EventSource | null;
+  /**
+   * Force-reopen the job-event stream (#387): a zombie source (server
+   * restart, proxy drop) looks open but never delivers, leaving a turn
+   * busy forever. Reconnecting replays from the persisted cursor, so a
+   * completion missed while the stream was dead settles on reconnect.
+   */
+  reconnectTaskStream: () => void;
   /**
    * Resume active jobs after a reload (#178): reopens the stream (replay
    * from the persisted cursor rebuilds cards/steps) and seeds queued/
@@ -402,6 +450,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   },
 
   clearConversation: async () => {
+    activeOrchestratorTurns.clear();
     const cleared = await clearAgentThread();
     if (!cleared) {
       set({ statusText: "Couldn't clear the conversation. Try again." });
@@ -414,6 +463,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       oldestMessageSeq: null,
       activeApproval: null,
       statusText: "",
+      isStreaming: false,
+      orbState: "idle",
     });
   },
 
@@ -490,6 +541,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       activeAbortController.abort();
       activeAbortController = null;
     }
+    activeOrchestratorTurns.clear();
     cancelSpeech();
     set({
       isStreaming: false,
@@ -579,6 +631,19 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     return source;
   },
 
+  reconnectTaskStream: () => {
+    const sessionId = get().orchestratorSessionId ?? taskStreamSession;
+    if (!sessionId) return;
+    try {
+      taskEventSource?.close();
+    } catch {
+      // Ignore close errors on a stale stream.
+    }
+    taskEventSource = null;
+    taskStreamSession = null;
+    get().ensureTaskStream(sessionId);
+  },
+
   hydrateJobs: async () => {
     const sessionId = get().orchestratorSessionId;
     if (!sessionId || typeof window === "undefined") return;
@@ -639,19 +704,23 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const isDockAdd = origin === "dock-add";
 
     cancelSpeech();
-    // The orchestrator path never holds the global thinking state: it
-    // appends the user message and returns, leaving the input enabled.
-    // Only legacy streaming turns (attachments/retries) set isStreaming.
+    // Orchestrator turns signal busy through the refcounted turn set
+    // (#387): the mark lands right after this reset and transfers to the
+    // server message id once the POST returns, so the working indicators
+    // show from send until message.done/message.error. Legacy streaming
+    // turns (attachments/retries) set isStreaming directly.
+    const pendingTurnKey = useOrchestrator ? `pending-${crypto.randomUUID()}` : null;
     set({
       draft: isDockAdd ? get().draft : "",
       stagedAttachments: [],
-      isStreaming: useOrchestrator ? false : true,
+      isStreaming: useOrchestrator ? get().isStreaming : true,
       isBuildingTool: isDockAdd && !useOrchestrator,
       buildingToolName: isDockAdd && !useOrchestrator ? prompt : "",
       orbState: useOrchestrator ? get().orbState : "thinking",
       statusText: isDockAdd && !useOrchestrator ? "Starting tool synthesis…" : "",
       activeApproval: null,
     });
+    if (pendingTurnKey) markOrchestratorTurnStart(pendingTurnKey);
 
     const userMsg: ConversationMessage = {
       id: crypto.randomUUID(),
@@ -667,7 +736,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     }));
 
     if (useOrchestrator) {
-      await sendViaOrchestrator(prompt, origin, callbacks);
+      await sendViaOrchestrator(prompt, origin, callbacks, pendingTurnKey ?? undefined);
       return;
     }
 
@@ -1160,17 +1229,24 @@ async function sendViaOrchestrator(
     onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
     onOpenExperience?: (expId: string) => void;
     onCloseExperience?: (expId: string) => void;
-  }
+  },
+  pendingTurnKey?: string
 ): Promise<void> {
   if (callbacks) {
     pendingPluginCallbacks = callbacks;
   }
   let posted: { messageId: string; sessionId: string } | null = null;
   try {
+    // Reuse the stable session (#347): without it the server mints one
+    // session per message, and the stream follows only the latest — job
+    // completions from earlier messages land on a closed stream and never
+    // render until reload. The server creates a fresh session when the
+    // stored one is missing or expired.
+    const sessionId = useConversationStore.getState().orchestratorSessionId ?? undefined;
     const res = await fetch("/api/agent/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, origin }),
+      body: JSON.stringify({ prompt, origin, ...(sessionId ? { sessionId } : {}) }),
     });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && typeof json.messageId === "string") {
@@ -1181,6 +1257,7 @@ async function sendViaOrchestrator(
   }
 
   if (!posted) {
+    if (pendingTurnKey) markOrchestratorTurnDone(pendingTurnKey);
     useConversationStore.setState((state) => ({
       messages: [
         ...state.messages,
@@ -1191,6 +1268,10 @@ async function sendViaOrchestrator(
   }
 
   const { messageId, sessionId } = posted;
+  // Transfer busy ownership from the pre-POST placeholder to the real id:
+  // message.done/message.error settle by this id from here on.
+  if (pendingTurnKey) activeOrchestratorTurns.delete(pendingTurnKey);
+  markOrchestratorTurnStart(messageId);
   useConversationStore.setState((state) => ({
     orchestratorSessionId: sessionId,
     messages: [
@@ -1301,6 +1382,10 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
   const taskId = typeof data?.jobId === "string" ? data.jobId : null;
   if (!taskId) return;
   if (id !== undefined) saveJobCursor(sessionId, id);
+  useConversationStore.setState({ lastEventAt: Date.now() });
+  // A (re)played agent.start re-arms busy for a turn still in flight after
+  // reload; its message.done/message.error settles it again.
+  if (type === "agent.start") markOrchestratorTurnStart(taskId);
 
   if (type.startsWith("message.")) {
     handleMessageSseEvent(taskId, type, data);
@@ -1415,6 +1500,7 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
   const key = `m-${messageId}`;
   const set = useConversationStore.setState;
   if (type === "message.delta" && typeof data?.text === "string") {
+    markOrchestratorTurnStart(messageId);
     // Pre-tool narration rides as thinking: collapsible, never chat text.
     if ((data as Record<string, unknown>)?.thinking === true) {
       set((state) => ({
@@ -1441,6 +1527,7 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
     return;
   }
   if (type === "message.done") {
+    markOrchestratorTurnDone(messageId);
     finishScopeSteps(key, "done");
     if (data && typeof data === "object" && (data as any).action) {
       const reply = (data as any).action as { op?: string; id?: string };
@@ -1472,6 +1559,8 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
     return;
   }
   if (type === "message.error") {
+    markOrchestratorTurnDone(messageId);
+    finishScopeSteps(key, "error");
     const text = typeof data?.text === "string" ? data.text : "Something went wrong.";
     set((state) => {
       const exists = state.messages.some((m) => m.id === key);

@@ -25,19 +25,47 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
     nextStep,
     prevStep,
     skipDemo,
+    startDemo,
     paused,
     setPaused,
   } = useOnboardingStore();
   const isReduced = prefersReducedMotion();
 
-  if (!isOpen || currentStep === "idle") return null;
+  // The tab only mounts when focused, so it never renders null: stage
+  // while the tour plays, replay entry otherwise. Completed tours land
+  // here with isOpen:false — that early return blanked the viewport and
+  // made the row look dead (#384). Settings → replay still works too.
+  if (!isOpen || currentStep === "idle") {
+    return (
+      <div
+        className="flex-1 w-full h-full overflow-y-auto flex flex-col items-center justify-center gap-3 px-6 py-8 font-sans select-none"
+        aria-label="Product walkthrough finished"
+      >
+        <Orb state="idle" size="md" />
+        <p className="mt-2 max-w-md px-4 text-center text-sm text-[var(--text-main)] font-medium leading-relaxed">
+          Walkthrough finished — your workspace is yours.
+        </p>
+        <button
+          type="button"
+          onClick={() => startDemo(true)}
+          className="mt-1 px-4 py-2 rounded-full text-xs font-medium bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/25 transition-colors cursor-pointer"
+          title="Replay walkthrough"
+        >
+          Replay walkthrough
+        </button>
+      </div>
+    );
+  }
 
   const stepDef = ONBOARDING_STEPS[currentStepIndex] ?? ONBOARDING_STEPS[0];
 
   const orbState =
-    currentStep === "research" || currentStep === "tools"
+    currentStep === "research" ||
+    currentStep === "breathe" ||
+    currentStep === "coin" ||
+    currentStep === "focus"
       ? "thinking"
-      : currentStep === "intro"
+      : currentStep === "home"
         ? "listening"
         : "idle";
 
