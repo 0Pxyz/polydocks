@@ -35,9 +35,12 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
   const stepDef = ONBOARDING_STEPS[currentStepIndex] ?? ONBOARDING_STEPS[0];
 
   const orbState =
-    currentStep === "research" || currentStep === "tools"
+    currentStep === "research" ||
+    currentStep === "breathe" ||
+    currentStep === "coin" ||
+    currentStep === "focus"
       ? "thinking"
-      : currentStep === "intro"
+      : currentStep === "home"
         ? "listening"
         : "idle";
 

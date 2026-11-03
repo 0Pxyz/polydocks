@@ -149,9 +149,12 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
               <Orb
                 state={
                   isOnboardingOpen && currentStep !== "idle"
-                    ? currentStep === "research" || currentStep === "tools"
+                    ? currentStep === "research" ||
+                      currentStep === "breathe" ||
+                      currentStep === "coin" ||
+                      currentStep === "focus"
                       ? "thinking"
-                      : currentStep === "intro"
+                      : currentStep === "home"
                       ? "listening"
                       : "idle"
                     : "idle"
@@ -171,10 +174,12 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
                 className="mt-6 max-w-md px-4 text-center"
               >
                 <p className="text-sm text-[var(--text-main)] font-sans font-medium leading-relaxed tracking-normal">
-                  {currentStep === "intro" && "“Welcome to your new workspace. Let me show you what we can do together.”"}
+                  {currentStep === "home" && "“Welcome to your workspace. This is Poly, and this is your dock.”"}
+                  {currentStep === "customize" && "“Change the theme to match this background — everything follows.”"}
                   {currentStep === "research" && "“Watch the dock: querying primary sources via TinyFish…”"}
-                  {currentStep === "workspace" && "“Opening real Chromium browser and research notes side by side…”"}
-                  {currentStep === "tools" && "“Building and mounting interactive tools into your dock…”"}
+                  {currentStep === "breathe" && "“Poly builds a breathing exercise plugin — live, in your dock.”"}
+                  {currentStep === "coin" && "“A decision coin with a flip animation and a history that persists.”"}
+                  {currentStep === "focus" && "“A focus timer that survives tab switches and restores on return.”"}
                   {currentStep === "handoff" && "“This is your workspace. Tell me what you want to build next.”"}
                 </p>
               </motion.div>

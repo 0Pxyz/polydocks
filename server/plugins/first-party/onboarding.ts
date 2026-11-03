@@ -26,7 +26,7 @@ export const onboardingPluginManifest: PluginManifest = {
       title: "Step Choreography",
       description: "Advances or navigates between steps of the live product demo.",
       input: z.object({
-        stepId: z.enum(["intro", "research", "workspace", "tools", "handoff"]),
+        stepId: z.enum(["home", "customize", "research", "breathe", "coin", "focus", "handoff"]),
         autoAdvance: z.boolean().default(true),
       }),
       risk: "read",
@@ -61,10 +61,10 @@ export const onboardingPluginManifest: PluginManifest = {
 export function registerOnboardingPlugin(): void {
   pluginRegistry.install(onboardingPluginManifest);
 
-  let currentStep: "idle" | "intro" | "research" | "workspace" | "tools" | "handoff" = "idle";
+  let currentStep: "idle" | "home" | "customize" | "research" | "breathe" | "coin" | "focus" | "handoff" = "idle";
 
   capabilityBus.register("onboarding", onboardingPluginManifest.capabilities[0], async (input, ctx) => {
-    currentStep = "intro";
+    currentStep = "home";
     if (ctx.emit) {
       await ctx.emit({
         type: "onboarding.started",
@@ -74,7 +74,7 @@ export function registerOnboardingPlugin(): void {
     return {
       status: "started",
       step: currentStep,
-      steps: ["intro", "research", "workspace", "tools", "handoff"],
+      steps: ["home", "customize", "research", "breathe", "coin", "focus", "handoff"],
     };
   });
 
@@ -107,7 +107,7 @@ export function registerOnboardingPlugin(): void {
   });
 
   capabilityBus.register("onboarding", onboardingPluginManifest.capabilities[3], async (_input, ctx) => {
-    currentStep = "intro";
+    currentStep = "home";
     if (ctx.emit) {
       await ctx.emit({
         type: "onboarding.started",
