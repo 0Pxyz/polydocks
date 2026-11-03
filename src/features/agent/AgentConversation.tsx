@@ -970,7 +970,7 @@ export function AgentConversation({
       <div
         ref={transcriptRef}
         className={cn(
-          "relative z-0 flex-1 min-h-0 w-full overflow-y-auto overscroll-contain px-4 sm:px-6 [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]",
+          "relative z-0 flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-contain px-4 sm:px-6 [scrollbar-width:thin] [scrollbar-color:var(--border-subtle)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--border-subtle)]",
           !isSide && "max-w-[720px] mx-auto"
         )}
       >
@@ -1041,9 +1041,9 @@ export function AgentConversation({
                   key={msg.id}
                   data-msg-role="user"
                   data-msg-id={msg.id}
-                  className="flex flex-col items-end gap-1.5 w-full"
+                  className="flex flex-col items-end gap-1.5 w-full min-w-0"
                 >
-                  <div className="max-w-[75%] rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
+                  <div className="max-w-[75%] min-w-0 break-words rounded-[20px] px-4 pt-2.5 pb-3 bg-white/[0.08] text-[#f1f3f9] text-base font-sans backdrop-blur-md leading-relaxed text-pretty shadow-sm">
                     {msg.content}
                   </div>
                   <MessageAttachments attachments={msg.attachments} />
@@ -1075,7 +1075,7 @@ export function AgentConversation({
                 key={msg.id}
                 data-msg-role="assistant"
                 data-msg-id={msg.id}
-                className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
+                className="group relative w-full min-w-0 break-words prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
                 <StepsTimeline steps={messageSteps[msg.id] || []} thinking={messageThinking[msg.id]} />
                 <AssistantMarkdown content={msg.content} />
