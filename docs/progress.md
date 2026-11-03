@@ -129,3 +129,5 @@
 | 2026-11-02 | Chat refinement: progressive responses, no Thinking label, chips removed, resize/touch/IME polish | [#295](https://github.com/0Pxyz/polymax/pull/295) |
 | 2026-11-02 | MCP client+server: PolyDocks serves its bus at POST /mcp, one manager connects external MCPs with progressive discovery (#293) | [#293](https://github.com/0Pxyz/polymax/pull/293) |
 | 2026-11-02 | Durable thinking/research timeline on the SSE stream: friendly steps, collapsible narration, replay-safe dedup, isolated test harness | [#296](https://github.com/0Pxyz/polymax/pull/296) |
+| 2026-11-03 | Release: Better Auth, kit v2, MCP, chat refinement, thinking timeline, #277 hardening promoted to main | [#298](https://github.com/0Pxyz/polymax/pull/298) |
+| 2026-11-03 | CI fix: hermetic OpenAI mock in model-registry tests, test-only secret for browser-smoke; production fail-closed auth unchanged | [#299](https://github.com/0Pxyz/polymax/pull/299) [#300](https://github.com/0Pxyz/polymax/pull/300) |
