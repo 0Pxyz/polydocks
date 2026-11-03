@@ -60,6 +60,72 @@ export function isPluginIdTaken(id: string): { taken: boolean; namespaces: strin
  * verification can pass for tab-namespace experiences that were written
  * directly to plugin_files. Idempotent.
  */
+export interface EquivalentPlugin {
+  id: string;
+  name: string;
+  /** Where the match was found: registry row vs workspace install. */
+  where: "registry" | "workspace";
+}
+
+/** Normalizes names for equivalence: case/punctuation/space-insensitive. */
+export function normalizePluginName(name: string): string {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Numeric-suffix stem ("aiagentsfeed2" -> "aiagentsfeed"): the classic
+ * repeat-synthesis pattern is the same name with a suffixed slug.
+ * Stems shorter than 3 chars never match (avoids "a2" == "a").
+ */
+export function stemPluginName(normalized: string): string {
+  const stem = normalized.replace(/[0-9]+$/, "");
+  return stem.length >= 3 ? stem : normalized;
+}
+
+/**
+ * Registry equivalence check (#346): finds an already-installed plugin with
+ * the same normalized name or id stem, even when the requested slug differs
+ * ("AI Agents Feed" vs "ai-agents-feed-2"). The agent only sees pinned dock
+ * items, so this server-side guard is what stops duplicate synthesis.
+ */
+export function findEquivalentPlugins(
+  nameOrId: string,
+  excludeId?: string
+): EquivalentPlugin[] {
+  const needle = normalizePluginName(nameOrId);
+  if (!needle) return [];
+  const excluded = excludeId ? normalizePluginId(excludeId) : "";
+  const found = new Map<string, EquivalentPlugin>();
+  const needleStem = stemPluginName(needle);
+  const consider = (id: string, name: string, where: EquivalentPlugin["where"]) => {
+    if (!id || normalizePluginId(id) === excluded) return;
+    const candidates = [normalizePluginName(id), normalizePluginName(name)];
+    if (
+      candidates.includes(needle) ||
+      candidates.map(stemPluginName).includes(needleStem)
+    ) {
+      if (!found.has(id)) found.set(id, { id, name, where });
+    }
+  };
+  try {
+    const rows = db
+      .query<{ id: string; name: string }, []>(`SELECT id, name FROM plugins`)
+      .all();
+    for (const row of rows) consider(row.id, row.name, "registry");
+  } catch {
+    // table may not exist in ancient flows
+  }
+  try {
+    const rows = db
+      .query<{ plugin_id: string }, []>(`SELECT DISTINCT plugin_id FROM workspace_plugins`)
+      .all();
+    for (const row of rows) consider(row.plugin_id, row.plugin_id, "workspace");
+  } catch {
+    // table created lazily
+  }
+  return [...found.values()];
+}
+
 export function ensurePluginRegisteredAndMounted(
   pluginId: string,
   workspaceId: string,

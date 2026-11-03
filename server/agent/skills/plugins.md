@@ -4,7 +4,7 @@
 
 ## Backend contract
 
-`create_plugin`: `id` `^[a-z0-9_-]+$`, `name` `description` `code`; icon via `search_icons`; `workspaceId?` `idempotencyKey?` `capabilities?`. Duplicates refused; emits `plugin.created`; `verifyPluginState` gates.
+`create_plugin`: `id` `^[a-z0-9_-]+$`, `name` `description` `code`; icon via `search_icons`; `workspaceId?` `idempotencyKey?` `capabilities?`. `dock_search` first — off-dock installs still exist; same-name equivalents refused, then `modify_plugin` or `dock_pin`/`dock.open`. Emits `plugin.created`; `verifyPluginState` gates.
 `modify_plugin`: `id` `changeSummary` + `patch`/`code`/metadata. Bumps version, keeps keys; emits `plugin.updated`.
 `inspect_experience({id, workspaceId?})`: `experience_errors` (last 10), health; inspect before fixing.
 `operate_plugin`: declared capability only. `publish_plugin`/`promote_to_plugin` emit published.
@@ -36,8 +36,7 @@ State in `polymax.storage`, work in `polymax.task`; FORBIDDEN: `location.reload(
 
 ## Common mistakes
 
-`create_plugin` for a fix; `modify_plugin` without inspecting; `operate_plugin` undeclared; clearing stored keys; raw `<button>` not kit `Button`; no early success claims.
-Mounting unregistered UI: every agent-built tool ships as a registered plugin via `create_plugin` (registry + verify + dock mount). Never render hardcoded tool screens in core surfaces and never mount ad-hoc tabs.
+`create_plugin` for a fix; `modify_plugin` without inspecting; `operate_plugin` undeclared; clearing stored keys; raw `<button>` not kit `Button`; no early success claims; mounting unregistered UI.
 
 <!--
 Source files (maintainer refs, stripped before injection):
