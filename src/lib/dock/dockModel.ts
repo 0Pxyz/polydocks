@@ -45,10 +45,10 @@ export const SYSTEM_TOOL_IDS = new Set(["agent"]);
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
 export const DEFAULT_PINNED_IDS = ["agent", "browser", "plugins", "creations", "store", "settings"];
 
-/** Builtin ids retired with the knowledge-map experience (never valid pins). */
+/** Builtin ids retired with the knowledge-map experience (never valid pins).
+ * "notes" is back as a first-party surface (#351) so it survives migration. */
 export const RETIRED_PIN_IDS = new Set([
   "maps",
-  "notes",
   "files",
   "quests",
   "flashcards",
@@ -318,6 +318,7 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
 export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "agent", label: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin", system: true },
   { id: "browser", label: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
+  { id: "notes", label: "Notes", description: "Notes: write and keep workspace notes", icon: "notes", kind: "builtin" },
   { id: "onboarding", label: "Tour", description: "Tour: learn the dock", icon: "onboarding", kind: "builtin" },
   { id: "plugins", label: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
   { id: "creations", label: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },
