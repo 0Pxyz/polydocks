@@ -17,6 +17,7 @@ import {
 import { platformStorage } from "@/lib/platform/storage";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { useNotesNavStore } from "@/lib/store/useNotesNavStore";
 import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 import { onboardingIntentFromTool } from "./onboardingBridge";
 import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
@@ -1530,10 +1531,12 @@ function handleMessageSseEvent(messageId: string, type: string, data: any): void
     markOrchestratorTurnDone(messageId);
     finishScopeSteps(key, "done");
     if (data && typeof data === "object" && (data as any).action) {
-      const reply = (data as any).action as { op?: string; id?: string };
+      const reply = (data as any).action as { op?: string; id?: string; noteId?: string };
       const dock = useDockStore.getState();
-      if (reply.op === "open" && reply.id) dock.openTool(reply.id);
-      else if (reply.op === "close" && reply.id) dock.closeTool(reply.id);
+      if (reply.op === "open" && reply.id) {
+        if (reply.noteId) useNotesNavStore.getState().requestNote(reply.noteId);
+        dock.openTool(reply.id);
+      } else if (reply.op === "close" && reply.id) dock.closeTool(reply.id);
     }
     if (data && typeof data === "object" && typeof (data as any).taskId === "string") {
       const tid = (data as any).taskId as string;

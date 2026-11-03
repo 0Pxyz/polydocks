@@ -51,6 +51,8 @@ export type UIEvent =
       type: "dock.open_experience";
       step: number;
       experienceId: string;
+      /** Requested note inside the Notes surface (deep link). */
+      noteId?: string;
     }
   | {
       type: "dock.layout";
@@ -405,6 +407,7 @@ export function adaptBackendEvent(raw: {
         type: "dock.open_experience",
         step,
         experienceId: String(payload.tabId || payload.id || ""),
+        noteId: typeof payload.noteId === "string" && payload.noteId ? payload.noteId : undefined,
       };
 
     case "dock.layout": {

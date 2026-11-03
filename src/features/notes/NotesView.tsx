@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTabState } from "@/lib/tabs/useTabState";
+import { useNotesNavStore } from "@/lib/store/useNotesNavStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 
 interface NoteItem {
@@ -62,6 +63,9 @@ export function NotesView({ workspaceKey = "home", className = "" }: NotesViewPr
   // Latest unsaved draft for the unload flush below. Set whenever the
   // debounced save is (re)scheduled, cleared when it lands.
   const pendingSave = useRef<{ id: string; title: string; body: string } | null>(null);
+  // Deep-link request from any entry point (palette row, agent dock.open
+  // with noteId, dock focus): select the note or show a visible error.
+  const pendingNoteId = useNotesNavStore((s) => s.pendingNoteId);
 
   const refreshList = useCallback(async () => {
     const data = await callNotes<{ items: NoteItem[] }>("list", {});
@@ -130,6 +134,27 @@ export function NotesView({ workspaceKey = "home", className = "" }: NotesViewPr
     },
     [notes, setSelectedId]
   );
+
+  // Consume cross-surface deep links (#402): palette rows, agent dock.open
+  // with a noteId, and dock focus all land here. Unknown ids surface a
+  // visible error instead of failing silently.
+  useEffect(() => {
+    if (!pendingNoteId || loading) return;
+    const id = useNotesNavStore.getState().consumeNote();
+    if (!id) return;
+    if (notes.some((n) => n.id === id)) {
+      void selectNote(id);
+      return;
+    }
+    callNotes<NoteItem>("get", { id })
+      .then((full) => {
+        setNotes((prev) => (prev.some((n) => n.id === full.id) ? prev : [full, ...prev]));
+        return selectNote(full.id);
+      })
+      .catch(() => {
+        setLoadError(`Note "${id}" was not found in this workspace.`);
+      });
+  }, [pendingNoteId, loading, notes, selectNote]);
 
   // Debounced autosave: update title/body 800ms after the last keystroke.
   // Guarded by editingId so a mid-save note switch never writes into the

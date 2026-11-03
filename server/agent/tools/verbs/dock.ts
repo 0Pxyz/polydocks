@@ -8,12 +8,13 @@ function actorCtx(ctx: { workspaceId?: string; sessionId?: string }) {
 
 const workspaceScope = { workspaceId: z.string().optional().describe("Workspace scope") };
 
-export const dockOpen: AgentTool<{ tabId: string; workspaceId?: string }> = {
+export const dockOpen: AgentTool<{ tabId: string; workspaceId?: string; noteId?: string }> = {
   name: "dock.open",
   description:
     "Open a tab or plugin in the dock: it takes the screen or opens next to the chat. Everything the user sees is a plugin open in the dock — open it, never describe it. Same handler as POST /api/dock/action and the CLI.",
   schema: z.object({
     tabId: z.string().min(1).describe("Tab or plugin id to open"),
+    noteId: z.string().min(1).optional().describe("Note id to select inside the Notes surface (tabId notes)"),
     ...workspaceScope,
   }),
   execute: (args, ctx) => dockAction("tabs.open", args as Record<string, unknown>, actorCtx(ctx)),
