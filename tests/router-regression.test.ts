@@ -53,6 +53,15 @@ describe("Router regression: theme/wallpaper never becomes a background job", ()
     expect(meh.args?.dockId).toBe("usage monitor");
     expect(DOCK.includes(meh.args?.dockId ?? "")).toBe(false);
   });
+
+  it("flags note-like open targets for model escalation, not dock ids (#402)", async () => {
+    const { isNoteOpenRequest } = await import("../server/agent/orchestrator");
+    expect(isNoteOpenRequest('Open my note titled "weekly plan"')).toBe(true);
+    expect(isNoteOpenRequest("abre minha nota de estudos")).toBe(true);
+    expect(isNoteOpenRequest("open my tools")).toBe(false);
+    expect(isNoteOpenRequest("open usage monitor")).toBe(false);
+    expect(isNoteOpenRequest("open my keynote")).toBe(false);
+  });
 });
 
 describe("Honest job completion", () => {

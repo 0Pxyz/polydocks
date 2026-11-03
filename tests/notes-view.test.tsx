@@ -169,6 +169,90 @@ describe("notes surface (#351)", () => {
     }
   });
 
+  it("hydrates title and body from the list on mount (reload path, #400)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "Research", body: "hello body", createdAt: "", updatedAt: "" },
+    ];
+    const { container, root } = await renderNotes();
+    try {
+      const input = container.querySelector('input[aria-label="Note title"]') as any;
+      const area = container.querySelector('textarea[aria-label="Note body (Markdown)"]') as any;
+      expect(input?.value).toBe("Research");
+      expect(area?.value).toBe("hello body");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("flushes an unsaved draft on unmount without waiting for the debounce (#400)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "Research", body: "hello", createdAt: "", updatedAt: "" },
+    ];
+    const { container, root } = await renderNotes();
+    const area = container.querySelector('textarea[aria-label="Note body (Markdown)"]') as any;
+    expect(area).toBeDefined();
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      (fileWindow as any).HTMLTextAreaElement.prototype,
+      "value"
+    )?.set;
+    nativeSetter?.call(area, "typed then closed");
+    area.dispatchEvent(new (fileWindow as any).Event("input", { bubbles: true }));
+    // Unmount immediately: the 800ms debounce never fires on its own.
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    const updates = calls.filter((c) => c.cap === "update");
+    expect(updates.length).toBeGreaterThan(0);
+    expect(updates.at(-1)!.input.body).toBe("typed then closed");
+  });
+
+  it("selects a deep-linked note requested from another surface (#402)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "First", body: "first body", createdAt: "", updatedAt: "" },
+      { id: "note_2", workspaceId: "w", title: "Second", body: "second body", createdAt: "", updatedAt: "" },
+    ];
+    const { useNotesNavStore } = await import("../src/lib/store/useNotesNavStore");
+    useNotesNavStore.getState().requestNote("note_2");
+    const { container, root } = await renderNotes();
+    try {
+      const input = container.querySelector('input[aria-label="Note title"]') as any;
+      const area = container.querySelector('textarea[aria-label="Note body (Markdown)"]') as any;
+      expect(input?.value).toBe("Second");
+      expect(area?.value).toBe("second body");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+      useNotesNavStore.getState().consumeNote();
+    }
+  });
+
+  it("shows a visible error for an unknown deep-linked note (#402)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "First", body: "first body", createdAt: "", updatedAt: "" },
+    ];
+    const { useNotesNavStore } = await import("../src/lib/store/useNotesNavStore");
+    useNotesNavStore.getState().requestNote("note_nope");
+    const { container, root } = await renderNotes();
+    try {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(container.textContent || "").toContain("was not found");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+      useNotesNavStore.getState().consumeNote();
+    }
+  });
+
   it("emits no unhandled console errors", async () => {
     const { container, root } = await renderNotes();
     try {

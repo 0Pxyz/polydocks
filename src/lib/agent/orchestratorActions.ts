@@ -2,6 +2,7 @@ import type { UIEvent } from "./events";
 import { buildMemoryChipContent } from "./events";
 import { useConversationStore } from "./conversationStore";
 import { useDockStore } from "../store/useDockStore";
+import { useNotesNavStore } from "../store/useNotesNavStore";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import { useThemeStore, THEMES, type ThemeId, type DockStyleId, type DockPosition } from "@/lib/theme";
 import { DOCK_TOOL_DESCRIPTIONS } from "../dock/dockModel";
@@ -89,6 +90,7 @@ export async function applyOrchestratorAction(
 
     case "dock.open_experience": {
       set({ statusText: `Opening "${event.experienceId}"…` });
+      if (event.noteId) useNotesNavStore.getState().requestNote(event.noteId);
       callbacks?.onOpenExperience?.(event.experienceId);
       if (!isDockAdd) {
         if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {

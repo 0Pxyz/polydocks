@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { resolveIcon } from "@/components/icons";
 import { useDockStore } from "@/lib/store/useDockStore";
+import { useNotesNavStore } from "@/lib/store/useNotesNavStore";
 import { useWorkspaceStore } from "@/lib/store/useWorkspaceStore";
 import {
   buildDockSections,
@@ -109,6 +110,7 @@ export function CommandPalette({
   const [deferredQuery, setDeferredQuery] = useState("");
   const [browseStore, setBrowseStore] = useState(false);
   const [storeItems, setStoreItems] = useState<DockItem[]>([]);
+  const [noteItems, setNoteItems] = useState<Array<{ id: string; title: string }>>([]);
   const [failedIds, setFailedIds] = useState<Map<string, string>>(new Map());
   const [installingId, setInstallingId] = useState<string | null>(null);
   const modifierHeld = useRef(false);
@@ -156,6 +158,28 @@ export function CommandPalette({
       console.error("Failed to fetch capabilities:", err);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Notes for deep-link rows (#402): id + title only, filtered on query.
+  // Best-effort like capabilities above — search still works without them.
+  const fetchNoteItems = useCallback(async () => {
+    try {
+      const wsId = useWorkspaceStore.getState().activeWorkspaceId || "default";
+      const res = await fetch("/api/plugins/notes/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: wsId }),
+      });
+      const json = await res.json().catch(() => null);
+      const items = json?.ok && Array.isArray(json?.data?.items) ? json.data.items : [];
+      setNoteItems(
+        items
+          .filter((n: any) => n && typeof n.id === "string")
+          .map((n: any) => ({ id: n.id, title: typeof n.title === "string" && n.title ? n.title : "Untitled note" }))
+      );
+    } catch {
+      setNoteItems([]);
     }
   }, []);
 
@@ -235,8 +259,9 @@ export function CommandPalette({
 
   const reload = useCallback(() => {
     void fetchCapabilities();
+    void fetchNoteItems();
     void fetchDockData();
-  }, [fetchCapabilities, fetchDockData]);
+  }, [fetchCapabilities, fetchNoteItems, fetchDockData]);
 
   useEffect(() => {
     setLastResult(null);
@@ -322,9 +347,28 @@ export function CommandPalette({
     return matches.slice(0, 8);
   }, [capabilities, trimmedQuery]);
 
+  // Note deep links (#402): match on title, same open path as every other
+  // entry point (requestNote + open the Notes surface).
+  const noteMatches = useMemo(() => {
+    const q = trimmedQuery.toLowerCase();
+    if (!q) return [];
+    return noteItems
+      .filter((n) => n.title.toLowerCase().includes(q) || n.id.toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [noteItems, trimmedQuery]);
+
+  const openNote = useCallback(
+    (id: string) => {
+      useNotesNavStore.getState().requestNote(id);
+      closePalette();
+      onOpenItem?.("notes");
+    },
+    [closePalette, onOpenItem]
+  );
+
   const dockMatchCount = dockedItems.length + yoursItems.length + storeSectionItems.length;
   const showNoMatchRow =
-    !isEmptyQuery && !browseStore && dockMatchCount === 0 && capMatches.length === 0;
+    !isEmptyQuery && !browseStore && dockMatchCount === 0 && capMatches.length === 0 && noteMatches.length === 0;
 
 
   const handlePrimaryAction = useCallback(
@@ -812,6 +856,30 @@ export function CommandPalette({
             </CommandEmpty>
 
             {/* Agent Capabilities: filtered matches only, grouped by plugin */}
+            {!loading && !isEmptyQuery && noteMatches.length > 0 && (
+              <CommandGroup key="notes" heading="Notes">
+                {noteMatches.map((note) => (
+                  <CommandItem
+                    key={note.id}
+                    value={`${note.title} ${note.id}`}
+                    onSelect={() => openNote(note.id)}
+                    className={ROW_CLASS}
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
+                      {(() => {
+                        const Icon = resolveIcon("notes");
+                        return <Icon className="w-4 h-4 shrink-0 text-white/50" weight="regular" />;
+                      })()}
+                      <div className="flex flex-col gap-0 min-w-0">
+                        <span className="text-sm font-medium text-white/95 truncate">{note.title}</span>
+                        <span className="text-[11px] text-white/40 truncate">Open in Notes</span>
+                      </div>
+                    </div>
+                    <Badge variant="outline">Note</Badge>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             {Object.entries(capabilitiesByPlugin).map(([pluginId, caps]) => (
               <CommandGroup key={pluginId} heading={`Capabilities · ${pluginId}`}>
                 {caps.map((cap) => {
