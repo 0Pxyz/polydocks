@@ -214,6 +214,19 @@ export function AgentConversation({
   // One-shot anchor: expanding to full/side lands on the last user message,
   // never at the top after a reload. Reset when leaving the expanded views.
   const anchoredRef = useRef(false);
+  // Set once the user scrolls away from the bottom on purpose.
+  const userScrolledRef = useRef(false);
+
+  // Focus lands on the composer whenever the panel opens or changes shape
+  // (#173): sheet input on sheet, textarea on side/full. Esc-to-close
+  // returns focus to the home orb (App owns that handoff).
+  useEffect(() => {
+    if (layoutState === "sheet") {
+      sheetInputRef.current?.focus({ preventScroll: true });
+    } else if (layoutState === "full" || layoutState === "side") {
+      textareaRef.current?.focus({ preventScroll: true });
+    }
+  }, [layoutState]);
 
   // Live clock for activity elapsed times + the stuck message. Ticks only
   // while a turn is streaming.
@@ -296,28 +309,32 @@ export function AgentConversation({
   }, [draft, adjustTextareaHeight]);
 
   // Handle auto-scroll during streaming (expanded views only; the sheet
-  // shows a compact Orb + summary instead of a transcript)
+  // shows a compact Orb + summary instead of a transcript). Stickiness
+  // follows the user: only auto-scroll while already near the bottom,
+  // never yank a reader back down (#173).
   useEffect(() => {
     if (layoutState === "closed" || layoutState === "sheet") return;
     const el = transcriptRef.current;
     if (!el) return;
 
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (isNearBottom || isStreaming) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (isNearBottom) {
+      el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? "auto" : "smooth" });
       setShowScrollBottom(false);
     }
   }, [messages, isStreaming, statusText, layoutState]);
 
   // Anchor expanded views on the last user message (once per open, after
-  // hydration). Reloads never start at the top of the history.
+  // hydration). Reloads never start at the top of the history. Never fires
+  // after the user has deliberately scrolled away (#173).
   useEffect(() => {
     if (layoutState !== "full" && layoutState !== "side") {
       anchoredRef.current = false;
+      userScrolledRef.current = false;
       return;
     }
     if (isHydratingThread || messages.length === 0 || isStreaming) return;
-    if (anchoredRef.current) return;
+    if (anchoredRef.current || userScrolledRef.current) return;
     const container = transcriptRef.current;
     if (!container) return;
     anchoredRef.current = true;
@@ -341,6 +358,9 @@ export function AgentConversation({
     const onViewportScroll = () => {
       const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       setShowScrollBottom(distanceToBottom > 150);
+      // The user deliberately left the bottom: stickiness and the open
+      // anchor must not pull them back (#173).
+      if (distanceToBottom > 150) userScrolledRef.current = true;
     };
 
     onViewportScroll();
@@ -700,10 +720,12 @@ export function AgentConversation({
                 )}
                 title={orbState === "listening" ? "Listening… (click to stop)" : "Voice input"}
               >
-                {/* Shared with the home orb: opening chat morphs it here. */}
+                {/* Shared with the home orb: opening chat morphs it here.
+                    The id stays on both sides under reduced motion (zero
+                    duration instead), so no double-orb flash (#173). */}
                 <motion.div
-                  layoutId={reduceMotion ? undefined : "agent-orb-shared"}
-                  transition={{ duration: 0.28, ease: "easeOut" }}
+                  layoutId="agent-orb-shared"
+                  transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: "easeOut" }}
                   className="flex items-center justify-center"
                 >
                   <Orb state={orbState} size="xs" audioLevel={audioLevel} />
