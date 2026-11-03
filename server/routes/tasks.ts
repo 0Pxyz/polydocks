@@ -96,7 +96,7 @@ tasksRouter.get("/stream", async (c) => {
       (row) => {
         if (!active) return;
         if (jobId && row.jobId !== jobId) return;
-        void send(String(row.id), row.type, JSON.stringify({ id: row.id, jobId: row.jobId, ...row.payload }));
+        void send(String(row.id), row.type, JSON.stringify({ jobId: row.jobId, ...row.payload }));
       },
       afterId
     );

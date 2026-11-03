@@ -28,4 +28,16 @@ describe("agent dock verbs (#390)", () => {
     const types = (out.events || []).map((e: any) => e.type);
     expect(types).toContain("tray.open");
   });
+
+  it("tabs.open passes noteId through for note deep links (#402)", async () => {
+    const out: any = await dockAction(
+      "tabs.open",
+      { tabId: "notes", noteId: "note_deep123" },
+      { actor: "agent", workspaceId: "default" }
+    );
+    expect(out.ok).toBe(true);
+    const tray = (out.events || []).find((e: any) => e.type === "tray.open");
+    expect(tray).toBeDefined();
+    expect(tray.payload.noteId).toBe("note_deep123");
+  });
 });

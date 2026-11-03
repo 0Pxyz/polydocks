@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { llm, MODEL_ID } from "./llm";
-import { shouldForwardBusEvent } from "./loopEvents";
+import { shouldForwardBusEvent, selectTrayOpenPayload } from "./loopEvents";
 import { defaultTools, resolveTools } from "./tools";
 import type { AgentTool } from "./tools/types";
 import { loadSkill, stripSkillMetadata, selectDomainSkills } from "./skills";
@@ -1142,13 +1142,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         // Opening a tool must surface in the UI the same way on the loop
         // path as on the facade path (which returns tray.open events).
+        // Forward the facade PARAMS, not the envelope: the client resolves
+        // the dock id from payload.tabId (#402).
         if (
           toolName === "dock.open" &&
           toolOutput &&
           typeof toolOutput === "object" &&
           (toolOutput as any).ok === true
         ) {
-          await emitOnce("tray.open", toolOutput as Record<string, unknown>);
+          await emitOnce("tray.open", selectTrayOpenPayload(toolOutput));
         }
 
 

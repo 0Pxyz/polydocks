@@ -34,3 +34,25 @@ const BACKGROUND_SKIP = new Set(["agent.heartbeat", "agent.text_delta"]);
 export function shouldBridgeLoopEvent(type: string): boolean {
   return !BACKGROUND_SKIP.has(type);
 }
+
+/**
+ * tray.open payload preference (#402): facade lifecycle ops return
+ * {ok, events:[{tray.open, payload: params}]} and the loop must forward
+ * the PARAMS, not the envelope — the client resolves the dock id from
+ * payload.tabId, and the envelope carries neither (worse, the SSE row id
+ * used to leak in as payload.id and open a phantom numeric tool).
+ * Falls back to the raw result when no facade event exists.
+ */
+export function selectTrayOpenPayload(toolOutput: unknown): Record<string, unknown> {
+  const events = (toolOutput as unknown as { events?: unknown })?.events;
+  if (Array.isArray(events)) {
+    const hit = events.find(
+      (e): e is { type: string; payload: unknown } =>
+        !!e && typeof e === "object" && (e as { type?: unknown }).type === "tray.open"
+    );
+    if (hit && hit.payload && typeof hit.payload === "object") {
+      return hit.payload as Record<string, unknown>;
+    }
+  }
+  return (toolOutput as Record<string, unknown>) ?? {};
+}

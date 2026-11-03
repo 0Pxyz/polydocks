@@ -210,6 +210,49 @@ describe("notes surface (#351)", () => {
     expect(updates.at(-1)!.input.body).toBe("typed then closed");
   });
 
+  it("selects a deep-linked note requested from another surface (#402)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "First", body: "first body", createdAt: "", updatedAt: "" },
+      { id: "note_2", workspaceId: "w", title: "Second", body: "second body", createdAt: "", updatedAt: "" },
+    ];
+    const { useNotesNavStore } = await import("../src/lib/store/useNotesNavStore");
+    useNotesNavStore.getState().requestNote("note_2");
+    const { container, root } = await renderNotes();
+    try {
+      const input = container.querySelector('input[aria-label="Note title"]') as any;
+      const area = container.querySelector('textarea[aria-label="Note body (Markdown)"]') as any;
+      expect(input?.value).toBe("Second");
+      expect(area?.value).toBe("second body");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+      useNotesNavStore.getState().consumeNote();
+    }
+  });
+
+  it("shows a visible error for an unknown deep-linked note (#402)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "First", body: "first body", createdAt: "", updatedAt: "" },
+    ];
+    const { useNotesNavStore } = await import("../src/lib/store/useNotesNavStore");
+    useNotesNavStore.getState().requestNote("note_nope");
+    const { container, root } = await renderNotes();
+    try {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      expect(container.textContent || "").toContain("was not found");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+      useNotesNavStore.getState().consumeNote();
+    }
+  });
+
   it("emits no unhandled console errors", async () => {
     const { container, root } = await renderNotes();
     try {

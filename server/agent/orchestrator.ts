@@ -403,6 +403,16 @@ export type OpenRequestResolution =
   | { status: "unknown" };
 
 /**
+ * Note-like open targets ("open my note titled X", "abre minha nota")
+ * are not dock ids — but they are resolvable by the model (notes.list
+ * then dock.open with noteId). Never dead-end them with "not in your
+ * dock"; escalate to the model turn instead (#402).
+ */
+export function isNoteOpenRequest(prompt: string): boolean {
+  return /\bnot[ea]s?\b/i.test(prompt);
+}
+
+/**
  * Comprehensive resolver before any dock denial (#345): the dispatcher must
  * never claim something does not exist from dock presence alone. It checks,
  * in order: the canonical alias table (multi-word sources phrasings map to
@@ -625,6 +635,12 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
           return;
         }
         if (resolution.status === "ambiguous") {
+          await runModelTurn(row, input, messageId, done, answerQuick);
+          return;
+        }
+        if (op === "open" && isNoteOpenRequest(row.prompt)) {
+          // A note title is not a dock id, but the model can resolve it
+          // (notes.list, then dock.open with noteId) — never dead-end.
           await runModelTurn(row, input, messageId, done, answerQuick);
           return;
         }
