@@ -31,12 +31,11 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
   } = useOnboardingStore();
   const isReduced = prefersReducedMotion();
 
-  if (!isOpen) return null;
-
-  // Tour finished or dismissed mid-way: the dock row still focuses this
-  // tab, so offer an explicit replay instead of a blank viewport (#382).
-  // Settings → replay is no longer the only way back in.
-  if (currentStep === "idle") {
+  // The tab only mounts when focused, so it never renders null: stage
+  // while the tour plays, replay entry otherwise. Completed tours land
+  // here with isOpen:false — that early return blanked the viewport and
+  // made the row look dead (#384). Settings → replay still works too.
+  if (!isOpen || currentStep === "idle") {
     return (
       <div
         className="flex-1 w-full h-full overflow-y-auto flex flex-col items-center justify-center gap-3 px-6 py-8 font-sans select-none"
