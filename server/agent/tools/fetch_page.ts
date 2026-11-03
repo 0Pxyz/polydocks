@@ -29,6 +29,8 @@ export const fetch_page: AgentTool<{
         actor: "agent",
         workspaceId: targetWorkspace,
         step: (ctx as any)?.step,
+        taskId: (ctx as any)?.taskId,
+        onEvent: (ctx as any)?.onEvent,
       });
       if (!fetched.success) {
         pages.push({
@@ -55,6 +57,8 @@ export const fetch_page: AgentTool<{
             actor: "agent",
             workspaceId: targetWorkspace,
             step: (ctx as any)?.step,
+            taskId: (ctx as any)?.taskId,
+            onEvent: (ctx as any)?.onEvent,
           });
         } catch {
           // Non-fatal: the page content above is still returned.

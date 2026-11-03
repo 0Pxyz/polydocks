@@ -34,10 +34,21 @@ export const publish_plugin: AgentTool<PublishPluginArgs> = {
   }),
   execute: async (input, ctx) => {
 
-    // Install policy: agent writes need an explicit user yes.
-    const { enforceInstallPolicy } = await import("../installPolicy");
+    // Install policy: agent writes need an explicit user yes. Background
+    // tasks escalate to a real approval request (#315) instead of failing.
+    const { enforceInstallPolicy, requestTaskApproval } = await import("../installPolicy");
     const denied = enforceInstallPolicy(ctx?.actor, (input as any).userApproved);
-    if (denied) return denied;
+    if (denied) {
+      if (denied.code !== "approval_required") return denied;
+      const ws = input.workspaceId || ctx?.workspaceId || "default";
+      const ok = await requestTaskApproval(ctx, {
+        pluginId: String((input as any).pluginId || "plugin"),
+        capabilityId: "plugins.publish",
+        scope: `workspace:${ws}`,
+        summary: `Background job needs approval to publish plugin "${(input as any).pluginId}".`,
+      });
+      if (!ok) return denied;
+    }
 
     // Visual kit gate on the stored code (agent-published code is strict).
     {

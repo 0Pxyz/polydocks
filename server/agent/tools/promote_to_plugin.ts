@@ -36,9 +36,20 @@ export const promote_to_plugin: AgentTool<PromoteToPluginArgs> = {
   }),
   execute: async (args, ctx) => {
     // Install policy: promotion writes executable plugin code to the catalog.
-    const { enforceInstallPolicy } = await import("../installPolicy");
+    // Background tasks escalate to a real approval request (#315).
+    const { enforceInstallPolicy, requestTaskApproval } = await import("../installPolicy");
     const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
-    if (denied) return denied;
+    if (denied) {
+      if (denied.code !== "approval_required") return denied;
+      const ws = args.workspaceId || ctx.workspaceId || "global";
+      const ok = await requestTaskApproval(ctx, {
+        pluginId: String((args as any).id || "plugin"),
+        capabilityId: "plugins.promote",
+        scope: `workspace:${ws}`,
+        summary: `Background job needs approval to promote "${(args as any).id}" to a plugin.`,
+      });
+      if (!ok) return denied;
+    }
 
     const targetWorkspace = args.workspaceId || ctx.workspaceId || "global";
 

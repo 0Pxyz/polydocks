@@ -1003,6 +1003,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
                 taskId,
                 step: currentStep,
                 actor: toolActor,
+                onEvent: async (e) => {
+                  // Only approval.requested travels up from the bus: the
+                  // loop already emits its own tool.start/tool.done, and
+                  // forwarding the bus duplicates would double-report
+                  // every capability-backed tool in the stream.
+                  if (e.type !== "approval.requested") return;
+                  await emit({ type: e.type, payload: e.payload } as any);
+                },
               });
             } catch (execErr: any) {
               toolOutput = {

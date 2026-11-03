@@ -7,6 +7,8 @@ export interface ToolExecutionContext {
   step: number;
   /** Who is acting: the agent (chat/task/dock turns), the CLI, or a user-confirmed surface. Defaults to "user". */
   actor?: "agent" | "cli" | "user";
+  /** Forwards bus/policy events (approval.requested, tool.done) to the turn. */
+  onEvent?: (event: { step: number; type: string; payload: Record<string, unknown> }) => Promise<void> | void;
 }
 
 export interface AgentTool<T = any> {

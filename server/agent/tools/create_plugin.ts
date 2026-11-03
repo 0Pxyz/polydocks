@@ -87,10 +87,21 @@ export const create_plugin: AgentTool<CreatePluginArgs> = {
   }),
   execute: async (args, ctx) => {
 
-    // Install policy: agent writes need an explicit user yes.
-    const { enforceInstallPolicy } = await import("../installPolicy");
+    // Install policy: agent writes need an explicit user yes. Background
+    // tasks escalate to a real approval request (#315) instead of failing.
+    const { enforceInstallPolicy, requestTaskApproval } = await import("../installPolicy");
     const denied = enforceInstallPolicy(ctx?.actor, (args as any).userApproved);
-    if (denied) return denied;
+    if (denied) {
+      if (denied.code !== "approval_required") return denied;
+      const ws = args.workspaceId || ctx?.workspaceId || "default";
+      const ok = await requestTaskApproval(ctx, {
+        pluginId: String((args as any).id || "plugin"),
+        capabilityId: "plugins.create",
+        scope: `workspace:${ws}`,
+        summary: `Background job needs approval to create plugin "${(args as any).id}".`,
+      });
+      if (!ok) return denied;
+    }
 
     // Visual kit gate (agent-created code is validated strict).
     {

@@ -84,6 +84,7 @@ const CARD_DOT: Record<string, string> = {
   failed: "bg-rose-400",
   cancelled: "bg-white/40",
   interrupted: "bg-amber-400",
+  awaiting_approval: "bg-amber-300 animate-pulse",
 };
 
 const CARD_LABEL: Record<string, string> = {
@@ -93,11 +94,12 @@ const CARD_LABEL: Record<string, string> = {
   failed: "Failed",
   cancelled: "Cancelled",
   interrupted: "Interrupted",
+  awaiting_approval: "Needs approval",
 };
 
-function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; status: string }> }) {
+function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; status: string; approvalId?: string }> }) {
   const visible = cards
-    .filter((c) => c.status === "queued" || c.status === "running" || c.status === "failed" || c.status === "interrupted")
+    .filter((c) => c.status === "queued" || c.status === "running" || c.status === "awaiting_approval" || c.status === "failed" || c.status === "interrupted")
     .sort((a, b) => (a.taskId < b.taskId ? -1 : 1));
   const stepsByTask = useConversationStore((s) => s.messageSteps);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -135,6 +137,38 @@ function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; st
               >
                 Cancel
               </button>
+            )}
+            {card.status === "awaiting_approval" && card.approvalId && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void fetch(`/api/capabilities/approvals/${encodeURIComponent(card.approvalId as string)}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ decision: "allow_once" }),
+                    }).catch(() => {});
+                  }}
+                  className="shrink-0 text-[var(--accent-lime)] hover:underline cursor-pointer"
+                  aria-label={`Approve ${card.title}`}
+                >
+                  Allow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void fetch(`/api/capabilities/approvals/${encodeURIComponent(card.approvalId as string)}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ decision: "deny" }),
+                    }).catch(() => {});
+                  }}
+                  className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer"
+                  aria-label={`Deny ${card.title}`}
+                >
+                  Deny
+                </button>
+              </>
             )}
           </div>
           {isOpen && steps.length > 0 && (

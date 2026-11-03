@@ -32,6 +32,8 @@ async function runSandboxTool(capability: string, args: Record<string, unknown>,
     actor: "agent",
     workspaceId: t.workspaceId,
     step: ctx?.step,
+    taskId: ctx?.taskId,
+    onEvent: ctx?.onEvent,
   });
   if (!result.success) {
     return { error: result.error || `Execution failed for capability "${capability}"`, capabilityId: capability, durationMs: result.durationMs };
