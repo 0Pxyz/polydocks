@@ -184,6 +184,19 @@ describe("live task stream (#387)", () => {
     expect(useConversationStore.getState().isStreaming).toBe(false);
   });
 
+  it("reconnect forces a fresh stream (zombie source recovery, #387)", async () => {
+    const { useConversationStore } = await import("../src/lib/agent/conversationStore");
+    useConversationStore.setState({ orchestratorSessionId: "sess_reconnect" } as any);
+    useConversationStore.getState().ensureTaskStream("sess_reconnect");
+    await new Promise((r) => setTimeout(r, 20));
+    const first = FakeEventSource.lastInstance;
+    useConversationStore.getState().reconnectTaskStream();
+    await new Promise((r) => setTimeout(r, 20));
+    const second = FakeEventSource.lastInstance;
+    expect(second).not.toBe(first);
+    expect(second?.url ?? "").toContain("sessionId=sess_reconnect");
+  });
+
   it("subscribes with the session cursor for resume", async () => {
     const { useConversationStore } = await import("../src/lib/agent/conversationStore");
     useConversationStore.getState().ensureTaskStream("sess_cursor");
