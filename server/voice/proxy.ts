@@ -40,6 +40,35 @@ function vlog(sessionId: string, msg: string, extra?: Record<string, unknown>): 
 const upstreamByClient = new Map<object, WebSocket>();
 const sessionByClient = new Map<object, string>();
 
+/**
+ * Per-client relay counters (#177): open()'s closures AND the sibling
+ * message() handler share this map. The counters used to be locals of
+ * open() while message() referenced them bare — every frame threw
+ * ReferenceError into the catch-all and zero bytes ever reached Meta.
+ */
+export interface VoiceRelayState {
+  framesRelayed: number;
+  bytesRelayed: number;
+  transcriptEvents: number;
+  endStreamSeen: boolean;
+}
+
+const relayStateByClient = new Map<object, VoiceRelayState>();
+
+function relayStateFor(client: object): VoiceRelayState {
+  let state = relayStateByClient.get(client);
+  if (!state) {
+    state = { framesRelayed: 0, bytesRelayed: 0, transcriptEvents: 0, endStreamSeen: false };
+    relayStateByClient.set(client, state);
+  }
+  return state;
+}
+
+/** Test seam: inspect (not mutate) a client's relay counters. */
+export function relayStateOf(client: object): VoiceRelayState | undefined {
+  return relayStateByClient.get(client);
+}
+
 function clientSend(ws: any, payload: unknown): void {
   try {
     ws.send(typeof payload === "string" ? payload : JSON.stringify(payload));
@@ -52,6 +81,7 @@ function closeUpstream(client: object): void {
   const upstream = upstreamByClient.get(client);
   upstreamByClient.delete(client);
   sessionByClient.delete(client);
+  relayStateByClient.delete(client);
   try {
     if (upstream && upstream.readyState === WebSocket.OPEN) upstream.close(1000, "client done");
   } catch {
@@ -107,10 +137,7 @@ export const voiceWebsocketHandlers = {
     }
     upstreamByClient.set(client, upstream);
 
-    let framesRelayed = 0;
-    let bytesRelayed = 0;
-    let transcriptEvents = 0;
-    let endStreamSeen = false;
+    const relay = relayStateFor(client);
 
     upstream.addEventListener("open", () => {
       vlog(sessionId, "upstream open; sending handshake");
@@ -126,7 +153,7 @@ export const voiceWebsocketHandlers = {
       // Relay upstream text frames verbatim; binary frames are ignored (transcripts only).
       if (typeof event.data === "string") {
         const parsed = parseServerMessage(event.data);
-        if (parsed.kind === "transcript" || parsed.kind === "speechComplete") transcriptEvents++;
+        if (parsed.kind === "transcript" || parsed.kind === "speechComplete") relay.transcriptEvents++;
         if (parsed.kind === "error") {
           vlog(sessionId, "upstream error frame", { message: parsed.message });
         } else if (parsed.kind === "transcript" || parsed.kind === "speechComplete") {
@@ -143,7 +170,7 @@ export const voiceWebsocketHandlers = {
     });
 
     upstream.addEventListener("error", () => {
-      vlog(sessionId, "upstream socket error", { framesRelayed, bytesRelayed, transcriptEvents });
+      vlog(sessionId, "upstream socket error", { framesRelayed: relay.framesRelayed, bytesRelayed: relay.bytesRelayed, transcriptEvents: relay.transcriptEvents });
       clientSend(client, { type: "error", message: "Voice upstream connection error.", sessionId });
     });
 
@@ -151,10 +178,10 @@ export const voiceWebsocketHandlers = {
       vlog(sessionId, "upstream close", {
         code: event.code,
         reason: event.reason || closeCodeMeaning(event.code),
-        framesRelayed,
-        bytesRelayed,
-        transcriptEvents,
-        endStreamSeen,
+        framesRelayed: relay.framesRelayed,
+        bytesRelayed: relay.bytesRelayed,
+        transcriptEvents: relay.transcriptEvents,
+        endStreamSeen: relay.endStreamSeen,
       });
       if (event.code !== 1000) {
         clientSend(client, { type: "error", message: closeCodeMeaning(event.code), sessionId });
@@ -166,40 +193,54 @@ export const voiceWebsocketHandlers = {
       }
       upstreamByClient.delete(client);
       sessionByClient.delete(client);
+      relayStateByClient.delete(client);
     });
   },
 
   message(client: any, message: string | Buffer | ArrayBuffer | Uint8Array): void {
     const upstream = upstreamByClient.get(client);
     if (!upstream || upstream.readyState !== WebSocket.OPEN) return;
-    try {
-      // Text frames: only endStream passthrough; binary frames: raw PCM relay.
-      if (typeof message === "string") {
-        const trimmed = message.trim();
-        if (!trimmed) return;
+    const relay = relayStateFor(client);
+    const sid = sessionByClient.get(client) || "?";
+    // Text frames: only endStream passthrough; binary frames: raw PCM relay.
+    // Bookkeeping runs OUTSIDE the send try/catch on purpose (#177): a bug
+    // here must throw loudly instead of mimicking "no transcripts".
+    if (typeof message === "string") {
+      const trimmed = message.trim();
+      if (!trimmed) return;
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        return; // Drop non-JSON text frames
+      }
+      if (parsed && parsed.type === "endStream") {
+        relay.endStreamSeen = true;
+        vlog(sid, "client endStream", {
+          framesRelayed: relay.framesRelayed,
+          bytesRelayed: relay.bytesRelayed,
+          transcriptEvents: relay.transcriptEvents,
+        });
         try {
-          const parsed = JSON.parse(trimmed);
-          if (parsed && parsed.type === "endStream") {
-            endStreamSeen = true;
-            vlog(sessionId, "client endStream", { framesRelayed, bytesRelayed, transcriptEvents });
-            upstream.send(JSON.stringify({ type: "endStream" }));
-          }
-          // Drop any other client text frame: handshake is server-owned.
+          upstream.send(JSON.stringify({ type: "endStream" }));
         } catch {
-          // Drop non-JSON text frames
+          // Socket died mid-handoff; close handlers report it.
         }
-        return;
       }
-      const bytes = (message as any)?.byteLength ?? (message as any)?.length ?? 0;
-      framesRelayed++;
-      bytesRelayed += bytes;
-      if (framesRelayed === 1 || framesRelayed % 375 === 0) {
-        // First frame + ~every 30s at 80ms pacing: proves audio ingress.
-        vlog(sessionId, "relaying client audio", { framesRelayed, bytesRelayed });
-      }
+      // Drop any other client text frame: handshake is server-owned.
+      return;
+    }
+    const bytes = (message as any)?.byteLength ?? (message as any)?.length ?? 0;
+    relay.framesRelayed++;
+    relay.bytesRelayed += bytes;
+    if (relay.framesRelayed === 1 || relay.framesRelayed % 375 === 0) {
+      // First frame + ~every 30s at 80ms pacing: proves audio ingress.
+      vlog(sid, "relaying client audio", { framesRelayed: relay.framesRelayed, bytesRelayed: relay.bytesRelayed });
+    }
+    try {
       upstream.send(message as any);
     } catch {
-      // Ignore relay failures; close handlers report them
+      // Socket died mid-frame; close handlers report it.
     }
   },
 
