@@ -1,6 +1,6 @@
 import { DockSurface } from "@/features/dock/DockSurface";
 import { TabHost } from "@/features/dock/TabHost";
-import { ThemeCustomizerView } from "@/features/theme/ThemeCustomizerView";
+import { SettingsView } from "@/features/settings/SettingsView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
@@ -43,7 +43,7 @@ export function ToolSurface({
   if (toolId === "settings" || toolId === "theme") {
     return (
       <DockSurface frameless>
-        <ThemeCustomizerView onDismiss={() => onDismiss("settings")} />
+        <SettingsView onDismiss={onDismiss} />
       </DockSurface>
     );
   }

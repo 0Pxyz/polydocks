@@ -2,26 +2,33 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { TaskService } from "../services/taskService";
 import { taskExecutionEngine } from "../agent/taskRunner";
+import { getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
 
 export const tasksRouter = new Hono();
 
 /**
  * GET /api/tasks
  * Lists background tasks with optional filtering by status, sessionId, workspaceId.
+ * Only tasks in accessible workspaces are returned.
  */
-tasksRouter.get("/", (c) => {
+tasksRouter.get("/", async (c) => {
+  const caller = await getEffectiveCaller(c.req.raw.headers);
   const sessionId = c.req.query("sessionId");
   const workspaceId = c.req.query("workspaceId");
   const status = c.req.query("status");
   const limitParam = c.req.query("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
+  if (workspaceId && !hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ tasks: [] });
+  }
+
   const tasks = TaskService.listTasks({
     sessionId,
     workspaceId,
     status,
     limit,
-  });
+  }).filter((t) => hasWorkspaceAccess(t.workspaceId, caller));
 
   return c.json({ tasks });
 });
@@ -33,11 +40,30 @@ tasksRouter.get("/", (c) => {
  * Reconnects never lose or duplicate events: ids are monotonic per process
  * and the replay boundary is exclusive (id > last).
  */
-tasksRouter.get("/stream", (c) => {
+tasksRouter.get("/stream", async (c) => {
   const sessionId = c.req.query("sessionId");
   const jobId = c.req.query("jobId");
   if (!sessionId && !jobId) {
     return c.json({ error: "Provide sessionId and/or jobId." }, 400);
+  }
+
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  // Session-scoped streams check the session's workspace. Job-only streams
+  // resolve the task first so a job id can never escape its workspace.
+  if (sessionId) {
+    const { SessionService } = await import("../services/sessionService");
+    const session = SessionService.getSession(sessionId);
+    if (!session) {
+      return c.json({ error: `Session "${sessionId}" not found` }, 404);
+    }
+    if (!hasWorkspaceAccess(session.workspaceId, caller)) {
+      return c.json({ error: "Not available to this account" }, 403);
+    }
+  } else if (jobId) {
+    const task = TaskService.getTask(jobId);
+    if (task && !hasWorkspaceAccess(task.workspaceId, caller)) {
+      return c.json({ error: "Not available to this account" }, 403);
+    }
   }
 
   const headerId = c.req.header("last-event-id");
@@ -104,12 +130,17 @@ tasksRouter.get("/stream", (c) => {
  * GET /api/tasks/:id
  * Retrieve specific task details.
  */
-tasksRouter.get("/:id", (c) => {
+tasksRouter.get("/:id", async (c) => {
   const taskId = c.req.param("id");
   const task = TaskService.getTask(taskId);
 
   if (!task) {
     return c.json({ error: `Task "${taskId}" not found` }, 404);
+  }
+
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(task.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
   }
 
   return c.json({ task });
@@ -129,6 +160,14 @@ tasksRouter.post("/:id/cancel", async (c) => {
   }
 
   const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : undefined;
+  const existing = TaskService.getTask(taskId);
+  if (!existing) {
+    return c.json({ error: `Task "${taskId}" not found` }, 404);
+  }
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(existing.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
   const result = TaskService.cancelTask(taskId, workspaceId, "user");
 
   if (!result.cancelled && !result.task) {

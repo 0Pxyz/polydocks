@@ -1,6 +1,5 @@
 import { Hono } from "hono";
-import { resolveUserIdForMode } from "../identity";
-import { config } from "../config";
+import { effectiveUserId, getEffectiveCaller } from "../auth/session";
 import {
   clearAgentThread,
   getAgentThreadSnapshot,
@@ -30,16 +29,13 @@ function parseLimit(raw: string | undefined, fallback: number): number {
 
 /**
  * GET /api/agent/thread
- * Latest page of the user's single persistent conversation, oldest first.
+ * Latest page of the caller's single persistent conversation, oldest first.
+ * Signed-in callers get their account thread (Better Auth id); local
+ * callers keep the legacy device-local thread.
  */
-threadRouter.get("/", (c) => {
-  const userId = resolveUserIdForMode(
-    {
-      header: c.req.header("x-polymax-user"),
-      query: c.req.query("userId"),
-    },
-    config.DEPLOY_MODE
-  );
+threadRouter.get("/", async (c) => {
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const userId = effectiveUserId(caller);
   const limit = parseLimit(c.req.query("limit"), 60);
 
   const { thread, page } = getAgentThreadSnapshot(userId, { limit });
@@ -63,14 +59,9 @@ threadRouter.get("/", (c) => {
  * GET /api/agent/thread/messages?before=<seq>
  * Older page for scroll-back inside the same thread. Never creates a section.
  */
-threadRouter.get("/messages", (c) => {
-  const userId = resolveUserIdForMode(
-    {
-      header: c.req.header("x-polymax-user"),
-      query: c.req.query("userId"),
-    },
-    config.DEPLOY_MODE
-  );
+threadRouter.get("/messages", async (c) => {
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const userId = effectiveUserId(caller);
   const before = Number.parseInt(c.req.query("before") || "", 10);
   if (!Number.isFinite(before) || before <= 0) {
     return c.json({ error: "Missing or invalid 'before' cursor" }, 400);
@@ -90,14 +81,9 @@ threadRouter.get("/messages", (c) => {
  * DELETE /api/agent/thread
  * Clears the transcript inside the same thread. No new thread is created.
  */
-threadRouter.delete("/", (c) => {
-  const userId = resolveUserIdForMode(
-    {
-      header: c.req.header("x-polymax-user"),
-      query: c.req.query("userId"),
-    },
-    config.DEPLOY_MODE
-  );
+threadRouter.delete("/", async (c) => {
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  const userId = effectiveUserId(caller);
 
   const cleared = clearAgentThread(userId);
   return c.json({ success: cleared, userId });

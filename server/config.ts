@@ -49,6 +49,23 @@ const envSchema = z.object({
   // Product surface: three APIs (/api/plugins, /api/dock, /api/agent).
   // facade = also mounts the thin facade routers (old routes stay untouched).
   PRODUCT_SURFACE: z.enum(["legacy", "facade"]).default("facade"),
+  // Better Auth identity foundation (server/auth/index.ts). Everything is
+  // optional so a fresh `docker compose up` works with zero secrets:
+  // local workspaces keep working, OAuth providers simply stay disabled.
+  BETTER_AUTH_SECRET: z.string().optional().default(""),
+  BETTER_AUTH_URL: z.string().optional().default(""),
+  GOOGLE_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(""),
+  GITHUB_CLIENT_ID: z.string().optional().default(""),
+  GITHUB_CLIENT_SECRET: z.string().optional().default(""),
+  // Outbound email for verification / password-reset links. Unset = the
+  // auth module logs the link server-side (dev) instead of sending mail,
+  // so email flows stay testable without SMTP credentials.
+  SMTP_HOST: z.string().optional().default(""),
+  SMTP_PORT: z.coerce.number().int().positive().optional().default(587),
+  SMTP_USER: z.string().optional().default(""),
+  SMTP_PASS: z.string().optional().default(""),
+  SMTP_FROM: z.string().optional().default(""),
   // Agent tool surface: minimal = intent-scoped verb tools (default) plus
   // find_capabilities; full = current catalog. Whole-tool and per-action
   // denylists still apply on top (intent + surface filters).

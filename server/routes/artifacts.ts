@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { ArtifactService } from "../services/artifactService";
+import { getEffectiveCaller, hasWorkspaceAccess } from "../auth/session";
 
 export const artifactsRouter = new Hono();
 
@@ -7,8 +8,12 @@ export const artifactsRouter = new Hono();
  * GET /api/artifacts
  * List artifacts in workspace.
  */
-artifactsRouter.get("/", (c) => {
+artifactsRouter.get("/", async (c) => {
   const workspaceId = c.req.query("workspaceId") || "default";
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ artifacts: [] });
+  }
   const sessionId = c.req.query("sessionId");
   const artifacts = ArtifactService.listArtifacts(workspaceId, sessionId);
   return c.json({ artifacts });
@@ -31,6 +36,10 @@ artifactsRouter.post("/", async (c) => {
   }
 
   const workspaceId = body.workspaceId || "default";
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
   const artifact = await ArtifactService.createArtifact({
     workspaceId,
     sessionId: body.sessionId,
@@ -50,11 +59,15 @@ artifactsRouter.post("/", async (c) => {
  * GET /api/artifacts/:id
  * Retrieve a specific artifact.
  */
-artifactsRouter.get("/:id", (c) => {
+artifactsRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const artifact = ArtifactService.getArtifact(id);
   if (!artifact) {
     return c.json({ error: `Artifact "${id}" not found` }, 404);
+  }
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(artifact.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
   }
   return c.json({ artifact });
 });
@@ -63,8 +76,16 @@ artifactsRouter.get("/:id", (c) => {
  * DELETE /api/artifacts/:id
  * Delete an artifact.
  */
-artifactsRouter.delete("/:id", (c) => {
+artifactsRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
+  const artifact = ArtifactService.getArtifact(id);
+  if (!artifact) {
+    return c.json({ error: `Artifact "${id}" not found` }, 404);
+  }
+  const caller = await getEffectiveCaller(c.req.raw.headers);
+  if (!hasWorkspaceAccess(artifact.workspaceId, caller)) {
+    return c.json({ error: "Not available to this account" }, 403);
+  }
   const result = ArtifactService.deleteArtifact(id, "user");
   if (!result.success) {
     return c.json({ error: result.error || "Failed to delete artifact" }, 400);
