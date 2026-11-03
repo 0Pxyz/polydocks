@@ -45,7 +45,11 @@ if (config.NODE_ENV !== "test") {
   try {
     const { migrateWorkspacePluginFiles } = await import("./workspace/pluginFiles");
     const report = await migrateWorkspacePluginFiles();
-    if (report.imported > 0 || report.conflicts.length > 0) {
+    // Log only when the migration actually imported something this boot.
+    // Long-standing features-vs-tabs duplicates re-report the same
+    // conflicts on every boot with nothing to act on; steady-state
+    // boots stay quiet (same policy as the backfills below).
+    if (report.imported > 0) {
       console.log(
         `[Polymax Server] Plugin migration: ${report.imported} imported, ${report.skipped} skipped, ${report.conflicts.length} conflicts`
       );
