@@ -428,6 +428,19 @@ export function shouldYieldEscToMedia(target: EventTarget | null, fullscreenElem
 /** Two panels fit at or above this viewport width (px). */
 export const TWO_PANEL_MIN_WIDTH = 1100;
 
+/**
+ * Chat panel docks to the side at or above this width; below it the panel
+ * overlays as a sheet. Unified with the beside rule (#174): one threshold
+ * for both panels, so the 900–1100 band no longer squeezes chat side by
+ * side while beside overlays with a different z-order.
+ */
+export const CHAT_SIDE_MIN_WIDTH = TWO_PANEL_MIN_WIDTH;
+
+/** Single owner for chat placement: every opener uses this, not a local width check. */
+export function chatPlacement(viewportWidth: number): "side" | "sheet" {
+  return viewportWidth >= CHAT_SIDE_MIN_WIDTH ? "side" : "sheet";
+}
+
 /** Beside-panel width bounds (mirror the chat panel: same feel, same room). */
 export const BESIDE_WIDTH_MIN = 340;
 export const BESIDE_WIDTH_MAX = 560;

@@ -20,6 +20,7 @@ import {
   panelLayout,
   isBesideEligible,
   shouldYieldEscToMedia,
+  chatPlacement,
 } from "@/lib/dock/dockItems";
 import { DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
 import { cn } from "@/lib/cn";
@@ -334,10 +335,10 @@ export default function App() {
       return;
     }
 
-    const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+    const wide = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
 
     if (layoutState === "full") {
-      if (isWide) {
+      if (wide) {
         setLayoutState("side");
         setActiveToolId(toolId);
         setDockActiveTool(toolId);
@@ -484,8 +485,8 @@ export default function App() {
           dock.runDockAction("chat.toggle");
           const focused = useDockStore.getState().dock.focusedId;
           if (focused === "agent") {
-            const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
-            setLayoutState(isWide ? "side" : "sheet");
+            const wide = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
+            setLayoutState(wide ? "side" : "sheet");
           }
           return;
         }
@@ -664,8 +665,8 @@ export default function App() {
             onSubmitToolPrompt={(prompt) => handleToolPromptSubmit(prompt)}
             onFixWithAgent={(prompt) => {
               handleToolPromptSubmit(prompt, { origin: "dock-fix" });
-              const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
-              setLayoutState(isWide ? "side" : "sheet");
+              const wide = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
+              setLayoutState(wide ? "side" : "sheet");
             }}
             onOpenAgent={() => {
               setActiveToolId("agent");
@@ -806,10 +807,10 @@ export default function App() {
               <DockSurface frameless>
                 <HomeScreen
                   onOpenAgent={() => {
-                    const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
+                    const wide = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
                     setActiveToolId("agent");
                     setDockActiveTool("agent");
-                    setLayoutState(isWide ? "side" : "sheet");
+                    setLayoutState(wide ? "side" : "sheet");
                     // The home orb is the voice button: open and start listening.
                     requestVoiceStart();
                   }}

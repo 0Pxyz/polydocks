@@ -20,6 +20,7 @@ import { useDockStore } from "@/lib/store/useDockStore";
 import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 import { onboardingIntentFromTool } from "./onboardingBridge";
 import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
+import { chatPlacement } from "@/lib/dock/dockItems";
 import type { OrbState } from "@/features/agent/Orb";
 
 const ORCH_SESSION_KEY = "polymax-orchestrator-session";
@@ -474,8 +475,8 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     if (layoutState !== "closed") {
       set({ layoutState: "closed" });
     } else {
-      const isWide = typeof window !== "undefined" && window.innerWidth >= 900;
-      if (currentActiveToolId && currentActiveToolId !== "agent" && isWide) {
+      const side = typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side";
+      if (currentActiveToolId && currentActiveToolId !== "agent" && side) {
         set({ layoutState: "side" });
       } else {
         set({ layoutState: "sheet" });
@@ -815,7 +816,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             });
             callbacks?.onOpenExperience?.(event.plugin.id);
             if (!isDockAdd) {
-              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+              if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
                 set({ layoutState: "side" });
               } else {
                 set({ layoutState: "closed" });
@@ -844,10 +845,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             callbacks?.onOpenExperience?.(event.experienceId);
 
             // Per specification: from sheet or full, the chat goes to side
-            // and the experience opens on the right (on >= 900px wide screens).
-            // But if origin is dock-add, chat stays closed!
+            // and the experience opens on the right (on wide screens, same
+            // threshold as the beside panel). But if origin is dock-add,
+            // chat stays closed!
             if (!isDockAdd) {
-              if (typeof window !== "undefined" && window.innerWidth >= 900) {
+              if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
                 set({ layoutState: "side" });
               } else {
                 set({ layoutState: "closed" });
