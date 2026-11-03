@@ -35,9 +35,34 @@ export const DOCK_ID_ALIASES: Record<string, string> = {
   agent: "agent",
   chat: "agent",
   notes: "notes",
-  sources: "sources",
+  // The retired "sources" pin lives on as the Browser surface (its manifest
+  // entry is SourcesView): every sources phrasing opens the browser (#345).
+  sources: "browser",
+  feed: "browser",
+  "sources feed": "browser",
+  "sources view": "browser",
+  "source feed": "browser",
   files: "files",
 };
+
+/**
+ * Finds every alias mentioned as a standalone phrase in free text (#345).
+ * Longest match wins per target; callers decide what conflicting targets
+ * mean (the router escalates to the model instead of guessing).
+ */
+export function findAliasMentions(text: string): Array<{ alias: string; id: string }> {
+  const padded = ` ${text.trim().toLowerCase()} `;
+  const hits = (Object.keys(DOCK_ID_ALIASES) as string[])
+    .filter((a) => padded.includes(` ${a} `))
+    .sort((a, b) => b.length - a.length || a.localeCompare(b))
+    .map((a) => ({ alias: a, id: DOCK_ID_ALIASES[a] }));
+  const seen = new Set<string>();
+  return hits.filter((h) => {
+    if (seen.has(h.id)) return false;
+    seen.add(h.id);
+    return true;
+  });
+}
 
 const THEME_IDS = new Set(["void", "cyber", "amber", "amethyst"]);
 

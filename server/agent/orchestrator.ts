@@ -1,5 +1,5 @@
 import { runAgentLoop, type AgentStepEvent, type AgentLoopOptions } from "./loop";
-import { matchDeterministicCommand, runDeterministicCommand, DOCK_ID_ALIASES } from "./dispatcher";
+import { matchDeterministicCommand, runDeterministicCommand, DOCK_ID_ALIASES, findAliasMentions } from "./dispatcher";
 import { getClientForRole, roleReasoningEffort } from "./modelRegistry";
 import {
   dockOpen,
@@ -15,7 +15,7 @@ import {
 } from "./tools/verbs/dock";
 import { escalate } from "./tools/verbs/escalate";
 import type { AgentTool } from "./tools/types";
-import { searchDockCatalog } from "./tools/dockCatalog";
+import { searchDockCatalog, resolveDockTarget } from "./tools/dockCatalog";
 import { TaskService } from "../services/taskService";
 import { createSession, getSession, taskExecutionEngine } from "./taskRunner";
 import { insertJobEvent } from "../workspace/sessions";
@@ -149,6 +149,24 @@ export class KeywordRouter implements IntentRouter {
     if (ptClose) {
       const id = cleanId(ptClose[1]);
       return { kind: "dock_action", confidence: 0.85, reason: `PT imperative close for "${id}"`, args: { dockOp: "close", dockId: id } };
+    }
+    // Free-form open requests ("hey open the feed"): the imperative did not
+    // lead the sentence, so no matcher above fired. Resolve mentioned
+    // aliases anywhere in the text — but only when an open verb is present,
+    // and escalate on conflicting targets instead of guessing (#345).
+    if (/\b(open|abre|abra|show|mostre|mostra)\b/i.test(text)) {
+      const mentions = findAliasMentions(text).filter((m) => state.dockIds.includes(m.id));
+      if (mentions.length === 1) {
+        return {
+          kind: "dock_action",
+          confidence: 0.8,
+          reason: `free-form open for alias "${mentions[0].alias}"`,
+          args: { dockOp: "open", dockId: mentions[0].id },
+        };
+      }
+      if (mentions.length > 1) {
+        return { kind: "answer_quick", confidence: 0.6, reason: `ambiguous open targets: ${mentions.map((m) => m.id).join(", ")}` };
+      }
     }
     if (/^(?:liste|mostre|mostra|list|show)\b/i.test(text)) {
       return { kind: "dock_action", confidence: 0.8, reason: "inventory request", args: { dockOp: "list" } };
@@ -379,6 +397,57 @@ function publishMessage(
  * runs detached in session order; every outcome arrives as a durable
  * message.* event. Never awaits a job.
  */
+export type OpenRequestResolution =
+  | { status: "resolved"; id: string; title: string; via: string }
+  | { status: "ambiguous"; candidates: string[] }
+  | { status: "unknown" };
+
+/**
+ * Comprehensive resolver before any dock denial (#345): the dispatcher must
+ * never claim something does not exist from dock presence alone. It checks,
+ * in order: the canonical alias table (multi-word sources phrasings map to
+ * the Browser surface, whose manifest entry is SourcesView), the exact
+ * dock target (builtins + installed workspace plugins), and a catalog
+ * search for installed-plugin names. Multiple strong hits mean ambiguity
+ * (caller escalates to the model); nothing at all means unknown.
+ */
+export async function resolveOpenRequest(
+  phrase: string,
+  workspaceId: string
+): Promise<OpenRequestResolution> {
+  const normalized = phrase.trim().toLowerCase();
+  if (!normalized) return { status: "unknown" };
+
+  const aliased = DOCK_ID_ALIASES[normalized];
+  if (aliased) {
+    const target = await resolveDockTarget(aliased, { workspaceId });
+    if (target.entry && target.entry.kind !== "store") {
+      return { status: "resolved", id: target.entry.id, title: target.entry.title, via: `alias "${normalized}"` };
+    }
+  }
+
+  const direct = await resolveDockTarget(normalized, { workspaceId });
+  if (direct.entry && direct.entry.kind !== "store") {
+    return { status: "resolved", id: direct.entry.id, title: direct.entry.title, via: "dock id" };
+  }
+
+  const hits = (await searchDockCatalog({ query: normalized, workspaceId })).filter(
+    (e) => e.kind !== "store"
+  );
+  const strong = hits.filter((e) => {
+    const title = e.title.toLowerCase();
+    const id = e.id.toLowerCase();
+    return title === normalized || id === normalized || title.startsWith(normalized) || id.startsWith(normalized);
+  });
+  if (strong.length === 1) {
+    return { status: "resolved", id: strong[0].id, title: strong[0].title, via: "catalog search" };
+  }
+  if (strong.length > 1) {
+    return { status: "ambiguous", candidates: strong.map((e) => e.id) };
+  }
+  return { status: "unknown" };
+}
+
 export function queueMessage(input: HandleMessageInput): { messageId: string; sessionId: string } {
   ensureQueueTable();
   const workspaceId = input.workspaceId || "default";
@@ -401,6 +470,47 @@ export function queueMessage(input: HandleMessageInput): { messageId: string; se
   // Detached: the HTTP layer already answered 202.
   void chain.catch(() => {});
   return { messageId, sessionId };
+}
+
+type QueueRow = {
+  session_id: string;
+  workspace_id: string;
+  prompt: string;
+  origin: string;
+  user_id?: string | null;
+};
+
+type AnswerQuickFn = (ctx: AnswerContext) => Promise<string>;
+
+/** Shared model-turn runner: default chat path and ambiguity escalation (#345). */
+async function runModelTurn(
+  row: QueueRow,
+  input: HandleMessageInput,
+  messageId: string,
+  done: (payload: Record<string, unknown>) => void,
+  answerQuick: AnswerQuickFn
+): Promise<void> {
+  let full = "";
+  const text = await answerQuick({
+    prompt: row.prompt,
+    workspaceId: row.workspace_id,
+    sessionId: row.session_id,
+    userId: input.userId ?? row.user_id ?? undefined,
+    messageId,
+    llmClient: input.llmClient,
+    onEvent: (ev) => {
+      if (ev.type === "delta" && ev.text) {
+        if (!ev.thinking) full += ev.text;
+        publishMessage(row.session_id, messageId, "message.delta", { text: ev.text, ...(ev.thinking ? { thinking: true } : {}) });
+      } else if (ev.type === "progress" && ev.text) {
+        publishMessage(row.session_id, messageId, "message.delta", { text: `\n_${ev.text}_\n` });
+      }
+    },
+  });
+  if (!full && text) {
+    publishMessage(row.session_id, messageId, "message.delta", { text });
+  }
+  done({ text });
 }
 
 async function processOne(messageId: string, input: HandleMessageInput): Promise<void> {
@@ -501,8 +611,25 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
       const op = decision.args?.dockOp ?? "list";
       const id = decision.args?.dockId;
       if ((op === "open" || op === "close") && id && !dockIds.includes(id)) {
+        // Never deny from dock presence alone: resolve aliases, exact
+        // targets and catalog names first; escalate ambiguity to the model
+        // instead of asserting something does not exist (#345).
+        const resolution = await resolveOpenRequest(String(id), row.workspace_id);
+        if (resolution.status === "resolved") {
+          const verb = op === "open" ? "Opening" : "Closing";
+          done({
+            text: `${verb} "${resolution.title}" (resolved from "${id}").`,
+            action: { op, id: resolution.id },
+            decision,
+          });
+          return;
+        }
+        if (resolution.status === "ambiguous") {
+          await runModelTurn(row, input, messageId, done, answerQuick);
+          return;
+        }
         publishMessage(row.session_id, messageId, "message.error", {
-          text: `Nothing called "${id}" is in your dock. Install it from the Library first.`,
+          text: `Nothing called "${id}" is in your dock. Try "list my dock" to see what's available, or install it from the Library.`,
           decision,
         });
         db.prepare("UPDATE message_queue SET status = 'failed', error = ?, updated_at = ? WHERE id = ?").run(
@@ -534,27 +661,7 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
       return;
     }
 
-    let full = "";
-    const text = await answerQuick({
-      prompt: row.prompt,
-      workspaceId: row.workspace_id,
-      sessionId: row.session_id,
-      userId: input.userId ?? row.user_id ?? undefined,
-      messageId,
-      llmClient: input.llmClient,
-      onEvent: (ev) => {
-        if (ev.type === "delta" && ev.text) {
-          if (!ev.thinking) full += ev.text;
-          publishMessage(row.session_id, messageId, "message.delta", { text: ev.text, ...(ev.thinking ? { thinking: true } : {}) });
-        } else if (ev.type === "progress" && ev.text) {
-          publishMessage(row.session_id, messageId, "message.delta", { text: `\n_${ev.text}_\n` });
-        }
-      },
-    });
-    if (!full && text) {
-      publishMessage(row.session_id, messageId, "message.delta", { text });
-    }
-    done({ text });
+    await runModelTurn(row, input, messageId, done, answerQuick);
   } catch (err: any) {
     fail(err?.message || "Couldn't handle that just now — try again.");
   }
