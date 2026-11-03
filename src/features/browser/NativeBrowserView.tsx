@@ -4,6 +4,7 @@ import { useTabState } from "@/lib/tabs/useTabState";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { ReaderView } from "@/features/dock/ReaderView";
 import { normalizeUrl, shortLabel, resolveAgentTab } from "./browserTabs";
+import { SourcesView } from "@/features/sources/SourcesView";
 import {
   browserHealth,
   createBrowserSession,
@@ -351,6 +352,27 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
     setError(null);
   }, [tabs.length, counter, setCounter, setTabs, setActiveTabId]);
 
+  /** Sources feed handoff (#352): a feed click loads the URL in the active
+   * tab (creating one when boot has not yet), so ReaderView renders it —
+   * no live session needed in the no-worker branches. */
+  const openFeedUrl = useCallback(
+    (url: string) => {
+      const normalized = normalizeUrl(url);
+      if (!normalized) return;
+      if (!activeTab) {
+        const fresh: BrowserTab = { id: "tab-1", url: normalized, session: null };
+        setCounter(1);
+        setTabs([fresh]);
+        setActiveTabId(fresh.id);
+        setUrlInput(normalized);
+        return;
+      }
+      setTabUrl(activeTab.id, normalized);
+      setUrlInput(normalized);
+    },
+    [activeTab, setTabs, setActiveTabId, setCounter, setTabUrl]
+  );
+
   const handleCloseTab = useCallback(
     async (id: string) => {
       const closing = tabs.find((t) => t.id === id);
@@ -396,7 +418,7 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
           reader instead. Start the worker:{" "}
           <code className="text-primary">ATRIUM_WORKER_SECRET=dev-secret-change-me npx atrium-worker</code>
         </div>
-        <ReaderView url={activeUrl || "https://example.com/"} />
+        {activeUrl ? <ReaderView url={activeUrl} /> : <SourcesView onOpenUrl={openFeedUrl} />}
       </div>
     );
   }
@@ -611,9 +633,7 @@ export function NativeBrowserView({ workspaceKey, initialUrl, className = "" }: 
                 {activeUrl ? (
                   <ReaderView url={activeUrl} />
                 ) : (
-                  <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                    <span className="text-xs">Type a URL above to read it here.</span>
-                  </div>
+                  <SourcesView onOpenUrl={openFeedUrl} />
                 )}
               </div>
             </div>
