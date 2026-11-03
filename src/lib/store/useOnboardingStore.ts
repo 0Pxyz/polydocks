@@ -87,6 +87,20 @@ export const ONBOARDING_STEPS: {
   },
 ];
 
+/**
+ * Scripted composer drafts the tour pre-fills per build step (#373): the
+ * walkthrough demonstrates the feature instead of an empty chat, and the
+ * user still sends (consent-preserving — the tour never auto-submits).
+ * Steps without an entry leave the draft untouched.
+ */
+export const ONBOARDING_STEP_PROMPTS: Partial<Record<OnboardingStep, string>> = {
+  breathe:
+    "Build me a breathing exercise plugin: a circle that expands and contracts on a 4-4-4-4 box breathing cycle with start/pause, a round counter, and a calm dark design. Call it Box Breathing.",
+  coin: "Build me a decision coin plugin: a coin flipper with a flip animation and a timestamped history that persists. Call it Decision Coin.",
+  focus:
+    "Build me a focus timer plugin: a 25-minute countdown that keeps counting in the background and restores on return. Call it Focus Timer.",
+};
+
 interface OnboardingStoreState {
   isOpen: boolean;
   hasCompleted: boolean;

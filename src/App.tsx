@@ -573,9 +573,10 @@ export default function App() {
   }, []);
 
   // Tool hosted by the main viewport (single home per tool; beside tools
-  // live in the beside panel).
+  // live in the beside panel). Every ToolSurface static id must route here
+  // or the dock focuses while Home stays put (#373: notes opened nothing).
   const MAIN_STATIC_IDS = useMemo(
-    () => new Set(["settings", "theme", "plugins", "creations", "store", "onboarding", "deep-work-flashcards", "bitcoin-viewer"]),
+    () => new Set(["settings", "theme", "plugins", "creations", "store", "notes", "inspect", "onboarding", "deep-work-flashcards", "bitcoin-viewer"]),
     []
   );
   const mainToolId =
