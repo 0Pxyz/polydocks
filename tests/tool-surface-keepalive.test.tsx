@@ -55,7 +55,19 @@ const fileWindow = new Window({ url: "http://localhost:3000/" });
 const realFetch = globalThis.fetch;
 beforeEach(async () => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-  (globalThis as any).fetch = async () => ({ ok: true, json: async () => ({ notes: [], data: {} }) });
+  (globalThis as any).fetch = async (url: any) => {
+    const u = String(url);
+    const data = u.includes("/api/plugins/notes/")
+      ? { items: [] }
+      : u.includes("/api/account/")
+        ? { memberships: [], user: null, status: {} }
+        : u.includes("/api/agent/memory")
+          ? { memories: [] }
+          : u.includes("/api/plugins?")
+            ? { plugins: [] }
+            : {};
+    return { ok: true, json: async () => ({ ok: true, data }) };
+  };
 });
 afterEach(async () => {
   (globalThis as any).fetch = realFetch;
@@ -134,6 +146,67 @@ describe("sandbox keep-alive across surfaces", () => {
         root.unmount();
       });
       document.body.removeChild(container);
+    }
+  });
+
+  it("open builtin views stay mounted across navigation (notes keep their editor state)", async () => {
+    const { ToolSurface } = await import("../src/features/dock/ToolSurface");
+    const { useDockStore } = await import("../src/lib/store/useDockStore");
+    const { createRoot } = await import("react-dom/client");
+    const dock = useDockStore.getState();
+    dock.openTool("notes");
+    dock.openTool("settings");
+    const baseProps = {
+      sandboxTabs: [],
+      sandboxActiveId: null,
+      keepBuiltinsAlive: true,
+      onDismiss: () => {},
+      onOpenPlugin: () => {},
+      onSelectTool: () => {},
+      pluginsInitialTab: "installed",
+    } as any;
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(React.createElement(ToolSurface, { ...baseProps, toolId: "notes" }));
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      const editor = container.querySelector(
+        'textarea[aria-label="Note body (Markdown)"]'
+      ) as HTMLTextAreaElement | null;
+      expect(editor).not.toBeNull();
+
+      // Navigate to settings: notes must stay in the DOM, hidden.
+      await act(async () => {
+        root.render(React.createElement(ToolSurface, { ...baseProps, toolId: "settings" }));
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      const hiddenEditor = container.querySelector(
+        'textarea[aria-label="Note body (Markdown)"]'
+      ) as HTMLTextAreaElement | null;
+      expect(hiddenEditor).not.toBeNull();
+      expect(hiddenEditor!.closest("div[hidden]")).not.toBeNull();
+
+      // Navigate back: same node, visible again.
+      await act(async () => {
+        root.render(React.createElement(ToolSurface, { ...baseProps, toolId: "notes" }));
+        await new Promise((r) => setTimeout(r, 50));
+      });
+      const backEditor = container.querySelector(
+        'textarea[aria-label="Note body (Markdown)"]'
+      ) as HTMLTextAreaElement | null;
+      expect(backEditor).toBe(hiddenEditor);
+      expect(backEditor!.closest("div[hidden]")).toBeNull();
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      document.body.removeChild(container);
+      useDockStore.getState().closeTool("notes");
+      useDockStore.getState().closeTool("settings");
     }
   });
 });

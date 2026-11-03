@@ -1,5 +1,8 @@
 import { DockSurface } from "@/features/dock/DockSurface";
 import { TabHost } from "@/features/dock/TabHost";
+import { useMemo } from "react";
+import { MAIN_VIEW_STATIC_IDS } from "@/lib/dock/dockModel";
+import { useDockStore } from "@/lib/store/useDockStore";
 import { SettingsView } from "@/features/settings/SettingsView";
 import { PluginsView } from "@/features/plugins/PluginsView";
 import { PluginStoreView } from "@/features/plugins/PluginStoreView";
@@ -26,6 +29,11 @@ interface ToolSurfaceProps {
   onOpenPlugin: (pluginId: string) => void;
   onSelectTool: (id: string) => void;
   pluginsInitialTab: "installed" | "discover";
+  /**
+   * Main host keeps open builtin views mounted (hidden) across navigation.
+   * The beside host never owns builtins, so it renders only its own tabs.
+   */
+  keepBuiltinsAlive?: boolean;
 }
 
 /**
@@ -45,6 +53,7 @@ export function ToolSurface({
   onOpenPlugin,
   onSelectTool,
   pluginsInitialTab,
+  keepBuiltinsAlive = false,
 }: ToolSurfaceProps) {
   return (
     <SurfaceErrorBoundary toolId={toolId ?? "none"}>
@@ -56,6 +65,7 @@ export function ToolSurface({
         onOpenPlugin={onOpenPlugin}
         onSelectTool={onSelectTool}
         pluginsInitialTab={pluginsInitialTab}
+        keepBuiltinsAlive={keepBuiltinsAlive}
       />
     </SurfaceErrorBoundary>
   );
@@ -69,6 +79,7 @@ function ToolSurfaceInner({
   onOpenPlugin,
   onSelectTool,
   pluginsInitialTab,
+  keepBuiltinsAlive = false,
 }: ToolSurfaceProps) {
   // Keep-alive host (platform rule: open tabs never reload on navigation).
   // Every live sandbox tab stays mounted across ALL surfaces — the TabHost
@@ -76,6 +87,19 @@ function ToolSurfaceInner({
   // (timers, drafts, counters) survives navigating to a builtin view and
   // back. Only the focused surface is visible; the rest hide, never unmount.
   const focusedSandbox = toolId != null && sandboxTabs.some((t) => t.id === toolId);
+  // Same contract for first-party views (browser, notes, settings, …):
+  // every id the dock has open stays mounted once opened, hidden unless
+  // focused. New static surfaces join automatically through
+  // MAIN_VIEW_STATIC_IDS (the same set App's viewport routing already
+  // requires), so future views keep alive with no ToolSurface change.
+  // Explicit close removes the id from openIds and unmounts, as before.
+  const openIds = useDockStore((s) => s.openIds);
+  const sandboxIds = useMemo(() => new Set(sandboxTabs.map((t) => t.id)), [sandboxTabs]);
+  const keptBuiltinIds = useMemo(() => {
+    if (!keepBuiltinsAlive) return [];
+    return openIds.filter((id) => MAIN_VIEW_STATIC_IDS.has(id) && !sandboxIds.has(id));
+  }, [keepBuiltinsAlive, openIds, sandboxIds]);
+  const actions = { onDismiss, onOpenPlugin, onSelectTool, pluginsInitialTab };
   // Browser and notes go edge-to-edge (no bottom pad), as before.
   const edgeToEdge = toolId === "browser" || toolId === "notes";
   // The host owns the active id: when a builtin surface is focused, no
@@ -92,7 +116,14 @@ function ToolSurfaceInner({
         activeId={hostActiveId}
         tabs={sandboxTabs.map((t) => ({ id: t.id, render: t.render }))}
       />
-      {renderBuiltinView(toolId, { onDismiss, onOpenPlugin, onSelectTool, pluginsInitialTab, isHidden: focusedSandbox })}
+      {keptBuiltinIds.map((id) => (
+        <div key={`kept-${id}`} hidden={id !== toolId} className={id !== toolId ? undefined : "contents"}>
+          {renderBuiltinView(id, actions)}
+        </div>
+      ))}
+      {!focusedSandbox && !keptBuiltinIds.includes(toolId ?? "") && (
+        <>{renderBuiltinView(toolId, actions)}</>
+      )}
     </DockSurface>
   );
 }
@@ -104,11 +135,9 @@ function renderBuiltinView(
     onOpenPlugin: (pluginId: string) => void;
     onSelectTool: (id: string) => void;
     pluginsInitialTab: "installed" | "discover";
-    /** A focused sandbox tab owns the viewport; builtins stay out of the way. */
-    isHidden: boolean;
   }
 ) {
-  if (toolId === null || actions.isHidden) return null;
+  if (toolId === null) return null;
   if (toolId === "settings" || toolId === "theme") {
     return <SettingsView />;
   }
