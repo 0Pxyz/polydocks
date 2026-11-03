@@ -68,13 +68,22 @@ function classList(el: Element): string[] {
   return String((el as any).className || "").split(/\s+/);
 }
 
+function isSolidWhiteBox(el: Element): boolean {
+  const cls = classList(el);
+  if (!cls.includes("bg-white")) return false;
+  // Translucent white overlays (bg-white/5, dots, hairlines) are the
+  // dark-theme idiom. So are tiny round control knobs (Radix Switch
+  // thumb: solid white knob on an accent track) — neither is the
+  // full-bleed white container box the regression is about.
+  if (cls.includes("rounded-full") && (cls.includes("size-4") || cls.includes("size-3.5"))) return false;
+  return true;
+}
+
 function hasNoWhiteBg(root: Element): boolean {
   // No stark solid-white container backgrounds anywhere in the view.
-  // Translucent white overlays (bg-white/5, dots, hairlines) are the
-  // dark-theme idiom and are allowed; only opaque bg-white counts.
   const els = root.querySelectorAll("*");
   for (const el of Array.from(els)) {
-    if (classList(el).includes("bg-white")) return false;
+    if (isSolidWhiteBox(el)) return false;
   }
   return true;
 }
