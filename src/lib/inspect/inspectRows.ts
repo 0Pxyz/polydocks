@@ -13,6 +13,8 @@ export type InspectRowKind = "request" | "decision" | "action" | "result" | "err
 
 export interface InspectRow {
   seq: number;
+  /** Client arrival time (ms epoch), set by the view when pushing. */
+  at?: number;
   kind: InspectRowKind;
   /** Short human label (tool name, event name). Values never included. */
   label: string;
@@ -25,6 +27,8 @@ export interface InspectRow {
 export interface RawInspectEvent {
   type: string;
   step?: number;
+  /** Client arrival time (ms epoch). */
+  at?: number;
   payload?: Record<string, any>;
 }
 
@@ -153,6 +157,10 @@ export function summarizeInspectEvent(raw: RawInspectEvent, seq: number): Inspec
 /** Folds a raw event stream into Inspect rows, dropping the rest. */
 export function buildInspectRows(events: RawInspectEvent[]): InspectRow[] {
   return events
-    .map((event, index) => summarizeInspectEvent(event, index))
+    .map((event, index) => {
+      const row = summarizeInspectEvent(event, index);
+      if (row && typeof event.at === "number") row.at = event.at;
+      return row;
+    })
     .filter((row): row is InspectRow => row !== null);
 }
