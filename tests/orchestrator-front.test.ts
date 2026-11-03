@@ -64,6 +64,8 @@ beforeEach(() => {
   };
   (globalThis as any).window = (globalThis as any).window ?? {};
   (globalThis as any).EventSource = FakeEventSource;
+  // Clear any in-flight turn leaked by an earlier file in this process.
+  useConversationStore.getState().abortStream();
   useConversationStore.setState({
     messages: [],
     taskCards: {},
@@ -76,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   (globalThis as any).fetch = realFetch;
   (globalThis as any).EventSource = realEventSource;
+  useConversationStore.getState().abortStream();
   useConversationStore.setState({ messages: [], taskCards: {}, isStreaming: false, statusText: "" } as any);
 });
 
@@ -85,8 +88,10 @@ describe("Orchestrator front: input never blocks on running jobs", () => {
     await useConversationStore.getState().sendMessage("create a dashboard tool");
     expect(posted.length).toBe(1);
     expect(posted[0].url).toBe("/api/agent/message");
-    // Input free immediately: no global streaming flag held.
-    expect(useConversationStore.getState().isStreaming).toBe(false);
+    // Send returns immediately (never awaits the turn), but the busy
+    // signal is on while the turn is in flight (#387) so the chat shows
+    // its working indicators instead of looking dead.
+    expect(useConversationStore.getState().isStreaming).toBe(true);
     const placeholder = useConversationStore.getState().messages.find((m) => m.id === "m-msg-1");
     expect(sseInstances.length).toBe(1);
     expect(placeholder?.streaming).toBe(true);
@@ -102,6 +107,8 @@ describe("Orchestrator front: input never blocks on running jobs", () => {
     const done = useConversationStore.getState().messages.find((m) => m.id === "m-msg-1");
     expect(done?.content).toBe("On it — building.");
     expect(done?.streaming).toBe(false);
+    // Busy signal settles with the turn.
+    expect(useConversationStore.getState().isStreaming).toBe(false);
 
     // Replay / reconnect duplicates change nothing.
     stream.emit("message.done", { text: "On it — building.", taskId: "task-9", jobId: "msg-1", prompt: "create a dashboard tool" }, 13);

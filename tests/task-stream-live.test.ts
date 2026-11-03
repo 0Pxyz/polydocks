@@ -102,6 +102,10 @@ class FakeEventSource {
       for (const fn of this.listeners.get(f.type) || []) fn(ev);
     }
   }
+  emit(type: string, data: any, id = 99) {
+    const ev = { type, data: JSON.stringify(data), lastEventId: String(id) };
+    for (const fn of this.listeners.get(type) || []) fn(ev);
+  }
   close() {
     this.readyState = 2;
   }
@@ -114,13 +118,15 @@ describe("live task stream (#387)", () => {
     (globalThis as any).EventSource = FakeEventSource as any;
     FakeEventSource.lastInstance = null;
     const { useConversationStore } = await import("../src/lib/agent/conversationStore");
-    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {} } as any);
+    // Clear any in-flight turn leaked by an earlier file in this process.
+    useConversationStore.getState().abortStream();
+    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {}, isStreaming: false, statusText: "" } as any);
   });
 
   afterEach(async () => {
     (globalThis as any).EventSource = REAL_ES;
     const { useConversationStore } = await import("../src/lib/agent/conversationStore");
-    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {} } as any);
+    useConversationStore.setState({ messages: [], taskCards: {}, messageSteps: {}, isStreaming: false, statusText: "" } as any);
   });
 
   it("renders steps as tool events arrive (no reload)", async () => {
@@ -154,6 +160,28 @@ describe("live task stream (#387)", () => {
     await new Promise((r) => setTimeout(r, 50));
     const second = useConversationStore.getState().messages.length;
     expect(second).toBe(first);
+  });
+
+  it("signals busy while a turn is in flight, refcounted across turns (#387)", async () => {
+    const { useConversationStore } = await import("../src/lib/agent/conversationStore");
+    useConversationStore.getState().ensureTaskStream("sess_busy");
+    await new Promise((r) => setTimeout(r, 50));
+    // Recorded frames completed: busy must be off.
+    expect(useConversationStore.getState().isStreaming).toBe(false);
+    const es = FakeEventSource.lastInstance!;
+    es.emit("agent.start", { jobId: "msg_busy_1", prompt: "one" }, 100);
+    es.emit("agent.start", { jobId: "msg_busy_2", prompt: "two" }, 101);
+    expect(useConversationStore.getState().isStreaming).toBe(true);
+    es.emit("message.done", { jobId: "msg_busy_1", text: "first" }, 102);
+    // One turn still in flight: refcount keeps the signal on.
+    expect(useConversationStore.getState().isStreaming).toBe(true);
+    es.emit("message.done", { jobId: "msg_busy_2", text: "second" }, 103);
+    expect(useConversationStore.getState().isStreaming).toBe(false);
+    // Errors settle too.
+    es.emit("agent.start", { jobId: "msg_busy_3", prompt: "three" }, 104);
+    expect(useConversationStore.getState().isStreaming).toBe(true);
+    es.emit("message.error", { jobId: "msg_busy_3", text: "boom" }, 105);
+    expect(useConversationStore.getState().isStreaming).toBe(false);
   });
 
   it("subscribes with the session cursor for resume", async () => {
