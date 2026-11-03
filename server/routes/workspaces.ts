@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { internalError } from "../errors";
 import { WorkspaceService } from "../services/workspaceService";
 import { readFeature } from "../workspace/features";
 import { callerOf, denied, denyUnlessWorkspace, visibleIds } from "../auth/guard";
@@ -61,7 +62,8 @@ workspacesRouter.post("/", async (c) => {
 
     return c.json({ success: true, data: ws }, 201);
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Failed to create workspace" }, 500);
+    const out = internalError("workspaces", err, "Failed to create workspace");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
 
@@ -98,7 +100,8 @@ workspacesRouter.put("/:id", async (c) => {
     }
     return c.json({ success: true, data: updated });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Failed to update workspace" }, 500);
+    const out = internalError("workspaces", err, "Failed to update workspace");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
 
@@ -191,7 +194,8 @@ workspacesRouter.post("/:id/plugins", async (c) => {
 
     return c.json({ success: true, data: mounted }, 201);
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Failed to mount plugin" }, 500);
+    const out = internalError("workspaces", err, "Failed to mount plugin");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
 
@@ -212,7 +216,8 @@ workspacesRouter.patch("/:id/plugins/:pluginId", async (c) => {
     }
     return c.json({ success: true, enabled });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Failed to update plugin status" }, 500);
+    const out = internalError("workspaces", err, "Failed to update plugin status");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
 

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { internalError } from "../errors";
 import { denyUnlessIdentified } from "../auth/guard";
 import {
   getMemoryOverview,
@@ -21,7 +22,8 @@ memoryRouter.get("/", async (c) => {
     const overview = await getMemoryOverview();
     return c.json(overview);
   } catch (err: any) {
-    return c.json({ error: `Failed to retrieve memory overview: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to retrieve memory overview");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -47,7 +49,8 @@ memoryRouter.put("/", async (c) => {
     const result = await updateMemoryMd(body.content);
     return c.json({ success: true, ...result });
   } catch (err: any) {
-    return c.json({ error: `Failed to update MEMORY.md: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to update MEMORY.md");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -78,7 +81,8 @@ memoryRouter.post("/record", async (c) => {
     });
     return c.json(result);
   } catch (err: any) {
-    return c.json({ error: `Failed to record memory: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to record memory");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -104,7 +108,8 @@ memoryRouter.post("/recall", async (c) => {
     const memories = await recallMemory({ query, category, maxTokens });
     return c.json({ query, count: memories.length, memories });
   } catch (err: any) {
-    return c.json({ error: `Failed to recall memories: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to recall memories");
+    return c.json(out.body, out.status);
   }
 });
 
@@ -141,6 +146,7 @@ memoryRouter.delete("/entry", async (c) => {
     }
     return c.json({ removed: true, scope: result.scope });
   } catch (err: any) {
-    return c.json({ error: `Failed to delete memory entry: ${err.message}` }, 500);
+    const out = internalError("memory", err, "Failed to delete memory entry");
+    return c.json(out.body, out.status);
   }
 });

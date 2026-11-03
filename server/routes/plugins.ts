@@ -4,6 +4,7 @@ import { capabilityBus } from "../plugins/bus";
 import { approvalManager, type ApprovalDecision } from "../plugins/approval";
 import { connectMcpServer } from "../plugins/adapters/mcp";
 import { denyUnlessWorkspace } from "../auth/guard";
+import { safeMessage } from "../errors";
 import { db } from "../workspace/db";
 
 export const pluginsRouter = new Hono();
@@ -299,7 +300,7 @@ pluginsRouter.post("/mcp/refresh", async (c) => {
     const tools = await McpClientManager.getInstance().refreshTools(name);
     return c.json({ success: true, tools });
   } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    return c.json({ error: safeMessage(err, "Live tool refresh failed.") }, 400);
   }
 });
 
