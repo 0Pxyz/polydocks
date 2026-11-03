@@ -376,14 +376,19 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
 
   const fetchPlugins = async () => {
     try {
-      const res = await fetch("/api/plugins");
+      // Single request: last-run dots ride the list response (?withLastRun=1)
+      // instead of one /executions call per plugin (devtools spam).
+      const res = await fetch("/api/plugins?withLastRun=1");
       if (res.ok) {
         const data = await res.json();
         setPlugins(data.plugins || []);
-        // Fetch executions for each plugin
-        for (const p of data.plugins || []) {
-          fetchExecutions(p.id);
-        }
+        setExecutions((prev) => {
+          const next = { ...prev };
+          for (const p of data.plugins || []) {
+            if (p.lastExecution && !next[p.id]?.length) next[p.id] = [p.lastExecution];
+          }
+          return next;
+        });
       }
     } catch (err) {
       console.error("Failed to fetch plugins", err);
@@ -411,14 +416,15 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
     fetchPlugins();
   }, []);
 
-  // Live grants for the open detail sheet (#180): what the plugin may do
-  // right now, revocable per permission. Manifest chips below are the
-  // static request; this is the enforced state.
+  // Detail sheet data (grants + run history) loads on selection only:
+  // the list dots come from ?withLastRun=1, so opening Tools costs a
+  // bounded 2 requests instead of one /executions call per plugin.
   useEffect(() => {
     if (!selectedPlugin) {
       setGrants([]);
       return;
     }
+    fetchExecutions(selectedPlugin.id);
     let cancelled = false;
     (async () => {
       try {
