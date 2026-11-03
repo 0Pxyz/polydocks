@@ -5,8 +5,20 @@ import {
   publishToRegistry,
   installFromRegistry,
 } from "../plugins/communityRegistry";
+import { describePermission, requiresInstallAcknowledge } from "../plugins/risk";
+import type { Permission } from "../plugins/manifest";
 
 export const registryRouter = new Hono();
+
+/** Install-time permission envelope (#180): what + why + whether to ask. */
+function permissionEnvelope(manifest: { permissions?: Permission[] } | null | undefined) {
+  const permissions = manifest?.permissions ?? [];
+  return {
+    permissions,
+    permissionLines: permissions.map(describePermission),
+    requiresAcknowledge: requiresInstallAcknowledge(permissions),
+  };
+}
 
 /**
  * GET /api/registry - Lists all plugins in the community registry
@@ -15,7 +27,11 @@ registryRouter.get("/", (c) => {
   const search = c.req.query("search");
   const tag = c.req.query("tag");
   const plugins = listRegistryPlugins({ search, tag });
-  return c.json({ success: true, count: plugins.length, data: plugins });
+  return c.json({
+    success: true,
+    count: plugins.length,
+    data: plugins.map((p) => ({ ...p, ...permissionEnvelope(p.manifest) })),
+  });
 });
 
 /**
@@ -75,6 +91,7 @@ registryRouter.post("/:id/install", async (c) => {
       success: true,
       message: `Plugin "${id}" installed to workspace "${workspaceId}".`,
       data: result.plugin,
+      ...permissionEnvelope(result.plugin),
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message || "Failed to install plugin" }, 500);

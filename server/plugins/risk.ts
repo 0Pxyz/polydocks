@@ -62,3 +62,19 @@ export function describePermission(p: Permission): string {
       return `Declared permission (unknown type).`;
   }
 }
+
+/**
+ * Install-time quiet set (#180): own state, own UI, workspace-scoped
+ * storage. Everything else (network, exec, MCP, secrets, writes outside
+ * the plugin's own storage) needs an explicit acknowledge at install.
+ * This is the UI threshold only — enforcement stays in policy.ts.
+ */
+export function isQuietPermission(p: Permission): boolean {
+  if (p.type === "fs") return p.scope === "plugin" || p.mode === "read";
+  return false;
+}
+
+/** True when installing requires the user to acknowledge permissions. */
+export function requiresInstallAcknowledge(permissions: Permission[]): boolean {
+  return permissions.some((p) => !isQuietPermission(p));
+}

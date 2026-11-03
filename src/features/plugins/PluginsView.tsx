@@ -338,6 +338,8 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"installed" | "discover">(initialTab);
   const [selectedPlugin, setSelectedPlugin] = useState<PluginItem | null>(null);
+  const [grants, setGrants] = useState<Array<{ grantId: string; permissionType: string; scope: string; status: string }>>([]);
+  const [grantsBusy, setGrantsBusy] = useState(false);
   const [executions, setExecutions] = useState<Record<string, ExecutionRecord[]>>({});
   const [showMcpModal, setShowMcpModal] = useState(false);
   const [mcpName, setMcpName] = useState("");
@@ -408,6 +410,44 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
   useEffect(() => {
     fetchPlugins();
   }, []);
+
+  // Live grants for the open detail sheet (#180): what the plugin may do
+  // right now, revocable per permission. Manifest chips below are the
+  // static request; this is the enforced state.
+  useEffect(() => {
+    if (!selectedPlugin) {
+      setGrants([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/plugins/${encodeURIComponent(selectedPlugin.id)}/grants`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data?.grants)) setGrants(data.grants);
+      } catch {
+        // Grants are progressive enhancement; the sheet works without them.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPlugin?.id]);
+
+  const handleRevokeGrant = async (grantId: string) => {
+    if (grantsBusy) return;
+    setGrantsBusy(true);
+    try {
+      const res = await fetch(`/api/plugins/grants/${encodeURIComponent(grantId)}/revoke`, { method: "POST" });
+      if (!res.ok) throw new Error("Revoke failed.");
+      setGrants((prev) => prev.filter((g) => g.grantId !== grantId));
+    } catch {
+      setActionError("Could not revoke that permission. Try again.");
+    } finally {
+      setGrantsBusy(false);
+    }
+  };
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -661,9 +701,9 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
             </div>
           </div>
 
-          {/* Permission Chips */}
+          {/* Requested permissions (static manifest declaration) */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-white/70">Granted Permissions:</span>
+            <span className="text-xs font-medium text-white/70">Requested permissions:</span>
             <div className="flex flex-wrap gap-1.5">
               {selectedPlugin.permissions.length === 0 ? (
                 <span className="text-xs text-white/40 italic">No special permissions requested.</span>
@@ -700,6 +740,31 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
                 })
               )}
             </div>
+          </div>
+
+          {/* Granted access (live, revocable per permission) */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-white/70">Granted access:</span>
+            {grants.length === 0 ? (
+              <span className="text-xs text-white/40">Nothing granted yet. First use asks once; uninstall removes everything.</span>
+            ) : (
+              grants.map((g) => (
+                <div key={g.grantId} className="flex items-center justify-between gap-2 text-xs text-white/80">
+                  <span className="min-w-0 flex-1 truncate font-mono">
+                    {g.permissionType}
+                    {g.scope ? ` · ${g.scope}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={grantsBusy}
+                    onClick={() => void handleRevokeGrant(g.grantId)}
+                    className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Last 5 Executions */}
