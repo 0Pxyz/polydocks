@@ -16,4 +16,4 @@
 
 ## Explicitly deferred
 
-- Agent-as-plugin, map/chat extraction, remote store with review/signing, voice/segmentation wiring, deleting any documentation or application code (see `CLEANUP-PROPOSALS.md` — proposals only, execution needs approval).
+- Agent-as-plugin, map/chat extraction, remote store with review/signing, voice/segmentation wiring, deleting any documentation or application code (see `internal-docs/CLEANUP-PROPOSALS.md` — proposals only, execution needs approval).

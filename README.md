@@ -127,6 +127,19 @@ The interface has three simple ideas.
 
 PolyDocks is a **microkernel**: the core stays minimal — **dock + capability bus + plugin lifecycle/policy + sandbox bridge** — and everything else is a plugin.
 
+```mermaid
+flowchart LR
+    subgraph kernel[Microkernel]
+        dock[Dock] --> bus[Capability bus]
+        bus --> lifecycle[Plugin lifecycle / policy]
+        lifecycle --> sandbox[Sandbox bridge]
+    end
+    agent[Agent Poly] -->|tool calls| bus
+    agent -->|open / close / pin| dock
+    bus --> plugins[Plugins: browser, notes, sources, built tools]
+    sandbox --> plugins
+```
+
 - **Dock.** The product surface: a persistent control bar of tool panels (browser, sources feed, notes, store, settings, agent-built tools). Tools mount in the main or beside host, stay alive hidden, and hibernate past the live-tab limit. First-party surfaces: [browser](src/features/browser/NativeBrowserView.tsx), [sources feed](src/features/sources/SourcesView.tsx), [notes](src/features/notes/NotesView.tsx).
 - **Capability bus.** The only way tools touch the world: typed capabilities (`server/plugins/bus.ts`) with a risk policy, 30s timeout, and an `executions` audit trail. The agent reaches them through `find_capabilities` / `invoke_capability`; the front end through `POST /api/plugins/:pluginId/:capability`.
 - **Plugin lifecycle.** One file + manifest, sandboxed (`<iframe sandbox="allow-scripts" srcdoc>`, `window.polymax` bridge), versioned with rollback. Contract plugins (search, browser, notes, sources, files) are kernel-enforced; community tools install from the store.

@@ -22,7 +22,7 @@ Product routes delegate to one shared layer (`server/facade/shared.ts`); the HTT
 | `POST /api/plugins/lifecycle` | plugins | Synthesis lifecycle (`create\|modify\|publish\|install\|uninstall`); agent create/modify/install/publish gated by `INSTALL_POLICY` |
 | `GET /api/plugins/:id/versions` | plugins | Kept versions (edit history for rollback) |
 | `POST /api/plugins/:id/rollback` | plugins | Roll back to a kept version (workspace: new row with old content; registry: reactivate) |
-| `POST /api/dock/action` | dock | Verbs (`tabs.open/close/pin/unpin/list/focus/next/prev/background`, `chat.toggle`, `tabs.create/update`, `scope.enter/get`, `appearance.apply`; registry in `docs/dock-shortcuts.md`) |
+| `POST /api/dock/action` | dock | Verbs (`tabs.open/close/pin/unpin/list/focus/next/prev/background`, `chat.toggle`, `tabs.create/update`, `scope.enter/get`, `appearance.apply`; registry in `internal-docs/dock-shortcuts.md`) |
 | `GET /api/dock/tabs` | dock | Tabs with `pinned` flags (durable `dock_pins` record, not just client cache) |
 | `GET /api/plugins`, `POST /:id/toggle`, `DELETE /:id`, `GET /:id/executions` | plugins | Lifecycle + introspection |
 | `GET /api/capabilities`, `POST /invoke`, `POST /:id/invoke` | plugins | Discovery; approvals under it conceptually belong to agent (see below) |

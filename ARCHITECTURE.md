@@ -30,7 +30,7 @@ Microkernel core (enumerated in §4): runtime/routes, agent loop transport, perm
 | 4 | Split-brain persistence (client pins / `dock_pins` / in-memory tab host) | `useDockStore.ts:10-30`, `schema.sql`, `tabHostStore.ts` |
 | 5 | No migrations, drift (`dock_items` orphan, `image_spend` outside schema) | `schema.sql` vs live DB; `server/media/budget.ts:11` |
 | 6 | Agent is core, not a plugin | 45-tool hardcoded catalog, prompt in `loop.ts:183-218` |
-| 7 | Remote branches/stashes hold unmerged value (Sources iterations, slop/policy stack copies) | `CLEANUP-PROPOSALS.md` |
+| 7 | Remote branches/stashes hold unmerged value (Sources iterations, slop/policy stack copies) | `internal-docs/CLEANUP-PROPOSALS.md` |
 
 ## 4. What stays core (never a plugin)
 

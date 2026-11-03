@@ -7,7 +7,7 @@ This document is the audit and the plan. It stays as the living reference for fo
 
 | Concern | Before | Evidence |
 |---|---|---|
-| Authentication | None. `server/identity.ts` `sanitizeUserId`/`resolveUserIdForMode` only shapes an opaque id. Local mode pins `"local"`; cloud mode trusts the `x-polymax-user` header/query/body — any client can self-assert any id. | `server/identity.ts`, `ARCHITECTURE.md`, `docs/adr/0002-*.md` |
+| Authentication | None. `server/identity.ts` `sanitizeUserId`/`resolveUserIdForMode` only shapes an opaque id. Local mode pins `"local"`; cloud mode trusts the `x-polymax-user` header/query/body — any client can self-assert any id. | `server/identity.ts`, `ARCHITECTURE.md`, `internal-docs/adr/0002-*.md` |
 | Database | Single SQLite file (`DATA_DIR/polymax.db`, `bun:sqlite`, WAL) + `server/workspace/schema.sql` and idempotent `ensure*` functions. No user table, no ownership columns. | `server/workspace/db.ts`, `server/workspace/schema.sql` |
 | Workspaces | Unscoped CRUD (`workspaces`, `workspace_plugins`, `dock_pins`). Every route trusts the client-supplied id. | `server/routes/workspaces.ts`, `server/services/workspaceService.ts` |
 | Conversations / jobs | `sessions`/`tasks`/`job_events` keyed by `workspace_id` only; `agent_threads.user_id` is the same opaque string. No access checks. | `server/routes/sessions.ts`, `server/routes/tasks.ts`, `server/routes/thread.ts` |

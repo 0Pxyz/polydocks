@@ -64,7 +64,7 @@ server/
   workspace/      fs + SQLite access, path-traversal guard
   plugins/        capability bus, registry, policy, validation, first-party plugins
   facade/         shared route/CLI/tool handlers (single envelope)
-docs/             older public docs (see CLEANUP-PROPOSALS.md for what is stale)
+docs/             judge-facing docs (moving leftovers? see internal-docs/CLEANUP-PROPOSALS.md)
 .internal/        gitignored, never committed
 workspace/        local runtime data, gitignored
 ```
@@ -116,14 +116,14 @@ embed third-party pages in ad-hoc iframes or open raw browser windows for conten
 
 ## 4c. System access
 
-The agent works on the user's real files and, later, commands. `docs/system-access.md` holds the design, the capability ladder and the open research questions.
+The agent works on the user's real files and, later, commands. `internal-docs/system-access.md` holds the design, the capability ladder and the open research questions.
 
 - Two run modes, same code: **local** (the user's machine, real access to granted folders) and **hosted demo** (sandboxed workspace folders, no exec).
 - All OS access lives in `server/system/` behind typed functions that take a **grant** plus a relative path, never a raw path. Nothing else in the repo spawns processes, except the allowlisted plugin-context spawn (`server/plugins/context.ts:219`: `shell: false`, 10s timeout, 1MB cap).
 - Order of delivery: folder access, open/import, approvals, then command execution (stretch, local only). Do not skip ahead.
 - Every write outside the granted folder, every delete and every command outside the allowlist pauses the loop for user approval and is written to the audit log.
 - There is no multi-user auth today: any client can self-assert any user id (`server/identity.ts`). Do not document or assume per-user isolation until `MIGRATION.md` Slice 4 ships.
-- When you read a reference project to learn how they do something, write what you learned into `docs/system-access.md` in the same PR, with the repo, file path and commit you looked at. Mark anything you could not confirm as `TO VERIFY`.
+- When you read a reference project to learn how they do something, write what you learned into `internal-docs/system-access.md` in the same PR, with the repo, file path and commit you looked at. Mark anything you could not confirm as `TO VERIFY`.
 
 ## 4d. Plugin lifecycle (platform rule)
 
@@ -141,7 +141,7 @@ Source of truth for work is **GitHub Issues**. `.internal/backlog.md` is only a 
 3. Implement in small steps. After each logical change: `bun run check` (typecheck + lint + test) must be green before you commit.
 4. Add or update tests for logic (registry, mapgen, tools, loop). UI is verified on `/dev/ui` and by screenshot.
 5. Open a PR (section 6) and keep it under about 400 changed lines. Split if bigger. Always link the issue in the PR description (e.g., `Closes #<id>`).
-6. Update `docs/progress.md` (one line: date, what shipped, PR link). Add an ADR in `docs/adr/` if you changed an architecture decision.
+6. Update `internal-docs/progress.md` (one line: date, what shipped, PR link). Add an ADR in `internal-docs/adr/` if you changed an architecture decision.
 7. Ensure linked GitHub issues are closed upon PR approval and merge (`gh issue close <id>` if not auto-closed).
 8. Never push to `main`. Always branch off `main` and submit via PR.
 9. Strictly follow the **Language Rule**: write all code, commit messages, PR descriptions, and docs in English.
@@ -171,18 +171,18 @@ docker compose up  # whole app, no manual steps
 
 ## 8. Docs map
 
-Start here: `VISION.md` (north star), `ARCHITECTURE.md` (Today / Target / Gaps, with evidence), `MIGRATION.md` (reversible slices), `CLEANUP-PROPOSALS.md` (what is stale and what to do about it).
+Start here: `VISION.md` (north star), `ARCHITECTURE.md` (Today / Target / Gaps, with evidence), `MIGRATION.md` (reversible slices), `internal-docs/CLEANUP-PROPOSALS.md` (what is stale and what to do about it).
 - `README.md`: what it is, run it (`docker compose up`), how the agent builds plugins.
 - `docs/product-philosophy.md`: everything is a plugin, the agent is the operator, typed capability bus.
-- `docs/architecture.md` and `docs/adr/NNNN-title.md`: older reference architecture; partially superseded (see `CLEANUP-PROPOSALS.md`).
+- `docs/architecture.md` and `internal-docs/adr/NNNN-title.md`: older reference architecture; partially superseded (see `internal-docs/CLEANUP-PROPOSALS.md`).
 - `docs/api.md`: product surfaces (`/api/plugins`, `/api/dock`, `/api/agent`) and modes (`PRODUCT_SURFACE`, `AGENT_SURFACE`).
-- `docs/design-system.md`: tokens, typography, Dock motion rules.
+- `internal-docs/design-system.md`: tokens, typography, Dock motion rules.
 - `docs/design-slop.md`: visual slop patterns to eliminate across UI and agent experiences.
 - `docs/meta-model-api.md`: the Meta API facts we rely on.
 - `docs/tinyfish.md`: the TinyFish API facts we rely on.
-- `docs/system-access.md`: how the agent accesses the user's files and machine, security model, reference projects.
-- `docs/progress.md`: one line per shipped item.
-- `docs/dock-shortcuts.md`: dock verb registry shared by REST/CLI/agent.
+- `internal-docs/system-access.md`: how the agent accesses the user's files and machine, security model, reference projects.
+- `internal-docs/progress.md`: one line per shipped item.
+- `internal-docs/dock-shortcuts.md`: dock verb registry shared by REST/CLI/agent.
 - `docs/plugins/lifecycle.md`: the host-owned lifecycle contract.
 - `docs/model.md`: plugin/experience data model.
 
