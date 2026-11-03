@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Orb } from "@/features/agent/Orb";
-import { prefersReducedMotion } from "@/lib/motion";
+import { useReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import { ThoughtStream } from "./ThoughtStream";
 import { pushThought } from "@/lib/agent/thoughtStream";
@@ -21,6 +21,15 @@ const ROTATING_TIPS = [
   "Your plugins live in the dock",
   "Try: change my background",
 ];
+
+/**
+ * Tip list for the current pointer (#173): coarse pointers never see
+ * keyboard-shortcut tips they cannot use.
+ */
+export function rotatingTips(isCoarse: boolean): string[] {
+  if (!isCoarse) return ROTATING_TIPS;
+  return ROTATING_TIPS.filter((t) => !/ctrl/i.test(t));
+}
 
 export interface HomeScreenProps {
   /** Open the agent chat panel (same panel as Ctrl K / dock agent icon). */
@@ -46,7 +55,7 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
       return false;
     }
   });
-  const isReduced = prefersReducedMotion();
+  const isReduced = useReducedMotion();
   const isCoarse =
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
@@ -63,7 +72,8 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
   // quiet spot, never a prompt box; pauses while the panel is open.
   useEffect(() => {
     if (!hintDismissed || panelOpen) return;
-    const t = setInterval(() => setTipIndex((i) => (i + 1) % ROTATING_TIPS.length), 12000);
+    const total = rotatingTips(isCoarse).length || 1;
+    const t = setInterval(() => setTipIndex((i) => (i + 1) % total), 12000);
     return () => clearInterval(t);
   }, [hintDismissed, panelOpen]);
 
@@ -187,7 +197,7 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
                 )}
                 aria-hidden="true"
               >
-                {ROTATING_TIPS[tipIndex]}
+                {rotatingTips(isCoarse)[tipIndex % (rotatingTips(isCoarse).length || 1)]}
               </div>
             )}
           </motion.div>

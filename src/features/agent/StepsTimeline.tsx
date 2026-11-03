@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, X } from "lucide-react";
-import { prefersReducedMotion } from "@/lib/motion";
+import { useReducedMotion } from "@/lib/motion";
 import { cn } from "@/lib/cn";
 import { TINYFISH_LOGO_SRC } from "@/lib/agent/events";
 import type { AgentStep } from "@/lib/agent/conversationStore";
@@ -20,7 +20,7 @@ export function StepsTimeline({
   thinking?: string;
   defaultOpen?: boolean;
 }) {
-  const reduceMotion = prefersReducedMotion();
+  const reduceMotion = useReducedMotion();
   const [thinkingOpen, setThinkingOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(!defaultOpen);
   if ((!steps || steps.length === 0) && !thinking) return null;

@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { cn } from "@/lib/cn";
 import { RotateCcw } from "lucide-react";
-import { prefersReducedMotion } from "@/lib/motion";
+import { useReducedMotion } from "@/lib/motion";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking" | "error";
 
@@ -35,7 +35,7 @@ export function Orb({
     xl: "w-28 h-28",
   };
   // Still frame under reduced motion, like MiniOrb.
-  const isReduced = prefersReducedMotion();
+  const isReduced = useReducedMotion();
 
   const scaleBoost =
     state === "listening" || state === "speaking"

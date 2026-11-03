@@ -32,7 +32,7 @@ import {
   createMicPcmStreamer,
   type MicPcmStreamer,
 } from "@/lib/agent/realtimeVoice";
-import { spring, prefersReducedMotion } from "@/lib/motion";
+import { spring, useReducedMotion } from "@/lib/motion";
 
 interface AgentConversationProps {
   onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
@@ -240,7 +240,7 @@ export function AgentConversation({
   const stuckSecs =
     isStreaming && lastEventAt > 0 ? Math.max(0, Math.floor((now - lastEventAt) / 1000)) : 0;
   const isStuck = stuckSecs >= 8;
-  const reduceMotion = prefersReducedMotion();
+  const reduceMotion = useReducedMotion();
 
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
@@ -605,11 +605,11 @@ export function AgentConversation({
       <AnimatePresence>
         <motion.div
           layoutId="polymax-agent-surface"
-          initial={{ opacity: 0, y: prefersReducedMotion() ? 0 : 20, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1, transition: spring.soft }}
-          exit={{ opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 20, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
           className={cn(
-            "fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none flex flex-col items-center",
+            "agent-panel fixed left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[560px] pointer-events-auto select-none flex flex-col items-center",
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
@@ -622,9 +622,9 @@ export function AgentConversation({
                   className={cn(
                     "w-2 h-2 rounded-full",
                     orbState === "listening" || orbState === "speaking"
-                      ? "bg-[var(--accent-lime)] animate-pulse"
+                      ? `bg-[var(--accent-lime)]${reduceMotion ? "" : " animate-pulse"}`
                       : orbState === "thinking"
-                        ? "bg-[var(--accent-lime)]/70 animate-ping"
+                        ? `bg-[var(--accent-lime)]/70${reduceMotion ? "" : " animate-ping"}`
                         : orbState === "error"
                           ? "bg-red-400"
                           : "bg-white/25"
@@ -632,7 +632,7 @@ export function AgentConversation({
                 />
                 {isStreaming && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
+                    <span className={reduceMotion ? "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)]" : "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping"} />
                   </span>
                 )}
               </div>
@@ -749,7 +749,7 @@ export function AgentConversation({
               </button>
 
               {isStreaming && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping shrink-0" />
+                <span className={reduceMotion ? "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] shrink-0" : "w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping shrink-0"} />
               )}
             </div>
 
@@ -853,11 +853,11 @@ export function AgentConversation({
     <motion.div
       layoutId="polymax-agent-surface"
       initial={{ opacity: 0 }}
-      animate={{ opacity: 1, transition: spring.soft }}
+      animate={{ opacity: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
       exit={{ opacity: 0, transition: { duration: 0.16 } }}
       style={isSide ? { width: `${sideWidth}px` } : undefined}
       className={cn(
-        "relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
+        "agent-panel relative flex flex-col bg-[var(--bg-void)]/96 backdrop-blur-2xl transition-all duration-150 select-text",
         isSide
           ? "fixed top-0 bottom-0 left-0 z-40 border-r border-white/5 shadow-2xl"
           : "fixed inset-0 z-40 w-full",
@@ -1047,7 +1047,7 @@ export function AgentConversation({
                 <AssistantMarkdown content={msg.content} />
 
                 {/* Hover actions: Copy & Retry on last message */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
+                <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
                   {msg.model && (
                     <span className="text-[10px] text-muted-foreground/60" title={`Answered by ${msg.model}`}>
                       {modelShortName(msg.model)}

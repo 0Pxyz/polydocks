@@ -1,4 +1,5 @@
 import type { Transition, Variants } from "motion/react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Checks if the user prefers reduced motion (client-side).
@@ -6,6 +7,24 @@ import type { Transition, Variants } from "motion/react";
 export function prefersReducedMotion(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Reactive reduced-motion flag (#173): re-renders when the OS setting
+ * changes mid-session. Use in components; keep the plain function for
+ * module scope and event handlers.
+ */
+export function useReducedMotion(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {};
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", notify);
+      return () => mq.removeEventListener("change", notify);
+    },
+    prefersReducedMotion,
+    () => false
+  );
 }
 
 /**
