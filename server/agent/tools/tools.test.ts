@@ -102,6 +102,8 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "plugins.operate",
         "plugins.rollback",
         "plugins.uninstall",
+        "recall_memory",
+        "record_memory",
         "skills.read",
         "ui_catalog",
       ].sort()
@@ -130,12 +132,12 @@ describe("Agent Tool Catalog & Security Guards", () => {
     // Derived views cover the canonical list (find_capabilities and
     // ui_catalog are the tools offered on both surfaces).
     expect(fullNames.size).toBe(50);
-    expect(minimalNames.size).toBe(22);
+    expect(minimalNames.size).toBe(24);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
     }
     const both = [...fullNames].filter((n) => minimalNames.has(n));
-    expect(both).toEqual(["apply_theme", "find_capabilities", "ui_catalog"]);
+    expect(both).toEqual(["apply_theme", "find_capabilities", "recall_memory", "record_memory", "ui_catalog"]);
     // plugins.install ships on every surface.
     expect(fullNames.has("install_plugin")).toBe(true);
     expect(minimalNames.has("plugins.install")).toBe(true);

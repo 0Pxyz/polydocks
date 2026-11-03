@@ -33,6 +33,19 @@ describe("intent-scoped minimal surface", () => {
     expect(INTENT_TOOL_DENYLIST.theme).not.toContain("apply_theme");
   });
 
+  it("memory intent turns can reach record_memory/recall_memory on the default surface (#265)", async () => {
+    const { INTENT_TOOL_DENYLIST } = await import("../server/agent/intent");
+    const min = minimalTools.map((t) => t.name);
+    // The memory-and-files skill names record_memory/recall_memory
+    // explicitly; the tools must be offered (not denied, not
+    // surface-filtered) or the model confabulates confirmations with zero
+    // tool calls (same class as the #264 apply_theme regression).
+    expect(min).toContain("record_memory");
+    expect(min).toContain("recall_memory");
+    expect(INTENT_TOOL_DENYLIST.general).not.toContain("record_memory");
+    expect(INTENT_TOOL_DENYLIST.general).not.toContain("recall_memory");
+  });
+
   it("minimal context is smaller than full", () => {
     expect(minimalTools.length).toBeLessThan(fullTools.length);
   });
