@@ -144,8 +144,35 @@ export class PluginRegistry {
    */
   public uninstall(pluginId: string): boolean {
     const result = db.query("DELETE FROM plugins WHERE id = ?").run(pluginId);
+    // Hygiene (#310): uninstall leaves no orphan rows behind.
     db.query("DELETE FROM plugin_grants WHERE plugin_id = ?").run(pluginId);
+    db.query("DELETE FROM executions WHERE plugin_id = ?").run(pluginId);
+    db.query("DELETE FROM plugin_versions WHERE plugin_id = ?").run(pluginId);
+    db.query("DELETE FROM plugin_files WHERE plugin_id = ?").run(pluginId);
     return result.changes > 0;
+  }
+
+  /**
+   * Registry hygiene audit (#310): orphan rows (child tables pointing at
+   * an uninstalled plugin) and duplicate names (same display name on
+   * different ids — the Notes/Bitcoin/Pomodoro class of confusion).
+   */
+  public audit(): { orphans: Array<{ table: string; pluginId: string; rows: number }>; duplicates: string[] } {
+    const orphans: Array<{ table: string; pluginId: string; rows: number }> = [];
+    for (const table of ["plugin_grants", "executions", "plugin_versions", "plugin_files"] as const) {
+      const rows = db
+        .query<{ plugin_id: string; rows: number }, []>(
+          `SELECT plugin_id, COUNT(*) as rows FROM "${table}" WHERE plugin_id NOT IN (SELECT id FROM plugins) GROUP BY plugin_id`
+        )
+        .all();
+      for (const r of rows) orphans.push({ table, pluginId: r.plugin_id, rows: r.rows });
+    }
+    const dupes = db
+      .query<{ name: string }, []>(
+        `SELECT LOWER(name) as name FROM plugins GROUP BY LOWER(name) HAVING COUNT(*) > 1`
+      )
+      .all();
+    return { orphans, duplicates: dupes.map((d) => d.name) };
   }
 
   /**
