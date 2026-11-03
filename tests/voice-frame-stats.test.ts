@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   floatToPcm16LE,
   isSilentPcm16LE,
+  micSilenceHint,
   noteMicFrame,
   emptyMicFrameStats,
 } from "../src/lib/agent/realtimeVoice";
@@ -41,5 +42,14 @@ describe("voice frame stats (#177)", () => {
     expect(stats.frames).toBe(2);
     expect(stats.silentFrames).toBe(1);
     expect(stats.bytes).toBe(1920 * 2 * 2);
+  });
+
+  it("hints only on sustained all-silence (#177)", () => {
+    expect(micSilenceHint(emptyMicFrameStats())).toBeNull();
+    expect(micSilenceHint({ frames: 49, bytes: 49 * 3840, silentFrames: 49 })).toBeNull();
+    // One live frame silences the hint.
+    expect(micSilenceHint({ frames: 60, bytes: 60 * 3840, silentFrames: 59 })).toBeNull();
+    const hint = micSilenceHint({ frames: 60, bytes: 60 * 3840, silentFrames: 60 });
+    expect(hint).toContain("silent");
   });
 });

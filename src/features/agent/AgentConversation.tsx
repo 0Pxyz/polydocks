@@ -30,6 +30,7 @@ import { useThemeStore } from "@/lib/theme";
 import {
   connectRealtimeVoice,
   createMicPcmStreamer,
+  micSilenceHint,
   type MicPcmStreamer,
 } from "@/lib/agent/realtimeVoice";
 import { spring, useReducedMotion } from "@/lib/motion";
@@ -328,6 +329,9 @@ export function AgentConversation({
   // Tracks whether the current/last voice attempt showed an error: the
   // close handler must not wipe it, or failures look like silence.
   const voiceErrorShownRef = useRef(false);
+  // Sustained all-silence hint fires once per attempt (#177): permission
+  // granted + frames flowing, but nothing audible (muted/wrong device).
+  const voiceSilenceHintShownRef = useRef(false);
 
   // Auto-resize textarea from 1 to 6 lines (approx 24px to 144px)
   const adjustTextareaHeight = useCallback(() => {
@@ -525,6 +529,7 @@ export function AgentConversation({
       }
 
       let streamer: MicPcmStreamer;
+      voiceSilenceHintShownRef.current = false;
       try {
         streamer = await createMicPcmStreamer(
           (pcm) => {
@@ -536,7 +541,15 @@ export function AgentConversation({
               }
             }
           },
-          (level) => setAudioLevel(level)
+          (level) => setAudioLevel(level),
+          (stats) => {
+            if (voiceSilenceHintShownRef.current) return;
+            const hint = micSilenceHint(stats);
+            if (hint) {
+              voiceSilenceHintShownRef.current = true;
+              setStatusText(hint);
+            }
+          }
         );
       } catch (err: any) {
         setOrbState("idle");
