@@ -5,6 +5,7 @@ import { useDockStore } from "../store/useDockStore";
 import { useWorkspaceStore } from "../store/useWorkspaceStore";
 import { useThemeStore, THEMES, type ThemeId, type DockStyleId, type DockPosition } from "@/lib/theme";
 import { DOCK_TOOL_DESCRIPTIONS } from "../dock/dockModel";
+import { chatPlacement } from "../dock/dockItems";
 import { applyReaderOpened } from "./conversationStore";
 
 export interface OrchestratorActionCallbacks {
@@ -62,7 +63,7 @@ export async function applyOrchestratorAction(
       });
       callbacks?.onOpenExperience?.(event.plugin.id);
       if (!isDockAdd) {
-        if (typeof window !== "undefined" && window.innerWidth >= 900) {
+        if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
           set({ layoutState: "side" });
         } else {
           set({ layoutState: "closed" });
@@ -90,7 +91,7 @@ export async function applyOrchestratorAction(
       set({ statusText: `Opening "${event.experienceId}"…` });
       callbacks?.onOpenExperience?.(event.experienceId);
       if (!isDockAdd) {
-        if (typeof window !== "undefined" && window.innerWidth >= 900) {
+        if (typeof window !== "undefined" && chatPlacement(window.innerWidth) === "side") {
           set({ layoutState: "side" });
         } else {
           set({ layoutState: "closed" });
