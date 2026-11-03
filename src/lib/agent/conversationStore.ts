@@ -1167,10 +1167,16 @@ async function sendViaOrchestrator(
   }
   let posted: { messageId: string; sessionId: string } | null = null;
   try {
+    // Reuse the stable session (#347): without it the server mints one
+    // session per message, and the stream follows only the latest — job
+    // completions from earlier messages land on a closed stream and never
+    // render until reload. The server creates a fresh session when the
+    // stored one is missing or expired.
+    const sessionId = useConversationStore.getState().orchestratorSessionId ?? undefined;
     const res = await fetch("/api/agent/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, origin }),
+      body: JSON.stringify({ prompt, origin, ...(sessionId ? { sessionId } : {}) }),
     });
     const json = await res.json().catch(() => null);
     if (res.ok && json?.success && typeof json.messageId === "string") {
