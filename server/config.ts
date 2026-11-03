@@ -38,8 +38,11 @@ const envSchema = z.object({
   // MODAL_TOKEN_SECRET from env, falling back to ~/.modal.toml (`modal setup`).
   // Unset means the sandbox provider is disabled and sandbox tools fail
   // closed with a setup hint; the rest of the app keeps working.
+  // MODAL_DISABLED=1 forces the provider off even with credentials present
+  // (e.g. credits over) — unset it to re-enable, no other change needed.
   MODAL_TOKEN_ID: z.string().optional().default(""),
   MODAL_TOKEN_SECRET: z.string().optional().default(""),
+  MODAL_DISABLED: z.string().optional().default(""),
   // Atrium remote browser (first-party Browser surface). The worker runs
   // Chromium; this process only relays short-lived viewer tokens. Unset
   // ATRIUM_WORKER_SECRET means the browser surface degrades to the Reader
