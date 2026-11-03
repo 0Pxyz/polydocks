@@ -73,9 +73,14 @@ export function LiveOnboarding() {
     };
 
     switch (currentStep) {
-      case "intro":
+      case "home":
         force("");
         pushThought("Poly is active and ready");
+        break;
+
+      case "customize":
+        force("settings");
+        pushThought("Applying theme tokens across the workspace…");
         break;
 
       case "research":
@@ -96,19 +101,29 @@ export function LiveOnboarding() {
         );
         break;
 
-      case "workspace":
-        force("browser");
-        pushThought("Opening primary source in native Browser surface", {
-          tool: "browser",
-        });
-        break;
-
-      case "tools":
-        force("bitcoin");
-        pushThought("Synthesizing bitcoin plugin…");
+      case "breathe":
+        pushThought("Synthesizing box-breathing plugin…");
         thoughtTimersRef.current.push(
           setTimeout(() => {
-            pushThought("Mounted and pinned bitcoin in dock");
+            pushThought("Mounted box-breathing in dock");
+          }, 3000)
+        );
+        break;
+
+      case "coin":
+        pushThought("Synthesizing decision-coin plugin…");
+        thoughtTimersRef.current.push(
+          setTimeout(() => {
+            pushThought("Mounted decision-coin in dock");
+          }, 3000)
+        );
+        break;
+
+      case "focus":
+        pushThought("Synthesizing focus-timer plugin…");
+        thoughtTimersRef.current.push(
+          setTimeout(() => {
+            pushThought("Focus timer keeps counting in the background");
           }, 3000)
         );
         break;
