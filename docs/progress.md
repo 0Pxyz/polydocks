@@ -133,3 +133,13 @@
 | 2026-11-03 | CI fix: hermetic OpenAI mock in model-registry tests, test-only secret for browser-smoke; production fail-closed auth unchanged | [#299](https://github.com/0Pxyz/polymax/pull/299) [#300](https://github.com/0Pxyz/polymax/pull/300) |
 | 2026-11-03 | Reopen fixes: inspect blank (#319), chat history plumbing (#307), sandbox dedup (#308), wallpaper persistence (#309), TinyFish pill (#323), layout overflow (#306), settings sheet (#326) + awaiting_approval (#315), route boundary (#322), registry hygiene (#310) [#349](https://github.com/0Pxyz/polymax/pull/349) |
 | 2026-11-03 | Demo-ready batch: voice transport fix (#177, ws proxy + batched last-run), onboarding 7-act tour + blank states (#368, #373, #384), Tools/Creations split + row contract (#380, #382), durable-stream bridge (#360), README positioning (#365), demo script + taxonomy (#366, #362) | [#386](https://github.com/0Pxyz/polymax/pull/386) |
+| 2026-11-03 | Chat busy signal for orchestrator turns (refcounted isStreaming) + exact-shape stream pin | [#391](https://github.com/0Pxyz/polymax/pull/391) |
+| 2026-11-03 | Stream watchdog reconnect + focused tool always in dock bar | [#392](https://github.com/0Pxyz/polymax/pull/392) |
+| 2026-11-03 | Modal kill-switch (MODAL_DISABLED) for zero credits | [#393](https://github.com/0Pxyz/polymax/pull/393) |
+| 2026-11-03 | Sandbox tabs keep alive across builtin surfaces | [#394](https://github.com/0Pxyz/polymax/pull/394) |
+| 2026-11-03 | Builtin views keep alive via MAIN_VIEW_STATIC_IDS | [#395](https://github.com/0Pxyz/polymax/pull/395) |
+| 2026-11-03 | CI hermetic fixes (ResizeObserver stub, Modal-aware isolation) + keepalive shim | [#396](https://github.com/0Pxyz/polymax/pull/396) [#398](https://github.com/0Pxyz/polymax/pull/398) |
+| 2026-11-03 | Notes body persist + unload flush (#400) | [#403](https://github.com/0Pxyz/polymax/pull/403) |
+| 2026-11-03 | Agent dock.open/dock.list on full surface (#390) | [#404](https://github.com/0Pxyz/polymax/pull/404) |
+| 2026-11-03 | Per-note deep-link across palette/dock/agent + tray.open wire fixes (#402) | [#405](https://github.com/0Pxyz/polymax/pull/405) |
+| 2026-11-03 | Catalog pins for agent dock verbs | [#407](https://github.com/0Pxyz/polymax/pull/407) |
