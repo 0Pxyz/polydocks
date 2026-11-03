@@ -10,6 +10,7 @@ import {
 } from "../workspace/sessions";
 import { getSessionsPath } from "../system/agentHome";
 import { runAgentLoop, type AgentStepEvent } from "./loop";
+import { shouldBridgeLoopEvent } from "./loopEvents";
 
 /** Terminal task states: timestamps close and no further transitions apply. */
 const TERMINAL_TASK_STATUSES: TaskStatus[] = ["completed", "failed", "cancelled", "interrupted"];
@@ -428,6 +429,48 @@ export function buildTaskLoopOptions(
 }
 
 /**
+ * Durable bridge for one background loop event (#360): mirrors the
+ * interactive turn's reactive stream — approvals park visibly, progress
+ * (tool.start/done) and UI side-effects (tray.open, dock.*, browser.open,
+ * source.added, sandbox.preview, plugin.*) land in the durable job stream
+ * so chat and the dock update without reload. Heartbeats and raw text
+ * deltas have no consumer here. Returns counters for the completion gate.
+ */
+export async function bridgeBackgroundLoopEvent(
+  task: Pick<AgentTask, "id" | "sessionId" | "type">,
+  ev: AgentStepEvent,
+  emit: (ev: AgentStepEvent) => Promise<void>,
+  announce: (row: JobEventRow) => void
+): Promise<{ toolCall: boolean; pluginTouch: boolean }> {
+  await emit(ev);
+  let toolCall = false;
+  let pluginTouch = false;
+  if (ev.type === "approval.requested") {
+    // Visible wait instead of a silent fail (#315): the job parks in
+    // awaiting_approval with a durable, resumable event.
+    updateTaskState(task.id, "awaiting_approval");
+    const row = insertJobEvent(task.id, task.sessionId, "job.awaiting_approval", {
+      status: "awaiting_approval",
+      ...(ev.payload as Record<string, unknown>),
+      taskType: task.type,
+    });
+    announce(row);
+  }
+  if (ev.type === "tool.start") toolCall = true;
+  if (ev.type === "plugin.created" || ev.type === "plugin.updated" || ev.type === "plugin.published") {
+    pluginTouch = true;
+  }
+  if (ev.type !== "approval.requested" && shouldBridgeLoopEvent(ev.type)) {
+    const row = insertJobEvent(task.id, task.sessionId, ev.type, {
+      ...(ev.payload as Record<string, unknown>),
+      taskType: task.type,
+    });
+    announce(row);
+  }
+  return { toolCall, pluginTouch };
+};
+
+/**
  * Background Task Runner Engine
  * Manages asynchronous task lifecycle, in-memory replay buffers, and active cancellations.
  */
@@ -702,28 +745,16 @@ export class TaskExecutionEngine {
               origin,
               signal: controller.signal,
               onLoopEvent: async (ev) => {
-                await emit(ev);
-                if (ev.type === "approval.requested") {
-                  // Visible wait instead of a silent fail (#315): the job
-                  // parks in awaiting_approval with a durable, resumable
-                  // event until the user allows or denies.
-                  updateTaskState(task.id, "awaiting_approval");
-                  const row = insertJobEvent(task.id, task.sessionId, "job.awaiting_approval", {
-                    status: "awaiting_approval",
-                    ...(ev.payload as Record<string, unknown>),
-                    taskType: task.type,
-                  });
-                  this.announceRow(row);
-                }
-                if (ev.type === "tool.start") toolCalls += 1;
-                if (ev.type === "plugin.created" || ev.type === "plugin.updated" || ev.type === "plugin.published") {
-                  pluginTouched = true;
-                  const row = insertJobEvent(task.id, task.sessionId, ev.type, {
-                    ...(ev.payload as Record<string, unknown>),
-                    taskType: task.type,
-                  });
-                  this.announceRow(row);
-                }
+                // Shared durable bridge (#360): same reactive stream as
+                // an interactive turn (counters feed the completion gate).
+                const { toolCall, pluginTouch } = await bridgeBackgroundLoopEvent(
+                  task,
+                  ev,
+                  emit,
+                  (row) => this.announceRow(row)
+                );
+                if (toolCall) toolCalls += 1;
+                if (pluginTouch) pluginTouched = true;
               },
             })
           );
