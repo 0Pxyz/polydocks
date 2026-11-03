@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Polymax — The Agentic Dock",
-  "short_name": "Polymax",
-  "description": "An agentic dock workspace: an agent builds a living world map of knowledge cities you can explore, learn from, and extend.",
+  "name": "PolyDocks — Your agentic dock space",
+  "short_name": "PolyDocks",
+  "description": "Tell Poly what you need. It builds the tools to do it.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
