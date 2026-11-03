@@ -11,7 +11,7 @@ import path from "node:path";
 
 const REPO = path.resolve(import.meta.dir, "..");
 
-const SCOPES = ["server/agent", "server/facade", "src/features/dock"];
+const SCOPES = ["server/agent", "server/facade", "src/features/dock", "server/plugins", "src/lib/dock", "src/lib/agent"];
 
 interface Exception {
   file: string;
@@ -24,11 +24,6 @@ const EXCEPTIONS: Exception[] = [
     file: "server/agent/tools/tools.test.ts",
     pattern: "enter_city|get_city_context|read_city_file|write_city_file|build_city|place_city|connect_cities",
     reason: "Gone-list: asserts removed city tools stay removed.",
-  },
-  {
-    file: "server/agent/namespaces.ts",
-    pattern: "cities",
-    reason: "Demo plugin domain id (capability pluginId 'cities', task 2 keeps it a plugin).",
   },
 ];
 
