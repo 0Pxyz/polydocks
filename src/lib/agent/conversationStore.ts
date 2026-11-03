@@ -215,6 +215,13 @@ interface ConversationStoreState {
   /** Open (or reuse) the job-event stream for a session. Returns the live instance. */
   ensureTaskStream: (sessionId: string) => EventSource | null;
   /**
+   * Force-reopen the job-event stream (#387): a zombie source (server
+   * restart, proxy drop) looks open but never delivers, leaving a turn
+   * busy forever. Reconnecting replays from the persisted cursor, so a
+   * completion missed while the stream was dead settles on reconnect.
+   */
+  reconnectTaskStream: () => void;
+  /**
    * Resume active jobs after a reload (#178): reopens the stream (replay
    * from the persisted cursor rebuilds cards/steps) and seeds queued/
    * running cards from the API so jobs are visible before replay lands.
@@ -622,6 +629,19 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       }
     };
     return source;
+  },
+
+  reconnectTaskStream: () => {
+    const sessionId = get().orchestratorSessionId ?? taskStreamSession;
+    if (!sessionId) return;
+    try {
+      taskEventSource?.close();
+    } catch {
+      // Ignore close errors on a stale stream.
+    }
+    taskEventSource = null;
+    taskStreamSession = null;
+    get().ensureTaskStream(sessionId);
   },
 
   hydrateJobs: async () => {

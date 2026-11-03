@@ -230,6 +230,7 @@ export function AgentConversation({
     clearConversation,
     consumeVoiceStart,
     hydrateJobs,
+    reconnectTaskStream,
   } = useConversationStore();
 
   const { dockPosition } = useThemeStore();
@@ -275,6 +276,19 @@ export function AgentConversation({
   const stuckSecs =
     isStreaming && lastEventAt > 0 ? Math.max(0, Math.floor((now - lastEventAt) / 1000)) : 0;
   const isStuck = stuckSecs >= 8;
+
+  // Stream watchdog (#387): a zombie EventSource (server restart, proxy
+  // drop) looks open but delivers nothing, so the turn would sit at
+  // "Still working" forever and only a reload showed the reply. While
+  // stuck, force one reconnect per 20s window — the replay from the
+  // persisted cursor delivers any completion missed while dead.
+  const lastStuckReconnectRef = useRef(0);
+  useEffect(() => {
+    if (!isStreaming || !isStuck) return;
+    if (now - lastStuckReconnectRef.current < 20000) return;
+    lastStuckReconnectRef.current = now;
+    reconnectTaskStream();
+  }, [isStreaming, isStuck, now, reconnectTaskStream]);
   const reduceMotion = useReducedMotion();
 
   const handlePaste = useCallback(
