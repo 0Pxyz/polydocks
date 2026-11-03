@@ -1,9 +1,5 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ReaderFeed, ListRow, SearchField, SegmentedControl, InlineMessage, Inline } from "@/components/ui/kit";
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -12,7 +8,7 @@ type Item = { kind: "article" | "video"; title: string; src: string; url: string
 const CURATED: Item[] = [
   { kind: "article", title: "7 Steps to Create a Go-To-Market App Strategy", src: "Median.co", url: "https://median.co/blog/what-is-a-go-to-market-app-strategy-how-to-build-a-fool-proof-promotion-plan-in-7-steps", desc: "Most tactical for apps — 7-step promotion plan." },
   { kind: "article", title: "How to Market a Mobile App Effectively (2026)", src: "Appit Ventures", url: "https://appitventures.com/blog/how-to-market-a-mobile-app", desc: "Most up-to-date 2026 playbook." },
-  { kind: "article", title: "GTM Strategy Framework for Tech Startups", src: "HBS Online", url: "https://online.hbs.edu/blog/post/go-to-market-strategy-framework", desc: "Framework from Harvard Business School." },
+  { kind: "article", title: "GTM Strategy Framework for Tech Startups", src: "HBS Online", url: "https://online.hbs.edu/blog/go-to-market-strategy-framework", desc: "Framework from Harvard Business School." },
   { kind: "article", title: "What Is a GTM Strategy? And How to Create One", src: "Coursera", url: "https://www.coursera.org/articles/go-to-market-strategy", desc: "Beginner-friendly builder guide." },
   { kind: "article", title: "Choose the Right GTM Strategy for Your Mobile App", src: "EB Pearls", url: "https://ebpearls.com.au/learn/go-to-market-strategy-mobile-apps", desc: "App-specific GTM picks." },
   { kind: "article", title: "What is a GTM Strategy? Build One in 11 Steps", src: "Zendesk", url: "https://www.zendesk.es/blog/sales/sales-and-marketing/go-to-market-strategy/", desc: "11-step build guide." },
@@ -48,7 +44,6 @@ function toItems(raw: any): Item[] {
       kind: /youtu\.?be|vimeo|mp4|webm/i.test(url) ? "video" : "article",
       title,
       src: typeof h?.source === "string" ? h.source : "Fresh via search",
-      url,
       desc: typeof h?.snippet === "string" ? h.snippet.slice(0, 140) : "Fresh result via capability search.",
     });
   }
@@ -131,68 +126,50 @@ function App() {
 
   return (
     <div className="flex min-h-full flex-col gap-4 p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="Search articles and videos…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="min-w-40 flex-1"
-        />
+      <Inline gap={8}>
+        <div className="min-w-40 flex-1">
+          <SearchField value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
         <Button variant={unreadOnly ? "default" : "outline"} size="sm" onClick={() => setUnreadOnly(!unreadOnly)}>
           Unread only
         </Button>
         <Button size="sm" variant="secondary" onClick={refresh} disabled={refreshing}>
           {refreshing ? "Refreshing…" : "Refresh via search"}
         </Button>
-      </div>
+      </Inline>
 
-      <Tabs value={filter} onValueChange={setFilter}>
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="article">Articles</TabsTrigger>
-          <TabsTrigger value="video">Videos</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <SegmentedControl
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: "all", label: "All" },
+          { value: "article", label: "Articles" },
+          { value: "video", label: "Videos" },
+        ]}
+      />
 
-      {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
-      {openError && <p className="text-xs text-destructive">{openError}</p>}
+      {openError ? <InlineMessage tone="error">{openError}</InlineMessage> : null}
 
-      {refreshing && (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3">
+      <ReaderFeed
+        notice={notice || undefined}
+        loading={refreshing}
+        empty={{ title: "Nothing matches these filters", hint: "Try a shorter search or clear the unread filter." }}
+      >
         {items.map((x) => (
-          <div key={x.url} className="rounded-xl border border-border bg-card p-4">
-            <div className="mb-1 flex items-center gap-2">
-              <Badge variant={x.kind === "video" ? "secondary" : "default"}>
-                {x.kind === "video" ? "Video" : "Article"}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                {x.src} · {read[x.url] ? "read" : "unread"}
-              </span>
-            </div>
-            <div className="text-sm font-semibold text-foreground">{x.title}</div>
-            <div className="mb-3 text-[13px] leading-relaxed text-muted-foreground">{x.desc}</div>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => openItem(x)}>
-                Open in reader
-              </Button>
+          <ListRow
+            key={x.url}
+            title={x.title}
+            meta={`${x.src} · ${x.kind === "video" ? "Video" : "Article"}`}
+            onOpen={() => openItem(x)}
+            action={
               <Button size="sm" variant="ghost" onClick={() => toggleRead(x.url)}>
                 {read[x.url] ? "Mark unread" : "Mark read"}
               </Button>
-            </div>
-          </div>
+            }
+          />
         ))}
-        {!refreshing && items.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nothing matches these filters.</p>
-        )}
-      </div>
+      </ReaderFeed>
 
-      <Separator />
       <p className="text-xs text-muted-foreground">
         Articles and videos open in the native reader — no popups, no embeds blocked by the source site.
       </p>

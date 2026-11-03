@@ -4,7 +4,7 @@ import {
   buildDockSections,
   computeVisibleCap,
   createItemsForQuery,
-  getStaticCreateRows,
+  capabilityNeedsInput,
   migratePinnedIds,
   visibleEmptyQuery,
   scoreDockItem,
@@ -111,11 +111,12 @@ describe("buildDockSections", () => {
 });
 
 describe("createItemsForQuery", () => {
-  test("generates rows from the query, never static", () => {
+  test("generates one honest row from the query, never static", () => {
     const items = createItemsForQuery("Stoicism");
-    expect(items.length).toBe(3);
+    expect(items.length).toBe(1);
     expect(items.every((i) => i.kind === "create")).toBe(true);
     expect(items[0].label).toContain("Stoicism");
+    expect(items[0].id).toContain("Stoicism");
     expect(createItemsForQuery("   ")).toEqual([]);
   });
 
@@ -132,10 +133,13 @@ describe("createItemsForQuery", () => {
   });
 });
 
-describe("getStaticCreateRows", () => {
-  test("mirrors the original static suggestions", () => {
-    const rows = getStaticCreateRows();
-    expect(rows.map((i) => i.label)).toEqual(["Bitcoin price viewer", "A reading list", "A timeline"]);
+describe("capabilityNeedsInput", () => {
+  test("detects required params, allows empty input otherwise", () => {
+    expect(capabilityNeedsInput({ type: "object", properties: { q: { type: "string" } }, required: ["q"] })).toBe(true);
+    expect(capabilityNeedsInput({ type: "object", properties: { q: { type: "string" } } })).toBe(false);
+    expect(capabilityNeedsInput({ type: "object" })).toBe(false);
+    expect(capabilityNeedsInput(null)).toBe(false);
+    expect(capabilityNeedsInput(undefined)).toBe(false);
   });
 });
 
@@ -148,19 +152,19 @@ describe("sliceEmptyQueryRows", () => {
     kind: "tab",
   });
 
-  test("caps the empty panel at six rows: open, yours, then create", () => {
+  test("caps the empty panel at six rows: open, then yours (no fake create rows)", () => {
     const open = [row("a"), row("b"), row("c")];
     const yours = [row("d"), row("e"), row("f"), row("g"), row("h")];
     const sliced = sliceEmptyQueryRows({ open, yours });
     expect(sliced.open.map((r) => r.id)).toEqual(["a", "b"]);
-    // 2 open + 3 create = 5, so 1 yours row fits.
-    expect(sliced.yours.map((r) => r.id)).toEqual(["d"]);
+    // 2 open + 0 create = 2, so 4 yours rows fit in the 6-row cap.
+    expect(sliced.yours.map((r) => r.id)).toEqual(["d", "e", "f", "g"]);
   });
 
   test("fills yours up when nothing is open", () => {
     const yours = [row("d"), row("e"), row("f"), row("g")];
     const sliced = sliceEmptyQueryRows({ open: [], yours });
-    expect(sliced.yours.map((r) => r.id)).toEqual(["d", "e", "f"]);
+    expect(sliced.yours.map((r) => r.id)).toEqual(["d", "e", "f", "g"]);
   });
 });
 
@@ -219,8 +223,8 @@ describe("sliceEmptyQueryRows reserved", () => {
   test("reserves space for the browse row inside the six-row cap", () => {
     const yours = [row("a"), row("b"), row("c")];
     const sliced = sliceEmptyQueryRows({ open: [], yours, reserved: 1 });
-    // 0 open + 3 create + 1 browse = 4, so 2 yours rows fit.
-    expect(sliced.yours.map((r) => r.id)).toEqual(["a", "b"]);
+    // 0 open + 0 create + 1 browse = 1, so all 3 yours rows fit.
+    expect(sliced.yours.map((r) => r.id)).toEqual(["a", "b", "c"]);
   });
 });
 
@@ -229,6 +233,13 @@ describe("dock catalog", () => {
     expect(DOCK_CORE_CATALOG.some((item) => item.id === "store")).toBe(true);
     expect(DOCK_CORE_CATALOG.some((item) => item.id === "creations")).toBe(true);
     expect(DOCK_CORE_CATALOG.some((item) => item.id === "maps")).toBe(false);
+  });
+
+  test("front catalog matches the server dock catalog (no drift)", async () => {
+    const server = await import("../server/agent/tools/dockCatalog");
+    const frontIds = new Set(DOCK_CORE_CATALOG.map((i) => i.id));
+    const serverIds = new Set(server.DOCK_BUILTINS.map((e) => e.id));
+    expect(frontIds).toEqual(serverIds);
   });
 });
 

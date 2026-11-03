@@ -23,8 +23,8 @@ export interface DeterministicDecision {
   args: Record<string, unknown>;
 }
 
-/** Allow-listed dock ids the dispatcher may open/close. Nothing else. */
-const DOCK_ID_ALIASES: Record<string, string> = {
+/** Allow-listed dock ids the dispatcher may open/close. Exported so the orchestrator router resolves the same aliases. */
+export const DOCK_ID_ALIASES: Record<string, string> = {
   browser: "browser",
   settings: "settings",
   store: "store",

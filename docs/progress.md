@@ -117,3 +117,15 @@
 | 2026-11-01 | Core plugin suite ADR + reconciliation audit (#271): cities/writing/workspace absent from code, notes/files gaps named | [#271](https://github.com/0Pxyz/polymax/pull/271) |
 | 2026-11-01 | Core suite ships in dev (#272): files + notes contract plugins, core trust on search/browser/sandbox, live-verified over HTTP | [#272](https://github.com/0Pxyz/polymax/pull/272) |
 | 2026-11-01 | Media refresh: Bitcoin viewer tour replaces flashcards, walkthrough + GIFs regenerated | [#275](https://github.com/0Pxyz/polymax/pull/275) |
+| 2026-11-02 | Command palette polish: honest workspace-backed listing, no mock rows, read-inline vs agent routing, catalog parity | [#276](https://github.com/0Pxyz/polymax/pull/276) |
+| 2026-11-02 | CI trim: check only on main push, parallel jobs, bun cache, check:fast + pre-push hook | [#277](https://github.com/0Pxyz/polymax/pull/277) |
+| 2026-11-02 | Single workspace scope, bar-order shortcuts, real bitcoin plugin (no mocks) | [#279](https://github.com/0Pxyz/polymax/pull/279) |
+| 2026-11-02 | Orchestrator jobs: durable events, concurrency cap, timeout, sandbox-aware cancel, resumable SSE | [#280](https://github.com/0Pxyz/polymax/pull/280) [#281](https://github.com/0Pxyz/polymax/pull/281) |
+| 2026-11-02 | Orchestrator inbox: per-session queue, instant ack, real-dock routing, non-blocking front with job cards | [#283](https://github.com/0Pxyz/polymax/pull/283) [#284](https://github.com/0Pxyz/polymax/pull/284) |
+| 2026-11-02 | Orchestrator stream: 202 + SSE answers, deterministic status, NL cancel, unlocked composer, plugin auto-mount | [#286](https://github.com/0Pxyz/polymax/pull/286) [#287](https://github.com/0Pxyz/polymax/pull/287) |
+| 2026-11-02 | Plugin UI Kit v2: Level 1 primitives, 9 patterns, ui_catalog, strict gate, gallery, 5 canonical examples | [#290](https://github.com/0Pxyz/polymax/pull/290) |
+| 2026-11-02 | Plugin UI Kit v2.1: Level 2 essentials, seeds split, shipped migration (bitcoin/pomodoro/feed), per-theme contrast QA | [#292](https://github.com/0Pxyz/polymax/pull/292) |
+| 2026-11-02 | Kit button fix: shared class extractor + default theme import, kit.css 11.7KB to 40KB | [#292](https://github.com/0Pxyz/polymax/pull/292) |
+| 2026-11-02 | Chat refinement: progressive responses, no Thinking label, chips removed, resize/touch/IME polish | [#295](https://github.com/0Pxyz/polymax/pull/295) |
+| 2026-11-02 | MCP client+server: PolyDocks serves its bus at POST /mcp, one manager connects external MCPs with progressive discovery (#293) | [#293](https://github.com/0Pxyz/polymax/pull/293) |
+| 2026-11-02 | Durable thinking/research timeline on the SSE stream: friendly steps, collapsible narration, replay-safe dedup, isolated test harness | [#296](https://github.com/0Pxyz/polymax/pull/296) |

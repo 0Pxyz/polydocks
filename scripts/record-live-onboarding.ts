@@ -122,13 +122,13 @@ async function main() {
     window.__onboardingStore?.getState().setStep("tools");
   });
   await page.waitForTimeout(1500);
-  // Mount the viewer as an interactive dock tool so the capture shows a
-  // real agent-built surface (not a static card).
+  // Mount the registered bitcoin plugin as an interactive dock tool so the
+  // capture shows a real agent-built surface (not a static card).
   await page.evaluate(() => {
     // @ts-ignore
-    window.__dockStore?.getState().openTool("bitcoin-viewer");
+    window.__dockStore?.getState().openTool("bitcoin");
     // @ts-ignore
-    window.__dockStore?.getState().focusTool("bitcoin-viewer");
+    window.__dockStore?.getState().focusTool("bitcoin");
   });
   await page.waitForTimeout(2000);
 
@@ -204,9 +204,9 @@ async function main() {
       // @ts-ignore
       window.__onboardingStore?.getState().completeDemo();
       // @ts-ignore
-      window.__dockStore?.getState().openTool("bitcoin-viewer");
+      window.__dockStore?.getState().openTool("bitcoin");
       // @ts-ignore
-      window.__dockStore?.getState().focusTool("bitcoin-viewer");
+      window.__dockStore?.getState().focusTool("bitcoin");
     });
     await tpage.waitForTimeout(2500);
     await tpage.screenshot({ path: path.join(captureDir, `theme-${themeId}.png`) });

@@ -131,57 +131,37 @@ export function buildDockSections(args: {
   ];
 }
 
-/** Generate "create with agent" rows from the current query (never static). */
+/** Generate one honest "create with agent" row from the current query. */
 export function createItemsForQuery(query: string): DockItem[] {
   const q = query.trim();
   if (!q) return [];
-  const short = q.length > 40 ? `${q.slice(0, 40)}…` : q;
+  const short = q.length > 60 ? `${q.slice(0, 60)}…` : q;
   return [
     {
-      id: `create:bitcoin-viewer:${q}`,
-      label: `Price viewer for ${short}`,
-      description: `Ask the agent to build a live price viewer for ${short}`,
-      icon: "chartlineup",
-      kind: "create",
-    },
-    {
-      id: `create:compare:${q}`,
-      label: `Compare sources on ${short}`,
-      description: `Ask the agent to compare two sources on ${short}`,
-      icon: "scales",
-      kind: "create",
-    },
-    {
-      id: `create:timeline:${q}`,
-      label: `A timeline of ${short}`,
-      description: `Ask the agent to build a timeline of ${short}`,
-      icon: "clock",
+      id: `create:${short}`,
+      label: `Create "${short}"`,
+      description: `Ask the agent to build it`,
+      icon: "sparkle",
       kind: "create",
     },
   ];
 }
 
 /**
- * Static "create with agent" rows for an empty query.
+ * Returns true when a capability input schema declares required params and
+ * therefore cannot run with an empty input from the palette.
  */
-export function getStaticCreateRows(): DockItem[] {
-  const rows: Array<[string, string]> = [
-    ["Bitcoin price viewer", "Ask the agent to mount a live crypto price viewer"],
-    ["A reading list", "Ask the agent to build a reading list"],
-    ["A timeline", "Ask the agent to build a timeline"],
-  ];
-  return rows.map(([label, description], i) => ({
-    id: `create:static:${i}`,
-    label,
-    description,
-    icon: "cards",
-    kind: "create" as const,
-  }));
+export function capabilityNeedsInput(inputSchema: unknown): boolean {
+  if (!inputSchema || typeof inputSchema !== "object") return false;
+  const schema = inputSchema as Record<string, unknown>;
+  const required = schema.required;
+  if (Array.isArray(required)) return required.length > 0;
+  return false;
 }
 
 const EMPTY_QUERY_MAX_ROWS = 6;
 const EMPTY_QUERY_OPEN_MAX = 2;
-const EMPTY_QUERY_CREATE_COUNT = 3;
+const EMPTY_QUERY_CREATE_COUNT = 0;
 
 /**
  * Curates the empty-query panel so it stays small: open items first (if
@@ -322,6 +302,7 @@ export function applyDockDirective(
 export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
   agent: "Poly: your agent",
   browser: "Browse the web with a real browser",
+  onboarding: "Tour: learn the dock",
   settings: "Dock appearance and theme",
   theme: "Dock appearance and theme",
   store: "Library: discover what others have built",
@@ -336,6 +317,7 @@ export const DOCK_TOOL_DESCRIPTIONS: Record<string, string> = {
 export const DOCK_CORE_CATALOG: DockItem[] = [
   { id: "agent", label: "Poly", description: "Poly: your agent", icon: "agent", kind: "builtin", system: true },
   { id: "browser", label: "Browser", description: "Browse the web with a real browser", icon: "browser", kind: "builtin" },
+  { id: "onboarding", label: "Tour", description: "Tour: learn the dock", icon: "onboarding", kind: "builtin" },
   { id: "plugins", label: "Tools", description: "Tools: your capabilities", icon: "plugins", kind: "builtin" },
   { id: "creations", label: "Creations", description: "Creations: your personal software", icon: "creations", kind: "builtin" },
   { id: "store", label: "Library", description: "Library: discover what others have built", icon: "store", kind: "builtin" },

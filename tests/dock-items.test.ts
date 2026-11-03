@@ -10,6 +10,7 @@ import {
   setActiveContext,
   registerItem,
   visibleIds,
+  barOrderIds,
   assignPanels,
   matchDockShortcut,
   DOCK_ACTIONS,
@@ -165,5 +166,52 @@ describe("dock actions: one registry for keyboard, REST, CLI, agent", () => {
       expect(action.description.length).toBeGreaterThan(0);
       expect(action.shortcut.code.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("shortcuts read the bar order (pinned first, no ghosts)", () => {
+  const threeOpen = () => {
+    let dock = emptyDock();
+    dock = { ...dock, activeContextId: null };
+    for (const id of ["a", "b", "c"]) dock = openItem(dock, id, null);
+    return dock;
+  };
+
+  test("numbers follow pin order, not registration order", () => {
+    const dock = threeOpen();
+    expect(barOrderIds(dock, ["c", "a"])).toEqual(["c", "a", "b"]);
+    expect(focusByIndex(dock, 0, ["c", "a"]).focusedId).toBe("c");
+    expect(focusByIndex(dock, 2, ["c", "a"]).focusedId).toBe("b");
+  });
+
+  test("removing the middle item shrinks the order at once (no cache)", () => {
+    let dock = threeOpen();
+    expect(barOrderIds(dock, [])).toEqual(["a", "b", "c"]);
+    dock = closeItem(dock, "b");
+    expect(barOrderIds(dock, [])).toEqual(["a", "c"]);
+    expect(focusByIndex(dock, 1, []).focusedId).toBe("c");
+  });
+
+  test("out-of-range numbers never open anything", () => {
+    const dock = threeOpen();
+    const same = focusByIndex(dock, 9, []);
+    expect(same.focusedId).toBe(dock.focusedId);
+    expect(same.order).toEqual(dock.order);
+  });
+
+  test("stale pins (no record) are skipped, pinned closed items reopen", () => {
+    let dock = threeOpen();
+    dock = closeItem(dock, "a");
+    expect(barOrderIds(dock, ["ghost", "a"])).toEqual(["a", "b", "c"]);
+    expect(focusByIndex(dock, 0, ["ghost", "a"]).focusedId).toBe("a");
+    expect(focusByIndex(dock, 0, ["ghost", "a"]).items["a"].state).toBe("focused");
+  });
+
+  test("arrows wrap around the bar order at the ends", () => {
+    const dock = threeOpen();
+    const last = focusByIndex(dock, 2, []);
+    expect(focusNext(last, 1, []).focusedId).toBe("a");
+    const first = focusByIndex(dock, 0, []);
+    expect(focusNext(first, -1, []).focusedId).toBe("c");
   });
 });

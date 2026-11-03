@@ -35,6 +35,10 @@ import { inspect_session } from "./inspect_session";
 import { list_tasks } from "./list_tasks";
 import { list_artifacts } from "./list_artifacts";
 import { read_artifact } from "./read_artifact";
+import { mcp_connect } from "./mcp_connect";
+import { mcp_list_servers } from "./mcp_list_servers";
+import { mcp_search_tools } from "./mcp_search_tools";
+import { mcp_disconnect } from "./mcp_disconnect";
 import {
   sandbox_exec,
   sandbox_write_file,
@@ -49,8 +53,10 @@ import {
 // plugins.create/edit/install/uninstall/operate — thin aliases over the
 // current executors via the shared facade layer.
 import { dockOpen, dockClose, dockPin, dockUnpin, dockList, dockFocus, dockNext, dockPrev, dockBackground, chatToggle } from "./verbs/dock";
+import { start_background_job } from "./start_background_job";
 import { pluginsCreate, pluginsEdit, pluginsInstall, pluginsUninstall, pluginsOperate, pluginsRollback, pluginsActivate, pluginsDeactivate } from "./verbs/plugins";
 import { skillsRead } from "./verbs/skills";
+import { ui_catalog } from "./ui_catalog";
 import { config } from "../../config";
 import { buildDynamicCapabilityTools } from "./catalog";
 
@@ -92,6 +98,10 @@ export {
   list_tasks,
   list_artifacts,
   read_artifact,
+  mcp_connect,
+  mcp_list_servers,
+  mcp_search_tools,
+  mcp_disconnect,
   sandbox_exec,
   sandbox_write_file,
   sandbox_read_file,
@@ -111,6 +121,7 @@ export {
   dockPrev,
   dockBackground,
   chatToggle,
+  start_background_job,
   pluginsCreate,
   pluginsEdit,
   pluginsInstall,
@@ -120,6 +131,7 @@ export {
   pluginsActivate,
   pluginsDeactivate,
   skillsRead,
+  ui_catalog,
 };
 
 export type AgentSurface = "full" | "minimal";
@@ -173,6 +185,10 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: list_tasks, surfaces: ["full"] },
   { tool: list_artifacts, surfaces: ["full"] },
   { tool: read_artifact, surfaces: ["full"] },
+  { tool: mcp_connect, surfaces: ["full"] },
+  { tool: mcp_list_servers, surfaces: ["full"] },
+  { tool: mcp_search_tools, surfaces: ["full"] },
+  { tool: mcp_disconnect, surfaces: ["full"] },
   { tool: sandbox_exec, surfaces: ["full"] },
   { tool: sandbox_write_file, surfaces: ["full"] },
   { tool: sandbox_read_file, surfaces: ["full"] },
@@ -191,6 +207,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: dockPrev, surfaces: ["minimal"] },
   { tool: dockBackground, surfaces: ["minimal"] },
   { tool: chatToggle, surfaces: ["minimal"] },
+  { tool: start_background_job, surfaces: ["full"] },
   { tool: pluginsCreate, surfaces: ["minimal"] },
   { tool: pluginsEdit, surfaces: ["minimal"] },
   { tool: pluginsInstall, surfaces: ["minimal"] },
@@ -200,6 +217,7 @@ const canonicalCatalog: Array<{ tool: AgentTool; surfaces: AgentSurface[] }> = [
   { tool: pluginsActivate, surfaces: ["minimal"] },
   { tool: pluginsDeactivate, surfaces: ["minimal"] },
   { tool: skillsRead, surfaces: ["minimal"] },
+  { tool: ui_catalog, surfaces: ["full", "minimal"] },
 ];
 
 function toolsFor(surface: AgentSurface): AgentTool[] {

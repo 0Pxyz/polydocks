@@ -225,19 +225,34 @@ CREATE TABLE IF NOT EXISTS tasks (
   session_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   type TEXT NOT NULL, -- 'chat' | 'plugin_synthesis' | 'research' | 'background_worker'
-  status TEXT NOT NULL DEFAULT 'queued', -- 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  status TEXT NOT NULL DEFAULT 'queued', -- 'queued' | 'running' | 'completed' (=succeeded) | 'failed' | 'cancelled' | 'interrupted'
   progress REAL DEFAULT 0.0,
   input_json TEXT,
   output_json TEXT,
   error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
   FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+-- Durable job event log (SSE resume via Last-Event-ID; survives restarts)
+CREATE TABLE IF NOT EXISTS job_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  payload_json TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_events_session_id ON job_events(session_id, id);
 
 -- Idempotency & Unified Service Layer (Issue #77)
 
@@ -295,6 +310,29 @@ CREATE TABLE IF NOT EXISTS artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_workspace_id ON artifacts(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
+
+-- PolyDocks identity foundation (Better Auth 1.7.x).
+-- The `user`, `session`, `account` and `verification` tables are created by
+-- Better Auth's own migration planner at boot (server/auth/membership.ts
+-- ensureAuthTables, additive only). They are listed here so fresh-database
+-- readers can see the full shape; the planner remains the source of truth
+-- for their columns and must never be hand-edited here.
+-- `workspace_members` is PolyDocks-owned (not a Better Auth org table): it
+-- binds a Better Auth user id to a workspace id. Zero rows = legacy
+-- device-local workspace, visible without sign-in (local-first compat).
+-- Dropping this table reverts every workspace to device-local.
+CREATE TABLE IF NOT EXISTS workspace_members (
+  workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user
+  ON workspace_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace
+  ON workspace_members(workspace_id);
 
 
 

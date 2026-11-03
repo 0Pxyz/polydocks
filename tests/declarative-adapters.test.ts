@@ -255,6 +255,23 @@ describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
       try {
         globalThis.fetch = (async (input: any, init?: any) => {
           const body = JSON.parse(init?.body || "{}");
+          if (body.method === "initialize") {
+            return new Response(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: body.id,
+                result: {
+                  protocolVersion: "2025-11-25",
+                  capabilities: {},
+                  serverInfo: { name: "postgres-mock", version: "1.0.0" },
+                },
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+          }
+          if (body.method === "notifications/initialized") {
+            return new Response(null, { status: 202 });
+          }
           if (body.method === "tools/list") {
             return new Response(
               JSON.stringify({

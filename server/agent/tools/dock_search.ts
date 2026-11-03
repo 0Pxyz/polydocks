@@ -15,7 +15,6 @@ export const dock_search: AgentTool<{ query?: string; workspaceId?: string; limi
     const results = await searchDockCatalog({
       query: args.query,
       workspaceId: args.workspaceId || ctx.workspaceId,
-      workspaceId: ctx.workspaceId || ctx.workspaceId,
       limit: args.limit,
     });
     return {

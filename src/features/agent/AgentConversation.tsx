@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { AssistantMarkdown, StreamingText } from "./StreamingText";
 import {
   X,
   Maximize2,
@@ -22,9 +21,10 @@ import {
 import { cn } from "@/lib/cn";
 import { TINYFISH_LOGO_SRC, isTinyFishTool } from "@/lib/agent/events";
 import { Orb } from "./Orb";
+import { StepsTimeline } from "./StepsTimeline";
 import { ModelSwitcher } from "./ModelSwitcher";
 import { AttachmentStagingBar, MessageAttachments } from "./ChatAttachments";
-import { useConversationStore } from "@/lib/agent/conversationStore";
+import { useConversationStore, scopeKeyFor } from "@/lib/agent/conversationStore";
 import { cancelSpeech } from "@/lib/agent/speech";
 import { useThemeStore } from "@/lib/theme";
 import {
@@ -60,7 +60,6 @@ function shortSummary(
   statusText: string
 ): string {
   if (isStreaming && statusText) return statusText;
-  if (isStreaming) return "Thinking…";
   if (isHydrating && messages.length === 0) return "Restoring your conversation…";
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -76,6 +75,78 @@ function shortSummary(
     return lastUser.content.length > 140 ? `${lastUser.content.slice(0, 140)}…` : lastUser.content;
   }
   return "Speak or type to research topics, build tools, or explore your workspace.";
+}
+
+const CARD_DOT: Record<string, string> = {
+  queued: "bg-white/40",
+  running: "bg-[var(--accent-lime)] animate-pulse",
+  completed: "bg-emerald-400",
+  failed: "bg-rose-400",
+  cancelled: "bg-white/40",
+  interrupted: "bg-amber-400",
+};
+
+const CARD_LABEL: Record<string, string> = {
+  queued: "Queued",
+  running: "Running",
+  completed: "Done",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  interrupted: "Interrupted",
+};
+
+function TaskCards({ cards }: { cards: Array<{ taskId: string; title: string; status: string }> }) {
+  const visible = cards
+    .filter((c) => c.status === "queued" || c.status === "running" || c.status === "failed" || c.status === "interrupted")
+    .sort((a, b) => (a.taskId < b.taskId ? -1 : 1));
+  const stepsByTask = useConversationStore((s) => s.messageSteps);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  if (visible.length === 0) return null;
+  return (
+    <div className="mb-1.5 flex flex-col gap-1" aria-live="polite" aria-label="Background jobs">
+      {visible.map((card) => {
+        const steps = stepsByTask[scopeKeyFor(card.taskId)] || [];
+        const isOpen = expanded === card.taskId;
+        return (
+        <div
+          key={card.taskId}
+          className="rounded-xl bg-white/[0.04] px-3 py-1.5 text-xs text-white/80"
+        >
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CARD_DOT[card.status] || "bg-white/40"}`} aria-hidden />
+            <button
+              type="button"
+              onClick={() => setExpanded(isOpen ? null : card.taskId)}
+              className="min-w-0 flex-1 truncate text-left hover:text-white transition-colors cursor-pointer"
+              title={card.title}
+              aria-expanded={isOpen}
+            >
+              {card.title}
+            </button>
+            <span className="shrink-0 text-white/40">{CARD_LABEL[card.status] || card.status}</span>
+            {(card.status === "queued" || card.status === "running") && (
+              <button
+                type="button"
+                onClick={() => {
+                  void fetch(`/api/tasks/${encodeURIComponent(card.taskId)}/cancel`, { method: "POST" }).catch(() => {});
+                }}
+                className="shrink-0 text-white/40 hover:text-white hover:underline cursor-pointer"
+                aria-label={`Cancel ${card.title}`}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {isOpen && steps.length > 0 && (
+            <div className="pt-1.5 pl-3.5">
+              <StepsTimeline steps={steps} defaultOpen />
+            </div>
+          )}
+        </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function AgentConversation({
@@ -101,6 +172,9 @@ export function AgentConversation({
     soundEnabled,
     audioLevel,
     orbState,
+    taskCards,
+    messageSteps,
+    messageThinking,
     isHydratingThread,
     isLoadingOlder,
     hasOlderMessages,
@@ -331,20 +405,13 @@ export function AgentConversation({
           if (!clean || sent) return;
           sent = true;
           stopSession();
-          const store = useConversationStore.getState();
-          if (store.isStreaming) {
-            // Never drop the user's words: park them in the draft so they
-            // can press send once the running turn finishes.
-            busyHandoff = true;
-            setDraft(clean);
-            setOrbState("idle");
-            setStatusText("Still working — your words are in the box, press send when ready.");
-            return;
-          }
+          // The orchestrator path never blocks, so voice input goes straight
+          // through instead of parking in the draft.
+          busyHandoff = false;
           setDraft("");
           setOrbState("idle");
           setStatusText("");
-          void store.sendMessage(clean, { onExperienceCreated, onOpenExperience, onCloseExperience });
+          void useConversationStore.getState().sendMessage(clean, { onExperienceCreated, onOpenExperience, onCloseExperience });
         },
         onLevel: (level) => setAudioLevel(level),
         onError: (message) => {
@@ -452,33 +519,51 @@ export function AgentConversation({
   }, [pendingVoiceStart, consumeVoiceStart, toggleVoice]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (isStreaming) return;
+      // Never blocked: the orchestrator queues per session and answers fast.
+      // Legacy streaming turns (attachments/retry) keep their own gate inside sendMessage.
       sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience });
     }
   };
 
-  // Drag-to-resize side width
-  const handleMouseDownResize = (e: React.MouseEvent) => {
-    e.preventDefault();
+  // Drag-to-resize side width (pointer capture: reliable across
+  // window edges, touch-friendly; clamped to usable bounds).
+  const startResize = (clientX: number) => {
     setIsDraggingWidth(true);
-    const startX = e.clientX;
+    const startX = clientX;
     const startWidth = sideWidth;
+    const MIN_W = 320;
+    const maxW = () => Math.max(MIN_W + 40, window.innerWidth - 120);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
-      setSideWidth(startWidth + deltaX);
+      setSideWidth(Math.min(maxW(), Math.max(MIN_W, startWidth + deltaX)));
     };
 
     const handleMouseUp = () => {
       setIsDraggingWidth(false);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleMouseUp);
+    };
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      const t = moveEvent.touches[0];
+      if (!t) return;
+      setSideWidth(Math.min(maxW(), Math.max(MIN_W, startWidth + (t.clientX - startX))));
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleMouseUp);
+  };
+
+  const handleMouseDownResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    startResize(e.clientX);
   };
 
   if (layoutState === "closed") return null;
@@ -519,7 +604,6 @@ export function AgentConversation({
                 {isStreaming && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-[var(--accent-lime)] font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-lime)] animate-ping" />
-                    <span>Thinking…</span>
                   </span>
                 )}
               </div>
@@ -664,25 +748,6 @@ export function AgentConversation({
             )}
 
             {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript) */}
-            {!draft.trim() && stagedAttachments.length === 0 && !isStreaming && (
-              <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
-                {[
-                  "Show notes and sources side by side",
-                  "Start a focus session",
-                  "Research a topic for me",
-                  "Change my background",
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setDraft(suggestion)}
-                    className="px-2.5 py-1 rounded-full text-[11px] text-white/60 bg-white/[0.05] hover:bg-white/[0.1] hover:text-white border border-white/[0.06] transition-colors cursor-pointer font-sans"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            )}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -772,8 +837,12 @@ export function AgentConversation({
       {isSide && (
         <div
           onMouseDown={handleMouseDownResize}
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            if (t) startResize(t.clientX);
+          }}
           className={cn(
-            "absolute top-0 bottom-0 -right-1.5 w-3 cursor-col-resize z-50 group hover:bg-[var(--accent-lime)]/20 transition-colors",
+            "absolute top-0 bottom-0 -right-1.5 w-3 cursor-col-resize z-50 group hover:bg-[var(--accent-lime)]/20 transition-colors touch-none select-none",
             isDraggingWidth && "bg-[var(--accent-lime)]/30"
           )}
           title="Drag to resize chat width"
@@ -943,57 +1012,8 @@ export function AgentConversation({
                 data-msg-id={msg.id}
                 className="group relative w-full prose prose-invert max-w-none leading-relaxed prose-h1:text-lg prose-h2:text-base prose-h3:text-sm prose-strong:text-foreground prose-th:p-1"
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    // The custom `code` renderer draws its own code block; let it
-                    // through without the default <pre> wrapper (and prose styling)
-                    pre: ({ children }) => <>{children}</>,
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--accent-lime)] hover:underline underline-offset-4"
-                      >
-                        {children}
-                      </a>
-                    ),
-                    code({ className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || "");
-                      const isInline = !match && !String(children).includes("\n");
-                      if (isInline) {
-                        return (
-                          <code
-                            className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-xs text-[var(--accent-lime)]"
-                            {...props}
-                          >
-                            {children}
-                          </code>
-                        );
-                      }
-                      return (
-                        <div className="relative my-3 rounded-xl bg-black/60 border border-white/10 overflow-hidden font-mono text-xs">
-                          <div className="flex items-center justify-between px-3.5 py-1.5 bg-white/5 border-b border-white/5 text-muted-foreground text-[11px]">
-                            <span>{match?.[1] || "code"}</span>
-                            <button
-                              type="button"
-                              onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ""))}
-                              className="hover:text-white transition-colors cursor-pointer"
-                            >
-                              Copy
-                            </button>
-                          </div>
-                          <pre className="p-3.5 overflow-x-auto text-[#e2e8f0]">
-                            <code>{children}</code>
-                          </pre>
-                        </div>
-                      );
-                    },
-                  }}
-                >
-                  {msg.content}
-                </ReactMarkdown>
+                <StepsTimeline steps={messageSteps[msg.id] || []} thinking={messageThinking[msg.id]} />
+                <AssistantMarkdown content={msg.content} />
 
                 {/* Hover actions: Copy & Retry on last message */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-3 pt-2 text-xs font-mono text-muted-foreground">
@@ -1032,9 +1052,7 @@ export function AgentConversation({
           {isStreaming && (
             <div className="flex flex-col gap-1 py-1" aria-live="polite">
               {streamingText && (
-                <div className="w-full leading-relaxed whitespace-pre-wrap text-[15px] text-foreground/90 font-sans pb-1">
-                  {streamingText}
-                </div>
+                <StreamingText text={streamingText} streaming />
               )}
               {activity.map((row) => {
                 const elapsed = Math.max(
@@ -1092,7 +1110,7 @@ export function AgentConversation({
                       ✦
                     </span>
                   )}
-                  <span>{statusText || currentPhase || "Thinking…"}</span>
+                  <span>{statusText || currentPhase}</span>
                 </div>
               )}
               {isStuck && (
@@ -1147,6 +1165,9 @@ export function AgentConversation({
           />
         )}
 
+        {/* Background job cards (resumable SSE; input stays enabled) */}
+        <TaskCards cards={Object.values(taskCards)} />
+
         <div
           className={cn(
             "relative flex flex-col bg-[var(--bg-surface)]/90 border border-white/10 p-2 shadow-lg backdrop-blur-2xl focus-within:border-[var(--accent-lime)]/50 transition-colors",
@@ -1189,7 +1210,7 @@ export function AgentConversation({
                   <Orb state={orbState} size="sm" audioLevel={audioLevel} className="scale-75" />
                 </button>
 
-                {isStreaming ? (
+                {isStreaming && (
                   <button
                     type="button"
                     onClick={abortStream}
@@ -1198,17 +1219,16 @@ export function AgentConversation({
                   >
                     <Square className="w-4 h-4 fill-current" />
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience })}
-                    disabled={!draft.trim() && stagedAttachments.length === 0}
-                    className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
-                    title="Send message"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience })}
+                  disabled={!draft.trim() && stagedAttachments.length === 0}
+                  className="w-9 h-9 rounded-xl bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer font-bold"
+                  title="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
             </div>
 

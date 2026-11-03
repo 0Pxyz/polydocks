@@ -1,19 +1,19 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { ExecutionContext } from "../bus";
 import { pluginRegistry } from "../registry";
 import { capabilityBus } from "../bus";
 import type { CapabilityManifest, PluginManifest } from "../manifest";
 import { type McpAdapterConfig, McpAdapterConfigSchema } from "./types";
+import { McpClientManager } from "../../mcp/manager";
+import { cleanServerName } from "../../mcp/config";
 
 export interface ConnectMcpServerOptions {
   name: string;
   url?: string;
   token?: string;
-  transport?: "http" | "sse" | "stdio";
+  transport?: "http" | "sse" | "stdio" | "streamable";
   command?: string;
   args?: string[];
+  headers?: Record<string, string>;
   allowStdio?: boolean;
 }
 
@@ -23,118 +23,14 @@ export interface McpToolDefinition {
   inputSchema?: Record<string, unknown>;
 }
 
-/**
- * Fetch remote tools via HTTP JSON-RPC 2.0 POST.
- */
-async function fetchToolsHttp(
-  url: string,
-  token?: string,
-  fetchFn: typeof fetch = fetch
-): Promise<McpToolDefinition[]> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  const response = await fetchFn(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: "tools_list",
-      method: "tools/list",
-      params: {},
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`MCP HTTP tools/list failed with status ${response.status} (${response.statusText})`);
-  }
-
-  const json = (await response.json()) as any;
-  if (json.error) {
-    throw new Error(`MCP tools/list error: ${json.error.message || JSON.stringify(json.error)}`);
-  }
-
-  const tools = json.result?.tools;
-  if (!Array.isArray(tools)) {
-    return [];
-  }
-
-  return tools.map((t: any) => ({
-    name: String(t.name),
-    description: t.description ? String(t.description) : undefined,
-    inputSchema: t.inputSchema || { type: "object", properties: {} },
-  }));
-}
-
-/**
- * Fetch remote tools via official TypeScript MCP SDK Client with SSE or Stdio transport.
- */
-async function fetchToolsSdk(options: ConnectMcpServerOptions): Promise<McpToolDefinition[]> {
-  const client = new Client(
-    { name: "polymax-client", version: "1.0.0" },
-    { capabilities: {} }
-  );
-
-  let transport: SSEClientTransport | StdioClientTransport;
-
-  if (options.transport === "stdio") {
-    if (!options.allowStdio) {
-      throw new Error(
-        "Stdio transport for MCP is disabled for security unless explicitly enabled via allowStdio."
-      );
-    }
-    if (!options.command) {
-      throw new Error("Command is required for stdio transport.");
-    }
-    transport = new StdioClientTransport({
-      command: options.command,
-      args: options.args || [],
-    });
-  } else {
-    if (!options.url) {
-      throw new Error("URL is required for SSE transport.");
-    }
-    const headers: Record<string, string> = {};
-    if (options.token) {
-      headers.Authorization = `Bearer ${options.token}`;
-    }
-    transport = new SSEClientTransport(new URL(options.url), {
-      eventSourceInit: {
-        // @ts-expect-error headers may be supported by underlying fetch
-        headers,
-      },
-      requestInit: {
-        headers,
-      },
-    });
-  }
-
-  try {
-    await client.connect(transport);
-    const result = await client.listTools();
-    const tools = (result?.tools || []).map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema as Record<string, unknown>,
-    }));
-    return tools;
-  } finally {
-    try {
-      await client.close();
-    } catch {
-      // Ignore cleanup error
-    }
-  }
+function manager(): McpClientManager {
+  return McpClientManager.getInstance();
 }
 
 /**
  * Connect to an external MCP server, discover its tools, map them to first-class capabilities
  * on the bus with risk 'external', and install the corresponding plugin.
+ * Transport order: streamable -> sse fallback; stdio only with explicit opt-in.
  */
 export async function connectMcpServer(options: ConnectMcpServerOptions): Promise<{
   success: boolean;
@@ -142,10 +38,10 @@ export async function connectMcpServer(options: ConnectMcpServerOptions): Promis
   tools: McpToolDefinition[];
   error?: string;
 }> {
-  const cleanServerName = options.name.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
-  const pluginId = `mcp_${cleanServerName}`;
+  const cleanServerNameValue = cleanServerName(options.name);
+  const pluginId = `mcp_${cleanServerNameValue}`;
 
-  if (options.transport === "stdio" && !options.allowStdio) {
+  if (options.transport === "stdio" && !options.allowStdio && process.env.MCP_ALLOW_STDIO !== "1") {
     return {
       success: false,
       tools: [],
@@ -153,37 +49,29 @@ export async function connectMcpServer(options: ConnectMcpServerOptions): Promis
     };
   }
 
+  const transport = options.transport === "http" ? "streamable" : options.transport || "streamable";
+
   let tools: McpToolDefinition[] = [];
   try {
-    if (options.transport === "stdio") {
-      tools = await fetchToolsSdk(options);
-    } else if (options.url) {
-      // Attempt SSE first; if that fails, try HTTP JSON-RPC
-      try {
-        if (options.transport === "sse") {
-          tools = await fetchToolsSdk(options);
-        } else {
-          tools = await fetchToolsHttp(options.url, options.token);
-        }
-      } catch (firstErr) {
-        // Fallback between HTTP and SSE
-        try {
-          if (options.transport === "sse") {
-            tools = await fetchToolsHttp(options.url, options.token);
-          } else {
-            tools = await fetchToolsSdk(options);
-          }
-        } catch {
-          // If discovery fails, continue with fallback error or rethrow
-          throw firstErr;
-        }
-      }
-    }
-  } catch (err: any) {
+    const connected = await manager().connect({
+      name: cleanServerNameValue,
+      url: options.url,
+      transport: transport as "streamable" | "sse" | "stdio",
+      token: options.token,
+      command: options.command,
+      args: options.args || [],
+      headers: options.headers || {},
+    });
+    tools = connected.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
+  } catch (err: unknown) {
     return {
       success: false,
       tools: [],
-      error: `Failed to discover MCP tools from ${options.url || options.command}: ${err.message}`,
+      error: `Failed to discover MCP tools from ${options.url || options.command}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 
@@ -196,19 +84,18 @@ export async function connectMcpServer(options: ConnectMcpServerOptions): Promis
     }
   }
 
-  // Map remote tools into local capabilities: mcp.<server>.<tool> with external risk
   const capabilities: CapabilityManifest[] = tools.map((t) => ({
-    id: `mcp.${cleanServerName}.${t.name}`,
+    id: `mcp.${cleanServerNameValue}.${t.name}`,
     title: `${options.name}: ${t.name}`,
     description: t.description || `Tool "${t.name}" on remote MCP server "${options.name}"`,
-    risk: "external" as const, // Sets default risk to external (prompts on first use)
+    risk: "external" as const,
     input: t.inputSchema || { type: "object", properties: {} },
     adapter: {
       mcp: {
-        server: cleanServerName,
+        server: cleanServerNameValue,
         serverUrl: options.url,
         tool: t.name,
-        transport: options.transport || "http",
+        transport,
         allowStdio: options.allowStdio ?? false,
         token: options.token,
       },
@@ -226,9 +113,9 @@ export async function connectMcpServer(options: ConnectMcpServerOptions): Promis
     capabilities,
     permissions: [
       ...(parsedHost ? [{ type: "net" as const, hosts: [parsedHost] }] : []),
-      { type: "mcp" as const, server: options.url || options.command || cleanServerName },
+      { type: "mcp" as const, server: options.url || options.command || cleanServerNameValue },
       ...(options.token
-        ? [{ type: "secret" as const, name: `MCP_TOKEN_${cleanServerName.toUpperCase()}` }]
+        ? [{ type: "secret" as const, name: `MCP_TOKEN_${cleanServerNameValue.toUpperCase()}` }]
         : []),
     ],
   };
@@ -242,7 +129,6 @@ export async function connectMcpServer(options: ConnectMcpServerOptions): Promis
     };
   }
 
-  // Register capabilities on the bus
   for (const cap of capabilities) {
     capabilityBus.register(pluginId, cap);
   }
@@ -255,8 +141,9 @@ export async function connectMcpServer(options: ConnectMcpServerOptions): Promis
 }
 
 /**
- * Declarative MCP capability executor.
- * Dispatches tool execution to the remote MCP server via HTTP JSON-RPC or SDK client.
+ * Declarative MCP capability executor via the shared client manager.
+ * Lazily reconnects from the adapter config when the process restarted
+ * after the original connect (connections are in-memory).
  */
 export async function executeMcpAdapter(
   rawConfig: unknown,
@@ -268,7 +155,7 @@ export async function executeMcpAdapter(
   if (typeof rawConfig === "string") {
     normalizedConfig = {
       serverUrl: rawConfig,
-      transport: "http",
+      transport: "streamable",
       allowStdio: false,
     };
   } else {
@@ -290,82 +177,30 @@ export async function executeMcpAdapter(
     throw new Error("MCP tool name is required for capability invocation.");
   }
 
+  const serverKey = cleanServerName(normalizedConfig.server || "remote");
   const token =
     normalizedConfig.token ||
     (normalizedConfig.server
       ? ctx.secrets?.get(`MCP_TOKEN_${normalizedConfig.server.toUpperCase()}`)
       : undefined);
 
-  // If HTTP URL is provided, invoke via JSON-RPC 2.0 tools/call
-  if (normalizedConfig.serverUrl) {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
+  const mgr = manager();
+  if (!mgr.isConnected(serverKey)) {
+    if (!normalizedConfig.serverUrl && normalizedConfig.transport !== "stdio") {
+      throw new Error(`MCP server "${serverKey}" is not connected and no URL is stored to reconnect.`);
     }
-
-    const fetchFn = ctx.fetch || fetch;
-    const response = await fetchFn(normalizedConfig.serverUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: `call_${Date.now()}`,
-        method: "tools/call",
-        params: {
-          name: toolName,
-          arguments: input && typeof input === "object" ? input : {},
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      throw new Error(
-        `MCP tools/call failed with status ${response.status} (${response.statusText}): ${errText.slice(0, 500)}`
-      );
-    }
-
-    const json = (await response.json()) as any;
-    if (json.error) {
-      throw new Error(`MCP tool error: ${json.error.message || JSON.stringify(json.error)}`);
-    }
-
-    return json.result?.content ?? json.result;
-  }
-
-  // If stdio transport
-  if (normalizedConfig.transport === "stdio") {
-    if (!normalizedConfig.command) {
-      throw new Error("Command is required for stdio MCP transport.");
-    }
-
-    const client = new Client(
-      { name: "polymax-client", version: "1.0.0" },
-      { capabilities: {} }
-    );
-    const transport = new StdioClientTransport({
+    await mgr.connect({
+      name: serverKey,
+      url: normalizedConfig.serverUrl,
+      transport:
+        normalizedConfig.transport === "http" ? "streamable" : (normalizedConfig.transport as "streamable" | "sse" | "stdio"),
+      token,
       command: normalizedConfig.command,
       args: normalizedConfig.args || [],
     });
-
-    try {
-      await client.connect(transport);
-      const res = await client.callTool({
-        name: toolName,
-        arguments: input && typeof input === "object" ? (input as Record<string, unknown>) : {},
-      });
-      return res.content ?? res;
-    } finally {
-      try {
-        await client.close();
-      } catch {
-        // Ignore cleanup error
-      }
-    }
   }
 
-  throw new Error("No server URL or command provided for MCP capability execution.");
+  const args = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  const res = await mgr.callTool(serverKey, toolName, args);
+  return res.content;
 }

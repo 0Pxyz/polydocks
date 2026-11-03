@@ -59,7 +59,7 @@ async function main() {
       "../../server/agent/tools/gtm-feed.fixture.tsx"
     );
     const code = await fs.readFile(fixturePath, "utf-8");
-    const ctx = { workspaceId: "default", workspaceId: "default", step: 1 };
+    const ctx = { workspaceId: "default", step: 1 };
     const current = feed;
     if (!current) {
       const created = (await create_plugin.execute(

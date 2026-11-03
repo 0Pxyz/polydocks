@@ -52,25 +52,23 @@ export const sandbox_write_file: AgentTool<{ path: string; content: string; work
   execute: (args, ctx) => runSandboxTool("sandbox.write_file", args as Record<string, unknown>, ctx),
 };
 
-export const sandbox_read_file: AgentTool<{ path: string; workspaceId?: string; workspaceId?: string }> = {
+export const sandbox_read_file: AgentTool<{ path: string; workspaceId?: string }> = {
   name: "sandbox_read_file",
   description:
     "Reads a file from the workspace sandbox (workdir-relative path). Read-only; use to inspect code, output or errors.",
   schema: z.object({
     path: z.string().min(1).describe("Workdir-relative file path"),
     workspaceId: scope.workspaceId,
-    workspaceId: scope.workspaceId,
   }),
   execute: (args, ctx) => runSandboxTool("sandbox.read_file", args as Record<string, unknown>, ctx),
 };
 
-export const sandbox_list_files: AgentTool<{ dir?: string; workspaceId?: string; workspaceId?: string }> = {
+export const sandbox_list_files: AgentTool<{ dir?: string; workspaceId?: string }> = {
   name: "sandbox_list_files",
   description:
     "Lists files in a workspace sandbox directory (read-only). Use to inspect what the sandbox holds before running or serving.",
   schema: z.object({
     dir: z.string().optional().describe("Workdir-relative directory (default .)"),
-    workspaceId: scope.workspaceId,
     workspaceId: scope.workspaceId,
   }),
   execute: (args, ctx) => runSandboxTool("sandbox.list_files", args as Record<string, unknown>, ctx),
@@ -89,24 +87,22 @@ export const sandbox_serve: AgentTool<{ command: string; port?: number; timeoutM
   execute: (args, ctx) => runSandboxTool("sandbox.serve", args as Record<string, unknown>, ctx),
 };
 
-export const sandbox_logs: AgentTool<{ port?: number; workspaceId?: string; workspaceId?: string }> = {
+export const sandbox_logs: AgentTool<{ port?: number; workspaceId?: string }> = {
   name: "sandbox_logs",
   description:
     "Tails the sandbox dev-server log and reports sandbox state (read-only). Use to inspect startup output and errors after sandbox_serve.",
   schema: z.object({
     port: z.number().int().optional().describe("Port whose log to tail (default 3000)"),
     workspaceId: scope.workspaceId,
-    workspaceId: scope.workspaceId,
   }),
   execute: (args, ctx) => runSandboxTool("sandbox.logs", args as Record<string, unknown>, ctx),
 };
 
-export const sandbox_status: AgentTool<{ workspaceId?: string; workspaceId?: string }> = {
+export const sandbox_status: AgentTool<{ workspaceId?: string }> = {
   name: "sandbox_status",
   description:
     "Reports the workspace sandbox lifecycle state and preview URL (read-only). Use to check whether a sandbox is running before executing.",
   schema: z.object({
-    workspaceId: scope.workspaceId,
     workspaceId: scope.workspaceId,
   }),
   execute: (args, ctx) => runSandboxTool("sandbox.status", args as Record<string, unknown>, ctx),

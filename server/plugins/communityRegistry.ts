@@ -3,6 +3,8 @@ import { PluginRegistry } from "./registry";
 import type { PluginManifest } from "./manifest";
 import { readFeature, writeFeature } from "../workspace/features";
 import { addPluginToWorkspace, ensureDefaultWorkspace } from "../workspace/workspaces";
+import { BITCOIN_CODE as bitcoinCode } from "./seeds/bitcoin.code";
+import { POMODORO_CODE as pomodoroCode } from "./seeds/pomodoro-focus.code";
 
 export interface RegistryPluginItem {
   id: string;
@@ -145,7 +147,12 @@ export async function publishToRegistry(input: {
 
   const registry = PluginRegistry.getInstance();
   const existingPlugin = registry.get(pluginId);
-  const existingFeature = await readFeature(workspaceId, pluginId);
+  let existingFeature: { manifest: any; code?: string } | null = null;
+  try {
+    existingFeature = await readFeature(workspaceId, pluginId);
+  } catch {
+    existingFeature = null;
+  }
 
   if (!existingPlugin && !existingFeature) {
     return {
@@ -154,7 +161,12 @@ export async function publishToRegistry(input: {
     };
   }
 
-  const name = existingPlugin?.name || existingFeature?.manifest.title || pluginId;
+  const featureManifest: any = (existingFeature as any)?.manifest || {};
+  const name =
+    existingPlugin?.name ||
+    featureManifest.title ||
+    featureManifest.name ||
+    pluginId;
   const description =
     existingPlugin?.manifest.description ||
     existingFeature?.manifest.description ||
@@ -280,108 +292,65 @@ export function seedDefaultCommunityPlugins(): void {
 
   const now = new Date().toISOString();
 
-  // 1. Pomodoro Focus
-  const pomodoroCode = `
-    const app = document.getElementById('app');
-    let timeLeft = 25 * 60;
-    let timerId = null;
-    let isRunning = false;
-    let mode = 'work';
-    let sessions = [];
+  // 0. Bitcoin (live exchange data, no mocks)
+  const bitcoinManifest: PluginManifest = {
+    apiVersion: 1,
+    id: "bitcoin",
+    name: "Bitcoin",
+    version: "1.0.0",
+    description: "Live Bitcoin price with real exchange data: area chart, timeframes, USD/EUR/GBP.",
+    icon: "bitcoin",
+    trust: "generated",
+    capabilities: [],
+    surfaces: [
+      {
+        id: "bitcoin",
+        title: "Bitcoin",
+        icon: "bitcoin",
+        variant: "immersive",
+        entry: "features/bitcoin",
+      },
+    ],
+    permissions: [],
+  };
 
-    window.polymax.storage.get('pomodoro_sessions').then(saved => {
-      if (Array.isArray(saved)) {
-        sessions = saved;
-        renderHistory();
-      }
-    });
 
-    app.innerHTML = \`
-      <div style="max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px;">
-        <div style="display: flex; gap: 8px;">
-          <button id="m-work" class="primary" style="padding: 6px 16px; border-radius: 20px;">Focus 25m</button>
-          <button id="m-break" style="padding: 6px 16px; border-radius: 20px;">Break 5m</button>
-        </div>
-        <div id="disp" style="font-family: var(--font-mono); font-size: 64px; font-weight: 700; color: var(--accent); letter-spacing: -2px;">
-          25:00
-        </div>
-        <div style="display: flex; gap: 12px;">
-          <button id="toggle" class="primary" style="padding: 10px 24px; font-size: 15px;">Start session</button>
-          <button id="reset" style="padding: 10px 18px;">Reset</button>
-        </div>
-        <div style="width: 100%; margin-top: 8px; padding-top: 8px;">
-          <div style="font-size: 11px; color: var(--muted); margin-bottom: 8px;">Completed sessions: <span id="cnt">0</span></div>
-          <div id="hist" style="display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto;"></div>
-        </div>
-      </div>
-    \`;
+  // Upsert: fresh checkouts insert; existing checkouts running the
+  // hand-rolled pre-kit render migrate once (kit marker absent).
+  // Guest code lives in ./seeds/bitcoin.code.ts (BITCOIN_CODE).
+  const hasBitcoin =
+    count > 0
+      ? (db.query<any, ["string"]>("SELECT id, code FROM registry_plugins WHERE id = ?").get("bitcoin") as any)
+      : null;
+  if (!hasBitcoin) {
+    db.query(
+      "INSERT INTO registry_plugins (id, name, description, icon, version, author, tags_json, manifest_json, code, downloads, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)"
+    ).run(
+      "bitcoin",
+      "Bitcoin",
+      "Live Bitcoin price with real exchange data: area chart, timeframes, USD/EUR/GBP.",
+      "bitcoin",
+      "1.0.0",
+      "PolyDocks Team",
+      JSON.stringify(["finance", "crypto", "tracker"]),
+      JSON.stringify(bitcoinManifest),
+      bitcoinCode,
+      now,
+      now
+    );
+  } else if (typeof hasBitcoin.code === "string" && !hasBitcoin.code.includes("@/components/ui/kit")) {
+    db.query(
+      "UPDATE registry_plugins SET manifest_json = ?, code = ?, updated_at = ? WHERE id = ?"
+    ).run(JSON.stringify(bitcoinManifest), bitcoinCode, now, "bitcoin");
+  }
 
-    function updateDisp() {
-      const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
-      const s = (timeLeft % 60).toString().padStart(2, '0');
-      document.getElementById('disp').innerText = \`\${m}:\${s}\`;
-    }
-
-    function setMode(next) {
-      if (isRunning) return;
-      mode = next;
-      timeLeft = mode === 'work' ? 25 * 60 : 5 * 60;
-      updateDisp();
-      document.getElementById('m-work').className = mode === 'work' ? 'primary' : '';
-      document.getElementById('m-break').className = mode === 'break' ? 'primary' : '';
-      document.getElementById('toggle').innerText = 'Start session';
-    }
-
-    function renderHistory() {
-      const list = document.getElementById('hist');
-      const count = document.getElementById('cnt');
-      if (!list || !count) return;
-      count.innerText = sessions.length;
-      list.innerHTML = sessions.slice(-5).reverse().map(s => \`
-        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 8px 4px;">
-          <span>\${s.mode === 'work' ? 'Focus' : 'Break'}</span>
-          <span style="color: var(--muted); font-family: var(--font-mono);">\${new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-        </div>
-      \`).join('');
-    }
-
-    document.getElementById('m-work').addEventListener('click', () => setMode('work'));
-    document.getElementById('m-break').addEventListener('click', () => setMode('break'));
-    document.getElementById('toggle').addEventListener('click', () => {
-      isRunning = !isRunning;
-      document.getElementById('toggle').innerText = isRunning ? 'Pause' : 'Resume';
-      if (isRunning) {
-        timerId = setInterval(() => {
-          if (timeLeft > 0) {
-            timeLeft--;
-            updateDisp();
-          } else {
-            clearInterval(timerId);
-            isRunning = false;
-            sessions.push({ mode, timestamp: Date.now() });
-            window.polymax.storage.set('pomodoro_sessions', sessions);
-            renderHistory();
-          }
-        }, 1000);
-      } else {
-        clearInterval(timerId);
-      }
-    });
-
-    document.getElementById('reset').addEventListener('click', () => {
-      clearInterval(timerId);
-      isRunning = false;
-      timeLeft = mode === 'work' ? 25 * 60 : 5 * 60;
-      updateDisp();
-      document.getElementById('toggle').innerText = 'Start Session';
-    });
-  `;
+  // 1. Pomodoro Focus (kit v2: Countdown + SegmentedControl + ListRow history)
 
   const pomodoroManifest: PluginManifest = {
     apiVersion: 1,
     id: "pomodoro-focus",
     name: "Pomodoro Focus",
-    version: "1.0.0",
+    version: "2.0.0",
     description: "Tactile Pomodoro timer with customizable intervals and local session logging.",
     icon: "Clock",
     trust: "generated",
@@ -398,12 +367,14 @@ export function seedDefaultCommunityPlugins(): void {
     permissions: [],
   };
 
-  // Upsert so existing checkouts pick up the fixed timer (working mode
-  // switch, whitespace grouping, sentence case) without duplicate rows.
+  // Upsert so existing checkouts pick up the kit v2 rewrite (React +
+  // Countdown/SegmentedControl/ListRow, no inline styles) without
+  // duplicate rows. The kit marker gates a single migration.
+  // Guest code lives in ./seeds/pomodoro-focus.code.ts (POMODORO_CODE).
   const existing = count > 0
     ? (db.query<any, ["string"]>("SELECT code FROM registry_plugins WHERE id = ?").get("pomodoro-focus") as any)
     : null;
-  if (existing && typeof existing.code === "string" && existing.code.includes("setMode")) {
+  if (existing && typeof existing.code === "string" && existing.code.includes("@/components/ui/kit")) {
     return;
   }
   if (existing) {

@@ -29,13 +29,13 @@ describe("tour takeover", () => {
   });
 
   it("ignores the tour's own settled focus", () => {
-    // Auto-advance forced bitcoin-viewer; focus settled there afterwards.
+    // Auto-advance forced the registered bitcoin plugin; focus settled there afterwards.
     expect(
       shouldPauseTourOnTakeover({
         ...playing,
         prevTool: "browser",
-        activeTool: "bitcoin-viewer",
-        forcedTool: "bitcoin-viewer",
+        activeTool: "bitcoin",
+        forcedTool: "bitcoin",
       })
     ).toBe(false);
   });

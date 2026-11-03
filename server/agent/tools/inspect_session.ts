@@ -14,7 +14,6 @@ export const inspect_session: AgentTool<{ sessionId: string; fromStep?: number }
     agentSession("resume", { sessionId: args.sessionId, fromStep: args.fromStep }, {
       actor: "agent",
       workspaceId: ctx?.workspaceId,
-      workspaceId: ctx?.workspaceId,
       sessionId: ctx?.sessionId,
     }),
 };

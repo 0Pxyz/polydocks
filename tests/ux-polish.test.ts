@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { HOME_DOCK_TOOLS } from "../src/features/dock/AgenticDock";
-import { useOnboardingStore } from "../src/lib/store/useOnboardingStore";
+import { useOnboardingStore, ONBOARDING_COMPLETED_KEY } from "../src/lib/store/useOnboardingStore";
 import { platformStorage } from "../src/lib/platform/storage";
 
 describe("Polymax UX Polish & Native Experiences", () => {
@@ -31,9 +31,9 @@ describe("Polymax UX Polish & Native Experiences", () => {
   });
 
   describe("2. Dock Tools (single curated set)", () => {
-    it("presents the curated dock (agent, browser, plugins, creations, store, settings)", () => {
+    it("presents the curated dock (agent, tour, browser, plugins, creations, store, settings)", () => {
       const ids = HOME_DOCK_TOOLS.map((t) => t.id);
-      expect(ids).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
+      expect(ids).toEqual(["agent", "onboarding", "browser", "plugins", "creations", "store", "settings"]);
     });
   });
 
@@ -44,14 +44,14 @@ describe("Polymax UX Polish & Native Experiences", () => {
     });
 
     it("persists completion to platformStorage and closes modal", () => {
-      useOnboardingStore.getState().completeOnboarding();
+      useOnboardingStore.getState().completeDemo();
       expect(useOnboardingStore.getState().isOpen).toBe(false);
       expect(useOnboardingStore.getState().hasCompleted).toBe(true);
-      expect(platformStorage.getItem("polymax_onboarding_completed_v1")).toBe(true);
+      expect(platformStorage.getItem(ONBOARDING_COMPLETED_KEY)).toBe(true);
     });
 
     it("can be replayed from settings via openOnboarding()", () => {
-      useOnboardingStore.getState().completeOnboarding();
+      useOnboardingStore.getState().completeDemo();
       expect(useOnboardingStore.getState().isOpen).toBe(false);
 
       useOnboardingStore.getState().openOnboarding();
@@ -61,7 +61,7 @@ describe("Polymax UX Polish & Native Experiences", () => {
 
   describe("4. Native Experiences & Design Slop Elimination", () => {
     it("ensures CORE_DOCK_TOOLS preserve backward-compatible surface definitions", () => {
-      expect(HOME_DOCK_TOOLS.length).toBe(6);
+      expect(HOME_DOCK_TOOLS.length).toBe(7);
     });
   });
 });
