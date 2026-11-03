@@ -192,6 +192,15 @@ export function getToolBrand(toolName?: string | null): ToolBrand | null {
 }
 
 /**
+ * Whether an activity row carries a provider brand (#323). The live pill
+ * shows the mark while running and dissolves on completion — the durable
+ * transcript row and the steps timeline keep the history.
+ */
+export function isBrandedActivity(tool?: string | null, label?: string | null): boolean {
+  return getToolBrand(tool) !== null || getToolBrandByLabel(label ?? undefined) !== null;
+}
+
+/**
  * Brand fallback by label text, driven by the same registry: matches when
  * the status line names a registered brand (e.g. a capability path whose
  * tool name differs from the integration). No per-vendor checks at render.

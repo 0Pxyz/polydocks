@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { streamAgentLoop } from "./client";
-import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus, adaptBackendEvent } from "./events";
+import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus, adaptBackendEvent, isBrandedActivity } from "./events";
 import { feedThoughtEvent, pushThought, shouldNudge } from "./thoughtStream";
 import { applyOrchestratorAction } from "./orchestratorActions";
 import { speakReply, cancelSpeech } from "./speech";
@@ -774,9 +774,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "tool.completed":
             set((state) => ({
-              activity: state.activity.map((row) =>
-                row.id === event.id ? { ...row, state: "done" as const, finishedAt: Date.now() } : row
-              ),
+              activity: dissolveCompletedActivity(state.activity, event.id),
             }));
             // Memory badge shares the orchestrator path so legacy turns
             // render the same line (id-guarded, replay-safe).
@@ -1246,6 +1244,22 @@ function stepKindForTool(toolName: string): AgentStep["kind"] | null {
 /** Scope key for steps/thinking: real background tasks use the raw task id,
  * everything else (message-scoped loop events) shares the `m-` message key.
  * Exported so cards and tests resolve the same bucket the stream writes to. */
+/**
+ * Applies a tool completion to the live activity list (#323). Branded
+ * provider pills dissolve — the durable transcript row and the steps
+ * timeline keep the history. Plain rows flip to done.
+ */
+export function dissolveCompletedActivity(
+  activity: ActivityRow[],
+  eventId: string
+): ActivityRow[] {
+  return activity
+    .filter((row) => row.id !== eventId || !isBrandedActivity(row.tool, row.label))
+    .map((row) =>
+      row.id === eventId ? { ...row, state: "done" as const, finishedAt: Date.now() } : row
+    );
+}
+
 export function scopeKeyFor(taskId: string): string {
   return taskId.startsWith("task_") ? taskId : `m-${taskId}`;
 }
