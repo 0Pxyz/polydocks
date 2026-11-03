@@ -25,12 +25,38 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
     nextStep,
     prevStep,
     skipDemo,
+    startDemo,
     paused,
     setPaused,
   } = useOnboardingStore();
   const isReduced = prefersReducedMotion();
 
-  if (!isOpen || currentStep === "idle") return null;
+  if (!isOpen) return null;
+
+  // Tour finished or dismissed mid-way: the dock row still focuses this
+  // tab, so offer an explicit replay instead of a blank viewport (#382).
+  // Settings → replay is no longer the only way back in.
+  if (currentStep === "idle") {
+    return (
+      <div
+        className="flex-1 w-full h-full overflow-y-auto flex flex-col items-center justify-center gap-3 px-6 py-8 font-sans select-none"
+        aria-label="Product walkthrough finished"
+      >
+        <Orb state="idle" size="md" />
+        <p className="mt-2 max-w-md px-4 text-center text-sm text-[var(--text-main)] font-medium leading-relaxed">
+          Walkthrough finished — your workspace is yours.
+        </p>
+        <button
+          type="button"
+          onClick={() => startDemo(true)}
+          className="mt-1 px-4 py-2 rounded-full text-xs font-medium bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/25 transition-colors cursor-pointer"
+          title="Replay walkthrough"
+        >
+          Replay walkthrough
+        </button>
+      </div>
+    );
+  }
 
   const stepDef = ONBOARDING_STEPS[currentStepIndex] ?? ONBOARDING_STEPS[0];
 

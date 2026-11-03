@@ -23,12 +23,48 @@ import {
   chatPlacement,
 } from "@/lib/dock/dockItems";
 import { DOCK_CORE_CATALOG, MAIN_VIEW_STATIC_IDS } from "@/lib/dock/dockModel";
+import { platformStorage } from "@/lib/platform/storage";
 import { cn } from "@/lib/cn";
+
+const EXTRA_TOOLS_KEY = "polymax-extra-tools-v1";
+
+interface PersistedExtraTool {
+  id: string;
+  label: string;
+  iconKey?: string;
+}
+
+/**
+ * Session tools (agent-built, this profile) survive a refresh (#382):
+ * the dock snapshot already persists open/focused records, but the icon
+ * metadata lived in useState only — after reload the bar dropped the
+ * icon and the viewport fell back to Home. Components stay out of
+ * storage; the icon resolves from its key on rehydrate.
+ */
+function loadExtraTools(): DockToolItem[] {
+  const raw = platformStorage.getItem<PersistedExtraTool[]>(EXTRA_TOOLS_KEY, []);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((t) => t && typeof t.id === "string" && t.id)
+    .map((t) => ({
+      id: t.id,
+      label: typeof t.label === "string" && t.label ? t.label : t.id,
+      type: "icon" as const,
+      icon: resolveIcon(t.iconKey || "Cards"),
+      iconKey: t.iconKey,
+    }));
+}
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>("");
   const [pluginsInitialTab] = useState<"installed" | "discover">("installed");
-  const [extraTools, setExtraTools] = useState<DockToolItem[]>([]);
+  const [extraTools, setExtraTools] = useState<DockToolItem[]>(loadExtraTools);
+  useEffect(() => {
+    platformStorage.setItem<PersistedExtraTool[]>(
+      EXTRA_TOOLS_KEY,
+      extraTools.map((t) => ({ id: t.id, label: t.label, iconKey: t.iconKey }))
+    );
+  }, [extraTools]);
 
   const { setActiveTool: setDockActiveTool } = useDockStore();
   const hostTabs = useTabHostStore((s) => s.tabs);
