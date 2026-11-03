@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { resolveSurfaceIcon } from "../dock/surfaceResolver";
+import { canOpenPluginView } from "@/lib/dock/dockModel";
 import { PluginStoreView } from "./PluginStoreView";
 
 export interface PluginItem {
@@ -207,11 +208,18 @@ function InstalledPluginList({
                     : lastRun?.status === "failed"
                       ? "Needs attention"
                       : "Connected";
-                  // One click zone per row: opens enabled tools, enables
-                  // disabled ones. Everything else lives in the hover menu.
+                  // One click zone per row: opens what has a view, enables
+                  // disabled ones, details the rest. Capability-only
+                  // plugins (search, sources, …) have no surface — opening
+                  // them was a silent no-op, so they open Details (#380).
+                  const canOpen = canOpenPluginView(plugin);
                   const primaryAction = () => {
-                    if (plugin.enabled) onOpenPlugin?.(plugin.id);
-                    else onToggle(plugin.id);
+                    if (!plugin.enabled) {
+                      onToggle(plugin.id);
+                      return;
+                    }
+                    if (canOpen) onOpenPlugin?.(plugin.id);
+                    else onSelect(plugin);
                   };
 
                   return (
@@ -220,6 +228,7 @@ function InstalledPluginList({
                       role="button"
                       tabIndex={0}
                       onClick={primaryAction}
+                      title={plugin.enabled && !canOpen ? "No preview surface — opens details" : undefined}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
@@ -695,6 +704,15 @@ export function PluginsView({ onDismiss, className = "", initialTab = "installed
                 >
                   <Trash className="w-3.5 h-3.5" />
                   <span>Uninstall</span>
+                </button>
+              )}
+              {canOpenPluginView(selectedPlugin) && onOpenPlugin && (
+                <button
+                  type="button"
+                  onClick={() => onOpenPlugin(selectedPlugin.id)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/25 transition-colors"
+                >
+                  <span>Open</span>
                 </button>
               )}
               <button
