@@ -48,6 +48,53 @@ export function emptyDock(): DockItemsSnapshot {
   return { items: {}, order: [], focusedId: null, activeContextId: null, focusedByContext: {}, seq: 0 };
 }
 
+/** One server dock_items row as returned by the tabs.list verb. */
+export interface ServerDockRow {
+  id: string;
+  state: "open" | "focused" | "closed" | "background";
+  order: number;
+  contextId?: string | null;
+  panel?: "left" | "right" | null;
+  updatedAt?: string;
+}
+
+/**
+ * Boot-restore contract (#174 slice B). The server keeps the durable open
+ * set (dock_items, written by every dock verb); the client keeps a
+ * localStorage read-cache. Restore rule:
+ * - local cache non-empty → local wins, server is ignored;
+ * - local cache empty (fresh profile, cleared storage) → adopt the
+ *   server's open/focused rows in server order; closed/background rows
+ *   stay out (their runtimes did not survive the reload).
+ * Layout-only state (chat sheet/side, hibernated tabs) always resets.
+ */
+export function adoptServerDock(local: DockItemsSnapshot, rows: ServerDockRow[]): DockItemsSnapshot {
+  if (local.order.length > 0) return local;
+  const open = (rows ?? []).filter(
+    (r) => r && typeof r.id === "string" && (r.state === "open" || r.state === "focused")
+  );
+  if (open.length === 0) return local;
+  const sorted = [...open].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const items: DockItemsSnapshot["items"] = {};
+  const order: string[] = [];
+  let focusedId: string | null = null;
+  for (const r of sorted) {
+    if (items[r.id]) continue;
+    items[r.id] = {
+      id: r.id,
+      pluginId: r.id,
+      contextId: r.contextId ?? null,
+      state: r.state,
+      order: order.length,
+      panel: r.panel ?? null,
+      updatedAt: r.updatedAt ? Date.parse(r.updatedAt) || Date.now() : Date.now(),
+    };
+    order.push(r.id);
+    if (r.state === "focused" && focusedId === null) focusedId = r.id;
+  }
+  return { ...emptyDock(), items, order, focusedId };
+}
+
 function contextKey(contextId: string | null): string {
   return contextId ?? "__global__";
 }

@@ -78,6 +78,9 @@ export default function App() {
   // empty state with Discover; nothing is auto-installed.
   useEffect(() => {
     void fetchWorkspaces();
+    // Fresh profiles boot the open set from the server dock record (#174):
+    // verbs keep writing dock_items, and an empty local cache adopts it.
+    void useDockStore.getState().hydrateDockFromServer();
   }, [fetchWorkspaces]);
 
   // Memoized: fresh arrays every render would retrigger the tab-host
