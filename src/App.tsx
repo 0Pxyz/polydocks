@@ -833,6 +833,7 @@ export default function App() {
                 toolId={mainToolId}
                 sandboxTabs={mainSandboxTabs}
                 sandboxActiveId={besideIds.includes(activeToolId) ? null : activeToolId}
+                keepBuiltinsAlive
                 onDismiss={(id) => handleDismissTool(id)}
                 onOpenPlugin={(pluginId) => {
                   setActiveToolId(pluginId);

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import app from "../server/index";
 import { ensureAuthTables } from "../server/auth/membership";
+import { isModalConfigured } from "../server/sandbox/modalProvider";
 import { wipeRunPrefix } from "./isolation-db";
 
 const RUN = `cap-invoke-${Date.now()}`;
@@ -97,7 +98,15 @@ describe("capability invoke workspace isolation (#215)", () => {
     const o2 = await post("/api/capabilities/sandbox.status/invoke", { input: {}, workspaceId: OWNED }, a.jar);
     expect(o2.res.status).toBe(200);
     const o3 = await post("/api/plugins/sandbox/status", { workspaceId: OWNED }, a.jar);
-    expect(o3.res.status).toBe(200);
+    if (isModalConfigured()) {
+      expect(o3.res.status).toBe(200);
+    } else {
+      // Modal off (no creds, e.g. CI): the guard still passes the owner
+      // through — the provider fails closed with an honest receipt instead
+      // of a 200. Isolation is proven either way (cross-user stays 404).
+      expect(o3.res.status).toBe(400);
+      expect((o3.data as any)?.code).toBe("modal_not_configured");
+    }
 
     // Other user: denied on all three paths.
     const f1 = await post("/api/capabilities/invoke", ownerBody, b.jar);
