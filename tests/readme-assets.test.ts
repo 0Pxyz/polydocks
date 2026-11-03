@@ -50,4 +50,17 @@ describe("submission README (#354)", () => {
     expect(readme).toContain("Not built yet");
     expect(readme).toContain("ARCHITECTURE.md");
   });
+
+  it("carries the approved positioning, framework and pitch (#365)", () => {
+    expect(readme).toContain("Tell Poly what you need. It builds the tools to do it.");
+    expect(readme).toContain("Software that adapts to your work.");
+    expect(readme).toContain("where AI doesn't stop at using existing tools. It can build new ones.");
+    expect(readme).toContain("software should adapt to people's needs, not the other way around");
+    for (const heading of ["- **Build.**", "- **Use.**", "- **Work.**", "- **Keep.**"]) {
+      expect(readme).toContain(heading);
+    }
+    expect(readme).toContain("what if an agent could build the tools it needs?");
+    expect(readme).not.toContain("AI-native from the ground up");
+    expect(readme).not.toContain("Your own workspace, run by Poly");
+  });
 });
