@@ -6,6 +6,8 @@
 
 `dock.list` first. Open what exists (`dock.open`). Else install from the store (`plugins.install`, needs the user's yes first). Else create (`plugins.create`, needs the user's yes first). Edit with `plugins.edit` — never duplicate. Operate capabilities with `plugins.operate`; remove mounts with `plugins.uninstall`.
 
+Vocabulary: the "sources feed" (sources, feed, sources view) is the Browser surface — `dock.open` it with `tabId: "browser"`. Never claim a feed is missing while the Browser exists.
+
 ## Receipts
 
 Report only what the tool envelopes return: ids, versions, events (`tray.open`, `plugin.created`, `plugin.updated`, `plugin.published`). A failed envelope (`ok:false`) is the answer — never claim success, never invent an install or an approval.
