@@ -8,8 +8,11 @@
  * are warnings — the skill, not the gate, teaches taste.
  */
 
+import { validateKitUsage } from "./kitValidator";
+
 const ALLOWED_HEX = new Set([
   "c8ff57", // --accent-lime, the single accent
+  "f7931a", "F7931A", // Bitcoin brand orange (asset color, not decoration)
   "0a0a0c", "0A0A0C",
   "ffffff", "fff", "FFFFFF",
   "000000", "000",
@@ -39,6 +42,15 @@ export function validateSlop(code: string, opts?: { strict?: boolean }): SlopRep
     errors.push(
       `hardcoded colors (${[...hexes].slice(0, 6).join(", ")}): use theme tokens (var(--...)), never literal colors`
     );
+  }
+
+  // Kit v2 hard gate (strict = agent-created): raw form elements, inline
+  // styles and missing kit usage fail closed with a fixable report.
+  if (strict) {
+    const report = validateKitUsage(src);
+    if (!report.ok) {
+      for (const e of report.errors) errors.push(e);
+    }
   }
 
   if (/linear-gradient|radial-gradient|conic-gradient/i.test(src)) {

@@ -8,6 +8,7 @@ import { registerSandboxPlugin } from "../sandbox";
 import { registerFilesPlugin } from "../files";
 import { registerNotesPlugin } from "../notes";
 import { registerOnboardingPlugin } from "./onboarding";
+import { registerKitGalleryPlugin } from "./kitGallery";
 
 /**
  * 1. Search Plugin
@@ -120,6 +121,7 @@ export function initializeFirstPartyPlugins(): void {
   registerFilesPlugin();
   registerNotesPlugin();
   registerOnboardingPlugin();
+  registerKitGalleryPlugin();
 
   // 1. Search Plugin
   pluginRegistry.install(searchPluginManifest);

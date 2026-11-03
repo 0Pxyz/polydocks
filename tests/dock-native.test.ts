@@ -1,12 +1,12 @@
 import { describe, it, expect } from "bun:test";
 import { ROOT_DOCK_TOOLS, CORE_DOCK_TOOLS } from "../src/features/dock/AgenticDock";
-import { getStaticCreateRows } from "../src/lib/dock/dockModel";
+import { createItemsForQuery } from "../src/lib/dock/dockModel";
 import app from "../server/index";
 
 describe("Dock Native Architecture (core tools only)", () => {
   it("CORE_DOCK_TOOLS contains the curated core set", () => {
     const toolIds = ROOT_DOCK_TOOLS.map((t) => t.id);
-    expect(toolIds).toEqual(["agent", "browser", "plugins", "creations", "store", "settings"]);
+    expect(toolIds).toEqual(["agent", "onboarding", "browser", "plugins", "creations", "store", "settings"]);
 
     const agent = ROOT_DOCK_TOOLS.find((t) => t.id === "agent");
     expect(agent?.isAgent).toBe(true);
@@ -24,8 +24,11 @@ describe("Dock Native Architecture (core tools only)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("contextual suggestions are generic (no knowledge-map variants)", () => {
-    const rows = getStaticCreateRows();
-    expect(rows.map((r) => r.label)).toEqual(["Bitcoin price viewer", "A reading list", "A timeline"]);
+  it("create suggestions are honest (derived from the query, never static)", () => {
+    const rows = createItemsForQuery("Stoicism");
+    expect(rows.length).toBe(1);
+    expect(rows[0].label).toContain("Stoicism");
+    expect(rows[0].kind).toBe("create");
+    expect(createItemsForQuery("   ")).toEqual([]);
   });
 });

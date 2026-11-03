@@ -228,6 +228,11 @@ export async function validatePluginCode(input: {
     );
   }
 
+  // Kit v2 gate: raw elements / hex / inline style / no kit usage reject
+  // with a fixable report (caller retries up to 2 times).
+  const { validateKitUsage } = await import("./kitValidator");
+  const kitReport = validateKitUsage(input.code);
+
   for (const slop of findSlopPatterns(input.code)) {
     warnings.push(`Design slop (docs/design-slop.md): ${slop} Warning only for now.`);
   }
@@ -236,6 +241,15 @@ export async function validatePluginCode(input: {
   if (lifecycle.length > 0) {
     return { ok: false, error: lifecycle.join(" "), warnings };
   }
+
+  if (!kitReport.ok) {
+    return {
+      ok: false,
+      error: `Kit v2 violation (attempt 1 of 2 then fix and retry): ${kitReport.errors.join("; ")}. Call ui_catalog for the right component, compose from the kit, no raw HTML/CSS.`,
+      warnings: [...warnings, ...kitReport.warnings],
+    };
+  }
+  for (const w of kitReport.warnings) warnings.push(w);
 
   const render = await validatePluginRender(guestJs);
   if (!render.ok) return { ok: false, error: render.error, warnings };

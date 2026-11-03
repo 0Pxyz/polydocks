@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { streamAgentLoop } from "./client";
-import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus } from "./events";
+import { type UIEvent, type ApprovalRequest, getFriendlyToolStatus, adaptBackendEvent } from "./events";
 import { feedThoughtEvent, pushThought, shouldNudge } from "./thoughtStream";
+import { applyOrchestratorAction } from "./orchestratorActions";
 import { speakReply, cancelSpeech } from "./speech";
 import { DEFAULT_MODEL_ID, DEFAULT_REASONING_EFFORT, getMetaModel, isValidReasoningEffort, type ReasoningEffort } from "./models";
 import { type ChatAttachment, processFileToAttachment, MAX_ATTACHMENTS_COUNT, MAX_ATTACHMENT_SIZE } from "./attachments";
@@ -21,6 +22,51 @@ import { onboardingIntentFromTool } from "./onboardingBridge";
 import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
 import type { OrbState } from "@/features/agent/Orb";
 
+const ORCH_SESSION_KEY = "polymax-orchestrator-session";
+const JOB_EVENT_CURSOR_KEY = "polymax-job-event-cursor";
+
+let taskEventSource: EventSource | null = null;
+let taskStreamSession: string | null = null;
+/** Latest send callbacks: plugin.created mounts through them (auto-open). */
+let pendingPluginCallbacks:
+  | {
+      onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
+      onOpenExperience?: (expId: string) => void;
+      onCloseExperience?: (expId: string) => void;
+    }
+  | undefined;
+/** Terminal jobs already announced in chat (no duplicate "done" lines). */
+const announcedJobs = new Set<string>();
+
+function loadOrchestratorSession(): string | null {
+  try {
+    const v = platformStorage.getItem<string | null>(ORCH_SESSION_KEY, null);
+    return typeof v === "string" && v ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadJobCursor(sessionId: string): number | undefined {
+  try {
+    const raw = platformStorage.getItem<Record<string, number>>(JOB_EVENT_CURSOR_KEY, {});
+    const n = raw?.[sessionId];
+    return typeof n === "number" ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveJobCursor(sessionId: string, id: number): void {
+  try {
+    const raw = platformStorage.getItem<Record<string, number>>(JOB_EVENT_CURSOR_KEY, {}) || {};
+    raw[sessionId] = id;
+    platformStorage.setItem(JOB_EVENT_CURSOR_KEY, raw);
+  } catch {
+    // Best-effort: resume just replays more.
+  }
+}
+
 export type LayoutState = "closed" | "sheet" | "full" | "side";
 
 export interface ConversationMessage {
@@ -30,6 +76,8 @@ export interface ConversationMessage {
   origin?: "dock-add" | "chat";
   toolName?: string;
   timestamp: number;
+  /** Live-streaming placeholder for orchestrator replies (cleared on done). */
+  streaming?: boolean;
   /** Server sequence inside the single persistent thread. */
   seq?: number;
   attachments?: ChatAttachment[];
@@ -49,6 +97,25 @@ export interface ActivityRow {
   finishedAt?: number;
   /** Machine tool name (used for provider branding, e.g. TinyFish). */
   tool?: string;
+}
+
+/** One step in the per-message / per-job thinking timeline. */
+export interface AgentStep {
+  /** Stable id for replay dedup (tool call id or event id). */
+  id: string;
+  kind: "search" | "read" | "build" | "save" | "think";
+  label: string;
+  status: "running" | "done" | "error";
+  detail?: string;
+  at: number;
+}
+
+/** Background job card: updated by the resumable job SSE stream. */
+export interface TaskCard {
+  taskId: string;
+  title: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+  updatedAt: number;
 }
 
 interface ConversationStoreState {
@@ -94,6 +161,16 @@ interface ConversationStoreState {
   /** Model + intent actually executing the current turn (null when idle). */
   activeModel: string | null;
   activeIntent: string | null;
+  /** Orchestrator session for the non-blocking message queue (persisted). */
+  orchestratorSessionId: string | null;
+  /** Live background-job cards keyed by task id (resumable SSE). */
+  taskCards: Record<string, TaskCard>;
+  /** Thinking steps per message/job id (durable, replay-safe, id-keyed). */
+  messageSteps: Record<string, AgentStep[]>;
+  /** Collapsed pre-tool narration per message id (the "thinking" block). */
+  messageThinking: Record<string, string>;
+  /** Open (or reuse) the job-event stream for a session. Returns the live instance. */
+  ensureTaskStream: (sessionId: string) => EventSource | null;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -246,6 +323,10 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
   activeModel: null,
   activeIntent: null,
   pendingVoiceStart: false,
+  orchestratorSessionId: loadOrchestratorSession(),
+  taskCards: {},
+  messageSteps: {},
+  messageThinking: {},
 
   setLayoutState: (layoutState) => set({ layoutState }),
   requestVoiceStart: () => set({ pendingVoiceStart: true }),
@@ -416,6 +497,78 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
   closeReader: () => set({ readerView: null }),
 
+  ensureTaskStream: (sessionId) => {
+    if (typeof window === "undefined" || typeof EventSource === "undefined") {
+      return null;
+    }
+    if (taskEventSource && taskStreamSession === sessionId) {
+      return taskEventSource;
+    }
+    try {
+      taskEventSource?.close();
+    } catch {
+      // Ignore close errors on a stale stream.
+    }
+    taskStreamSession = sessionId;
+    const from = loadJobCursor(sessionId);
+    const url =
+      `/api/tasks/stream?sessionId=${encodeURIComponent(sessionId)}` +
+      (from !== undefined ? `&from=${from}` : "");
+    const source = new EventSource(url);
+    taskEventSource = source;
+    // Named SSE events never hit onmessage: one listener per type,
+    // all funneled into the same ordered handler. Loop side-effects ride
+    // the same durable stream under the message scope (tool.*, plugin.*,
+    // theme/dock/reader effects) so answer_quick turns render steps too.
+    for (const type of [
+      "job.queued",
+      "job.started",
+      "job.progress",
+      "job.completed",
+      "job.failed",
+      "job.cancelled",
+      "job.interrupted",
+      "message.delta",
+      "message.done",
+      "message.error",
+      "plugin.created",
+      "plugin.updated",
+      "plugin.published",
+      "plugin.operated",
+      "tool.start",
+      "tool.done",
+      "tab.created",
+      "tab.prime",
+      "tray.open",
+      "browser.open",
+      "sandbox.preview",
+      "dock.layout",
+      "theme.apply",
+      "source.added",
+      "agent.start",
+      "agent.finish",
+    ]) {
+      source.addEventListener(type, (ev: Event) => {
+        const msg = ev as MessageEvent;
+        try {
+          const data = JSON.parse(msg.data);
+          const rawId = typeof msg.lastEventId === "string" && msg.lastEventId !== "" ? Number(msg.lastEventId) : undefined;
+          handleJobSseEvent(sessionId, type, data, Number.isInteger(rawId) ? (rawId as number) : undefined);
+        } catch {
+          // Malformed frames are ignored; the cursor only moves on parseable rows.
+        }
+      });
+    }
+    source.onerror = () => {
+      // EventSource reconnects on its own with Last-Event-ID; drop only a
+      // permanently closed stream so the next message reopens it.
+      if (source.readyState === EventSource.CLOSED) {
+        if (taskEventSource === source) taskEventSource = null;
+      }
+    };
+    return source;
+  },
+
   sendMessage: async (promptToSend, callbacks, options) => {
     const rawPrompt = (promptToSend ?? get().draft).trim();
     // Drop stale image previews without stored payloads: they render as
@@ -424,7 +577,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       (attachment) => !attachment.isImage || Boolean(attachment.dataUrl)
     );
     if (!rawPrompt && attachmentsToSend.length === 0) return;
-    if (get().isStreaming) {
+    // Text-only turns go through the non-blocking orchestrator: the input
+    // stays enabled while jobs run. Attachments/retries keep the legacy
+    // streaming turn (unchanged below).
+    const useOrchestrator = attachmentsToSend.length === 0 && options?.retry !== true;
+    if (!useOrchestrator && get().isStreaming) {
       // Never silently drop a request: the previous turn is still running,
       // so say so instead of leaving the user staring at stale progress.
       set({ statusText: "Still working on the previous request — wait for it or stop it first." });
@@ -436,14 +593,17 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     const isDockAdd = origin === "dock-add";
 
     cancelSpeech();
+    // The orchestrator path never holds the global thinking state: it
+    // appends the user message and returns, leaving the input enabled.
+    // Only legacy streaming turns (attachments/retries) set isStreaming.
     set({
       draft: isDockAdd ? get().draft : "",
       stagedAttachments: [],
-      isStreaming: true,
-      isBuildingTool: isDockAdd,
-      buildingToolName: isDockAdd ? prompt : "",
-      orbState: "thinking",
-      statusText: isDockAdd ? "Starting tool synthesis…" : "",
+      isStreaming: useOrchestrator ? false : true,
+      isBuildingTool: isDockAdd && !useOrchestrator,
+      buildingToolName: isDockAdd && !useOrchestrator ? prompt : "",
+      orbState: useOrchestrator ? get().orbState : "thinking",
+      statusText: isDockAdd && !useOrchestrator ? "Starting tool synthesis…" : "",
       activeApproval: null,
     });
 
@@ -459,6 +619,11 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     set((state) => ({
       messages: [...state.messages, userMsg],
     }));
+
+    if (useOrchestrator) {
+      await sendViaOrchestrator(prompt, origin, callbacks);
+      return;
+    }
 
     const abortCtrl = new AbortController();
     activeAbortController = abortCtrl;
@@ -760,20 +925,6 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
             break;
           }
 
-          case "reader.open": {
-            const url = typeof event.url === "string" ? event.url : "";
-            if (url) {
-              try {
-                const { openExternalUrl } = await import("@/lib/platform");
-                openExternalUrl(url);
-                set({ statusText: `Opening "${event.title || url}".` });
-              } catch {
-                set({ statusText: `Open this link: ${url}` });
-              }
-            }
-            break;
-          }
-
           case "source.added": {
             if (typeof window !== "undefined") {
               window.dispatchEvent(new CustomEvent("polymax:source.added", { detail: event.source }));
@@ -948,6 +1099,324 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
     }
   },
 }));
+
+/**
+ * Non-blocking send: POST returns 202 with ids at once, the reply streams
+ * back as durable message.* events. The input never waits — not for the
+ * POST, not for jobs.
+ */
+async function sendViaOrchestrator(
+  prompt: string,
+  origin: "dock-add" | "chat",
+  callbacks?: {
+    onExperienceCreated?: (exp: { id: string; title: string; icon?: string }) => void;
+    onOpenExperience?: (expId: string) => void;
+    onCloseExperience?: (expId: string) => void;
+  }
+): Promise<void> {
+  if (callbacks) {
+    pendingPluginCallbacks = callbacks;
+  }
+  let posted: { messageId: string; sessionId: string } | null = null;
+  try {
+    const res = await fetch("/api/agent/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, origin }),
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.success && typeof json.messageId === "string") {
+      posted = { messageId: json.messageId, sessionId: json.sessionId };
+    }
+  } catch {
+    posted = null;
+  }
+
+  if (!posted) {
+    useConversationStore.setState((state) => ({
+      messages: [
+        ...state.messages,
+        { id: crypto.randomUUID(), role: "assistant", content: "Couldn't reach the orchestrator just now.", timestamp: Date.now() },
+      ],
+    }));
+    return;
+  }
+
+  const { messageId, sessionId } = posted;
+  useConversationStore.setState((state) => ({
+    orchestratorSessionId: sessionId,
+    messages: [
+      ...state.messages,
+      { id: `m-${messageId}`, role: "assistant", content: "", streaming: true, timestamp: Date.now() },
+    ],
+  }));
+  try {
+    platformStorage.setItem(ORCH_SESSION_KEY, sessionId);
+  } catch {
+    // Best-effort persistence.
+  }
+  useConversationStore.getState().ensureTaskStream(sessionId);
+}
+
+/** Map a tool name to a timeline step kind. Internal bookkeeping tools are skipped (null). */
+function stepKindForTool(toolName: string): AgentStep["kind"] | null {
+  switch (toolName) {
+    case "search_web":
+    case "search.web":
+      return "search";
+    case "fetch_page":
+    case "search.fetch":
+      return "read";
+    case "create_plugin":
+    case "modify_plugin":
+    case "operate_plugin":
+    case "promote_to_plugin":
+    case "publish_plugin":
+    case "sandbox_exec":
+      return "build";
+    case "apply_theme":
+    case "dock_search":
+    case "dock_pin":
+    case "dock_unpin":
+    case "dock_close":
+    case "dock_open":
+      return "save";
+    case "recall_memory":
+    case "record_memory":
+    case "list_files":
+    case "read_file":
+    case "inspect_experience":
+    case "dock_list":
+      return null;
+    default:
+      return "think";
+  }
+}
+
+/** Scope key for steps/thinking: real background tasks use the raw task id,
+ * everything else (message-scoped loop events) shares the `m-` message key.
+ * Exported so cards and tests resolve the same bucket the stream writes to. */
+export function scopeKeyFor(taskId: string): string {
+  return taskId.startsWith("task_") ? taskId : `m-${taskId}`;
+}
+
+/** Idempotent step upsert: replay/resume never duplicates (match by stable id). */
+function upsertStep(scopeKey: string, step: AgentStep): void {
+  useConversationStore.setState((state) => {
+    const existing = state.messageSteps[scopeKey] || [];
+    const idx = existing.findIndex((s) => s.id === step.id);
+    const next =
+      idx >= 0 ? existing.map((s, i) => (i === idx ? { ...s, ...step } : s)) : [...existing, step];
+    return { messageSteps: { ...state.messageSteps, [scopeKey]: next } };
+  });
+}
+
+/** Mark every running step in a scope finished (done/error). */
+function finishScopeSteps(scopeKey: string, status: "done" | "error"): void {
+  useConversationStore.setState((state) => {
+    const existing = state.messageSteps[scopeKey];
+    if (!existing || existing.length === 0) return state;
+    if (!existing.some((s) => s.status === "running")) return state;
+    return {
+      messageSteps: {
+        ...state.messageSteps,
+        [scopeKey]: existing.map((s) => (s.status === "running" ? { ...s, status } : s)),
+      },
+    };
+  });
+}
+
+/**
+ * One durable event from the resumable stream. Message events update the
+ * per-message placeholder (streaming text, then final); job events update
+ * cards silently and only a fresh terminal transition appends a chat
+ * message. Replays and reconnects never duplicate anything: every branch
+ * below is idempotent on (id, status).
+ */
+function handleJobSseEvent(sessionId: string, type: string, data: any, id?: number): void {
+  const taskId = typeof data?.jobId === "string" ? data.jobId : null;
+  if (!taskId) return;
+  if (id !== undefined) saveJobCursor(sessionId, id);
+
+  if (type.startsWith("message.")) {
+    handleMessageSseEvent(taskId, type, data);
+    return;
+  }
+
+  // Loop side-effects (tools, dock/theme/reader, plugin registrations) ride
+  // the same durable stream: apply through the shared handler so the
+  // orchestrator path behaves exactly like the legacy turn.
+  try {
+    const adapted = adaptBackendEvent({ type, payload: (data || {}) as Record<string, any> });
+    if (adapted) {
+      void applyOrchestratorAction(adapted, pendingPluginCallbacks).catch(() => {});
+    }
+  } catch {
+    // A bad payload must never break the event stream.
+  }
+
+  // Thinking timeline for job cards: tool.start opens a step, tool.done
+  // closes it. Labels come from getFriendlyToolStatus — technical tool ids
+  // never reach the DOM. Message-scoped loop events share the message key.
+  const scopeKey = scopeKeyFor(taskId);
+  if (type === "tool.start" && typeof data?.name === "string") {
+    const kind = stepKindForTool(data.name);
+    if (kind) {
+      const label = getFriendlyToolStatus(data.name, (data?.arguments || {}) as Record<string, unknown>) || "Working…";
+      upsertStep(scopeKey, {
+        id: typeof data?.id === "string" && data.id ? data.id : `${type}-${id ?? Date.now()}`,
+        kind,
+        label,
+        status: "running",
+        at: Date.now(),
+      });
+    }
+  } else if (type === "tool.done" && typeof data?.name === "string") {
+    const stepId = typeof data?.id === "string" && data.id ? data.id : null;
+    const failed = Boolean(
+      data?.result && typeof data.result === "object" && (data.result as Record<string, unknown>).success === false
+    );
+    if (stepId) {
+      useConversationStore.setState((state) => {
+        const existing = state.messageSteps[scopeKey] || [];
+        if (!existing.some((s) => s.id === stepId)) return state;
+        return {
+          messageSteps: {
+            ...state.messageSteps,
+            [scopeKey]: existing.map((s) => (s.id === stepId ? { ...s, status: failed ? "error" : "done" } : s)),
+          },
+        };
+      });
+    }
+  } else if (type === "plugin.created" || type === "plugin.updated" || type === "plugin.published") {
+    const title =
+      typeof data?.title === "string" ? data.title : typeof data?.name === "string" ? data.name : "tool";
+    upsertStep(scopeKey, {
+      id: `${type}-${id ?? Date.now()}`,
+      kind: "build",
+      label: type === "plugin.published" ? `Published "${title}".` : `Mounted "${title}" in the dock.`,
+      status: "done",
+      at: Date.now(),
+    });
+  } else if (type === "theme.apply") {
+    upsertStep(scopeKey, {
+      id: `${type}-${id ?? Date.now()}`,
+      kind: "save",
+      label: "Theme updated.",
+      status: "done",
+      at: Date.now(),
+    });
+  }
+
+  const status = typeof data?.status === "string" ? data.status : type.replace(/^job\./, "");
+  const known: TaskCard["status"][] = ["queued", "running", "completed", "failed", "cancelled", "interrupted"];
+  if (!known.includes(status)) return;
+
+  const store = useConversationStore.getState();
+  const prev = store.taskCards[taskId];
+  const title = prev?.title || (typeof data?.prompt === "string" && data.prompt) || `Background job ${taskId.slice(0, 8)}`;
+  const terminal = status === "completed" || status === "failed" || status === "cancelled" || status === "interrupted";
+  const alreadyTerminal = prev && ["completed", "failed", "cancelled", "interrupted"].includes(prev.status);
+
+  useConversationStore.setState((state) => ({
+    taskCards: {
+      ...state.taskCards,
+      [taskId]: { taskId, title, status, updatedAt: Date.now() },
+    },
+  }));
+
+  if (terminal && !alreadyTerminal && !announcedJobs.has(taskId)) {
+    announcedJobs.add(taskId);
+    finishScopeSteps(scopeKey, status === "completed" ? "done" : "error");
+    // Honest completion: announce the real effect summary carried on
+    // job.completed, never the original prompt.
+    const summary = typeof data?.summary === "string" && data.summary ? data.summary : null;
+    const label =
+      status === "completed"
+        ? summary || `Done: ${title}.`
+        : status === "failed"
+          ? `The background job failed${data?.error ? `: ${data.error}` : "."}`
+          : status === "cancelled"
+            ? `The background job was cancelled.`
+            : `The background job was interrupted (server restarted).`;
+    useConversationStore.setState((state) => ({
+      messages: [...state.messages, { id: crypto.randomUUID(), role: "assistant", content: label, timestamp: Date.now() }],
+    }));
+  }
+}
+
+/** Streaming message placeholder keyed by server message id. */
+function handleMessageSseEvent(messageId: string, type: string, data: any): void {
+  const key = `m-${messageId}`;
+  const set = useConversationStore.setState;
+  if (type === "message.delta" && typeof data?.text === "string") {
+    // Pre-tool narration rides as thinking: collapsible, never chat text.
+    if ((data as Record<string, unknown>)?.thinking === true) {
+      set((state) => ({
+        messageThinking: {
+          ...state.messageThinking,
+          [key]: (state.messageThinking[key] || "") + data.text,
+        },
+      }));
+      return;
+    }
+    set((state) => {
+      const existing = state.messages.find((m) => m.id === key);
+      if (existing) {
+        return {
+          messages: state.messages.map((m) =>
+            m.id === key ? { ...m, content: (m.content || "") + data.text, streaming: true } : m
+          ),
+        };
+      }
+      return {
+        messages: [...state.messages, { id: key, role: "assistant" as const, content: data.text, streaming: true, timestamp: Date.now() }],
+      };
+    });
+    return;
+  }
+  if (type === "message.done") {
+    finishScopeSteps(key, "done");
+    if (data && typeof data === "object" && (data as any).action) {
+      const reply = (data as any).action as { op?: string; id?: string };
+      const dock = useDockStore.getState();
+      if (reply.op === "open" && reply.id) dock.openTool(reply.id);
+      else if (reply.op === "close" && reply.id) dock.closeTool(reply.id);
+    }
+    if (data && typeof data === "object" && typeof (data as any).taskId === "string") {
+      const tid = (data as any).taskId as string;
+      const prompt = typeof (data as any)?.prompt === "string" ? (data as any).prompt.slice(0, 80) : undefined;
+      set((state) => ({
+        taskCards: {
+          ...state.taskCards,
+          [tid]: {
+            taskId: tid,
+            title: prompt || state.taskCards[tid]?.title || `Background job ${tid.slice(0, 8)}`,
+            status: state.taskCards[tid]?.status || ("queued" as const),
+            updatedAt: Date.now(),
+          },
+        },
+      }));
+    }
+    const text = typeof data?.text === "string" ? data.text : "Done.";
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === key ? { ...m, content: text, streaming: false } : m
+      ),
+    }));
+    return;
+  }
+  if (type === "message.error") {
+    const text = typeof data?.text === "string" ? data.text : "Something went wrong.";
+    set((state) => {
+      const exists = state.messages.some((m) => m.id === key);
+      const next = exists
+        ? state.messages.map((m) => (m.id === key ? { ...m, content: text, streaming: false } : m))
+        : [...state.messages, { id: key, role: "assistant" as const, content: text, timestamp: Date.now() }];
+      return { messages: next };
+    });
+  }
+}
 
 /**
  * Applies a reader.open UI event to the store. Exported so tests prove the

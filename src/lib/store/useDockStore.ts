@@ -362,7 +362,7 @@ export const useDockStore = create<DockState>((set, get) => {
 
     focusByIndex: (index) =>
       set((state) => {
-        const dock = focusByIndex(state.dock, index);
+        const dock = focusByIndex(state.dock, index, state.pinnedToolIds);
         persistDockSnapshot(dock);
         const derived = deriveLegacy(dock);
         return { dock, activeToolId: dock.focusedId, openIds: derived.openIds };
@@ -370,7 +370,7 @@ export const useDockStore = create<DockState>((set, get) => {
 
     focusNext: (direction = 1) =>
       set((state) => {
-        const dock = focusNext(state.dock, direction);
+        const dock = focusNext(state.dock, direction, state.pinnedToolIds);
         persistDockSnapshot(dock);
         const derived = deriveLegacy(dock);
         return { dock, activeToolId: dock.focusedId, openIds: derived.openIds };

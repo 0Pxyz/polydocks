@@ -56,7 +56,7 @@ export const ONBOARDING_STEPS: {
     title: "Your Dock, Your Tools",
     subtitle: "Poly builds and mounts custom tools directly into the dock.",
     narration: "Building and mounting a live Bitcoin price viewer into your dock…",
-    dockTarget: "bitcoin-viewer",
+    dockTarget: "bitcoin",
     durationMs: 9000,
   },
   {
@@ -86,6 +86,8 @@ interface OnboardingStoreState {
   prevStep: () => void;
   skipDemo: () => void;
   completeDemo: () => void;
+  /** Backward-compat alias for completeDemo (older tests/callers). */
+  completeOnboarding: () => void;
   resetOnboarding: () => void;
 }
 
@@ -188,6 +190,10 @@ export const useOnboardingStore = create<OnboardingStoreState>((set, get) => ({
       hasCompleted: true,
     });
     useDockStore.getState().closeTool(ONBOARDING_TAB_ID);
+  },
+
+  completeOnboarding: () => {
+    get().completeDemo();
   },
 
   resetOnboarding: () => {

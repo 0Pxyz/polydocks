@@ -332,7 +332,7 @@ export function createHostBridge(
     handleMessage(event);
   };
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && typeof (window as any).addEventListener === "function") {
     window.addEventListener("message", listener);
   }
 
@@ -348,7 +348,7 @@ export function createHostBridge(
       target.postMessage({ polymaxTheme: theme }, "*");
     },
     destroy: () => {
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && typeof (window as any).removeEventListener === "function") {
         window.removeEventListener("message", listener);
       }
     },

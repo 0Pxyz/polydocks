@@ -14,7 +14,6 @@ export const dock_unpin: AgentTool<{ id: string; workspaceId?: string }> = {
     const targetWorkspace = args.workspaceId || ctx.workspaceId || "default";
     const resolution = await resolveDockTarget(args.id, {
       workspaceId: targetWorkspace,
-      workspaceId: ctx.workspaceId || targetWorkspace,
     });
     if (!resolution.entry) {
       return { success: false, id: args.id, action: "dock.unpin", message: resolution.error };

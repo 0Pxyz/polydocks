@@ -16,7 +16,6 @@ function ctxFrom(c: { req: { query: (k: string) => string | undefined } }, body:
   return {
     actor: "user",
     workspaceId: body?.workspaceId || c.req.query("workspaceId"),
-    workspaceId: body?.workspaceId || c.req.query("workspaceId"),
     sessionId: body?.sessionId || c.req.query("sessionId"),
   };
 }
@@ -86,6 +85,29 @@ agentRouter.post("/tasks/:id/cancel", async (c) => {
   const out = await agentTask("cancel", { taskId: c.req.param("id") });
   if (!out.ok) return c.json(out, 400);
   return c.json(out);
+});
+
+/**
+ * POST /api/agent/message — non-blocking orchestrator turn.
+ * Enqueues one message in the session FIFO and answers fast: light turns
+ * reply inline, heavy turns return an ack with a taskId. Never awaits a
+ * job; results arrive later through job events (/api/tasks/stream).
+ */
+agentRouter.post("/message", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  if (!prompt) {
+    return c.json({ error: "Missing required 'prompt' field" }, 400);
+  }
+  const { queueMessage } = await import("../agent/orchestrator");
+  const out = queueMessage({
+    sessionId: typeof body?.sessionId === "string" ? body.sessionId : undefined,
+    workspaceId:
+      typeof body?.workspaceId === "string" ? body.workspaceId : ctxFrom(c, body).workspaceId,
+    prompt,
+    origin: body?.origin === "dock-add" ? "dock-add" : "chat",
+  });
+  return c.json({ success: true, ...out }, 202);
 });
 
 /** POST /api/agent/memory — { op: recall|record, ...params }. */

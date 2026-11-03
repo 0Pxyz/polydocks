@@ -104,7 +104,6 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
     const bridge = createHostBridge(mockGuestWindow, {
       workspaceId: "focus-hub-test",
       tabId: "pomodoro-benchmark-test",
-      workspaceId: "focus-hub-test",
       pluginId: "pomodoro-benchmark-test",
       storagePrefix: "polydocks",
     });

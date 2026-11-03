@@ -23,7 +23,6 @@ export const pluginsCreate: AgentTool<Record<string, unknown>> = {
       code: z.string().min(1).describe("Single-file TSX/HTML; tokens only, no hardcoded colors, no gradients, no external URLs"),
       icon: z.string().optional(),
       workspaceId: z.string().optional(),
-      workspaceId: z.string().optional(),
       ...userApproved,
     })
     .catchall(z.unknown()),
@@ -41,7 +40,6 @@ export const pluginsEdit: AgentTool<Record<string, unknown>> = {
       code: z.string().optional().describe("Full replacement code (validated against the design kit)"),
       patch: z.unknown().optional().describe("Targeted patch instead of full code"),
       workspaceId: z.string().optional(),
-      workspaceId: z.string().optional(),
       ...userApproved,
     })
     .catchall(z.unknown()),
@@ -56,20 +54,18 @@ export const pluginsInstall: AgentTool<Record<string, unknown>> = {
     .object({
       pluginId: z.string().min(1),
       workspaceId: z.string().optional(),
-      workspaceId: z.string().optional(),
       ...userApproved,
     })
     .catchall(z.unknown()),
   execute: (args, ctx) => pluginLifecycle("install", args as Record<string, unknown>, actorCtx(ctx)),
 };
 
-export const pluginsUninstall: AgentTool<{ pluginId: string; workspaceId?: string; workspaceId?: string }> = {
+export const pluginsUninstall: AgentTool<{ pluginId: string; workspaceId?: string }> = {
   name: "plugins.uninstall",
   description:
     "Uninstall a plugin from a workspace (mount removed; code and versions are kept for reinstall or rollback). Refuses clearly when not installed. Same handler and the CLI.",
   schema: z.object({
     pluginId: z.string().min(1),
-    workspaceId: z.string().optional(),
     workspaceId: z.string().optional(),
   }),
   execute: (args, ctx) => pluginLifecycle("uninstall", args as Record<string, unknown>, actorCtx(ctx)),

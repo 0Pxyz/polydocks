@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import app from "../server/index";
+import { config } from "../server/config";
 import { runAgentLoop } from "../server/agent/loop";
 import { maybeCompactAgentThread } from "../server/agent/threadCompaction";
 import {
@@ -161,25 +162,35 @@ describe("Single persistent agent thread", () => {
   });
 
   it("serves, pages and clears the thread over HTTP", async () => {
-    appendThreadMessage(TEST_USER, "user", "Hello");
-    appendThreadMessage(TEST_USER, "assistant", "Hi");
+    // Per-user thread isolation is a cloud-mode behavior: local mode pins
+    // every request to the single-user demo identity (DEPLOY_MODE=local).
+    // Flip to cloud for this HTTP round-trip so the X-Polymax-User header
+    // scopes the thread, then restore.
+    const prevMode = config.DEPLOY_MODE;
+    (config as any).DEPLOY_MODE = "cloud";
+    try {
+      appendThreadMessage(TEST_USER, "user", "Hello");
+      appendThreadMessage(TEST_USER, "assistant", "Hi");
 
-    const getRes = await requestThread();
-    expect(getRes.status).toBe(200);
-    const snapshot = (await getRes.json()) as any;
-    expect(snapshot.thread.userId).toBe(TEST_USER);
-    expect(snapshot.messages).toHaveLength(2);
+      const getRes = await requestThread();
+      expect(getRes.status).toBe(200);
+      const snapshot = (await getRes.json()) as any;
+      expect(snapshot.thread.userId).toBe(TEST_USER);
+      expect(snapshot.messages).toHaveLength(2);
 
-    const before = snapshot.messages[0].seq;
-    const pageRes = await requestThread(`/api/agent/thread/messages?before=${before}&limit=1`);
-    expect(pageRes.status).toBe(200);
+      const before = snapshot.messages[0].seq;
+      const pageRes = await requestThread(`/api/agent/thread/messages?before=${before}&limit=1`);
+      expect(pageRes.status).toBe(200);
 
-    const delRes = await requestThread("/api/agent/thread", { method: "DELETE" });
-    expect(delRes.status).toBe(200);
+      const delRes = await requestThread("/api/agent/thread", { method: "DELETE" });
+      expect(delRes.status).toBe(200);
 
-    const after = (await (await requestThread()).json()) as any;
-    expect(after.messages).toHaveLength(0);
-    expect(after.thread.id).toBe(snapshot.thread.id);
+      const after = (await (await requestThread()).json()) as any;
+      expect(after.messages).toHaveLength(0);
+      expect(after.thread.id).toBe(snapshot.thread.id);
+    } finally {
+      (config as any).DEPLOY_MODE = prevMode;
+    }
   });
 });
 

@@ -22,7 +22,6 @@ export const list_tasks: AgentTool<{
       workspaceId: args.workspaceId || ctx?.workspaceId,
     }, {
       actor: "agent",
-      workspaceId: ctx?.workspaceId,
       workspaceId: args.workspaceId || ctx?.workspaceId,
       sessionId: ctx?.sessionId,
     }),
