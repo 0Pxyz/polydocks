@@ -294,6 +294,24 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
 }
 
 /**
+ * Builds the transcript line shown when the agent records a memory (#105).
+ * Pure: returns null for anything that is not a successful record_memory
+ * result, so both turn paths share one honest gate. No secrets: the entry
+ * line itself is the user-visible preference text, truncated.
+ */
+export function buildMemoryChipContent(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null;
+  const r = result as { recorded?: unknown; entry?: unknown };
+  if (r.recorded !== true || typeof r.entry !== "string") return null;
+  const text = r.entry
+    .replace(/^-\s*\[[^\]]*\]\s*(\[[^\]]*\]\s*)?(\(workspace:[^)]*\)\s*)?:\s*/, "")
+    .trim();
+  if (!text) return null;
+  const short = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  return `Remembered: ${short}`;
+}
+
+/**
  * Adapts raw SSE event from server to normalized UIEvent.
  */
 export function adaptBackendEvent(raw: {
