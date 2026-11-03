@@ -135,3 +135,62 @@ describe("Orchestrator front: input never blocks on running jobs", () => {
     expect(opened).toEqual(["my-tool"]);
   });
 });
+
+describe("Orchestrator front: jobs resume after reload (#178)", () => {
+  const seedFetch = (tasks: any[]) => {
+    (globalThis as any).fetch = async (url: any) => {
+      if (String(url).startsWith("/api/tasks?")) {
+        return { ok: true, json: async () => ({ tasks }) };
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    };
+  };
+
+  it("seeds active cards from the API and reopens the stream", async () => {
+    seedFetch([
+      { id: "task-run-1", status: "running", type: "plugin_synthesis", input: { prompt: "build me a dashboard" } },
+      { id: "task-old-1", status: "completed", type: "research", input: {} },
+      { id: "task-cancel-1", status: "cancelled", type: "chat", input: {} },
+    ]);
+    useConversationStore.setState({ taskCards: {}, orchestratorSessionId: "sess-resume" } as any);
+
+    await useConversationStore.getState().hydrateJobs();
+
+    const cards = useConversationStore.getState().taskCards;
+    expect(Object.keys(cards)).toEqual(["task-run-1"]);
+    expect(cards["task-run-1"].title).toBe("build me a dashboard");
+    expect(cards["task-run-1"].status).toBe("running");
+    const stream = sseInstances.find((s) => s.url.includes("/api/tasks/stream?sessionId=sess-resume"));
+    expect(stream).toBeDefined();
+
+    // Idempotent: replay + re-hydrate never duplicate.
+    stream!.emit("job.started", { jobId: "task-run-1", taskId: "task-run-1" }, 31);
+    await useConversationStore.getState().hydrateJobs();
+    expect(Object.keys(useConversationStore.getState().taskCards)).toEqual(["task-run-1"]);
+  });
+
+  it("rebuilds a card from stream replay when the API misses it", async () => {
+    seedFetch([]);
+    useConversationStore.setState({ taskCards: {}, orchestratorSessionId: "sess-replay" } as any);
+
+    await useConversationStore.getState().hydrateJobs();
+    expect(useConversationStore.getState().taskCards).toEqual({});
+    const stream = sseInstances.find((s) => s.url.includes("sess-replay"));
+    expect(stream).toBeDefined();
+    stream!.emit("job.queued", { jobId: "task-late-1", taskId: "task-late-1", prompt: "late job" }, 41);
+    expect(useConversationStore.getState().taskCards["task-late-1"]?.status).toBe("queued");
+  });
+
+  it("does nothing without a session", async () => {
+    let fetched = 0;
+    (globalThis as any).fetch = async () => {
+      fetched += 1;
+      throw new Error("must not fetch");
+    };
+    const before = sseInstances.length;
+    useConversationStore.setState({ taskCards: {}, orchestratorSessionId: null } as any);
+    await useConversationStore.getState().hydrateJobs();
+    expect(fetched).toBe(0);
+    expect(sseInstances.length).toBe(before);
+  });
+});

@@ -171,6 +171,13 @@ interface ConversationStoreState {
   messageThinking: Record<string, string>;
   /** Open (or reuse) the job-event stream for a session. Returns the live instance. */
   ensureTaskStream: (sessionId: string) => EventSource | null;
+  /**
+   * Resume active jobs after a reload (#178): reopens the stream (replay
+   * from the persisted cursor rebuilds cards/steps) and seeds queued/
+   * running cards from the API so jobs are visible before replay lands.
+   * Terminal states are never seeded — history already carries outcomes.
+   */
+  hydrateJobs: () => Promise<void>;
 
   // Actions
   setLayoutState: (layoutState: LayoutState) => void;
@@ -567,6 +574,42 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       }
     };
     return source;
+  },
+
+  hydrateJobs: async () => {
+    const sessionId = get().orchestratorSessionId;
+    if (!sessionId || typeof window === "undefined") return;
+    // Reopen first: replay from the persisted cursor rebuilds cards and
+    // thinking steps for everything the stream already carries.
+    get().ensureTaskStream(sessionId);
+    // Then seed still-active jobs so they render before replay lands.
+    // Terminal states stay out: outcomes live in the thread history.
+    try {
+      const res = await fetch(`/api/tasks?sessionId=${encodeURIComponent(sessionId)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+      set((state) => {
+        const cards = { ...state.taskCards };
+        for (const t of tasks) {
+          if (t?.status !== "queued" && t?.status !== "running") continue;
+          const id = String(t.id);
+          if (cards[id]) continue;
+          const prompt = t?.input && typeof t.input.prompt === "string" ? t.input.prompt : "";
+          cards[id] = {
+            taskId: id,
+            title: prompt ? prompt.slice(0, 80) : `Background job ${id.slice(0, 8)}`,
+            status: t.status,
+            updatedAt: Date.now(),
+          };
+        }
+        return { taskCards: cards };
+      });
+    } catch {
+      // Offline-first: cards still rebuild from the stream replay above.
+    }
   },
 
   sendMessage: async (promptToSend, callbacks, options) => {

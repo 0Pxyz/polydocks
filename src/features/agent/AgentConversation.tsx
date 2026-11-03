@@ -194,6 +194,7 @@ export function AgentConversation({
     loadOlderMessages,
     clearConversation,
     consumeVoiceStart,
+    hydrateJobs,
   } = useConversationStore();
 
   const { dockPosition } = useThemeStore();
@@ -268,6 +269,14 @@ export function AgentConversation({
       realtimeRef.current = null;
     };
   }, []);
+
+  // Resume active background jobs after a reload (#178): the server keeps
+  // tasks and events durably, but cards and the stream are in-memory only.
+  // Hydrate reopens the stream (replay from the saved cursor) and seeds
+  // still-running cards from the API. Idempotent: safe to run on mount.
+  useEffect(() => {
+    void hydrateJobs();
+  }, [hydrateJobs]);
 
   // Tracks whether the current/last voice attempt showed an error: the
   // close handler must not wipe it, or failures look like silence.
