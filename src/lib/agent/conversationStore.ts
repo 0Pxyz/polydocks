@@ -115,7 +115,8 @@ export interface AgentStep {
 export interface TaskCard {
   taskId: string;
   title: string;
-  status: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+  status: "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "interrupted";
+  approvalId?: string;
   updatedAt: number;
 }
 
@@ -536,6 +537,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       "job.failed",
       "job.cancelled",
       "job.interrupted",
+      "job.awaiting_approval",
       "message.delta",
       "message.done",
       "message.error",
@@ -595,7 +597,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
       set((state) => {
         const cards = { ...state.taskCards };
         for (const t of tasks) {
-          if (t?.status !== "queued" && t?.status !== "running") continue;
+          if (t?.status !== "queued" && t?.status !== "running" && t?.status !== "awaiting_approval") continue;
           const id = String(t.id);
           if (cards[id]) continue;
           const prompt = t?.input && typeof t.input.prompt === "string" ? t.input.prompt : "";
@@ -1357,7 +1359,7 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
   }
 
   const status = typeof data?.status === "string" ? data.status : type.replace(/^job\./, "");
-  const known: TaskCard["status"][] = ["queued", "running", "completed", "failed", "cancelled", "interrupted"];
+  const known: TaskCard["status"][] = ["queued", "running", "awaiting_approval", "completed", "failed", "cancelled", "interrupted"];
   if (!known.includes(status)) return;
 
   const store = useConversationStore.getState();
@@ -1366,10 +1368,11 @@ function handleJobSseEvent(sessionId: string, type: string, data: any, id?: numb
   const terminal = status === "completed" || status === "failed" || status === "cancelled" || status === "interrupted";
   const alreadyTerminal = prev && ["completed", "failed", "cancelled", "interrupted"].includes(prev.status);
 
+  const approvalId = typeof data?.approvalId === "string" && data.approvalId ? data.approvalId : prev?.approvalId;
   useConversationStore.setState((state) => ({
     taskCards: {
       ...state.taskCards,
-      [taskId]: { taskId, title, status, updatedAt: Date.now() },
+      [taskId]: { taskId, title, status, approvalId, updatedAt: Date.now() },
     },
   }));
 

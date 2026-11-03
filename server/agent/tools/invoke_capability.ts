@@ -29,6 +29,8 @@ export const invoke_capability: AgentTool<typeof InvokeCapabilitySchema> = {
       actor: "agent",
       workspaceId: targetWorkspace,
       step: context.step,
+      taskId: context.taskId,
+      onEvent: context.onEvent,
     });
 
     if (!result.success) {

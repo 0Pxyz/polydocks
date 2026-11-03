@@ -45,6 +45,7 @@ export interface CapabilityExecutionOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   step?: number;
+  taskId?: string;
   onEvent?: (event: {
     step: number;
     type: string;
@@ -403,6 +404,7 @@ export class CapabilityBus {
         manifest: activePlugin.manifest,
         actor: options.actor,
         workspaceId: options.workspaceId,
+        taskId: options.taskId,
         signal: controller.signal,
         log: (msg) => console.log(`[CapabilityBus][${capabilityId}] ${msg}`),
         emit: async (evt) => {

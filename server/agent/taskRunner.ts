@@ -27,6 +27,7 @@ export type SessionStatus = "active" | "paused" | "completed" | "archived";
 export type TaskStatus =
   | "queued"
   | "running"
+  | "awaiting_approval"
   | "completed"
   | "failed"
   | "cancelled"
@@ -484,7 +485,7 @@ export class TaskExecutionEngine {
    * reconnecting SSE clients learn about it without polling.
    */
   public recoverInterruptedTasks(): { recoveredCount: number; taskIds: string[] } {
-    const runningRows = db.prepare("SELECT id, session_id FROM tasks WHERE status = 'running'").all() as any[];
+    const runningRows = db.prepare("SELECT id, session_id FROM tasks WHERE status = 'running' OR status = 'awaiting_approval'").all() as any[];
     const taskIds = runningRows.map((r) => r.id);
 
     if (taskIds.length > 0) {
@@ -496,7 +497,7 @@ export class TaskExecutionEngine {
               error = 'Task interrupted by server restart',
               finished_at = ?,
               updated_at = ?
-          WHERE status = 'running'
+          WHERE status = 'running' OR status = 'awaiting_approval'
         `).run(now, now);
         for (const row of runningRows) {
           insertJobEvent(row.id, row.session_id, "job.interrupted", {
@@ -678,6 +679,18 @@ export class TaskExecutionEngine {
             signal: controller.signal,
             onEvent: async (ev) => {
               await emit(ev);
+              if (ev.type === "approval.requested") {
+                // Visible wait instead of a silent fail (#315): the job
+                // parks in awaiting_approval with a durable, resumable
+                // event until the user allows or denies.
+                updateTaskState(task.id, "awaiting_approval");
+                const row = insertJobEvent(task.id, task.sessionId, "job.awaiting_approval", {
+                  status: "awaiting_approval",
+                  ...(ev.payload as Record<string, unknown>),
+                  taskType: task.type,
+                });
+                this.announceRow(row);
+              }
               if (ev.type === "tool.start") toolCalls += 1;
               if (ev.type === "plugin.created" || ev.type === "plugin.updated" || ev.type === "plugin.published") {
                 pluginTouched = true;
