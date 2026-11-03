@@ -43,7 +43,7 @@ export function ToolSurface({
   if (toolId === "settings" || toolId === "theme") {
     return (
       <DockSurface frameless>
-        <SettingsView onDismiss={onDismiss} />
+        <SettingsView />
       </DockSurface>
     );
   }
