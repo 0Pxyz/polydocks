@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { internalError } from "../errors";
 import {
   listRegistryPlugins,
   getRegistryPlugin,
@@ -73,7 +74,8 @@ registryRouter.post("/publish", async (c) => {
 
     return c.json({ success: true, data: result.item }, 201);
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Publishing failed" }, 500);
+    const out = internalError("registry", err, "Failed to publish plugin");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
 
@@ -100,6 +102,7 @@ registryRouter.post("/:id/install", async (c) => {
       ...permissionEnvelope(result.plugin),
     });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message || "Failed to install plugin" }, 500);
+    const out = internalError("registry", err, "Failed to install plugin");
+    return c.json({ success: false, ...out.body }, out.status);
   }
 });
