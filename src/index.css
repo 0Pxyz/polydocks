@@ -74,3 +74,16 @@ textarea {
     animation: none;
   }
 }
+
+/* Touch targets (#173): coarse pointers get 44px panel controls and
+   16px composer text (no iOS focus zoom). Desktop is untouched. */
+@media (pointer: coarse) {
+  .agent-panel button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .agent-panel input,
+  .agent-panel textarea {
+    font-size: 16px;
+  }
+}
