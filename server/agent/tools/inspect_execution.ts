@@ -13,7 +13,7 @@ export const inspect_execution: AgentTool<InspectExecutionArgs> = {
   schema: z.object({
     executionId: z.string().min(1).describe("The execution ID (e.g. exec_...) to inspect"),
   }),
-  execute: async (args) => {
+  execute: async (args, ctx) => {
     const row = db
       .query<
         {
@@ -38,6 +38,13 @@ export const inspect_execution: AgentTool<InspectExecutionArgs> = {
         success: false,
         error: `Execution record "${args.executionId}" not found in audit log.`,
       };
+    }
+
+    // The execution's workspace must match the session scope: a turn may
+    // only inspect its own runs. Global rows (no workspace) stay visible.
+    const sessionScope = typeof ctx?.workspaceId === "string" ? ctx.workspaceId : undefined;
+    if (row.workspace_id && sessionScope && row.workspace_id !== sessionScope) {
+      return { success: false, error: "Not found" };
     }
 
     let input: unknown = null;

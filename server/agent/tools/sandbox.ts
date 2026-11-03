@@ -8,7 +8,15 @@ const scope = {
 };
 
 function targetCtx(ctx: any, args: { workspaceId?: string }) {
-  const workspaceId = args.workspaceId || ctx?.workspaceId;
+  const sessionScope = ctx?.workspaceId;
+  // The scope comes from the authenticated session (the turn), never from
+  // a model-contrived argument: a tool call may not widen beyond the
+  // session scope. Local turns without a session scope keep today's
+  // open behavior (args or bust).
+  if (args.workspaceId && sessionScope && args.workspaceId !== sessionScope) {
+    return { denied: `Not found` } as const;
+  }
+  const workspaceId = sessionScope || args.workspaceId;
   return { workspaceId };
 }
 
@@ -17,6 +25,9 @@ async function runSandboxTool(capability: string, args: Record<string, unknown>,
   initializeFirstPartyPlugins();
   const { workspaceId, userApproved, ...rest } = args as any;
   const t = targetCtx(ctx, { workspaceId });
+  if ("denied" in t) {
+    return { error: t.denied, capabilityId: capability };
+  }
   const result = await capabilityBus.invoke(capability, { ...rest, workspaceId: t.workspaceId, userApproved }, {
     actor: "agent",
     workspaceId: t.workspaceId,
