@@ -25,7 +25,7 @@ export interface CreatePluginArgs {
 export const create_plugin: AgentTool<CreatePluginArgs> = {
   name: "create_plugin",
   description:
-    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin). Before creating, dock_search for an existing equivalent: creating a plugin whose name matches an installed one is refused — update it with modify_plugin or mount it with dock_pin/dock.open instead. UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (docs/design-slop.md).",
+    "Builds a new persistent workspace plugin (self-contained TSX). Use only for new durable tools; do not use to fix an existing plugin (use modify_plugin). Before creating, dock_search for an existing equivalent: creating a plugin whose name matches an installed one is refused — update it with modify_plugin or mount it with dock_pin/dock.open instead. UI must look native: kit components and theme tokens by default (React @/components/ui imports or vanilla px-* classes, skill plugins), sentence case (internal-docs/design-slop.md).",
   schema: z.object({
     id: z
       .string()

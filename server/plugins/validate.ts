@@ -22,7 +22,7 @@ export function findHardcodedHex(code: string): string[] {
 
 /**
  * Design-slop patterns that make generated UI look foreign inside the app
- * (docs/design-slop.md). Warning only, never a publish blocker: controls
+ * (internal-docs/design-slop.md). Warning only, never a publish blocker: controls
  * like TabsList carry their own chrome, and edge cases exist. Each hit
  * nudges the agent toward the native look: borderless surfaces, whitespace
  * grouping, sentence case, normal tracking, theme tokens.
@@ -55,7 +55,7 @@ export function findSlopPatterns(code: string): string[] {
 }
 
 /**
- * Hard lifecycle-contract violations (docs/plugins/lifecycle.md). The host
+ * Hard lifecycle-contract violations (internal-docs/plugins/lifecycle.md). The host
  * owns mount/hide/hibernate; plugins must never control their own
  * lifecycle. Unlike style hints, these REJECT the plugin with a clear
  * error pointing at the fix.
@@ -234,7 +234,7 @@ export async function validatePluginCode(input: {
   const kitReport = validateKitUsage(input.code);
 
   for (const slop of findSlopPatterns(input.code)) {
-    warnings.push(`Design slop (docs/design-slop.md): ${slop} Warning only for now.`);
+    warnings.push(`Design slop (internal-docs/design-slop.md): ${slop} Warning only for now.`);
   }
 
   const lifecycle = findLifecycleViolations(input.code);

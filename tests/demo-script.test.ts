@@ -9,7 +9,7 @@ import path from "node:path";
  */
 describe("demo script (#366)", () => {
   const root = path.resolve(import.meta.dir, "..");
-  const raw = fs.readFileSync(path.join(root, "docs/demo-script.md"), "utf-8");
+  const raw = fs.readFileSync(path.join(root, "internal-docs/demo-script.md"), "utf-8");
   // Blockquote line-breaks are rendering, not content: flatten them.
   const script = raw.replace(/^>\s?/gm, "").replace(/\s+/g, " ");
 

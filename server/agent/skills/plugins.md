@@ -30,7 +30,7 @@ where a part exists. Gate rejects raw `<button>/<input>/<select>/
 
 One TSX file; imports `react`, `react-dom/client`, `@/components/ui/*`; mount `#app`. Bridge `window.polymax`: `storage`, `invoke`/`useCapability`, `openContent`, `task`, `theme.get`; sandboxed.
 
-## Host-owned lifecycle (read docs/plugins/lifecycle.md first)
+## Host-owned lifecycle (read internal-docs/plugins/lifecycle.md first)
 
 State in `polymax.storage`, work in `polymax.task`; FORBIDDEN: `location.reload()`, active-tab rendering, active-derived keys.
 
@@ -45,5 +45,5 @@ server/agent/tools/inspect_experience.ts, server/agent/tools/operate_plugin.ts,
 server/agent/tools/publish_plugin.ts, server/agent/tools/promote_to_plugin.ts,
 server/services/pluginService.ts, server/plugins/registry.ts,
 server/plugins/bus.ts, server/plugins/verify.ts, server/plugins/versions.ts,
-server/workspace/pluginFiles.ts, server/workspace/experienceErrors.ts, docs/design-slop.md, docs/plugins/lifecycle.md
+server/workspace/pluginFiles.ts, server/workspace/experienceErrors.ts, internal-docs/design-slop.md, internal-docs/plugins/lifecycle.md
 -->

@@ -6,7 +6,7 @@ import { db } from "./db";
  * it now calls ensureSessionTaskTables() instead, so there is exactly one
  * definition. schema.sql carries the same statements for fresh databases.
  *
- * Ownership (see docs/persistence.md):
+ * Ownership (see internal-docs/persistence.md):
  * - sessions/tasks rows: SQLite is the store (via SessionService/TaskService).
  * - Transcripts: agent-home/sessions/*.jsonl is the current store;
  *   session_transcripts is a crash-safe SQLite mirror written alongside

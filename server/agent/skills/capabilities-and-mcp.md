@@ -18,7 +18,7 @@ Every capability declares `risk: read|write|destructive|external`. `read` runs f
 
 Remote systems join as user-connected MCP servers (explicit grant in the Plugins UI); tools appear as `mcp.<server>.<tool>` with `external` risk. Transport order is Streamable HTTP, SSE fallback, stdio denied unless `MCP_ALLOW_STDIO=1`. Connect only on explicit intent via `mcp_connect({name, url})`, list with `mcp_list_servers`, search tools with `mcp_search_tools({query})`, disconnect with `mcp_disconnect`; never fetch endpoints directly.
 
-PolyDocks is itself an MCP server: external clients connect at `POST /mcp` (Streamable HTTP, stateless). Details: `docs/mcp.md`.
+PolyDocks is itself an MCP server: external clients connect at `POST /mcp` (Streamable HTTP, stateless). Details: `internal-docs/mcp.md`.
 
 ## Common mistakes
 

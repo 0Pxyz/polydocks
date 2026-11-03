@@ -6,7 +6,7 @@ Polymax follows a disciplined, dark-only design system anchored in the Agentic D
 
 The dock is the primary control surface. Views expand into the viewport rather than spawning floating windows or modal clutter.
 
-All interface work must adhere to the design rules in [Design Slop](../docs/design-slop.md). Review this checklist before designing or modifying UI components.
+All interface work must adhere to the design rules in [Design Slop](design-slop.md). Review this checklist before designing or modifying UI components.
 
 ## Tokens
 

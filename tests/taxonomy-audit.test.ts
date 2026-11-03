@@ -10,7 +10,7 @@ import { DOCK_CORE_CATALOG } from "../src/lib/dock/dockModel";
  */
 describe("taxonomy audit (#362)", () => {
   const root = path.resolve(import.meta.dir, "..");
-  const report = fs.readFileSync(path.join(root, "docs/plugin-taxonomy-audit.md"), "utf-8");
+  const report = fs.readFileSync(path.join(root, "internal-docs/plugin-taxonomy-audit.md"), "utf-8");
 
   it("covers the six capabilities and the recommendation matrix", () => {
     for (const cap of ["Tasks", "Notes", "Files", "Research", "Code/Terminal", "Plugin Store"]) {

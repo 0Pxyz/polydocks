@@ -28,5 +28,5 @@ Guests reach the host through `window.polymax`: `storage.get/set/remove`, `openC
 Source files (maintainer refs, stripped before injection):
 server/agent/tools/verbs/dock.ts, server/agent/tools/verbs/plugins.ts, server/facade/shared.ts, server/routes/dock.ts,
 server/routes/plugins.ts, server/plugins/slop.ts, server/plugins/versions.ts,
-server/workspace/workspaces.ts, docs/design-slop.md, docs/model.md
+server/workspace/workspaces.ts, internal-docs/design-slop.md, internal-docs/model.md
 -->

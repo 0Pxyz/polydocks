@@ -88,12 +88,12 @@ function resolveTrustedOrigins(): string[] {
  *   links are issued; delivery is the dev outbox until SMTP lands.
  *   `requireEmailVerification` stays false so local-first signup is never
  *   blocked before mail delivery exists (one-flag flip documented in
- *   docs/auth.md).
+ *   internal-docs/auth.md).
  * - Google/GitHub OAuth mount only when BOTH id and secret are present,
  *   so local development never requires social credentials.
  * - No organization plugin: workspace ownership is PolyDocks-owned
  *   (`workspace_members`, see membership.ts), not Better Auth orgs.
- * - No passkey/2FA plugins yet: reserved for a follow-up (see docs/auth.md).
+ * - No passkey/2FA plugins yet: reserved for a follow-up (see internal-docs/auth.md).
  */
 export const auth = betterAuth({
   secret: resolveSecret(),

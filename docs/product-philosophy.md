@@ -1,4 +1,4 @@
-# Polymax Product Philosophy
+# PolyDocks Product Philosophy
 
 > "Everything is a plugin; the agent is the operator."
 

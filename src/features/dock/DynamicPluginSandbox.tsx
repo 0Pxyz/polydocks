@@ -18,7 +18,7 @@ export interface DynamicPluginSandboxProps {
 
 /**
  * Sandboxed iframe host for dynamic dock experiences.
- * Adheres strictly to docs/design-slop.md:
+ * Adheres strictly to internal-docs/design-slop.md:
  * - Edge-to-edge transparent surface with no artificial borders or window headers
  * - Skeleton loading while awaiting compilation and bridge handshake (3s timeout)
  * - Quiet inline recovery status with reload and agent fix triggers

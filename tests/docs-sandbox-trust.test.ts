@@ -1,10 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import fs from "node:fs";
 
-/** Doc-rot guard for docs/sandbox-trust.md (#183): every enforcement pointer must hold. */
+/** Doc-rot guard for internal-docs/sandbox-trust.md (#183): every enforcement pointer must hold. */
 describe("sandbox-trust doc pointers", () => {
   const read = (p: string) => fs.readFileSync(p, "utf-8");
-  const doc = () => read("docs/sandbox-trust.md");
+  const doc = () => read("internal-docs/sandbox-trust.md");
 
   it("states the two tiers and the intended (unenforced) items", () => {
     expect(doc()).toContain("First-party (global)");

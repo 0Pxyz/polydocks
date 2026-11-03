@@ -1,4 +1,4 @@
-# Polymax model: an agent and its dock
+# PolyDocks model: an agent and its dock
 
 A plugin is an experience that lives in your dock. Four verbs, shared by
 the dock and the agent:

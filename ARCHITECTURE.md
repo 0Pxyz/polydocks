@@ -6,7 +6,7 @@
 
 **Runtime.** One Bun + Hono process serves API + built front (`server/index.ts`). Local: `bun run dev` (Vite :5173 proxy → :3000). Prod: `Dockerfile` + `docker-compose.yml` (single service `polymax-app`, `127.0.0.1:3000`, volumes `./data:/app/data` + `agent-home-data:/app/agent-home`). No Modal SDK, no `server/sandbox*` — "sandbox" today means browser iframe + path-traversal guard (`server/system/filesystem.ts:35-97`).
 
-**Agent.** `runAgentLoop` (`server/agent/loop.ts:223`), OpenAI SDK against `MODEL_BASE_URL`/`MODEL_ID` (`server/agent/llm.ts:9-14`), zod-validated calls with 2 retries, duplicate-call guard, SSE events (`tool.start/done`, `tray.open`, `tab.created`, `plugin.*`, `map.*`). Catalog: 45 full tools + 11 minimal verbs (`server/agent/tools/index.ts:123,175,194-196`), skills in `server/agent/skills/*.md` (max 2 per turn). No `create_tool`, no shell executor, no `eval` in server.
+**Agent.** `runAgentLoop` (`server/agent/loop.ts:223`), OpenAI SDK against `MODEL_BASE_URL`/`MODEL_ID` (`server/agent/llm.ts:9-14`), zod-validated calls with 2 retries, duplicate-call guard, SSE events (`tool.start/done`, `tray.open`, `tab.created`, `plugin.*`, `map.*`). Catalog: full + minimal verb surfaces (`server/agent/tools/index.ts`), skills in `server/agent/skills/*.md` (max 2 per turn). No `create_tool`, no shell executor, no `eval` in server.
 
 **Plugin system.** Manifest `apiVersion: 1` (`server/plugins/manifest.ts:85-129`), registry install/enable/disable + version archive (`server/plugins/registry.ts:47-171`), capability bus with risk policy, 30s timeout, `executions` audit (`server/plugins/bus.ts:182-541`), receipts (`server/agent/receipts.ts:33-112`), slop validator, SSRF guard (`server/plugins/ssrf.ts`), one real `spawn` site allowlisted with timeout/cap (`server/plugins/context.ts:219`). Guests: iframe `sandbox="allow-scripts"` srcdoc + `window.polymax` bridge. Host lifecycle: mount/hide/hibernate, `LIVE_TAB_LIMIT = 5` (`src/lib/tabs/tabHostStore.ts:44`).
 
@@ -35,3 +35,9 @@ Microkernel core (enumerated in §4): runtime/routes, agent loop transport, perm
 ## 4. What stays core (never a plugin)
 
 Runtime + routes, agent loop transport, permission/approval engine, persistence, sandbox bridge, secrets/keys. (Adopted from `docs/plugin-core-readme`; the knowledge-map experience was removed to a parked branch instead of extracted.)
+
+## 5. Key decisions (distilled; full text in `internal-docs/adr/`)
+
+- **Microkernel + dock-first UX** — no chat-sprawl feed, no canvas lock-in; the dock is the product surface and every tool (including agent-built ones) is a plugin behind one typed capability bus ([ADR 0001](internal-docs/adr/0001-dock-plugin-architecture-and-day1-agentic-apis.md)).
+- **Demo-first local, cloud as post-demo fork** — `dev`/`main` stay single-user local (`docker compose up`); per-user isolation, auth, and remote sandboxes ship as a fork after the hackathon, not as demo-time complexity ([ADR 0002](internal-docs/adr/0002-single-codebase-local-cloud-modes.md)).
+- **First-party core suite as contract plugins** — Browser, Notes, Files, Sandbox, Research are kernel-enforced contract plugins, not special cases; generated tools meet the same manifest + lifecycle bar ([ADR 0003](internal-docs/adr/0003-first-party-core-plugins.md)).

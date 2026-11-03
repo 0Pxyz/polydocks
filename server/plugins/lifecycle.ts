@@ -10,7 +10,7 @@ import { findLifecycleViolations } from "./validate";
  * agent-generated (SQLite `plugins` + `plugin_files`) and community —
  * so the contract test suite automatically covers newly added plugins.
  * Validation of guest code reuses the same hard rules `create_plugin`
- * enforces (docs/plugins/lifecycle.md).
+ * enforces (internal-docs/plugins/lifecycle.md).
  */
 
 export type ContractPluginKind = "first-party" | "generated" | "community" | "workspace";

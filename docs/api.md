@@ -1,7 +1,7 @@
-# Polymax Product API
+# PolyDocks Product API
 
 Three product APIs. Everything else is infrastructure. The model is one page:
-[model.md](model.md) — a plugin is an experience that lives in the dock;
+[model.md](../internal-docs/model.md) — a plugin is an experience that lives in the dock;
 four verbs (open, close, edit, pin).
 
 | Surface | Controls | Shape |

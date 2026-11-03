@@ -99,7 +99,7 @@ describe("Issue #165 — one source of truth per data type", () => {
   });
 
   it("SoT map exists and MEMORY/summaries stay separate", async () => {
-    const doc = await fs.readFile(path.resolve("docs/persistence.md"), "utf-8");
+    const doc = await fs.readFile(path.resolve("internal-docs/persistence.md"), "utf-8");
     for (const anchor of ["`sources` table", "recordAudit", "`plugin_files`", "`dock_pins`", "`agent_threads`", "`session_transcripts`", "MEMORY.md"]) {
       expect(doc).toContain(anchor);
     }

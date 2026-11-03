@@ -13,7 +13,7 @@ export interface SandboxRecord {
 
 /** Canonical owner of workspace↔sandbox identity. The sandbox itself and its
  *  volume are disposable compute; this row is only a pointer. Product data
- *  stays in workspace tables (see docs/persistence.md). */
+ *  stays in workspace tables (see internal-docs/persistence.md). */
 export function ensureSandboxStore(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS workspace_sandboxes (
