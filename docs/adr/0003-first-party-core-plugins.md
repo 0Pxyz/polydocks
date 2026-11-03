@@ -1,6 +1,6 @@
 # ADR 0003: First-Party Core Plugin Suite
 
-- **Status:** Proposed
+- **Status:** Accepted (implemented via #272, verified 2026-11-03)
 - **Date:** 2026-11-01
 - **Authors:** Polymax team
 - **Issue:** #247
@@ -13,12 +13,12 @@ inventory (2026-11-01, against `dev`) differs from the issue text in two places:
 - `cities`, `writing`, and `workspace` plugins named in the issue **do not exist in code**. No
   manifests, no registrations, no routes. The stale names likely predate the registry. Nothing to
   migrate or delete for them.
-- **Notes and Files do not exist as plugins.** File access lives in native agent tools
+- **Notes and Files did not exist as plugins at proposal time.** File access lived in native agent tools
   (`list_files`, `read_file`, `write_file`, `edit_file`, `search_files` over agent-home via
-  `server/system/filesystem.ts`). There is no notes store at all; the closest structures are the
+  `server/system/filesystem.ts`). There was no notes store at all; the closest structures were the
   `sources` feed (saved URLs: add/list/open) and agent memory (`record_memory`).
 
-What ships today (all `trust: "first-party"`, registered in
+What shipped at proposal time (all `trust: "first-party"`, registered in
 `server/plugins/first-party/index.ts` or via contract):
 
 | Plugin | Capabilities | Notes |
@@ -73,3 +73,15 @@ Target suite: **Browser, Research, Files, Sandbox, Notes** as `trust: "core"`, p
   policy re-checked at invoke). Acceptable: one shared executor, two entries — not two
   implementations. If duplication confuses routing, the follow-up is to point the agent tools at
   the bus, not to fork logic.
+
+## 5. Acceptance (landed via #272, verified 2026-11-03)
+
+- `search`, `browser`, `sandbox` flipped to `trust: "core"`; `files` and `notes` ship as thin core
+  contracts over the existing executors. No ids renamed, nothing merged, no dock surfaces added
+  for Files/Notes (agent-operated, like sources) — dock presence stays a separate product decision.
+- Post-migration suite: 5 core (`search`, `browser`, `files`, `sandbox`, `notes`) + first-party
+  `sources` (internal service) and `onboarding` (special first-launch lifecycle) + dev/QA tooling
+  (`inspect` dev-gated, `kit-gallery` QA fixture) + generated store demos (`bitcoin`,
+  `pomodoro-focus`). The `cities`/`writing`/`workspace` names from the issue never existed in code.
+- The legacy mock-price `BitcoinViewer` dock branches (nothing opened them; live prices live in the
+  `bitcoin` store plugin) were removed with this acceptance.
