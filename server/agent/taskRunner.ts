@@ -402,6 +402,32 @@ export function verifyJobEffect(input: {
 }
 
 /**
+ * Pure options builder for the default background executor (#307): maps a
+ * durable task row to the runAgentLoop call, including the turn owner.
+ * Exported as a test seam (same pattern as setRouter/setHeavyRunnerForTest).
+ */
+export function buildTaskLoopOptions(
+  task: AgentTask,
+  opts: {
+    prompt: string;
+    origin: "chat" | "dock-add";
+    signal: AbortSignal;
+    onLoopEvent: (ev: AgentStepEvent) => Promise<void> | void;
+  }
+) {
+  return {
+    prompt: opts.prompt,
+    userId: typeof task.input?.userId === "string" ? task.input.userId : undefined,
+    workspaceId: task.workspaceId,
+    sessionId: task.sessionId,
+    taskId: task.id,
+    origin: opts.origin,
+    signal: opts.signal,
+    onEvent: opts.onLoopEvent,
+  };
+}
+
+/**
  * Background Task Runner Engine
  * Manages asynchronous task lifecycle, in-memory replay buffers, and active cancellations.
  */
@@ -670,38 +696,37 @@ export class TaskExecutionEngine {
           const prompt = String(task.input?.prompt || "");
           const origin = task.input?.origin === "dock-add" ? "dock-add" : "chat";
 
-          const loopResult = await runAgentLoop({
-            prompt,
-            workspaceId: task.workspaceId,
-            sessionId: task.sessionId,
-            taskId: task.id,
-            origin,
-            signal: controller.signal,
-            onEvent: async (ev) => {
-              await emit(ev);
-              if (ev.type === "approval.requested") {
-                // Visible wait instead of a silent fail (#315): the job
-                // parks in awaiting_approval with a durable, resumable
-                // event until the user allows or denies.
-                updateTaskState(task.id, "awaiting_approval");
-                const row = insertJobEvent(task.id, task.sessionId, "job.awaiting_approval", {
-                  status: "awaiting_approval",
-                  ...(ev.payload as Record<string, unknown>),
-                  taskType: task.type,
-                });
-                this.announceRow(row);
-              }
-              if (ev.type === "tool.start") toolCalls += 1;
-              if (ev.type === "plugin.created" || ev.type === "plugin.updated" || ev.type === "plugin.published") {
-                pluginTouched = true;
-                const row = insertJobEvent(task.id, task.sessionId, ev.type, {
-                  ...(ev.payload as Record<string, unknown>),
-                  taskType: task.type,
-                });
-                this.announceRow(row);
-              }
-            },
-          });
+          const loopResult = await runAgentLoop(
+            buildTaskLoopOptions(task, {
+              prompt,
+              origin,
+              signal: controller.signal,
+              onLoopEvent: async (ev) => {
+                await emit(ev);
+                if (ev.type === "approval.requested") {
+                  // Visible wait instead of a silent fail (#315): the job
+                  // parks in awaiting_approval with a durable, resumable
+                  // event until the user allows or denies.
+                  updateTaskState(task.id, "awaiting_approval");
+                  const row = insertJobEvent(task.id, task.sessionId, "job.awaiting_approval", {
+                    status: "awaiting_approval",
+                    ...(ev.payload as Record<string, unknown>),
+                    taskType: task.type,
+                  });
+                  this.announceRow(row);
+                }
+                if (ev.type === "tool.start") toolCalls += 1;
+                if (ev.type === "plugin.created" || ev.type === "plugin.updated" || ev.type === "plugin.published") {
+                  pluginTouched = true;
+                  const row = insertJobEvent(task.id, task.sessionId, ev.type, {
+                    ...(ev.payload as Record<string, unknown>),
+                    taskType: task.type,
+                  });
+                  this.announceRow(row);
+                }
+              },
+            })
+          );
 
           if (controller.signal.aborted) {
             updateTaskState(task.id, timedOut ? "failed" : "cancelled", {

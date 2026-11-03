@@ -185,6 +185,7 @@ export interface AnswerContext {
   prompt: string;
   workspaceId: string;
   sessionId: string;
+  userId?: string;
   /** Durable scope for loop events (same id as the message being answered). */
   messageId: string;
   llmClient?: unknown;
@@ -204,6 +205,7 @@ async function defaultAnswerQuick(ctx: AnswerContext): Promise<string> {
     " Reply concisely with the result only: no filler narration (no 'Got it', no 'Let me try a different approach'). Progress is shown from your tool calls, not from chat text.";
   const result = await runAgentLoop({
     prompt: ctx.prompt,
+    userId: ctx.userId,
     workspaceId: ctx.workspaceId,
     sessionId: ctx.sessionId,
     history: [{ role: "system", content: snapshot } as any],
@@ -247,6 +249,7 @@ export interface OrchestratorDeps {
     sessionId: string;
     workspaceId: string;
     type: string;
+    userId?: string;
     input: Record<string, unknown>;
   }) => Promise<{ id: string }>;
 }
@@ -255,13 +258,14 @@ async function defaultStartHeavy(task: {
   sessionId: string;
   workspaceId: string;
   type: string;
+  userId?: string;
   input: Record<string, unknown>;
 }): Promise<{ id: string }> {
   const created = await TaskService.createTask({
     sessionId: task.sessionId,
     workspaceId: task.workspaceId,
     type: task.type,
-    input: task.input,
+    input: { ...task.input, userId: task.userId },
   });
   await TaskService.runTask(created);
   return { id: created.id };
@@ -274,6 +278,7 @@ const QUEUE_TABLE_SQL = `
     workspace_id TEXT NOT NULL,
     prompt TEXT NOT NULL,
     origin TEXT NOT NULL DEFAULT 'chat',
+    user_id TEXT,
     status TEXT NOT NULL DEFAULT 'queued',
     error TEXT,
     created_at TEXT NOT NULL,
@@ -284,6 +289,10 @@ const QUEUE_TABLE_SQL = `
 
 export function ensureQueueTable(): void {
   db.exec(QUEUE_TABLE_SQL);
+  const cols = new Set(
+    (db.prepare(`PRAGMA table_info("message_queue")`).all() as Array<{ name: string }>).map((c) => c.name)
+  );
+  if (!cols.has("user_id")) db.exec(`ALTER TABLE message_queue ADD COLUMN user_id TEXT`);
 }
 
 function newId(prefix: string): string {
@@ -346,6 +355,8 @@ export function isStatusQuestion(message: string): boolean {
 export interface HandleMessageInput {
   sessionId?: string;
   workspaceId?: string;
+  /** Thread owner: plumbed through to every runAgentLoop so turns persist (#307). */
+  userId?: string;
   prompt: string;
   origin?: string;
   llmClient?: unknown;
@@ -379,9 +390,9 @@ export function queueMessage(input: HandleMessageInput): { messageId: string; se
   const messageId = newId("msg");
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO message_queue (id, session_id, workspace_id, prompt, origin, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
-  ).run(messageId, sessionId, workspaceId, input.prompt, input.origin || "chat", now, now);
+    `INSERT INTO message_queue (id, session_id, workspace_id, user_id, prompt, origin, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`
+  ).run(messageId, sessionId, workspaceId, input.userId || null, input.prompt, input.origin || "chat", now, now);
 
   const chain = (sessionChains.get(sessionId) ?? Promise.resolve()).then(() =>
     processOne(messageId, input)
@@ -511,6 +522,7 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
         sessionId: row.session_id,
         workspaceId: row.workspace_id,
         type: "plugin_synthesis",
+        userId: input.userId ?? row.user_id ?? undefined,
         input: { prompt: row.prompt, origin: row.origin },
       });
       done({
@@ -527,6 +539,7 @@ async function processOne(messageId: string, input: HandleMessageInput): Promise
       prompt: row.prompt,
       workspaceId: row.workspace_id,
       sessionId: row.session_id,
+      userId: input.userId ?? row.user_id ?? undefined,
       messageId,
       llmClient: input.llmClient,
       onEvent: (ev) => {
@@ -750,6 +763,15 @@ export async function runOrchestratorLoop(options: OrchestratorOptions) {
       await emit({ step: 1, type: "tool.start", payload: { name: ran.toolName, deterministic: true, reason: fast.reason } });
       await emit({ step: 1, type: "tool.done", payload: { name: ran.toolName, deterministic: true } });
       await emit({ step: 1, type: "agent.finish", payload: { text: ran.text, deterministic: true } });
+      if (options.userId) {
+        try {
+          const { appendThreadMessage } = await import("./workspace/thread");
+          appendThreadMessage(options.userId, "user", options.prompt, { workspaceId: options.workspaceId });
+          appendThreadMessage(options.userId, "assistant", ran.text, { workspaceId: options.workspaceId });
+        } catch {
+          // Thread persistence never breaks the fast path.
+        }
+      }
       return { status: "completed" as const, text: ran.text, steps: 1 };
     }
   }
@@ -768,6 +790,7 @@ export async function runOrchestratorLoop(options: OrchestratorOptions) {
   }
   return runAgentLoop({
     prompt: options.prompt,
+    userId: options.userId,
     workspaceId: options.workspaceId,
     history: options.history,
     tools: options.tools ?? ORCHESTRATOR_TOOLS,
