@@ -732,6 +732,9 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
                 row.id === event.id ? { ...row, state: "done" as const, finishedAt: Date.now() } : row
               ),
             }));
+            // Memory badge shares the orchestrator path so legacy turns
+            // render the same line (id-guarded, replay-safe).
+            void applyOrchestratorAction(event, callbacks).catch(() => {});
             break;
 
           case "experience.created":
