@@ -86,6 +86,21 @@ describe("notes append/update (#351)", () => {
     expect(renamed.data.data.body).toBe("B");
   });
 
+  it("list returns full bodies so reload hydrates the editor (#400)", async () => {
+    const added: any = await capabilityBus.invoke(
+      "notes.add",
+      { workspaceId: WS, title: "Reload me", body: "persisted body text" },
+      { workspaceId: WS }
+    );
+    expect(added.data.ok).toBe(true);
+    const listed: any = await capabilityBus.invoke("notes.list", { workspaceId: WS }, { workspaceId: WS });
+    expect(listed.data.ok).toBe(true);
+    const row = (listed.data.data.items as any[]).find((n) => n.id === added.data.id);
+    expect(row).toBeDefined();
+    expect(row.title).toBe("Reload me");
+    expect(row.body).toBe("persisted body text");
+  });
+
   it("append/update reject unknown ids and foreign workspaces", async () => {
     const missing: any = await capabilityBus.invoke(
       "notes.append",

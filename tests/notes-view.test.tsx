@@ -169,6 +169,47 @@ describe("notes surface (#351)", () => {
     }
   });
 
+  it("hydrates title and body from the list on mount (reload path, #400)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "Research", body: "hello body", createdAt: "", updatedAt: "" },
+    ];
+    const { container, root } = await renderNotes();
+    try {
+      const input = container.querySelector('input[aria-label="Note title"]') as any;
+      const area = container.querySelector('textarea[aria-label="Note body (Markdown)"]') as any;
+      expect(input?.value).toBe("Research");
+      expect(area?.value).toBe("hello body");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("flushes an unsaved draft on unmount without waiting for the debounce (#400)", async () => {
+    store.items = [
+      { id: "note_1", workspaceId: "w", title: "Research", body: "hello", createdAt: "", updatedAt: "" },
+    ];
+    const { container, root } = await renderNotes();
+    const area = container.querySelector('textarea[aria-label="Note body (Markdown)"]') as any;
+    expect(area).toBeDefined();
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      (fileWindow as any).HTMLTextAreaElement.prototype,
+      "value"
+    )?.set;
+    nativeSetter?.call(area, "typed then closed");
+    area.dispatchEvent(new (fileWindow as any).Event("input", { bubbles: true }));
+    // Unmount immediately: the 800ms debounce never fires on its own.
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    const updates = calls.filter((c) => c.cap === "update");
+    expect(updates.length).toBeGreaterThan(0);
+    expect(updates.at(-1)!.input.body).toBe("typed then closed");
+  });
+
   it("emits no unhandled console errors", async () => {
     const { container, root } = await renderNotes();
     try {

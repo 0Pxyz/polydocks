@@ -81,7 +81,7 @@ export function registerNotesPlugin(): void {
     plugin: "notes",
     name: "list",
     title: "List Notes",
-    description: "Lists note titles for a workspace (newest first).",
+    description: "Lists notes for a workspace (newest first), with full bodies.",
     scope: "workspace",
     input: z.object({
       workspaceId: z.string().min(1),
@@ -90,7 +90,7 @@ export function registerNotesPlugin(): void {
     risk: "read",
     handler: async (input) => {
       const rows = db
-        .query("SELECT id, workspace_id, title, created_at, updated_at FROM notes WHERE workspace_id = ? ORDER BY created_at DESC")
+        .query("SELECT id, workspace_id, title, body, created_at, updated_at FROM notes WHERE workspace_id = ? ORDER BY created_at DESC")
         .all(input.workspaceId) as any[];
       return { ok: true as const, data: { workspaceId: input.workspaceId, items: rows.map(rowToNote) } };
     },

@@ -59,6 +59,9 @@ export function NotesView({ workspaceKey = "home", className = "" }: NotesViewPr
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editingId = useRef<string | null>(null);
+  // Latest unsaved draft for the unload flush below. Set whenever the
+  // debounced save is (re)scheduled, cleared when it lands.
+  const pendingSave = useRef<{ id: string; title: string; body: string } | null>(null);
 
   const refreshList = useCallback(async () => {
     const data = await callNotes<{ items: NoteItem[] }>("list", {});
@@ -100,11 +103,12 @@ export function NotesView({ workspaceKey = "home", className = "" }: NotesViewPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Switching notes hydrates the editor from the cached list row, then a
-  // full get for the body (list rows may carry empty bodies).
+  // Switching notes hydrates the editor from the cached list row (list
+  // carries full bodies), then a full get as a refresh.
   const selectNote = useCallback(
     async (id: string) => {
       const cached = notes.find((n) => n.id === id);
+      pendingSave.current = null;
       setSelectedId(id);
       editingId.current = id;
       if (cached) {
@@ -138,14 +142,19 @@ export function NotesView({ workspaceKey = "home", className = "" }: NotesViewPr
     const id = editingId.current;
     const nextTitle = title;
     const nextBody = body;
+    pendingSave.current = { id, title: nextTitle, body: nextBody };
     saveTimer.current = setTimeout(() => {
       setSaveState("saving");
       callNotes<NoteItem>("update", { id, title: nextTitle, body: nextBody })
         .then((updated) => {
+          const pending = pendingSave.current;
+          if (pending && pending.id === id && pending.title === nextTitle && pending.body === nextBody) {
+            pendingSave.current = null;
+          }
           if (editingId.current !== id) return;
           setSavedAt(updated.updatedAt);
           setSaveState("saved");
-          setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: updated.title, updatedAt: updated.updatedAt } : n)));
+          setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: updated.title, body: updated.body, updatedAt: updated.updatedAt } : n)));
         })
         .catch(() => {
           if (editingId.current === id) setSaveState("error");
@@ -157,7 +166,35 @@ export function NotesView({ workspaceKey = "home", className = "" }: NotesViewPr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, body, saveState]);
 
+  // Flush-on-exit (#400): a reload or tab close inside the 800ms debounce
+  // window would otherwise drop the draft — the timer cleanup above only
+  // cancels. beforeunload fires synchronously, so the write goes out with
+  // keepalive (no state updates: the tree may already be gone). Unmount
+  // (explicit close) flushes the same way.
+  useEffect(() => {
+    const flush = () => {
+      const pending = pendingSave.current;
+      if (!pending) return;
+      pendingSave.current = null;
+      const wsId = useWorkspaceStore.getState().activeWorkspaceId || "default";
+      void fetch("/api/plugins/notes/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...pending, workspaceId: wsId }),
+        keepalive: true,
+      }).catch(() => {
+        // Unload path: nothing left to report to.
+      });
+    };
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, []);
+
   const handleNew = useCallback(async () => {
+    pendingSave.current = null;
     try {
       const created = await callNotes<NoteItem>("add", { title: "Untitled note", body: "" });
       setNotes((prev) => [created, ...prev]);
