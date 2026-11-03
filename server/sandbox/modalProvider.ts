@@ -163,6 +163,45 @@ async function adoptRunningByTag(modal: any, app: any, workspaceId: string): Pro
   return null;
 }
 
+/**
+ * Same-workspace duplicate sweeper (#308): after a successful ensure,
+ * any OTHER running sandbox carrying this workspace tag is a leaked
+ * duplicate (typically from a pre-lock race). Terminating it funnels
+ * every op back onto the single stored id. Best-effort: failures are
+ * swallowed so a listing outage never breaks the op itself.
+ */
+export async function sweepWorkspaceDuplicates(
+  modal: any,
+  app: any,
+  workspaceId: string,
+  keepSandboxId: string
+): Promise<number> {
+  let swept = 0;
+  try {
+    const appId = app?.appId || app?.app_id;
+    const params: any = { tags: { workspace: workspaceId.slice(0, 60) } };
+    if (appId) params.appId = appId;
+    for await (const candidate of modal.sandboxes.list(params)) {
+      try {
+        const id = String(candidate?.sandboxId || "");
+        if (!id || id === keepSandboxId) continue;
+        const code = await candidate.poll();
+        if (code !== null) continue;
+        await terminateSandbox(candidate);
+        swept += 1;
+      } catch {
+        // Keep sweeping the rest.
+      }
+    }
+  } catch {
+    // Listing unavailable — no sweep this time.
+  }
+  if (swept > 0) {
+    console.log(`[sandbox] swept ${swept} duplicate(s) for workspace "${workspaceId}", kept ${keepSandboxId}`);
+  }
+  return swept;
+}
+
 export async function execInSandbox(
   sandbox: any,
   command: string[],
