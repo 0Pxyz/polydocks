@@ -8,7 +8,7 @@ import {
 
 describe("Agent Tool Catalog & Security Guards", () => {
   it("should export all canonical tools in fullTools catalog", () => {
-    expect(fullTools.length).toBe(50);
+    expect(fullTools.length).toBe(52);
     const names = fullTools.map((t) => t.name);
     expect(names).toContain("dock_search");
     expect(names).toContain("dock_pin");
@@ -53,6 +53,9 @@ describe("Agent Tool Catalog & Security Guards", () => {
     expect(names).toContain("sandbox_status");
     expect(names).toContain("sandbox_terminate");
     expect(names).toContain("start_background_job");
+    // Agent dock control (#390): dock.open/list ship on full too.
+    expect(names).toContain("dock.open");
+    expect(names).toContain("dock.list");
     // Legacy tabs and world cartography are gone (parked branch).
     for (const gone of [
       "list_tabs",
@@ -108,8 +111,7 @@ describe("Agent Tool Catalog & Security Guards", () => {
         "ui_catalog",
       ].sort()
     );
-    expect(fullTools.length).toBe(50);
-    expect(fullTools.map((t) => t.name)).not.toContain("dock.open");
+    expect(fullTools.length).toBe(52);
   });
 
   it("open_source validates URLs", async () => {
@@ -131,13 +133,21 @@ describe("Agent Tool Catalog & Security Guards", () => {
     const minimalNames = new Set(minimalTools.map((t) => t.name));
     // Derived views cover the canonical list (find_capabilities and
     // ui_catalog are the tools offered on both surfaces).
-    expect(fullNames.size).toBe(50);
+    expect(fullNames.size).toBe(52);
     expect(minimalNames.size).toBe(24);
     for (const n of names) {
       expect(fullNames.has(n) || minimalNames.has(n)).toBe(true);
     }
     const both = [...fullNames].filter((n) => minimalNames.has(n));
-    expect(both).toEqual(["apply_theme", "find_capabilities", "recall_memory", "record_memory", "ui_catalog"]);
+    expect(both).toEqual([
+      "apply_theme",
+      "find_capabilities",
+      "recall_memory",
+      "record_memory",
+      "dock.open",
+      "dock.list",
+      "ui_catalog",
+    ]);
     // plugins.install ships on every surface.
     expect(fullNames.has("install_plugin")).toBe(true);
     expect(minimalNames.has("plugins.install")).toBe(true);
