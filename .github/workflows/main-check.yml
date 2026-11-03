@@ -78,6 +78,11 @@ jobs:
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Test-only secret so the production boot path (fail-closed without a
+      # secret) can start in CI. Production behavior is unchanged: an unset
+      # BETTER_AUTH_SECRET still crashes the boot on purpose.
+      BETTER_AUTH_SECRET: ci-smoke-test-only
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
