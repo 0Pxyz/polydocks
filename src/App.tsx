@@ -22,7 +22,7 @@ import {
   shouldYieldEscToMedia,
   chatPlacement,
 } from "@/lib/dock/dockItems";
-import { DOCK_CORE_CATALOG } from "@/lib/dock/dockModel";
+import { DOCK_CORE_CATALOG, MAIN_VIEW_STATIC_IDS } from "@/lib/dock/dockModel";
 import { cn } from "@/lib/cn";
 
 export default function App() {
@@ -573,12 +573,10 @@ export default function App() {
   }, []);
 
   // Tool hosted by the main viewport (single home per tool; beside tools
-  // live in the beside panel). Every ToolSurface static id must route here
-  // or the dock focuses while Home stays put (#373: notes opened nothing).
-  const MAIN_STATIC_IDS = useMemo(
-    () => new Set(["settings", "theme", "plugins", "creations", "store", "notes", "inspect", "onboarding", "deep-work-flashcards", "bitcoin-viewer"]),
-    []
-  );
+  // live in the beside panel). Shared with PluginsView's row-open contract
+  // (MAIN_VIEW_STATIC_IDS) so the dock can never focus what the viewport
+  // will not render (#373, #380).
+  const MAIN_STATIC_IDS = useMemo(() => MAIN_VIEW_STATIC_IDS, []);
   const mainToolId =
     activeToolId !== "" &&
     !besideIds.includes(activeToolId) &&

@@ -21,7 +21,11 @@ const surfacePath = resolve(__dirname, "../src/features/dock/ToolSurface.tsx");
 describe("onboarding choreography (#373)", () => {
   test("main viewport routes every ToolSurface static id (notes, inspect included)", () => {
     const app = readFileSync(appPath, "utf-8");
-    const match = app.match(/MAIN_STATIC_IDS = useMemo\(\s*\(\) => new Set\(\[([^\]]+)\]\)/);
+    // Single source: App reuses the shared set, it never lists ids inline.
+    expect(app).toContain("MAIN_VIEW_STATIC_IDS");
+    expect(app).not.toContain('"deep-work-flashcards", "bitcoin-viewer"');
+    const model = readFileSync(resolve(__dirname, "../src/lib/dock/dockModel.ts"), "utf-8");
+    const match = model.match(/MAIN_VIEW_STATIC_IDS = new Set\(\[([^\]]+)\]\)/);
     expect(match).not.toBeNull();
     const ids = match![1];
     // Every builtin the dock offers (minus agent: it is the chat panel,

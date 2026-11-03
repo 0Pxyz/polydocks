@@ -45,6 +45,42 @@ export const SYSTEM_TOOL_IDS = new Set(["agent"]);
 /** Fallback pinned order for a fresh layout (all ids must exist in the catalog). */
 export const DEFAULT_PINNED_IDS = ["agent", "browser", "plugins", "creations", "store", "settings"];
 
+/**
+ * Tool ids the main viewport renders without a manifest surface (#380):
+ * first-party ToolSurface routes (the agent chat panel is excluded — it
+ * is a panel, not a ToolSurface id). App's viewport routing and
+ * PluginsView's row-open contract share this set so they cannot drift
+ * apart the way notes did (#373).
+ */
+export const MAIN_VIEW_STATIC_IDS = new Set([
+  "settings",
+  "theme",
+  "plugins",
+  "creations",
+  "store",
+  "notes",
+  "inspect",
+  "onboarding",
+  "browser",
+  "deep-work-flashcards",
+  "bitcoin-viewer",
+]);
+
+/**
+ * Whether a Tools row can open a viewport (#380). Generated plugins open
+ * through their manifest surfaces; static tools through their ToolSurface
+ * route. Capability-only plugins (search, sources, files, sandbox: real
+ * caps, zero surfaces, no route) have no view — the row must offer
+ * Details instead of a no-op open.
+ */
+export function canOpenPluginView(plugin: {
+  id: string;
+  enabled: boolean;
+  surfaces: Array<unknown>;
+}): boolean {
+  return plugin.enabled && (plugin.surfaces.length > 0 || MAIN_VIEW_STATIC_IDS.has(plugin.id));
+}
+
 /** Builtin ids retired with the knowledge-map experience (never valid pins).
  * "notes" is back as a first-party surface (#351) so it survives migration. */
 export const RETIRED_PIN_IDS = new Set([
