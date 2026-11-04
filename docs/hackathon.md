@@ -1,127 +1,101 @@
 # PolyDocks — judge's guide
 
-Built for the **Meta Global AI Developer Hackathon** (Indie Track). All
-product code in this repo is original work written during the competition
-period on a fresh scaffold (origin ledger: `internal-docs/NEW_WORK.md`).
-No template, no fork, MIT licensed.
+PolyDocks is an agentic workspace for people whose tools change every week — researchers, students, founders. Instead of a chat box with a fixed set of buttons, you get a dock that an AI agent operates: it opens, arranges, and when nothing fits, creates new tool panels directly in your workspace.
 
-## What problem are we solving?
+![The dock](assets/tour-dock.png)
+*Every panel is a tool Poly opened. The Orb is Poly. Demo: [full walkthrough](assets/showcase.mp4) (1:08).*
 
-Every AI assistant today lives inside someone else's feature list. You get
-a chat box plus the thirty tools a product team pre-chose for you. The
-moment your task doesn't fit those tools, you are back to copy-paste:
-the agent can't reach your workspace, and your workspace can't learn new
-abilities. People adapt to software instead of software adapting to
-people.
+## The 30-second version
 
-## Why does this matter?
+1. You state intent: *"Set up my morning: open the three sites I read first, and pin notes beside them."*
+2. Poly uses what exists (browser, notes, sources, files) and rearranges the dock around the task.
+3. When no tool fits (*"Track what I read this week"*), Poly generates a new plugin, verifies it against a manifest contract, mounts it in the dock, and versions it so you can roll back.
+4. Built tools stay. Next month starts from last month's tools.
 
-Work is personal and changes daily — a researcher, a student, and a
-founder need different tools on different days. Shipping a new app for
-every need doesn't scale, and a chat log is a poor place to do real work.
-The missing piece is an environment the agent itself can reshape: open
-what exists, build what doesn't, keep what works.
+## Problem
 
-## What is PolyDocks?
+Assistants ship with a fixed tool list. The moment a task falls outside those 30 pre-chosen tools, the user is back to copy-paste: the agent cannot reach the workspace, and the workspace cannot learn new abilities. Shipping a new app for every need does not scale, and a chat log is a poor place to do real work.
 
-A workspace operated by an AI agent called Poly. The interface is a
-persistent dock of tool panels (browser, sources feed, notes, terminal,
-plus anything Poly builds). You talk or type; Poly operates the dock,
-researches the web, runs code in a sandbox, and generates new plugins
-that mount into the dock next to everything else. State persists:
-notes autosave, tools survive reload, memory carries preferences.
+## What to try (evaluation path)
 
-## What makes the approach different?
+Run the app (see below), then ask Poly:
 
-Three deliberate choices, all visible in the architecture:
+1. *"Find the best free Rust book, open it, and pin notes beside it."* — tests research + dock arrangement + persistence.
+2. *"Build me a tool that tracks what I read this week."* — tests `find_capabilities` first, then `create_plugin`, then mount in the dock.
+3. *"Change the theme, then roll back the tool you just built."* — tests versioning and host-owned lifecycle.
 
-1. **The agent builds tools, not just uses them.** `create_plugin` is a
-   first-class capability with validation, versioning, and rollback —
-   not a code dump in chat. The dock treats generated tools exactly like
-   built-in ones.
-2. **Everything crosses one typed bus.** Agent, dock, CLI, and HTTP all
-   call the same facade functions with the same envelope. There is no
-   shadow path where the demo works but the product doesn't.
-3. **The core stays boring on purpose.** Dock, capability bus,
-   lifecycle/policy, sandbox bridge. No domain logic in core: even
-   first-party surfaces (Search, Browser, Notes, Sources, Files,
-   Sandbox) are contract plugins under the same manifest and permission
-   rules as generated ones.
+Expected: every step streams over SSE (`tool.start`, `tool.done`, `plugin.created`), destructive writes pause for approval (`INSTALL_POLICY=ask`), and a reload keeps everything.
 
-This is not a chatbot, a dashboard, a marketplace, or a wrapper: there
-is no chat-bubble feed as the product, no feature grid to configure, and
-the value isn't "AI answers" — it's a workspace that changes shape
-around the task.
+![A tool Poly built](assets/tour-build.png)
+*Bitcoin viewer Poly built: live prices, chart, currency switch — generated, themed, live in the dock.*
 
-## What does the agent actually do?
+## How it works
 
-Per turn, the loop (`server/agent/loop.ts`) streams every step over SSE
-so you watch it work: it routes fast dock/skill intents deterministically
-(`server/agent/orchestrator.ts`), then runs model turns with ~50
-zod-validated tools — `dock.open` to arrange the workspace, `notes.*`
-and `search.*` for content, `plugins.create/modify` to build, `sandbox.*`
-to run code. Failures return as tool results so the model retries;
-destructive writes pause for your approval first.
-
-Watch it: [demo walkthrough](../docs/media/videos/polydocks-product-walkthrough.mp4)
-(recorded from the live app; capture script: `scripts/capture-demo.ts`).
-
-## What is the role of the Meta technologies?
-
-Meta's platform is the agent's brain, voice, and hands for media:
-
-```mermaid
-flowchart LR
-    subgraph meta[Meta platform]
-        spark[muse-spark-1.3<br/>reasoning + tool calls]
-        wonder[muse-wonder-1.0<br/>deep reasoning]
-        voice[muse-voice-transcribe-1.0<br/>realtime ASR]
-        image[muse-image-1.0<br/>generation]
-    end
-    loop[Agent loop] -->|tool calls, retries| spark
-    loop -->|hard tasks| wonder
-    orb[Dock orb] -->|mic stream, server-held key| voice
-    loop -->|covers, share art| image
+```
+you → Poly → dock + capability bus → plugins
 ```
 
-- **Reasoning + tool calling** — every turn, every tool, every retry.
-  Swapping models is one env var; `-contributor` variants are banned so
-  user content is never training data.
-- **Voice** — hands-free dock operation; realtime transcription proxied
-  server-side, replies spoken client-side.
-- **Image** — generated art with a daily budget ledger.
+- **Agent loop** (`server/agent/loop.ts`): one loop over the Meta Model API. Fast dock/skill intents route deterministically (`server/agent/orchestrator.ts`); harder turns run model turns with ~50 zod-validated tools. Failures return as tool results so the model retries (max 2). No shell executor, no runtime codegen outside `create_plugin` / sandbox tools.
+- **Dock**: the product surface. Open, close, pin, arrange. Mount on first open, keep alive hidden, hibernate past the live-tab limit. Poly never duplicates: per request it runs `find_capabilities`, then store install, then create.
+- **Capability bus** (`server/plugins/bus.ts`): the only way tools touch the world. Typed inputs, risk levels, 30s timeout, `executions` audit trail. Agent, CLI, and HTTP call the same facade functions with the same envelope — no shadow path where the demo works but the product does not.
+- **Plugins** (`server/plugins/registry.ts`, `server/agent/skills/plugins.md`): one file + manifest (`id, title, icon, scope`, `apiVersion: 1`). Sandboxed in `<iframe sandbox="allow-scripts" srcdoc>`, host-only bridge via `postMessage` (`window.polydocks`). Host owns mounting, hiding, hibernation; plugins never control their own lifecycle.
 
-Full reference: [meta-model-api.md](meta-model-api.md). Research content
-comes from TinyFish (server-side; key never reaches the browser).
+This is not a chatbot, a dashboard, or a wrapper: no chat-bubble feed as the product, no feature grid, and the value is not "AI answers" — it is a workspace that changes shape around the task.
 
-## What does the demo prove?
+## Role of Meta technologies
 
-The [demo flow](../internal-docs/demo-script.md) is one continuous take:
-theme + background change, TinyFish research into a browsable feed,
-three built plugins (breathing exercise, focus timer with persistence,
-a brief that composes Sources and Notes through the bus), an edit with
-rollback, approval cards, plugin manager toggles, dock rearrangement,
-and a reload where everything is still there. The closing message is the
-thesis: *one dock, one agent, tools built around you.*
+Meta's platform is Poly's reasoning, voice, and image generation. Swapping models is env config, never a code change.
 
-## What are the important technical decisions?
+| Model | Exact role in the product |
+|---|---|
+| `muse-spark-1.3` (default, `MODEL_ID`) | Every agent turn: reasoning + tool calls in `runAgentLoop`. ~50 validated tools, `tool_choice: "auto"`, retry on zod failure. Client in `server/agent/llm.ts` (OpenAI SDK + `MODEL_BASE_URL`). |
+| `muse-wonder-1.0` (preview, opt-in via `AGENT_MODEL`) | Deep reasoning for hard tasks (e.g. multi-paper comparison). Slower, same tool protocol. One env var to escalate. |
+| `muse-voice-transcribe-1.0` (`MODEL_VOICE_MODEL`, `MODEL_REALTIME_URL`) | Hands-free dock operation. Mic stream relayed through a server proxy (`server/voice/proxy.ts`, `wss` realtime); the browser never holds the key. Details: [voice-realtime.md](voice-realtime.md). |
+| `muse-image-1.0` (`MODEL_IMAGE_ID`) | Generated covers and share art via the `generate_image` tool (`server/media/image.ts`). Cached on disk with a daily budget ledger (`IMAGE_MAX_PER_DAY`, fails `budget_exceeded` instead of spending). |
 
-- **Microkernel + capability bus** over a feature monolith
-  ([ADR 0001](../internal-docs/adr/0001-dock-plugin-architecture-and-day1-agentic-apis.md)).
-- **Demo-first local, cloud as a post-demo fork** — no auth theater in
-  the prototype ([ADR 0002](../internal-docs/adr/0002-single-codebase-local-cloud-modes.md)).
-- **Contract plugins, including ours** — first-party surfaces meet the
-  same manifest/lifecycle bar as generated ones
-  ([ADR 0003](../internal-docs/adr/0003-first-party-core-plugins.md)).
-- **Fail closed everywhere** — missing keys, unconfigured sandboxes,
-  and unapproved writes produce honest errors, never silent nothing.
-  Until per-user isolation ships, the server must not be exposed beyond
-  localhost.
+Constraints we build on: `tool_choice` supports only `"auto"`; tool results require the full assistant message plus one `role: "tool"` message per call with matching `tool_call_id`; guaranteed JSON via `response_format: json_schema` with flat schemas. Never `-contributor` variants — user notes stay private. Full reference: [meta-model-api.md](meta-model-api.md).
 
-## What could this become?
+Research content comes from TinyFish (server-side only; key never reaches the browser). Fetched pages are treated as untrusted data: size-capped, labeled, never allowed to trigger tools by itself.
 
-The target in `ARCHITECTURE.md`: per-user sandboxes with the agent as a
-privileged first-party plugin under the same policy as everything else —
-your tools, portable, auditable, and compounding. Today's prototype
-already draws that line: the only things missing are isolation and
-tenancy, not architecture.
+## What the demo proves
+
+One continuous take from the live app (capture script: `scripts/capture-demo.ts`):
+
+theme + background change → TinyFish research into a browsable feed → three Poly-built plugins (breathing exercise, focus timer with persistence, a brief composing Sources + Notes through the bus) → an edit with rollback → approval cards → plugin manager toggles → dock rearrangement → reload where everything is still there.
+
+![Research that stays](assets/feed-browser.png)
+*Browser next to the sources feed: everything Poly reads is saved with its origin.*
+
+## Technical decisions
+
+- **Microkernel + capability bus over a feature monolith.** Core stays minimal — dock, bus, lifecycle/policy, sandbox bridge. No domain logic in core. See [ARCHITECTURE.md](../ARCHITECTURE.md).
+- **Contract plugins, including ours.** Browser, Notes, Sources, Files, Sandbox meet the same manifest and permission bar as generated tools — not special cases. See [product-philosophy.md](product-philosophy.md).
+- **Demo-first local, cloud as a post-demo fork.** Single-user local runtime (`docker compose up`), no auth theater in the prototype. Per-user sandboxes and tenancy ship as a fork, not demo-time complexity.
+- **Fail closed everywhere.** Missing keys, unconfigured sandboxes, and unapproved writes produce honest errors, never silent nothing. Until per-user isolation ships, do not expose the server beyond localhost.
+
+## Run it
+
+```bash
+git clone https://github.com/0Pxyz/polydocks.git
+cd polydocks
+cp .env.example .env      # add your keys (table below)
+docker compose up         # app on http://localhost:3000
+```
+
+Direct dev: `bun install && bun run dev` — web on `http://localhost:5173`, API on `:3000`.
+
+| Variable | Needed for | Without it |
+|---|---|---|
+| `MODEL_API_KEY` | Poly answering anything | `model_unauthorized`; everything else still works |
+| `TINYFISH_API_KEY` | Web / news / paper research | Research tools stay offline |
+| `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` | Code execution in sandboxes | Sandbox tools fail closed with a setup hint |
+
+## Scope
+
+**Runs today:** single-user local runtime. Notes autosave, tools survive reload, memory carries preferences. **Not built yet:** per-user sandboxes, auth/multi-tenancy, remote tool store.
+
+Built for the **Meta Global AI Developer Hackathon** (Indie Track). All product code in this repo is original work written during the competition period. MIT licensed.
+
+---
+
+- Code: [README.md](../README.md) · [ARCHITECTURE.md](../ARCHITECTURE.md) · [API](api.md) · [Meta API reference](meta-model-api.md) · [Vision](product-philosophy.md)
