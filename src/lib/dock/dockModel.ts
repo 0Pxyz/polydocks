@@ -62,6 +62,7 @@ export const MAIN_VIEW_STATIC_IDS = new Set([
   "inspect",
   "onboarding",
   "browser",
+  "demo-dashboard",
   "deep-work-flashcards",
   "bitcoin-viewer",
 ]);
