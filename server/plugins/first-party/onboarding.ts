@@ -26,7 +26,7 @@ export const onboardingPluginManifest: PluginManifest = {
       title: "Step Choreography",
       description: "Advances or navigates between steps of the live product demo.",
       input: z.object({
-        stepId: z.enum(["home", "customize", "research", "breathe", "coin", "focus", "handoff"]),
+        stepId: z.enum(["home", "customize", "research", "read", "build", "remember", "handoff"]),
         autoAdvance: z.boolean().default(true),
       }),
       risk: "read",
@@ -52,7 +52,7 @@ export const onboardingPluginManifest: PluginManifest = {
       title: "Product Walkthrough",
       icon: "PlayCircle",
       variant: "immersive",
-      entry: "LiveOnboarding",
+      entry: "OnboardingPluginView",
     },
   ],
   permissions: [],
@@ -61,7 +61,7 @@ export const onboardingPluginManifest: PluginManifest = {
 export function registerOnboardingPlugin(): void {
   pluginRegistry.install(onboardingPluginManifest);
 
-  let currentStep: "idle" | "home" | "customize" | "research" | "breathe" | "coin" | "focus" | "handoff" = "idle";
+  let currentStep: "idle" | "home" | "customize" | "research" | "read" | "build" | "remember" | "handoff" = "idle";
 
   capabilityBus.register("onboarding", onboardingPluginManifest.capabilities[0], async (input, ctx) => {
     currentStep = "home";
@@ -74,7 +74,7 @@ export function registerOnboardingPlugin(): void {
     return {
       status: "started",
       step: currentStep,
-      steps: ["home", "customize", "research", "breathe", "coin", "focus", "handoff"],
+      steps: ["home", "customize", "research", "read", "build", "remember", "handoff"],
     };
   });
 

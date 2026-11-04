@@ -70,29 +70,31 @@ describe("onboarding dock lifecycle", () => {
     expect(useOnboardingStore.getState().paused).toBe(false);
   });
 
-  it("tour steps follow the 7-act demo flow with no unmapped surfaces (#368)", () => {
+  it("tour steps follow the demo flow with no unmapped surfaces (#368)", () => {
     const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]));
     expect(ONBOARDING_STEPS.map((s) => s.id)).toEqual([
       "home",
       "customize",
       "research",
-      "breathe",
-      "coin",
-      "focus",
+      "read",
+      "build",
+      "remember",
       "handoff",
     ]);
-    expect(byId.get("research")?.dockTarget).toBe("browser");
-    expect(byId.get("research")?.subtitle).toContain("TinyFish");
-    // Plugin-generation steps focus the agent chat (the build happens
-    // there); they never target a plugin id that may not exist — an
-    // unmapped target renders the blank-void fallback (#319).
-    for (const id of ["breathe", "coin", "focus"] as const) {
+    expect(byId.get("customize")?.dockTarget).toBe("agent");
+    expect(byId.get("research")?.title).toContain("TinyFish");
+    // Operative stages focus the agent chat (the work happens there) and
+    // keep the bottom sheet visible; they never target a plugin id that
+    // may not exist — an unmapped target renders the blank-void fallback.
+    for (const id of ["customize", "research", "read", "build", "remember", "handoff"] as const) {
       expect(["agent", "plugins"]).toContain(byId.get(id)?.dockTarget);
     }
     for (const step of ONBOARDING_STEPS) {
       expect(step.title.length).toBeGreaterThan(0);
-      expect(step.subtitle.length).toBeGreaterThan(0);
       expect(step.narration.length).toBeGreaterThan(0);
+      // No subtitle: the pill shows title + counter only (truncated
+      // descriptions added nothing next to the kind chips).
+      expect("subtitle" in step).toBe(false);
     }
   });
 });

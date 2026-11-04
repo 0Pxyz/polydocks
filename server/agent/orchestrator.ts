@@ -129,43 +129,79 @@ export class KeywordRouter implements IntentRouter {
     const openAlias = /^(?:abre|abra|open)\b([\s\S]*)$/i.exec(text);
     if (openAlias) {
       const rest = ` ${cleanId(openAlias[1])} `;
-      const aliasHit = (Object.keys(DOCK_ID_ALIASES) as string[]).find((a) => rest.includes(` ${a} `) || rest.endsWith(` ${a}`));
-      if (aliasHit) {
-        const id = DOCK_ID_ALIASES[aliasHit];
-        if (state.dockIds.includes(id)) {
-          return { kind: "dock_action", confidence: 0.85, reason: `alias open for "${aliasHit}"`, args: { dockOp: "open", dockId: id } };
+      // Multi-intent prompts ("Open the browser. Change my theme…") are
+      // model turns, not single-surface opens: never hijack a sentence
+      // with trailing clauses into a dock id.
+      const rawTail = openAlias[1] ?? "";
+      const looksCompound =
+        /[.?!;\n]/.test(rawTail.replace(/[.!?]+$/, "")) ||
+        rawTail.split(/\s+/).filter(Boolean).length > 6 ||
+        /\b(change|theme|wallpaper|background|gif|research|tinyfish|build|create|make|plugin|dashboard|feed)\b/i.test(rawTail);
+      if (!looksCompound) {
+        const aliasHit = (Object.keys(DOCK_ID_ALIASES) as string[]).find((a) => rest.includes(` ${a} `) || rest.endsWith(` ${a}`));
+        if (aliasHit) {
+          const id = DOCK_ID_ALIASES[aliasHit];
+          if (state.dockIds.includes(id)) {
+            return { kind: "dock_action", confidence: 0.85, reason: `alias open for "${aliasHit}"`, args: { dockOp: "open", dockId: id } };
+          }
         }
       }
     }
     const ptOpen = /^(?:abre|abra|open)\s+(?:o\s+|a\s+|os\s+|as\s+|um\s+|uma\s+|the\s+)?(.+)$/i.exec(text);
     if (ptOpen) {
-      const id = cleanId(ptOpen[1]);
-      if (id && state.dockIds.includes(id)) {
-        return { kind: "dock_action", confidence: 0.85, reason: `PT imperative open for "${id}"`, args: { dockOp: "open", dockId: id } };
+      const raw = ptOpen[1] ?? "";
+      // Same compound guard: "Open the browser. Change my…" must reach
+      // the model with its full toolset, never become unknown id
+      // "browser. change my workspace theme…".
+      const isCompound =
+        /[.?!;\n]/.test(raw.replace(/[.!?]+$/, "")) ||
+        raw.split(/\s+/).filter(Boolean).length > 6;
+      if (!isCompound) {
+        const id = cleanId(raw);
+        if (id && state.dockIds.includes(id)) {
+          return { kind: "dock_action", confidence: 0.85, reason: `PT imperative open for "${id}"`, args: { dockOp: "open", dockId: id } };
+        }
+        // Short unknown single targets keep the honest dock error below.
+        if (id && raw.split(/\s+/).filter(Boolean).length <= 4) {
+          return { kind: "dock_action", confidence: 0.85, reason: `PT imperative open for unknown id "${id}"`, args: { dockOp: "open", dockId: id } };
+        }
       }
-      return { kind: "dock_action", confidence: 0.85, reason: `PT imperative open for unknown id "${id}"`, args: { dockOp: "open", dockId: id } };
     }
     const ptClose = /^(?:fecha|feche|close)\s+(?:o\s+|a\s+|os\s+|as\s+|um\s+|uma\s+|the\s+)?(.+)$/i.exec(text);
     if (ptClose) {
-      const id = cleanId(ptClose[1]);
-      return { kind: "dock_action", confidence: 0.85, reason: `PT imperative close for "${id}"`, args: { dockOp: "close", dockId: id } };
+      const raw = ptClose[1] ?? "";
+      const isCompound =
+        /[.?!;\n]/.test(raw.replace(/[.!?]+$/, "")) ||
+        raw.split(/\s+/).filter(Boolean).length > 6;
+      if (!isCompound) {
+        const id = cleanId(raw);
+        return { kind: "dock_action", confidence: 0.85, reason: `PT imperative close for "${id}"`, args: { dockOp: "close", dockId: id } };
+      }
     }
     // Free-form open requests ("hey open the feed"): the imperative did not
     // lead the sentence, so no matcher above fired. Resolve mentioned
     // aliases anywhere in the text — but only when an open verb is present,
     // and escalate on conflicting targets instead of guessing (#345).
+    // Multi-intent turns (theme/wallpaper/research/build/plugin) always go
+    // to the model: opening one surface would drop the rest of the request.
     if (/\b(open|abre|abra|show|mostre|mostra)\b/i.test(text)) {
-      const mentions = findAliasMentions(text).filter((m) => state.dockIds.includes(m.id));
-      if (mentions.length === 1) {
-        return {
-          kind: "dock_action",
-          confidence: 0.8,
-          reason: `free-form open for alias "${mentions[0].alias}"`,
-          args: { dockOp: "open", dockId: mentions[0].id },
-        };
-      }
-      if (mentions.length > 1) {
-        return { kind: "answer_quick", confidence: 0.6, reason: `ambiguous open targets: ${mentions.map((m) => m.id).join(", ")}` };
+      const isCompoundTurn =
+        /[.?!;\n]/.test(text.replace(/[.!?]+$/, "")) ||
+        text.split(/\s+/).filter(Boolean).length > 24 ||
+        /\b(theme|wallpaper|background|gif|research|tinyfish|build|create|make|plugin|dashboard|feed|install)\b/i.test(text);
+      if (!isCompoundTurn) {
+        const mentions = findAliasMentions(text).filter((m) => state.dockIds.includes(m.id));
+        if (mentions.length === 1) {
+          return {
+            kind: "dock_action",
+            confidence: 0.8,
+            reason: `free-form open for alias "${mentions[0].alias}"`,
+            args: { dockOp: "open", dockId: mentions[0].id },
+          };
+        }
+        if (mentions.length > 1) {
+          return { kind: "answer_quick", confidence: 0.6, reason: `ambiguous open targets: ${mentions.map((m) => m.id).join(", ")}` };
+        }
       }
     }
     if (/^(?:liste|mostre|mostra|list|show)\b/i.test(text)) {

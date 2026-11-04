@@ -41,9 +41,9 @@ describe("First-Party AGENT_ONBOARDING Plugin", () => {
       "home",
       "customize",
       "research",
-      "breathe",
-      "coin",
-      "focus",
+      "read",
+      "build",
+      "remember",
       "handoff",
     ]);
   });
@@ -60,12 +60,12 @@ describe("First-Party AGENT_ONBOARDING Plugin", () => {
 
     const res2 = await capabilityBus.invoke(
       "onboarding.step",
-      { stepId: "breathe", autoAdvance: true },
+      { stepId: "build", autoAdvance: true },
       opts
     );
     expect(res2.success).toBe(true);
     expect((res2.data as any)?.status).toBe("active");
-    expect((res2.data as any)?.step).toBe("breathe");
+    expect((res2.data as any)?.step).toBe("build");
   });
 
   it("invokes onboarding.skip to gracefully complete demo", async () => {

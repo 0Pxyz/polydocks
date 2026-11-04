@@ -141,7 +141,7 @@ async function main() {
       // Skip first-launch onboarding deterministically.
       await context.addInitScript(() => {
         try {
-          window.localStorage.setItem("polymax_onboarding_completed_v1", "true");
+          window.localStorage.setItem("polymax_onboarding_completed_v2", "true");
         } catch { /* ignore */ }
       });
       const page = await context.newPage();

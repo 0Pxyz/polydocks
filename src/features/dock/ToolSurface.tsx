@@ -9,6 +9,7 @@ import { PluginStoreView } from "@/features/plugins/PluginStoreView";
 import { NativeBrowserView } from "@/features/browser/NativeBrowserView";
 import { NotesView } from "@/features/notes/NotesView";
 import { OnboardingPluginView } from "@/features/onboarding/OnboardingPluginView";
+import { DemoDashboardView } from "@/features/onboarding/DemoDashboard";
 import { InspectView } from "@/features/inspect/InspectView";
 import { SurfaceErrorBoundary } from "@/components/ui/surface-error-boundary";
 
@@ -176,6 +177,10 @@ function renderBuiltinView(
   }
   if (toolId === "onboarding") {
     return <OnboardingPluginView onDismiss={() => actions.onDismiss("onboarding")} />;
+  }
+  // Demo-scoped dashboard: scripted tour only, renders the live feed.
+  if (toolId === "demo-dashboard") {
+    return <DemoDashboardView />;
   }
   if (toolId === "inspect") {
     // Dev-only runtime inspector (#181): outside DEV builds the surface

@@ -192,7 +192,7 @@ export function BesidePanel({
       />
 
       {/* Selected beside tool (host-owned TabHost keeps every tab mounted) */}
-      <div className="relative z-0 flex-1 min-w-0 w-full min-h-0 overflow-y-auto">
+      <div className="relative z-0 flex-1 min-w-0 w-full min-h-0 overflow-y-auto flex flex-col">
         {tabs.length === 0 || !selected ? (
           <EmptyState
             icon={<PanelLeft size={20} />}

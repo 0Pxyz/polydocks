@@ -143,3 +143,4 @@
 | 2026-11-03 | Agent dock.open/dock.list on full surface (#390) | [#404](https://github.com/0Pxyz/polymax/pull/404) |
 | 2026-11-03 | Per-note deep-link across palette/dock/agent + tray.open wire fixes (#402) | [#405](https://github.com/0Pxyz/polymax/pull/405) |
 | 2026-11-03 | Catalog pins for agent dock verbs | [#407](https://github.com/0Pxyz/polymax/pull/407) |
+| 2026-11-04 | Scripted token-free onboarding tour fixed (cancel-flag split, pause/takeover guards, reentry guard) + demo video/prints in internal-docs/demo-media | #411 |

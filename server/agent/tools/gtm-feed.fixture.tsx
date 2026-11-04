@@ -125,52 +125,60 @@ function App() {
   };
 
   return (
-    <div className="flex min-h-full flex-col gap-4 p-5">
-      <Inline gap={8}>
-        <div className="min-w-40 flex-1">
-          <SearchField value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
-        <Button variant={unreadOnly ? "default" : "outline"} size="sm" onClick={() => setUnreadOnly(!unreadOnly)}>
-          Unread only
-        </Button>
-        <Button size="sm" variant="secondary" onClick={refresh} disabled={refreshing}>
-          {refreshing ? "Refreshing…" : "Refresh via search"}
-        </Button>
-      </Inline>
+    <div className="flex h-full flex-col gap-4 p-5">
+      <div className="flex-none">
+        <Inline gap={8}>
+          <div className="min-w-40 flex-1">
+            <SearchField value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <Button variant={unreadOnly ? "default" : "outline"} size="sm" onClick={() => setUnreadOnly(!unreadOnly)}>
+            Unread only
+          </Button>
+          <Button size="sm" variant="secondary" onClick={refresh} disabled={refreshing}>
+            {refreshing ? "Refreshing…" : "Refresh via search"}
+          </Button>
+        </Inline>
 
-      <SegmentedControl
-        value={filter}
-        onChange={setFilter}
-        options={[
-          { value: "all", label: "All" },
-          { value: "article", label: "Articles" },
-          { value: "video", label: "Videos" },
-        ]}
-      />
-
-      {openError ? <InlineMessage tone="error">{openError}</InlineMessage> : null}
-
-      <ReaderFeed
-        notice={notice || undefined}
-        loading={refreshing}
-        empty={{ title: "Nothing matches these filters", hint: "Try a shorter search or clear the unread filter." }}
-      >
-        {items.map((x) => (
-          <ListRow
-            key={x.url}
-            title={x.title}
-            meta={`${x.src} · ${x.kind === "video" ? "Video" : "Article"}`}
-            onOpen={() => openItem(x)}
-            action={
-              <Button size="sm" variant="ghost" onClick={() => toggleRead(x.url)}>
-                {read[x.url] ? "Mark unread" : "Mark read"}
-              </Button>
-            }
+        <div className="mt-4">
+          <SegmentedControl
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "article", label: "Articles" },
+              { value: "video", label: "Videos" },
+            ]}
           />
-        ))}
-      </ReaderFeed>
+        </div>
 
-      <p className="text-xs text-muted-foreground">
+        {openError ? <InlineMessage tone="error">{openError}</InlineMessage> : null}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <ReaderFeed
+          notice={notice || undefined}
+          loading={refreshing}
+          empty={{ title: "Nothing matches these filters", hint: "Try a shorter search or clear the unread filter." }}
+        >
+          {items.map((x) => (
+            <ListRow
+              key={x.url}
+              title={x.title}
+              meta={`${x.src} · ${x.kind === "video" ? "Video" : "Article"}`}
+              onOpen={() => openItem(x)}
+              action={
+                <div className="flex justify-end">
+                  <Button size="sm" variant="secondary" onClick={() => toggleRead(x.url)}>
+                    {read[x.url] ? "Mark unread" : "Mark read"}
+                  </Button>
+                </div>
+              }
+            />
+          ))}
+        </ReaderFeed>
+      </div>
+
+      <p className="flex-none text-xs text-muted-foreground">
         Articles and videos open in the native reader — no popups, no embeds blocked by the source site.
       </p>
     </div>

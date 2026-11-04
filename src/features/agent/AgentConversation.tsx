@@ -242,7 +242,7 @@ export function AgentConversation({
 
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const sheetInputRef = useRef<HTMLInputElement>(null);
+  const sheetInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const realtimeRef = useRef<{ close: () => void; stopMic: () => void } | null>(null);
@@ -358,6 +358,44 @@ export function AgentConversation({
   useEffect(() => {
     adjustTextareaHeight();
   }, [draft, adjustTextareaHeight]);
+
+  // Floating sheet composer: auto-grows upward with the content (1 line up
+  // to 40dvh, then vertical scroll). Height resets on send because the
+  // draft clears, which re-runs this effect.
+  const adjustSheetHeight = useCallback(() => {
+    const el = sheetInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    if (layoutState !== "sheet") return;
+    adjustSheetHeight();
+  }, [draft, layoutState, adjustSheetHeight]);
+
+  // Floating sheet height → CSS var so the onboarding pill stacks above
+  // the chat instead of covering the composer (overlap regression: the
+  // sheet grows with the text while the pill used a fixed offset).
+  const sheetPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (layoutState !== "sheet") {
+      document.documentElement.style.removeProperty("--chat-sheet-height");
+      return;
+    }
+    const el = sheetPanelRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const publish = () => {
+      document.documentElement.style.setProperty("--chat-sheet-height", `${el.offsetHeight}px`);
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--chat-sheet-height");
+    };
+  }, [layoutState]);
 
   // Handle auto-scroll during streaming (expanded views only; the sheet
   // shows a compact Orb + summary instead of a transcript). Stickiness
@@ -673,7 +711,7 @@ export function AgentConversation({
             isBottom ? "bottom-[calc(var(--dock-bottom-offset,88px)+12px)]" : "bottom-6"
           )}
         >
-          <div className="relative w-full rounded-[24px] bg-[#0c1017]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col max-h-[calc(100dvh-120px)]">
+          <div ref={sheetPanelRef} className="relative w-full rounded-[24px] bg-[var(--bg-void)]/95 border border-white/10 shadow-[0_24px_60px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-2xl p-4 overflow-hidden flex flex-col max-h-[calc(100dvh-120px)]">
             {/* Header: status on left, mute/expand/close on right (no Orb here — single Orb lives in the composer) */}
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
@@ -762,10 +800,41 @@ export function AgentConversation({
               </div>
             )}
 
+            {/* Live execution feed: the bottom sheet must show what Poly is
+                doing while it operates the dock — not just the final answer.
+                Compact mirror of the full transcript's activity rows plus
+                background job cards. */}
+            {(isStreaming || Object.values(taskCards).some((c) => c.status === "running" || c.status === "queued" || c.status === "awaiting_approval" || c.status === "failed") || streamingText) && (
+              <div className="mb-2 flex flex-col gap-1 rounded-2xl bg-[var(--bg-surface)]/60 border border-white/[0.07] px-3 py-2" aria-live="polite" aria-label="Poly activity">
+                {streamingText && (
+                  <p className="text-[11px] leading-snug text-white/80 line-clamp-3">{streamingText.slice(-280)}</p>
+                )}
+                {activity.slice(-4).map((row) => (
+                  <div key={row.id} className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
+                    {row.state === "running" ? (
+                      <span className="text-[var(--accent-lime)] text-[10px] animate-spin inline-block">✦</span>
+                    ) : row.state === "done" ? (
+                      <span className="text-[var(--accent-lime)] text-[10px]">✓</span>
+                    ) : (
+                      <span className="text-red-400 text-[10px]">✕</span>
+                    )}
+                    <span className="truncate">{row.label}</span>
+                  </div>
+                ))}
+                {activity.length === 0 && (statusText || currentPhase) && (
+                  <div className="flex items-center gap-2 text-[11px] font-mono text-[var(--accent-lime)]">
+                    <span className="animate-spin inline-block">✦</span>
+                    <span className="truncate">{statusText || currentPhase}</span>
+                  </div>
+                )}
+                <TaskCards cards={Object.values(taskCards)} />
+              </div>
+            )}
+
             {/* Compact status: single Orb (voice toggle) + short summary.
                 The collapsed sheet never renders the transcript, so a reload
                 can't start at the top — tap to expand the full conversation. */}
-            <div className="my-3 flex items-center gap-3 rounded-2xl bg-black/30 border border-white/[0.07] pl-1.5 pr-2 py-1.5">
+            <div className="my-3 flex items-center gap-3 rounded-2xl bg-[var(--bg-surface)]/60 border border-white/[0.07] pl-1.5 pr-2 py-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -838,20 +907,19 @@ export function AgentConversation({
               />
             )}
 
-            {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript) */}
+            {/* Unified Composer: input row + footer toolbar (grid coexistence, layered above transcript).
+                Turns queue per session FIFO, so sending stays available while
+                a previous turn streams — stop and send coexist. */}
             <form
+              data-tour="composer"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (isStreaming) {
-                  abortStream();
-                  return;
-                }
                 if (!draft.trim() && stagedAttachments.length === 0) return;
                 sendMessage(undefined, { onExperienceCreated, onOpenExperience, onCloseExperience });
               }}
-              className="relative z-10 shrink-0 flex flex-col gap-1 bg-black/40 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
+              className="relative z-10 shrink-0 flex flex-col gap-1 bg-[var(--bg-surface)]/90 border border-white/10 rounded-2xl p-1.5 focus-within:border-[var(--accent-lime)]/50 transition-colors"
             >
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-end gap-1.5">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -862,19 +930,23 @@ export function AgentConversation({
                 </button>
 
                 {/* Single Orb lives in the summary row above — composer keeps attach + input + send */}
-                <input
+                <textarea
                   ref={sheetInputRef}
-                  type="text"
+                  rows={1}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    adjustSheetHeight();
+                  }}
+                  onInput={adjustSheetHeight}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
                   placeholder="Ask anything, or give a dock command…"
-                  className="flex-1 min-w-0 bg-transparent px-2 py-1 text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans"
+                  className="flex-1 min-w-0 bg-transparent px-2 py-1 text-base sm:text-xs text-white placeholder-[#9aa5b8] focus:outline-none font-sans resize-none overflow-x-hidden overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] max-h-[40dvh] leading-snug"
                   autoFocus
                 />
 
-                {isStreaming ? (
+                {isStreaming && (
                   <button
                     type="button"
                     onClick={abortStream}
@@ -883,16 +955,15 @@ export function AgentConversation({
                   >
                     <Square className="w-3 h-3 fill-current" />
                   </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!draft.trim() && stagedAttachments.length === 0}
-                    className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
-                    title="Send message"
-                  >
-                    <Send className="w-3 h-3" />
-                  </button>
                 )}
+                <button
+                  type="submit"
+                  disabled={!draft.trim() && stagedAttachments.length === 0}
+                  className="w-7 h-7 rounded-lg bg-[var(--accent-lime)] text-black hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer shrink-0 font-bold"
+                  title={isStreaming ? "Queue message behind the running turn" : "Send message"}
+                >
+                  <Send className="w-3 h-3" />
+                </button>
               </div>
               <div className="flex items-center justify-start pl-1">
                 {/* Model selector removed from the UI temporarily; logic intentionally kept (ModelSwitcher, models store, backend routing). */}

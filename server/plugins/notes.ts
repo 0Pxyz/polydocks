@@ -190,4 +190,28 @@ export function registerNotesPlugin(): void {
       return { ok: true as const, id: updated.id, data: rowToNote(updated) };
     },
   });
+
+  defineCapability({
+    plugin: "notes",
+    name: "remove",
+    title: "Remove Note",
+    description: "Deletes one note from the workspace by id.",
+    scope: "workspace",
+    input: z.object({
+      id: z.string().min(1).describe("Note id from notes.list"),
+      workspaceId: z.string().optional(),
+    }),
+    output: z.object({ id: z.string(), removed: z.boolean() }),
+    emits: [],
+    risk: "write",
+    handler: async (input, ctx) => {
+      const row = db.query("SELECT * FROM notes WHERE id = ?").get(input.id) as any;
+      const targetWorkspace = input.workspaceId || ctx.workspaceId;
+      if (!row || (targetWorkspace && row.workspace_id !== targetWorkspace)) {
+        return { ok: false as const, error: `Note "${input.id}" not found.`, retryable: false as const };
+      }
+      db.query("DELETE FROM notes WHERE id = ?").run(input.id);
+      return { ok: true as const, id: input.id, data: { id: input.id, removed: true } };
+    },
+  });
 }

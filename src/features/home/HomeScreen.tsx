@@ -149,10 +149,7 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
               <Orb
                 state={
                   isOnboardingOpen && currentStep !== "idle"
-                    ? currentStep === "research" ||
-                      currentStep === "breathe" ||
-                      currentStep === "coin" ||
-                      currentStep === "focus"
+                    ? currentStep === "research" || currentStep === "read" || currentStep === "build"
                       ? "thinking"
                       : currentStep === "home"
                       ? "listening"
@@ -174,12 +171,12 @@ export function HomeScreen({ onOpenAgent, panelOpen, className = "" }: HomeScree
                 className="mt-6 max-w-md px-4 text-center"
               >
                 <p className="text-sm text-[var(--text-main)] font-sans font-medium leading-relaxed tracking-normal">
-                  {currentStep === "home" && "“Welcome to your workspace. This is Poly, and this is your dock.”"}
-                  {currentStep === "customize" && "“Change the theme to match this background — everything follows.”"}
-                  {currentStep === "research" && "“Watch the dock: querying primary sources via TinyFish…”"}
-                  {currentStep === "breathe" && "“Poly builds a breathing exercise plugin — live, in your dock.”"}
-                  {currentStep === "coin" && "“A decision coin with a flip animation and a history that persists.”"}
-                  {currentStep === "focus" && "“A focus timer that survives tab switches and restores on return.”"}
+                  {currentStep === "home" && "“Meet Poly. Jump tools with Ctrl+Shift+1 to 9, or press Ctrl+K and ask — Poly operates the dock.”"}
+                  {currentStep === "customize" && "“Watch the bottom chat while Poly cycles themes and dock styles, then settles back on default.”"}
+                  {currentStep === "research" && "“Poly researches the web with TinyFish — progress stays visible below.”"}
+                  {currentStep === "read" && "“Poly opens the most relevant video in the reader — watch, then it returns to the feed.”"}
+                  {currentStep === "build" && "“Poly builds a research dashboard plugin — live, in your dock.”"}
+                  {currentStep === "remember" && "“Poly saves what matters to memory and shows it in Notes.”"}
                   {currentStep === "handoff" && "“This is your workspace. Tell me what you want to build next.”"}
                 </p>
               </motion.div>

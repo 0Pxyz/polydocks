@@ -7,7 +7,7 @@ import {
   PLUGIN_CSP,
   UI_KIT_FILES,
 } from "./reactKit";
-import { buildReactSrcdoc, writeFeature, readFeature } from "./features";
+import { buildReactSrcdoc, writeFeature, readFeature, GUEST_BASE_CSS } from "./features";
 import { getKitJs, getKitCss, getKitTokens } from "./reactKit";
 import { db } from "./db";
 
@@ -106,6 +106,19 @@ describe("React allowlist + vendored kit bundling", () => {
     expect(srcdoc).toContain("__polymaxKit");
     expect(srcdoc).toContain("openContent");
     expect(srcdoc).toContain("useCapability");
+    // Guest base layer: full-height chain, no native button chrome.
+    expect(srcdoc).toContain("scrollbar-width: thin");
+  });
+
+  it("guest base layer resets native chrome inside @layer base (utilities still win)", () => {
+    // @layer base loses to @layer utilities, so shadcn variants keep
+    // their backgrounds while bare buttons drop the gray native chrome.
+    expect(GUEST_BASE_CSS).toContain("@layer base");
+    expect(GUEST_BASE_CSS).toContain("html, body, #app");
+    expect(GUEST_BASE_CSS).toContain("height: 100%");
+    expect(GUEST_BASE_CSS).toContain("appearance: none");
+    expect(GUEST_BASE_CSS).toContain("background: transparent");
+    expect(GUEST_BASE_CSS).toContain("scrollbar-width: thin");
   });
 
   it("writeFeature routes import-bearing code through the React path", async () => {

@@ -15,15 +15,14 @@ export type OnboardingStep =
   | "home"
   | "customize"
   | "research"
-  | "breathe"
-  | "coin"
-  | "focus"
+  | "read"
+  | "build"
+  | "remember"
   | "handoff";
 
 export const ONBOARDING_STEPS: {
   id: OnboardingStep;
   title: string;
-  subtitle: string;
   /** Center-stage narration line (the video flow). Shown under the orb. */
   narration: string;
   dockTarget?: string;
@@ -31,74 +30,71 @@ export const ONBOARDING_STEPS: {
 }[] = [
   {
     id: "home",
-    title: "Home Screen & Dock",
-    subtitle: "Your personal workspace operated by an autonomous agent.",
-    narration: "Welcome to your workspace. This is Poly, and this is your dock.",
-    dockTarget: "agent",
-    durationMs: 7000,
+    title: "Meet Poly + Your Dock",
+    narration: "Meet Poly. Jump tools with Ctrl+Shift+1 to 9, or press Ctrl+K and ask — Poly operates the dock.",
+    dockTarget: undefined,
+    durationMs: 9000,
   },
   {
     id: "customize",
-    title: "Make It Yours",
-    subtitle: "Theme tokens adapt live; backgrounds persist across restarts.",
-    narration: "Change the theme to match this background — everything follows.",
-    dockTarget: "settings",
-    durationMs: 8000,
+    title: "Themes + Dock Styles, Live",
+    narration: "Watch the bottom chat while Poly cycles themes and dock styles, then settles back on default.",
+    dockTarget: "agent",
+    durationMs: 10000,
   },
   {
     id: "research",
     title: "Deep Web Research via TinyFish",
-    subtitle: "Poly searches and synthesizes primary sources via TinyFish.",
-    narration: "Watch the dock: querying primary sources via TinyFish…",
-    dockTarget: "browser",
-    durationMs: 9000,
-  },
-  {
-    id: "breathe",
-    title: "Poly Builds: Box Breathing",
-    subtitle: "Live code generation, mounted straight into the dock.",
-    narration: "Poly builds a breathing exercise plugin — live, in your dock.",
+    narration: "Poly researches the web with TinyFish — progress stays visible below.",
     dockTarget: "agent",
-    durationMs: 9000,
+    durationMs: 10000,
   },
   {
-    id: "coin",
-    title: "Poly Builds: Decision Coin",
-    subtitle: "User input, animation, and durable flip history.",
-    narration: "A decision coin with a flip animation and a history that persists.",
+    id: "read",
+    title: "Reader: Watch a Video",
+    narration: "Poly opens the most relevant video in the reader — watch, then it returns to the feed.",
     dockTarget: "agent",
-    durationMs: 9000,
+    durationMs: 10000,
   },
   {
-    id: "focus",
-    title: "Poly Builds: Focus Timer",
-    subtitle: "Keeps counting in the background; restores on return.",
-    narration: "A focus timer that survives tab switches and restores on return.",
+    id: "build",
+    title: "Poly Builds: Research Dashboard",
+    narration: "Poly builds a research dashboard plugin — live, in your dock.",
+    dockTarget: "agent",
+    durationMs: 10000,
+  },
+  {
+    id: "remember",
+    title: "Memory + Notes",
+    narration: "Poly saves what matters to memory and shows it in Notes.",
     dockTarget: "agent",
     durationMs: 9000,
   },
   {
     id: "handoff",
-    title: "Your Workspace, Your Rules",
-    subtitle: "Personalized theme, research feed, and new plugins live in the dock.",
+    title: "Your Workspace, Working Together",
     narration: "This is your workspace. Tell me what you want to build next.",
     dockTarget: "agent",
-    durationMs: 6000,
+    durationMs: 7000,
   },
 ];
 
 /**
- * Scripted composer drafts the tour pre-fills per build step (#373): the
- * walkthrough demonstrates the feature instead of an empty chat, and the
- * user still sends (consent-preserving — the tour never auto-submits).
- * Steps without an entry leave the draft untouched.
+ * Real prompts the walkthrough runs: each stage presents its prompt in the
+ * bottom chat and the actual agent processes it. The user (or the demo
+ * runner) sends; the tour never fabricates results.
  */
 export const ONBOARDING_STEP_PROMPTS: Partial<Record<OnboardingStep, string>> = {
-  breathe:
-    "Build me a breathing exercise plugin: a circle that expands and contracts on a 4-4-4-4 box breathing cycle with start/pause, a round counter, and a calm dark design. Call it Box Breathing.",
-  coin: "Build me a decision coin plugin: a coin flipper with a flip animation and a timestamped history that persists. Call it Decision Coin.",
-  focus:
-    "Build me a focus timer plugin: a 25-minute countdown that keeps counting in the background and restores on return. Call it Focus Timer.",
+  customize:
+    "Open the Settings tool (dock id 'settings'). Then, in ONE batch with parallel calls: set this GIF as the workspace background (wallpaper opacity 0.25) https://raw.githubusercontent.com/rachelvansciver/SpinningASCIIDonut/master/spinningdonut.gif with a complementing theme and the glass dock at the bottom. Do not list or search the dock — use the ids given here. Use the fewest tool calls possible, narrate briefly, then return to the tour with dock.open onboarding.",
+  research:
+    "Research the latest developments in AI agents, autonomous workflows, and new AI-powered developer tools. Search the web for interesting articles, blog posts, YouTube videos, and relevant resources. Use TinyFish to discover and collect relevant content, then organize everything into a visual feed inside my workspace with source links and short descriptions.",
+  read:
+    "Using the research feed we just collected, pick the single most relevant video, open it in the reader so I can watch it, keep it open briefly, then close the reader and return to the feed. Narrate in the bottom chat while you do it.",
+  build:
+    "I want a dedicated AI research dashboard for this workspace. Build a plugin that lets me explore the research we just collected: a visual overview of the collected resources, categories or filters for different topics, clear source titles and short descriptions, links to open the original articles and videos, and a clean interface that fits the current workspace theme. Validate it, install it, and open it in the dock.",
+  remember:
+    "Remember that I am evaluating PolyDocks for the hackathon demo and I like calm dark workspaces. Save that as a memory, write a short note titled 'Demo notes' in Notes with my goal and the workspace setup, then open Notes so I can see it.",
 };
 
 interface OnboardingStoreState {

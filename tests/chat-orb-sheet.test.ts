@@ -50,7 +50,9 @@ describe("chat capsule sheet (voice-first, footer picker)", () => {
     expect(source).toContain("Restoring your conversation");
     expect(sheet).not.toContain("ScrollArea");
     expect(sheet).not.toContain("sheetTranscriptRef");
-    expect(sheet).not.toContain("overflow-y-auto");
+    // No transcript scroller in the sheet; the composer textarea may still
+    // scroll vertically once it hits its own max height.
+    expect(sheet).not.toContain("transcriptRef");
   });
 
   test("single orb toggles realtime voice", () => {
@@ -70,6 +72,35 @@ describe("chat capsule sheet (voice-first, footer picker)", () => {
   test("approval banner and clear-conversation control exist", () => {
     expect(sheet).toContain("activeApproval");
     expect(sheet).toContain("clearConversation");
+  });
+
+  test("sheet composer is a growing textarea, not a fixed single-line input", () => {
+    expect(sheet).not.toContain('type="text"');
+    expect(sheet).toContain("<textarea");
+    expect(sheet).toContain("rows={1}");
+    expect(sheet).toContain("adjustSheetHeight");
+    // Height tracks scrollHeight at component scope (shared by the effect,
+    // onChange and onInput), resetting to one line when the draft clears.
+    expect(source).toContain("el.style.height = `${el.scrollHeight}px`");
+    // Capped growth in viewport units (mobile + keyboard safe), vertical
+    // scroll past the cap, no horizontal scroll, soft wrapping.
+    expect(sheet).toContain("max-h-[40dvh]");
+    expect(sheet).toContain("overflow-y-auto");
+    expect(sheet).toContain("overflow-x-hidden");
+    expect(sheet).toContain("whitespace-pre-wrap");
+    expect(sheet).toContain("[overflow-wrap:anywhere]");
+    expect(sheet).toContain("resize-none");
+    // Composer buttons stay pinned to the bottom row as the field grows.
+    expect(sheet).toContain("items-end");
+    // 16px minimum on mobile (no iOS auto-zoom), compact on desktop.
+    expect(sheet).toContain("text-base sm:text-xs");
+  });
+
+  test("sheet send stays available while streaming (turns queue FIFO)", () => {
+    // Stop and send coexist: the submit button is never swapped out for
+    // the stop button, and submit always queues instead of aborting.
+    expect(sheet).toContain("Queue message behind the running turn");
+    expect(sheet).not.toContain("isStreaming ? (");
   });
 });
 

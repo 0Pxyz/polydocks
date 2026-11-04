@@ -96,7 +96,7 @@ export function DockSurface({
     return (
       <div
         className={cn(
-          "w-full flex-1 flex flex-col items-center justify-start select-none bg-transparent",
+          "w-full flex-1 min-h-0 flex flex-col items-center justify-start select-none bg-transparent",
           isBottom
             ? "pb-[calc(var(--dock-bottom-offset,var(--dock-offset,88px))+12px)] pt-3"
             : "pt-[calc(var(--dock-top-offset,var(--dock-offset,88px))+12px)] pb-3",
@@ -111,7 +111,7 @@ export function DockSurface({
   return (
     <div
       className={cn(
-        "w-full flex-1 flex flex-col items-center justify-start select-none",
+        "w-full flex-1 min-h-0 flex flex-col items-center justify-start select-none",
         isBottom
           ? variant === "frameless"
             ? "pb-[calc(var(--dock-bottom-offset,var(--dock-offset,88px))+12px)] pt-4"

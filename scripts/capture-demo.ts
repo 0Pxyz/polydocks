@@ -176,7 +176,7 @@ async function main() {
     // 2. Theme + GIF background.
     scene("02 theme + background");
     const ok2 = await ask(
-      "Change my workspace theme to something that complements this background, and add this GIF as my workspace background:\n\nhttps://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExOGh1OTRrb2xpMGttNjBwaTI2eGFpeWRlenNtbG16eHQ3MnpoaWd4aCZlcD12MV9pbnRlcm5hbGdfZ2lmX2J5X2lkJmN0PWc/KZA296TejOSmsnJe6f/giphy.gif\n\nMake sure the theme and background work well together.",
+      "Change my workspace theme to something that complements this background, and add this GIF as my workspace background:\n\nhttps://raw.githubusercontent.com/rachelvansciver/SpinningASCIIDonut/master/spinningdonut.gif\n\nMake sure the theme and background work well together.",
       8 * 60 * 1000,
       "theme"
     );

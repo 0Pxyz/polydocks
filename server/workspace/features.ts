@@ -208,6 +208,41 @@ export function getVanillaKitCss(): string {
 }
 
 /**
+ * Guest base layer for the React-kit srcdoc shell (no Tailwind preflight
+ * ships in kit.css — utilities only). Lives in `@layer base` so kit
+ * utilities still win: native button chrome is reset (unstyled buttons
+ * otherwise render browser-default gray), the html/body/#root chain is
+ * full-height for flex column panels, and scrollbars follow the dark
+ * theme instead of the native light one.
+ */
+export const GUEST_BASE_CSS = `@layer base {
+  html, body, #app { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+  #app { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  button {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  input, textarea, select { font: inherit; }
+  * { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+}`;
+
+/**
  * Builds the sandboxed iframe srcdoc containing the app design tokens, the
  * native vanilla `px-*` component kit, the window.polymax bridge runtime,
  * and the transpiled guest code.
@@ -334,6 +369,9 @@ export function buildReactSrcdoc(
   <title>${escapeHtml(manifest.title)}</title>
   <style>
 ${kit.tokens}
+  </style>
+  <style>
+${GUEST_BASE_CSS}
   </style>
   <style>
 ${kit.css}

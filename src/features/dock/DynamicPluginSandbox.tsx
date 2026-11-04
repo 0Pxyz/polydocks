@@ -181,7 +181,7 @@ export function DynamicPluginSandbox({
   return (
     <div
       className={cn(
-        "relative w-full h-full flex-1 flex flex-col bg-transparent select-none",
+        "relative w-full h-full min-h-0 flex-1 flex flex-col bg-transparent select-none",
         className
       )}
     >

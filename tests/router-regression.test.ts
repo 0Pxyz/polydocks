@@ -54,6 +54,19 @@ describe("Router regression: theme/wallpaper never becomes a background job", ()
     expect(DOCK.includes(meh.args?.dockId ?? "")).toBe(false);
   });
 
+  it("never hijacks multi-sentence prompts into unknown dock ids", () => {
+    const customize = router.route(
+      "Open the browser. Change my workspace theme to something that complements this background, and add this GIF as my workspace background: https://media.giphy.com/media/x/giphy.gif",
+      st()
+    );
+    expect(customize.kind).toBe("answer_quick");
+    const research = router.route(
+      "Research the latest developments in AI agents. Search the web for articles and use TinyFish to organize a feed.",
+      st()
+    );
+    expect(research.kind).toBe("answer_quick");
+  });
+
   it("flags note-like open targets for model escalation, not dock ids (#402)", async () => {
     const { isNoteOpenRequest } = await import("../server/agent/orchestrator");
     expect(isNoteOpenRequest('Open my note titled "weekly plan"')).toBe(true);

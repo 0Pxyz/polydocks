@@ -656,7 +656,83 @@ export function registerSourcesPlugin(): void {
     },
   });
 
-  // 2. sources.list capability
+  // 2. sources.import capability: full-field insert with zero network
+  // (no oEmbed, no fetch, no enrichment). For local fixtures and bookmark
+  // imports where every field is already known. Dedupes by URL like add.
+  defineCapability({
+    plugin: "sources",
+    name: "import",
+    title: "Import Source",
+    description:
+      "Saves a fully-described source to the workspace feed without any network enrichment. The caller provides every field (title, kind, content).",
+    scope: "workspace",
+    input: z.object({
+      workspaceId: z.string().min(1).describe("Workspace id"),
+      url: z.string().url().describe("Source URL"),
+      kind: z.enum(["article", "paper", "video"]).describe("Source kind"),
+      title: z.string().min(1).describe("Source title"),
+      site: z.string().optional().describe("Site name"),
+      image: z.string().nullable().optional().describe("Image URL"),
+      author: z.string().nullable().optional().describe("Author name"),
+      publishedAt: z.string().nullable().optional().describe("ISO publish date"),
+      readMinutes: z.number().nullable().optional().describe("Read time in minutes"),
+      durationSec: z.number().nullable().optional().describe("Video duration in seconds"),
+      hook: z.string().nullable().optional().describe("One-line hook"),
+      fullText: z.string().nullable().optional().describe("Bundled markdown content"),
+    }),
+    output: AddSourceOutput,
+    emits: ["source.added"],
+    risk: "write",
+    handler: async (input) => {
+      const existing = db
+        .query("SELECT * FROM sources WHERE workspace_id = ? AND url = ?")
+        .get(input.workspaceId, input.url) as any;
+      if (existing) {
+        const row = rowFromDb(existing);
+        return { ok: true as const, id: row.id, data: { ...row, deduped: true }, events: [] };
+      }
+      const id = `src_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      const now = new Date().toISOString();
+      db.query(
+        `INSERT INTO sources (id, workspace_id, kind, url, title, site, image, author, published_at, read_minutes, duration_sec, hook, full_text, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        id, input.workspaceId, input.kind, input.url, input.title,
+        input.site ?? siteFromUrl(input.url), input.image ?? null, input.author ?? null,
+        input.publishedAt ?? null, input.readMinutes ?? null, input.durationSec ?? null,
+        input.hook ?? null, input.fullText ?? null, now
+      );
+      const row = { ...(await Promise.resolve(getSourceById(id)))!, deduped: false };
+      return { ok: true as const, id, data: row };
+    },
+  });
+
+  // 3. sources.remove capability: deletes a workspace source by id.
+  defineCapability({
+    plugin: "sources",
+    name: "remove",
+    title: "Remove Source",
+    description: "Deletes one saved source from the workspace feed by id.",
+    scope: "workspace",
+    input: z.object({
+      id: z.string().min(1).describe("Source id from the workspace feed"),
+      workspaceId: z.string().optional().describe("Workspace id (optional)"),
+    }),
+    output: z.object({ id: z.string(), removed: z.boolean() }),
+    emits: [],
+    risk: "write",
+    handler: async (input, ctx) => {
+      const row = getSourceById(input.id);
+      const targetWorkspace = input.workspaceId || ctx.workspaceId;
+      if (!row || (targetWorkspace && row.workspaceId !== targetWorkspace)) {
+        return { ok: false as const, error: `Source "${input.id}" not found.`, retryable: false as const };
+      }
+      db.query("DELETE FROM sources WHERE id = ?").run(input.id);
+      return { ok: true as const, id: input.id, data: { id: input.id, removed: true } };
+    },
+  });
+
+  // 4. sources.list capability
   defineCapability({
     plugin: "sources",
     name: "list",

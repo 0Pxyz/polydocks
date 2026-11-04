@@ -54,19 +54,52 @@ describe("onboarding choreography (#373)", () => {
     expect(engine).not.toContain('force("")');
   });
 
-  test("build steps prefill the composer draft (visible feature, never auto-send)", () => {
+  test("build stages prefill the composer draft (visible feature, never auto-send)", () => {
     const engine = readFileSync(enginePath, "utf-8");
     expect(engine).toContain("ONBOARDING_STEP_PROMPTS");
     expect(engine).toContain("setDraft(prompt)");
-    expect(engine).not.toContain("sendMessage(");
-    for (const step of ["breathe", "coin", "focus"] as const) {
+    for (const step of ["customize", "research", "read", "build", "remember"] as const) {
       const prompt = ONBOARDING_STEP_PROMPTS[step];
       expect(typeof prompt).toBe("string");
       expect(prompt!.length).toBeGreaterThan(20);
     }
-    expect(ONBOARDING_STEP_PROMPTS.breathe).toContain("Box Breathing");
-    expect(ONBOARDING_STEP_PROMPTS.coin).toContain("Decision Coin");
-    expect(ONBOARDING_STEP_PROMPTS.focus).toContain("Focus Timer");
+    expect(ONBOARDING_STEP_PROMPTS.customize).toContain("settings");
+    expect(ONBOARDING_STEP_PROMPTS.customize).toContain("fewest tool calls");
+    expect(ONBOARDING_STEP_PROMPTS.research).toContain("TinyFish");
+    expect(ONBOARDING_STEP_PROMPTS.build).toContain("dashboard");
+    expect(ONBOARDING_STEP_PROMPTS.remember).toContain("Notes");
+  });
+
+  test("customize pairs an instant local theme preview with the fast agent turn", () => {
+    const script = readFileSync(
+      resolve(__dirname, "../src/lib/onboarding/demoScript.ts"),
+      "utf-8"
+    );
+    // Same theme store the agent drives, cycled locally in ~2s instead of
+    // N model roundtrips; restored on cancel before the agent turn runs.
+    expect(script).toContain("previewThemes");
+    expect(script).toContain("setTheme");
+    expect(script).toContain("setDockStyle");
+  });
+
+  test("live auto tour types prompts, sends for real, and chains to the end", () => {
+    const script = readFileSync(
+      resolve(__dirname, "../src/lib/onboarding/demoScript.ts"),
+      "utf-8"
+    );
+    expect(script).toContain("typePromptText");
+    expect(script).toContain("runLiveAutoStep");
+    expect(script).toContain("TURN_FAILURE_PREFIXES");
+    // User takeover or step change stops the chain silently.
+    expect(script).toContain("demo-cancelled");
+    const engine = readFileSync(enginePath, "utf-8");
+    expect(engine).toContain("runLiveAutoStep");
+    expect(engine).toContain("isLiveAuto");
+    const view = readFileSync(
+      resolve(__dirname, "../src/features/onboarding/OnboardingPluginView.tsx"),
+      "utf-8"
+    );
+    expect(view).toContain("Auto live tour");
   });
 
   test("engine never claims a mount it did not perform", () => {
@@ -83,7 +116,12 @@ describe("onboarding choreography (#373)", () => {
   test("every step still carries narration + a dock target contract", () => {
     for (const step of ONBOARDING_STEPS) {
       expect(step.narration.length).toBeGreaterThan(0);
-      expect(step.dockTarget).toBeDefined();
     }
+    // Operative stages keep the bottom chat visible; home establishes context.
+    const byId = new Map(ONBOARDING_STEPS.map((s) => [s.id, s]));
+    for (const id of ["customize", "research", "read", "build", "remember", "handoff"] as const) {
+      expect(byId.get(id)?.dockTarget).toBe("agent");
+    }
+    expect(ONBOARDING_STEPS[0].id).toBe("home");
   });
 });
