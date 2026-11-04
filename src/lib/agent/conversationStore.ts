@@ -1347,13 +1347,30 @@ export function scopeKeyFor(taskId: string): string {
 }
 
 /** Idempotent step upsert: replay/resume never duplicates (match by stable id). */
+export function mergeStep(existing: AgentStep | undefined, incoming: AgentStep): AgentStep | null {
+  if (!existing) return incoming;
+  // Terminal states win: a redelivered running row (reconnect replay,
+  // duplicate frame) must never resurrect a finished step — that was the
+  // stuck "Working…" rows on failed background jobs (card Failed, steps
+  // still spinning until a manual refresh re-converged them).
+  if ((existing.status === "done" || existing.status === "error") && incoming.status === "running") {
+    return null;
+  }
+  return { ...existing, ...incoming };
+}
+
 function upsertStep(scopeKey: string, step: AgentStep): void {
   useConversationStore.setState((state) => {
     const existing = state.messageSteps[scopeKey] || [];
     const idx = existing.findIndex((s) => s.id === step.id);
-    const next =
-      idx >= 0 ? existing.map((s, i) => (i === idx ? { ...s, ...step } : s)) : [...existing, step];
-    return { messageSteps: { ...state.messageSteps, [scopeKey]: next } };
+    if (idx < 0) {
+      return { messageSteps: { ...state.messageSteps, [scopeKey]: [...existing, step] } };
+    }
+    const merged = mergeStep(existing[idx], step);
+    if (!merged) return state;
+    return {
+      messageSteps: { ...state.messageSteps, [scopeKey]: existing.map((s, i) => (i === idx ? merged : s)) },
+    };
   });
 }
 

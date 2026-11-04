@@ -254,6 +254,8 @@ export function getFriendlyToolStatus(toolName: string, args?: Record<string, un
     case "sandbox_status":
     case "sandbox_terminate":
       return null;
+    case "start_background_job":
+      return "Starting the background job…";
     case "apply_theme":
       return "Applying theme…";
     case "publish_plugin":
