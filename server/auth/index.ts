@@ -79,7 +79,7 @@ function resolveTrustedOrigins(): string[] {
 /**
  * Better Auth instance: the single identity foundation for PolyDocks.
  *
- * - Database: the shared bun:sqlite `polymax.db` (same file, same WAL
+ * - Database: the shared bun:sqlite `polydocks.db` (same file, same WAL
  *   strategy as the rest of the backend). Tables (`user`, `session`,
  *   `account`, `verification`) are created by `ensureAuthTables()` via
  *   Better Auth's own migration planner (additive only, reversible by

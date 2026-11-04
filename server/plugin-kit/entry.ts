@@ -3,7 +3,7 @@
  * into server/plugin-kit/kit.bundle.js and inlined into every React plugin srcdoc.
  * The iframe keeps origin isolation (no allow-same-origin, no external scripts).
  *
- * The bundle assigns window.__polymaxKit explicitly (the iife wrapper drops
+ * The bundle assigns window.__polydocksKit explicitly (the iife wrapper drops
  * ESM exports, so re-exports alone would vanish at runtime).
  */
 import * as React from "react";
@@ -64,7 +64,7 @@ const UI = {  ...badge,
   ...level2,
 };
 
-(globalThis as any).__polymaxKit = {
+(globalThis as any).__polydocksKit = {
   React,
   // Mutable copy: validation stubs createRoot to capture the root element.
   ReactDOMClient: { ...ReactDOMClient },

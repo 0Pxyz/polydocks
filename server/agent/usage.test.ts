@@ -11,7 +11,7 @@ describe("Turn usage accounting (measured, not estimated)", () => {
   let prevOutRate: string | undefined;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "polymax-usage-"));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "polydocks-usage-"));
     prevUsageDir = process.env.AGENT_USAGE_DIR;
     prevInRate = process.env.MODEL_INPUT_PRICE_PER_1K;
     prevOutRate = process.env.MODEL_OUTPUT_PRICE_PER_1K;

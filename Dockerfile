@@ -1,7 +1,7 @@
 # PolyDocks single-container sandbox image (local demo = 1 sandbox per account).
 # One image, one process: Bun serves the API and the built frontend.
 # ALL runtime state lives in two mounted paths and nothing else:
-#   /app/data        SQLite (polymax.db + WAL) via DATA_DIR
+#   /app/data        SQLite (polydocks.db + WAL) via DATA_DIR
 #   /app/agent-home  memory, sessions, artifacts, agent files via AGENT_HOME_DIR
 # The repo `workspace/` tree is a one-time import seed only (never live state).
 

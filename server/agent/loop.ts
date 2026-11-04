@@ -204,7 +204,7 @@ function loadDefaultSystemPrompt(): string {
   try {
     return getMainPrompt().text;
   } catch {
-    return "You are the Polymax Agent, a dock and workspace operator. A failed tool envelope (ok:false) is the answer — never invent success.";
+    return "You are the Polydocks Agent, a dock and workspace operator. A failed tool envelope (ok:false) is the answer — never invent success.";
   }
 }
 
@@ -463,7 +463,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     if (origin === "dock-add") {
       try {
         const overview = stripSkillMetadata(await loadSkill("app-overview"));
-        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polymax in one page (always loaded)\n${overview}`;
+        activeSystemPrompt = `${activeSystemPrompt}\n\n---\n## App Map: Polydocks in one page (always loaded)\n${overview}`;
         loadedSkills.push("app-overview");
       } catch {
         // Non-fatal

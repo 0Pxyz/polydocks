@@ -17,7 +17,7 @@ export interface SendAgentMessageOptions {
 }
 
 /**
- * Communicates with the Polymax Agent Loop backend over SSE.
+ * Communicates with the Polydocks Agent Loop backend over SSE.
  */
 export async function streamAgentLoop(
   options: SendAgentMessageOptions
@@ -31,7 +31,7 @@ export async function streamAgentLoop(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        ...(userId ? { "X-Polymax-User": userId } : {}),
+        ...(userId ? { "X-Polydocks-User": userId } : {}),
       },
       body: JSON.stringify({
         prompt,

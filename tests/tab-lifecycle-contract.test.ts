@@ -17,8 +17,8 @@ import { Button } from "@/components/ui/button";
 import { createRoot } from "react-dom/client";
 function App() {
   const [v, setV] = React.useState(null);
-  React.useEffect(() => { window.polymax.storage.get("v").then(setV); }, []);
-  const run = () => { window.polymax.task.start({ label: "Export" }).then(({ id }) => window.polymax.task.done(id)); };
+  React.useEffect(() => { window.polydocks.storage.get("v").then(setV); }, []);
+  const run = () => { window.polydocks.task.start({ label: "Export" }).then(({ id }) => window.polydocks.task.done(id)); };
   return <Stack gap={8}><Button size="sm" onClick={run}>go</Button><span>{v}</span></Stack>;
 }
 createRoot(document.getElementById("app")).render(<App />);`;
@@ -60,7 +60,7 @@ describe("tab lifecycle contract: every plugin, present and future", () => {
       expect(before.has("test-lifecycle-joiner")).toBe(false);
       expect(after.map((p) => p.id)).toContain("test-lifecycle-joiner");
       const joiner = after.find((p) => p.id === "test-lifecycle-joiner")!;
-      expect(joiner.code).toContain("polymax.task");
+      expect(joiner.code).toContain("polydocks.task");
       expect(checkPluginLifecycle(joiner)).toEqual([]);
     } finally {
       db.query("DELETE FROM plugins WHERE id = ?").run("test-lifecycle-joiner");
@@ -112,7 +112,7 @@ describe("tab lifecycle contract: every plugin, present and future", () => {
     // One expected remount; state restored from the persisted store.
     expect(tabs["plugin-0"].mountCount).toBe(2);
     expect(useTabStateStore.getState().values["plugin-0::draft"]).toBe("hello");
-    expect(platformStorage.getItem<Record<string, unknown>>("polymax-tab-state")?.["plugin-0::draft"]).toBe(
+    expect(platformStorage.getItem<Record<string, unknown>>("polydocks-tab-state")?.["plugin-0::draft"]).toBe(
       "hello"
     );
     clearTabState("plugin-0");

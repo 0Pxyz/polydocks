@@ -8,7 +8,7 @@ import type { AgentTool } from "../server/agent/tools/types";
  * not prose. The model double follows the skill protocol; the assertions
  * pin the loop mechanics (right tool runs, wrong tools never start,
  * duplicates are refused). Live-model variants run only with
- * POLYMAX_LIVE_MODEL=1 and a configured MODEL_API_KEY.
+ * POLYDOCKS_LIVE_MODEL=1 and a configured MODEL_API_KEY.
  */
 
 function fakeTool(name: string, calls: string[]): AgentTool {
@@ -166,7 +166,7 @@ describe("Agent evaluation scenarios (scripted model, tool selection)", () => {
 });
 
 describe("Live-model scenarios (gated)", () => {
-  const live = process.env.POLYMAX_LIVE_MODEL === "1";
+  const live = process.env.POLYDOCKS_LIVE_MODEL === "1";
   it.skipIf(!live)("research request uses search tools, not synthesis", async () => {
     const started: string[] = [];
     await runAgentLoop({

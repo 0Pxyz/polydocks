@@ -1,7 +1,7 @@
 /**
  * Builds the vendored sandbox UI kit:
  * - server/plugin-kit/kit.bundle.js : React + react-dom/client + all 17 shadcn
- *   components as an IIFE assigning window.__polymaxKit (regenerate on dep bumps).
+ *   components as an IIFE assigning window.__polydocksKit (regenerate on dep bumps).
  * - server/plugin-kit/kit.css : Tailwind utilities for the kit components.
  * - server/plugin-kit/manifest.json : export inventory + sizes.
  *
@@ -46,8 +46,8 @@ async function buildJs(): Promise<{ bytes: number }> {
     throw new Error(`Kit JS bundling failed:\n${details}`);
   }
   const text = await result.outputs[0].text();
-  if (!text.includes("__polymaxKit")) {
-    throw new Error("Kit bundle does not assign __polymaxKit");
+  if (!text.includes("__polydocksKit")) {
+    throw new Error("Kit bundle does not assign __polydocksKit");
   }
   await fs.writeFile(path.join(OUT_DIR, "kit.bundle.js"), text, "utf-8");
   return { bytes: Buffer.byteLength(text, "utf-8") };

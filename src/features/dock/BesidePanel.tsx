@@ -94,7 +94,7 @@ export function BesidePanel({
 
   return (
     <motion.div
-      layoutId="polymax-beside-surface"
+      layoutId="polydocks-beside-surface"
       data-beside-panel="true"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}

@@ -18,13 +18,13 @@ describe("Dock Positioning and Spacing Cleanliness", () => {
     it("allows switching dockPosition to top and persists in platformStorage", () => {
       useThemeStore.getState().setDockPosition("top");
       expect(useThemeStore.getState().dockPosition).toBe("top");
-      const stored = platformStorage.getItem<{ dockPosition: string }>("polymax-theme-config");
+      const stored = platformStorage.getItem<{ dockPosition: string }>("polydocks-theme-config");
       expect(stored?.dockPosition).toBe("top");
 
       // Switching back to bottom
       useThemeStore.getState().setDockPosition("bottom");
       expect(useThemeStore.getState().dockPosition).toBe("bottom");
-      const storedAfter = platformStorage.getItem<{ dockPosition: string }>("polymax-theme-config");
+      const storedAfter = platformStorage.getItem<{ dockPosition: string }>("polydocks-theme-config");
       expect(storedAfter?.dockPosition).toBe("bottom");
     });
   });

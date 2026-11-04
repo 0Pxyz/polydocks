@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# Polymax installer: clones the repo, installs deps and starts the dock.
+# Polydocks installer: clones the repo, installs deps and starts the dock.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/0Pxyz/polymax/main/install.sh | bash
-#   cd polymax && cp .env.example .env  # add MODEL_API_KEY (+ TINYFISH_API_KEY)
-#   polymax
+#   curl -fsSL https://raw.githubusercontent.com/0Pxyz/polydocks/main/install.sh | bash
+#   cd polydocks && cp .env.example .env  # add MODEL_API_KEY (+ TINYFISH_API_KEY)
+#   polydocks
 #
 set -euo pipefail
 
-REPO_URL="${POLYMAX_REPO_URL:-https://github.com/0Pxyz/polymax.git}"
-DEST_DIR="${POLYMAX_DIR:-polymax}"
+REPO_URL="${POLYDOCKS_REPO_URL:-https://github.com/0Pxyz/polydocks.git}"
+DEST_DIR="${POLYDOCKS_DIR:-polydocks}"
 
 info() { printf '%s\n' "$*"; }
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }

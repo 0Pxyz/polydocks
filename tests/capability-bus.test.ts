@@ -54,7 +54,7 @@ describe("Capability Bus, Execution Logging & Unified Catalog", () => {
       const emittedEvents: Array<{ type: string; payload: any }> = [];
       const res = await capabilityBus.invoke<{ echoed: string }>(
         "test-bus.echo",
-        { message: "hello polymax" },
+        { message: "hello polydocks" },
         {
           actor: "agent",
           workspaceId: "stoicism",
@@ -65,7 +65,7 @@ describe("Capability Bus, Execution Logging & Unified Catalog", () => {
       );
 
       expect(res.success).toBe(true);
-      expect(res.data?.echoed).toBe("HELLO POLYMAX");
+      expect(res.data?.echoed).toBe("HELLO POLYDOCKS");
       expect(res.durationMs).toBeGreaterThanOrEqual(0);
 
       // Verify emitted SSE events
@@ -73,7 +73,7 @@ describe("Capability Bus, Execution Logging & Unified Catalog", () => {
       expect(emittedEvents[0].type).toBe("tool.start");
       expect(emittedEvents[0].payload.pluginId).toBe("test-bus-plugin");
       expect(emittedEvents[1].type).toBe("tool.done");
-      expect(emittedEvents[1].payload.result).toEqual({ echoed: "HELLO POLYMAX" });
+      expect(emittedEvents[1].payload.result).toEqual({ echoed: "HELLO POLYDOCKS" });
 
       // Verify SQLite execution record
       const row = db
@@ -85,7 +85,7 @@ describe("Capability Bus, Execution Logging & Unified Catalog", () => {
       expect(row).not.toBeNull();
       expect(row?.status).toBe("success");
       expect(row?.actor).toBe("agent");
-      expect(JSON.parse(row?.output_json || "{}")).toEqual({ echoed: "HELLO POLYMAX" });
+      expect(JSON.parse(row?.output_json || "{}")).toEqual({ echoed: "HELLO POLYDOCKS" });
     });
 
     it("fails gracefully and logs error on invalid input schema", async () => {

@@ -82,8 +82,8 @@ describe("Pre-publish validation", () => {
     const compliant = `import { createRoot } from "react-dom/client";
 function App() {
   const [v, setV] = React.useState(null);
-  React.useEffect(() => { window.polymax.storage.get("v").then(setV); }, []);
-  const run = () => { window.polymax.task.start({ label: "Export" }).then(({ id }) => window.polymax.task.done(id)); };
+  React.useEffect(() => { window.polydocks.storage.get("v").then(setV); }, []);
+  const run = () => { window.polydocks.task.start({ label: "Export" }).then(({ id }) => window.polydocks.task.done(id)); };
   return <div><button onClick={run}>go</button><span>{v}</span></div>;
 }
 createRoot(document.getElementById("app")).render(<App />);`;

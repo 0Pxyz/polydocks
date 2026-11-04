@@ -31,7 +31,7 @@ afterEach(() => {
   capabilityBus.unregister("test-mcp-probe.echo");
 });
 
-describe("polymax MCP server (own server)", () => {
+describe("polydocks MCP server (own server)", () => {
   it("lists capability tools", async () => {
     const client = await linkedClient();
     try {
@@ -61,9 +61,9 @@ describe("polymax MCP server (own server)", () => {
     try {
       const resources = await client.listResources();
       const uris = resources.resources.map((r) => r.uri);
-      expect(uris).toContain("polymax://plugins");
-      expect(uris).toContain("polymax://capabilities");
-      const plugins = await client.readResource({ uri: "polymax://plugins" });
+      expect(uris).toContain("polydocks://plugins");
+      expect(uris).toContain("polydocks://capabilities");
+      const plugins = await client.readResource({ uri: "polydocks://plugins" });
       expect(plugins.contents.length).toBeGreaterThan(0);
     } finally {
       await client.close();

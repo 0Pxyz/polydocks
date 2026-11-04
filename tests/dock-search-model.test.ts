@@ -286,7 +286,7 @@ describe("applyDockDirective", () => {
     const layout: DockLayoutState = { pinnedIds: ["agent", "maps"], openIds: ["agent", "maps"] };
     expect(applyDockDirective(layout, { op: "unpin", id: "agent" }, known).ok).toBe(false);
     expect(applyDockDirective(layout, { op: "close", id: "agent" }, known).ok).toBe(false);
-    // Polymax is an optional plugin now: unpinning/closing maps succeeds.
+    // Polydocks is an optional plugin now: unpinning/closing maps succeeds.
     expect(applyDockDirective(layout, { op: "unpin", id: "maps" }, known).ok).toBe(true);
     expect(applyDockDirective(layout, { op: "close", id: "maps" }, known).ok).toBe(true);
     // ...and pinning and opening it are harmless no-ops that succeed.

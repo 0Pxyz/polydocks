@@ -25,7 +25,7 @@ const urlOrDataUrl = z
 export const apply_theme: AgentTool<ApplyThemeArgs> = {
   name: "apply_theme",
   description:
-    "Applies a theme change to the Polymax UI: wallpaper/background image (by attachmentId for user-attached images, or wallpaperUrl for remote images), base theme id, custom accent color, wallpaper fit/opacity/blur, dock style or position. Remote wallpaper URLs are verified to load as images before anything applies (unreachable or non-image URLs fail clearly with nothing changed). If only a wallpaper is given without theme/accent, the UI auto-complements the theme from the image; specify theme/accent explicitly to override. Use for ALL appearance change requests. Never use web research for theme edits.",
+    "Applies a theme change to the Polydocks UI: wallpaper/background image (by attachmentId for user-attached images, or wallpaperUrl for remote images), base theme id, custom accent color, wallpaper fit/opacity/blur, dock style or position. Remote wallpaper URLs are verified to load as images before anything applies (unreachable or non-image URLs fail clearly with nothing changed). If only a wallpaper is given without theme/accent, the UI auto-complements the theme from the image; specify theme/accent explicitly to override. Use for ALL appearance change requests. Never use web research for theme edits.",
   schema: z
     .object({
       wallpaperUrl: urlOrDataUrl.optional().describe("Remote https:// image URL for the wallpaper"),

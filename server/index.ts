@@ -34,7 +34,7 @@ import {
 
 // Bootstrap persistent agent-home filesystem structure on startup
 await initAgentHome().catch((err) => {
-  console.error("[Polymax Server] Failed to initialize agent-home:", err);
+  console.error("[Polydocks Server] Failed to initialize agent-home:", err);
 });
 
 // One-time idempotent import of workspace plugin files into SQLite
@@ -51,14 +51,14 @@ if (config.NODE_ENV !== "test") {
     // boots stay quiet (same policy as the backfills below).
     if (report.imported > 0) {
       console.log(
-        `[Polymax Server] Plugin migration: ${report.imported} imported, ${report.skipped} skipped, ${report.conflicts.length} conflicts`
+        `[Polydocks Server] Plugin migration: ${report.imported} imported, ${report.skipped} skipped, ${report.conflicts.length} conflicts`
       );
       for (const c of report.conflicts.slice(0, 10)) {
-        console.log(`[Polymax Server] Plugin migration conflict: ${c.workspaceId}/${c.pluginId} kept ${c.kept}`);
+        console.log(`[Polydocks Server] Plugin migration conflict: ${c.workspaceId}/${c.pluginId} kept ${c.kept}`);
       }
     }
   } catch (err) {
-    console.error("[Polymax Server] Plugin migration failed (non-fatal):", err);
+    console.error("[Polydocks Server] Plugin migration failed (non-fatal):", err);
   }
   // Reversible backfills (no destructive DDL): plugin version rows mirrored
   // into plugin_files.
@@ -66,10 +66,10 @@ if (config.NODE_ENV !== "test") {
     const { backfillPluginVersionsToFiles } = await import("./plugins/versions");
     const { copied } = backfillPluginVersionsToFiles();
     if (copied > 0) {
-      console.log(`[Polymax Server] Plugin versions backfill: ${copied} rows mirrored into plugin_files.`);
+      console.log(`[Polydocks Server] Plugin versions backfill: ${copied} rows mirrored into plugin_files.`);
     }
   } catch (err) {
-    console.error("[Polymax Server] Plugin versions backfill failed (non-fatal):", err);
+    console.error("[Polydocks Server] Plugin versions backfill failed (non-fatal):", err);
   }
 }
 
@@ -120,7 +120,7 @@ app.use(
       "http://127.0.0.1:3000",
     ],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Polymax-User"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Polydocks-User"],
     credentials: true,
   })
 );
@@ -133,7 +133,7 @@ app.get("/.well-known/llms.txt", async (c) => {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     return c.body(content);
   } catch {
-    return c.text("# Polymax\nAgentic Dock knowledge game and workspace.", 200, {
+    return c.text("# Polydocks\nAgentic Dock knowledge game and workspace.", 200, {
       "Content-Type": "text/markdown",
     });
   }
@@ -146,7 +146,7 @@ app.get("/.well-known/llms-full.txt", async (c) => {
     c.header("Content-Type", "text/markdown; charset=utf-8");
     return c.body(content);
   } catch {
-    return c.text("# Polymax Full Specification", 200);
+    return c.text("# Polydocks Full Specification", 200);
   }
 });
 
@@ -316,7 +316,7 @@ app.post("/api/agent", async (c) => {
       ? caller.user.id
       : resolveUserIdForMode(
           {
-            header: c.req.header("x-polymax-user"),
+            header: c.req.header("x-polydocks-user"),
             body: body.userId,
           },
           config.DEPLOY_MODE
@@ -439,12 +439,12 @@ if (import.meta.main) {
     config.MODEL_API_KEY.includes("placeholder")
   ) {
     console.warn(
-      "[Polymax Server] Warning: MODEL_API_KEY is not configured or uses a placeholder. Upstream agent calls will return model_unauthorized."
+      "[Polydocks Server] Warning: MODEL_API_KEY is not configured or uses a placeholder. Upstream agent calls will return model_unauthorized."
     );
   }
 
   console.log(
-    `[Polymax Server] Running on http://localhost:${config.PORT} (env: ${config.NODE_ENV}, mode: ${config.DEPLOY_MODE})`
+    `[Polydocks Server] Running on http://localhost:${config.PORT} (env: ${config.NODE_ENV}, mode: ${config.DEPLOY_MODE})`
   );
 
   // Demo guard (#191 slice 1, ADR 0002): local mode never serves a

@@ -19,7 +19,7 @@ import {
 const SUMMARY_MAX_CHARS = 24_000;
 const SUMMARY_MESSAGE_MAX_CHARS = 2_000;
 
-const SUMMARY_SYSTEM_PROMPT = `You maintain the durable memory of a single ongoing conversation between a user and the Polymax agent.
+const SUMMARY_SYSTEM_PROMPT = `You maintain the durable memory of a single ongoing conversation between a user and the Polydocks agent.
 
 Merge the existing summary with the new turns into one compact, factual summary that lets the agent continue the conversation later with full context.
 

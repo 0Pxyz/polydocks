@@ -60,7 +60,7 @@ async function ensureAcceptanceState(): Promise<void> {
         name: "GTM Reader",
         version: "1.0.0",
         description:
-          "[Superseded by the native in-app Reader] Legacy reader plugin. Open content via window.polymax.openContent instead; no replacement needed.",
+          "[Superseded by the native in-app Reader] Legacy reader plugin. Open content via window.polydocks.openContent instead; no replacement needed.",
         icon: "BookOpen",
         trust: "generated",
         capabilities: [],
@@ -77,7 +77,7 @@ async function ensureAcceptanceState(): Promise<void> {
         {
           id: "gtm-reader",
           description:
-            "[Superseded by the native in-app Reader] Legacy reader plugin. Open content via window.polymax.openContent instead; no replacement needed.",
+            "[Superseded by the native in-app Reader] Legacy reader plugin. Open content via window.polydocks.openContent instead; no replacement needed.",
           changeSummary: "Mark superseded by native Reader",
           workspaceId: "default",
         },
@@ -93,7 +93,7 @@ async function ensureAcceptanceState(): Promise<void> {
 /**
  * GTM App Feed acceptance: "Open in reader" must open articles/video inside
  * the app. The legacy fixture (workspace/global, never deleted) shows the old
- * code path: window.polymax.open(...) which does not exist on the bridge, plus
+ * code path: window.polydocks.open(...) which does not exist on the bridge, plus
  * an in-plugin <iframe> reader that frame-blocking sites refuse. The rebuilt
  * feed (same id, patched in place) uses openContent + the native Reader.
  */
@@ -116,7 +116,7 @@ describe("GTM App Feed acceptance: Open in reader", () => {
       return;
     }
     // Legacy bug markers: nonexistent bridge call + iframe reader.
-    expect(legacyHtml).toContain("window.polymax.open(");
+    expect(legacyHtml).toContain("window.polydocks.open(");
     expect(legacyHtml).toContain("<iframe");
   });
 
@@ -127,7 +127,7 @@ describe("GTM App Feed acceptance: Open in reader", () => {
     // No nested iframe reader: frame-blocking sites still open natively.
     expect(feed.srcdoc).not.toContain("<iframe");
     // No dead bridge calls, no reader-plugin handoff.
-    expect(feed.code).not.toContain("window.polymax.open(");
+    expect(feed.code).not.toContain("window.polydocks.open(");
     expect(feed.code).not.toContain("gtm-reader");
     expect(feed.code).not.toContain("GTM_OPEN_READER");
     expect(feed.code).not.toContain("POLY_OPEN_TAB");
@@ -137,7 +137,7 @@ describe("GTM App Feed acceptance: Open in reader", () => {
     const feed = await readFeature("default", "gtm-app-feed");
     expect(feed.code).toContain("@/components/ui/");
     expect(feed.code).toContain("useCapability");
-    expect(feed.srcdoc).toContain("__polymaxKit");
+    expect(feed.srcdoc).toContain("__polydocksKit");
     const verification = await verifyPluginStateAsync("gtm-app-feed", "default");
     expect(verification.ok).toBe(true);
   });

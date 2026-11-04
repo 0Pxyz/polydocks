@@ -42,7 +42,7 @@ export function DynamicPluginSandbox({
   const [readerUrl, setReaderUrl] = useState<string | null>(null);
   const handshakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bridgeRef = useRef<{ pushTheme: (theme: string) => void } | null>(null);
-  // New builds post `polymaxAction: "ui.ready"` after mounting (see
+  // New builds post `polydocksAction: "ui.ready"` after mounting (see
   // buildFeatureSrcdoc/buildReactSrcdoc). Only those get strict timeout
   // behavior; legacy srcdocs keep the lenient auto-reveal below.
   const requiresReadyRef = useRef(false);
@@ -62,7 +62,7 @@ export function DynamicPluginSandbox({
       }
       const text = await res.text();
       requiresReadyRef.current =
-        text.includes('polymaxAction: "ui.ready"') || text.includes("polymaxAction: 'ui.ready'");
+        text.includes('polydocksAction: "ui.ready"') || text.includes("polydocksAction: 'ui.ready'");
       setSrcdoc(text);
     } catch (err: any) {
       setError(err?.message || `Failed to load ${title || pluginId}`);
@@ -168,7 +168,7 @@ export function DynamicPluginSandbox({
       onAskAgentFix(issue);
     } else {
       window.dispatchEvent(
-        new CustomEvent("polymax:submit-prompt", {
+        new CustomEvent("polydocks:submit-prompt", {
           detail: {
             prompt: `Fix tool "${title || pluginId}": ${issue}`,
             origin: "dock-fix",
@@ -239,7 +239,7 @@ export function DynamicPluginSandbox({
           )}
         />
       )}
-      {/* Background task status: work registered via polymax.task keeps a
+      {/* Background task status: work registered via polydocks.task keeps a
           quiet row here so results that finish while hidden are seen. */}
       {isReady && !readerUrl && <TaskNotice tabId={pluginId} />}
         </>

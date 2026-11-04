@@ -64,12 +64,12 @@ const LIFECYCLE_PATTERNS: Array<{ re: RegExp; error: string }> = [
   {
     re: /location\s*\.\s*reload\s*\(/,
     error:
-      'Lifecycle contract: location.reload() is forbidden — the host keeps tabs mounted, so reload destroys guest state and interrupts tasks. Remove the call; state restores from polymax.storage on hibernate/restore.',
+      'Lifecycle contract: location.reload() is forbidden — the host keeps tabs mounted, so reload destroys guest state and interrupts tasks. Remove the call; state restores from polydocks.storage on hibernate/restore.',
   },
   {
     re: /if\s*\(\s*!?\s*(isActive|activeTab|isVisible|isCurrentTab)\b/,
     error:
-      'Lifecycle contract: conditional render on the active tab (isActive/activeTab/isVisible) is forbidden — the host mounts every tab once and hides inactive ones. Render unconditionally; use polymax.storage for state that must survive.',
+      'Lifecycle contract: conditional render on the active tab (isActive/activeTab/isVisible) is forbidden — the host mounts every tab once and hides inactive ones. Render unconditionally; use polydocks.storage for state that must survive.',
   },
   {
     re: /\b(isActive|activeTab|isVisible|isCurrentTab)\b\s*\?\s*[^:]+:\s*null/,
@@ -122,13 +122,13 @@ export async function validatePluginRender(guestJs: string): Promise<{ ok: boole
     }
 
     run(getKitJs());
-    const kit = (win as any).__polymaxKit;
+    const kit = (win as any).__polydocksKit;
     if (!kit?.React) {
       return { ok: false, error: "UI kit failed to initialize in the render test" };
     }
 
     // Browser APIs components may touch during render; inert no-ops here.
-    // Plus a stub window.polymax bridge: production always defines it before
+    // Plus a stub window.polydocks bridge: production always defines it before
     // guest code runs, so module-scope bridge calls must not crash validation.
     run(`(function() {
       try {
@@ -152,8 +152,7 @@ export async function validatePluginRender(guestJs: string): Promise<{ ok: boole
           submit: () => {},
           ui: { expand: () => {}, collapse: () => {} },
         };
-        window.polymax = window.polymax || bridgeStub;
-        window.polydocks = window.polydocks || window.polymax;
+        window.polydocks = window.polydocks || bridgeStub;
         try {
           Object.defineProperty(window, "parent", { value: { postMessage(){} }, configurable: true });
         } catch (e) { /* parent stays self; postMessage below still sunk */ }

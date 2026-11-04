@@ -41,7 +41,7 @@ describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
       permissions: [{ type: "net", hosts: ["en.wikipedia.org"] }],
       capabilities: [{ id: "wikipedia.summary", title: "Wikipedia Summary", description: "Fetch the summary of an article.", risk: "read",
         adapter: { http: { method: "GET", urlTemplate: "https://en.wikipedia.org/api/rest_v1/page/summary/{title}", byteCap: 1048576,
-          headers: { "User-Agent": "Polymax/1.0 (https://github.com/0Pxyz/polymax)" } } },
+          headers: { "User-Agent": "Polydocks/1.0 (https://github.com/0Pxyz/polydocks)" } } },
         input: { type: "object", properties: { title: { type: "string" } }, required: ["title"] } }],
     },
     "git-status": {
@@ -141,12 +141,12 @@ describe("Declarative Adapters & Example Plugins (Issue #51)", () => {
             priority: 1,
           },
         },
-        { item: { title: "Polymax Architecture" } },
+        { item: { title: "Polydocks Architecture" } },
         mockCtx
       );
 
       const parsed = JSON.parse(sentBody);
-      expect(parsed.title).toBe("Polymax Architecture");
+      expect(parsed.title).toBe("Polydocks Architecture");
       expect(parsed.priority).toBe(1);
       expect((result as any).createdId).toBe("res_99");
     });

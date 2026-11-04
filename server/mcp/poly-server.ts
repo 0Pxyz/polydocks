@@ -11,7 +11,7 @@ import { z } from "zod";
 import { capabilityBus } from "../plugins/bus";
 import { pluginRegistry } from "../plugins/registry";
 
-const SERVER_NAME = "polymax";
+const SERVER_NAME = "polydocks";
 const SERVER_VERSION = "1.0.0";
 
 function normalizeInputSchema(input: unknown): Record<string, unknown> {
@@ -119,14 +119,14 @@ export function buildPolyMcpServer(): Server {
     return {
       resources: [
         {
-          uri: "polymax://plugins",
+          uri: "polydocks://plugins",
           name: "plugins",
           title: "Installed plugins",
           description: "Installed PolyDocks plugins with trust and status.",
           mimeType: "application/json",
         },
         {
-          uri: "polymax://capabilities",
+          uri: "polydocks://capabilities",
           name: "capabilities",
           title: "Capability catalog",
           description: "Unified capability catalog with risk and schemas.",
@@ -138,7 +138,7 @@ export function buildPolyMcpServer(): Server {
 
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const uri = request.params.uri;
-    if (uri === "polymax://plugins") {
+    if (uri === "polydocks://plugins") {
       const plugins = pluginRegistry.list().map((p) => ({
         id: p.id,
         name: p.name,
@@ -151,7 +151,7 @@ export function buildPolyMcpServer(): Server {
         contents: [{ uri, mimeType: "application/json", text: JSON.stringify(plugins) }],
       };
     }
-    if (uri === "polymax://capabilities") {
+    if (uri === "polydocks://capabilities") {
       const caps = capabilityBus.getCapabilities({ enabledOnly: false }).map((c) => ({
         id: c.id,
         pluginId: c.pluginId,

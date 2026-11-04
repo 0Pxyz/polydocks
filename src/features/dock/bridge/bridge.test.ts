@@ -40,8 +40,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     (globalThis as any).localStorage = mockStorage;
   });
 
-  it("exports valid guest bridge script exposing window.polymax", () => {
-    expect(GUEST_BRIDGE_SCRIPT).toContain("window.polymax =");
+  it("exports valid guest bridge script exposing window.polydocks", () => {
+    expect(GUEST_BRIDGE_SCRIPT).toContain("window.polydocks =");
     expect(GUEST_BRIDGE_SCRIPT).toContain("storage:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("openUrl:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("openContent:");
@@ -67,8 +67,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "openContent",
-        polymaxRequestId: 701,
+        polydocksAction: "openContent",
+        polydocksRequestId: 701,
         url: "https://example.com/article",
       },
     } as any);
@@ -80,8 +80,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "openContent",
-        polymaxRequestId: 702,
+        polydocksAction: "openContent",
+        polydocksRequestId: 702,
         url: "javascript:alert(1)",
       },
     } as any);
@@ -100,8 +100,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await fallback.handleMessage({
       source: fallbackWin,
       data: {
-        polymaxAction: "openContent",
-        polymaxRequestId: 703,
+        polydocksAction: "openContent",
+        polydocksRequestId: 703,
         url: "https://example.com/video",
       },
     } as any);
@@ -119,15 +119,15 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge1.handleMessage({
       source: targetWin1,
       data: {
-        polymaxAction: "storage.set",
-        polymaxRequestId: 101,
+        polydocksAction: "storage.set",
+        polydocksRequestId: 101,
         key: "score",
         value: 42,
       },
     } as any);
 
     expect(targetWin1.receivedMessages[0]).toEqual({
-      polymaxResponseId: 101,
+      polydocksResponseId: 101,
       result: true,
       error: undefined,
     });
@@ -136,14 +136,14 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge1.handleMessage({
       source: targetWin1,
       data: {
-        polymaxAction: "storage.get",
-        polymaxRequestId: 102,
+        polydocksAction: "storage.get",
+        polydocksRequestId: 102,
         key: "score",
       },
     } as any);
 
     expect(targetWin1.receivedMessages[1]).toEqual({
-      polymaxResponseId: 102,
+      polydocksResponseId: 102,
       result: 42,
       error: undefined,
     });
@@ -152,14 +152,14 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge2.handleMessage({
       source: targetWin2,
       data: {
-        polymaxAction: "storage.get",
-        polymaxRequestId: 201,
+        polydocksAction: "storage.get",
+        polydocksRequestId: 201,
         key: "score",
       },
     } as any);
 
     expect(targetWin2.receivedMessages[0]).toEqual({
-      polymaxResponseId: 201,
+      polydocksResponseId: 201,
       result: null,
       error: undefined,
     });
@@ -176,13 +176,13 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "getContext",
-        polymaxRequestId: 301,
+        polydocksAction: "getContext",
+        polydocksRequestId: 301,
       },
     } as any);
 
     const res = targetWin.receivedMessages[0];
-    expect(res.polymaxResponseId).toBe(301);
+    expect(res.polydocksResponseId).toBe(301);
     expect(res.result.workspaceId).toBe("athens-stoicism");
     expect(res.result.tabId).toBe("matrix");
     expect(res.result.topic).toBe("Stoic Philosophy");
@@ -204,8 +204,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "openUrl",
-        polymaxRequestId: 401,
+        polydocksAction: "openUrl",
+        polydocksRequestId: 401,
         url: "https://arxiv.org/abs/2301.12345",
       },
     } as any);
@@ -217,8 +217,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "openUrl",
-        polymaxRequestId: 402,
+        polydocksAction: "openUrl",
+        polydocksRequestId: 402,
         url: "javascript:alert(1)",
       },
     } as any);
@@ -246,8 +246,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "ui.expand",
-        polymaxRequestId: 501,
+        polydocksAction: "ui.expand",
+        polydocksRequestId: 501,
       },
     } as any);
 
@@ -257,8 +257,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     await bridge.handleMessage({
       source: targetWin,
       data: {
-        polymaxAction: "submit",
-        polymaxRequestId: 502,
+        polydocksAction: "submit",
+        polydocksRequestId: 502,
         command: "synthesize practice drill",
       },
     } as any);
@@ -280,13 +280,13 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     // task.start requires a label and resolves with a host id.
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "task.start", polymaxRequestId: 801 },
+      data: { polydocksAction: "task.start", polydocksRequestId: 801 },
     } as any);
     expect(targetWin.receivedMessages[0].error).toContain("requires a label");
 
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "task.start", polymaxRequestId: 802, label: "Export CSV" },
+      data: { polydocksAction: "task.start", polydocksRequestId: 802, label: "Export CSV" },
     } as any);
     expect(targetWin.receivedMessages[1].result.id).toBeTruthy();
     expect(events[0]).toMatchObject({ type: "start", tabId: "tab-1", label: "Export CSV" });
@@ -295,20 +295,20 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     // task.update / task.done route by id; missing ids are rejected.
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "task.update", polymaxRequestId: 803 },
+      data: { polydocksAction: "task.update", polydocksRequestId: 803 },
     } as any);
     expect(targetWin.receivedMessages[2].error).toContain("requires a taskId");
 
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "task.update", polymaxRequestId: 804, taskId, status: "running", detail: "50%" },
+      data: { polydocksAction: "task.update", polydocksRequestId: 804, taskId, status: "running", detail: "50%" },
     } as any);
     expect(targetWin.receivedMessages[3].result).toBe(true);
     expect(events[1]).toMatchObject({ type: "update", taskId, status: "running" });
 
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "task.done", polymaxRequestId: 805, taskId },
+      data: { polydocksAction: "task.done", polydocksRequestId: 805, taskId },
     } as any);
     expect(events[2]).toMatchObject({ type: "done", taskId, status: "done" });
   });
@@ -325,8 +325,8 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     const handled = await bridge.handleMessage({
       source: attackerWin,
       data: {
-        polymaxAction: "storage.set",
-        polymaxRequestId: 601,
+        polydocksAction: "storage.set",
+        polydocksRequestId: 601,
         key: "exploit",
         value: "attack",
       },
@@ -347,13 +347,13 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
 
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "ui.ready", polymaxRequestId: 701 },
+      data: { polydocksAction: "ui.ready", polydocksRequestId: 701 },
     } as any);
     expect(targetWin.receivedMessages[0].result).toMatchObject({ ready: true, theme: "cyber" });
 
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "theme.get", polymaxRequestId: 702 },
+      data: { polydocksAction: "theme.get", polydocksRequestId: 702 },
     } as any);
     expect(targetWin.receivedMessages[1].result).toBe("cyber");
   });
@@ -367,7 +367,7 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
 
     await bridge.handleMessage({
       source: targetWin,
-      data: { polymaxAction: "ui.ready", polymaxRequestId: 703 },
+      data: { polydocksAction: "ui.ready", polydocksRequestId: 703 },
     } as any);
     expect(targetWin.receivedMessages[0].result).toMatchObject({ ready: true, theme: "void" });
   });
@@ -381,11 +381,11 @@ describe("Dock Plugin Bridge Runtime & Sandbox Protocol", () => {
     });
 
     bridge.pushTheme("amber");
-    expect(targetWin.receivedMessages[0]).toMatchObject({ polymaxTheme: "amber" });
+    expect(targetWin.receivedMessages[0]).toMatchObject({ polydocksTheme: "amber" });
   });
 
   it("guest script applies the acked theme and listens for live pushes", () => {
-    expect(GUEST_BRIDGE_SCRIPT).toContain("polymaxTheme");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("polydocksTheme");
     expect(GUEST_BRIDGE_SCRIPT).toContain("dataset.theme");
     expect(GUEST_BRIDGE_SCRIPT).toContain("theme.get");
   });

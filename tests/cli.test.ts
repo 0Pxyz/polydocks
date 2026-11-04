@@ -30,7 +30,7 @@ describe("PolyDocks CLI Runtime Management (Issue #78)", () => {
       env: {
         ...process.env,
         AGENT_HOME_DIR: TEST_ROOT,
-        POLYMAX_CLI_MOCK_LLM: "true",
+        POLYDOCKS_CLI_MOCK_LLM: "true",
       },
       stdout: "pipe",
       stderr: "pipe",

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { platformStorage } from "@/lib/platform/storage";
 import { useDockStore } from "@/lib/store/useDockStore";
 
-const ONBOARDING_STORAGE_KEY = "polymax_onboarding_completed_v2";
+const ONBOARDING_STORAGE_KEY = "polydocks_onboarding_completed_v2";
 
 /** Exported for tests: the persisted completion flag. */
 export const ONBOARDING_COMPLETED_KEY = ONBOARDING_STORAGE_KEY;

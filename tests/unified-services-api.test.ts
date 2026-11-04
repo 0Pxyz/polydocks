@@ -240,7 +240,7 @@ describe("Unified Product API & Shared Service Layer (Issue #77)", () => {
         {
           pluginId: "shared-app",
           workspaceId: "default",
-          author: "Polymax Agent",
+          author: "Polydocks Agent",
           tags: ["utility"],
         },
         { workspaceId: "default", step: 3 }

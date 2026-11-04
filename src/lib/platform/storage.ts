@@ -34,7 +34,7 @@ function getNativeStorage(): Storage | MemoryStorage {
     return memoryFallback;
   }
   try {
-    const testKey = "__polymax_storage_test__";
+    const testKey = "__polydocks_storage_test__";
     window.localStorage.setItem(testKey, "1");
     window.localStorage.removeItem(testKey);
     return window.localStorage;

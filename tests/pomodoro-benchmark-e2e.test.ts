@@ -116,14 +116,14 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
     await bridge.handleMessage({
       source: mockGuestWindow,
       data: {
-        polymaxAction: "storage.set",
-        polymaxRequestId: 201,
+        polydocksAction: "storage.set",
+        polydocksRequestId: 201,
         key: "pomodoro_sessions",
         value: sessionData,
       },
     } as MessageEvent);
 
-    expect(bridgeResponse.polymaxResponseId).toBe(201);
+    expect(bridgeResponse.polydocksResponseId).toBe(201);
     expect(bridgeResponse.result).toBe(true);
 
     // -------------------------------------------------------------
@@ -158,13 +158,13 @@ describe("PolyDocks V2 End-to-End Pomodoro Benchmark Suite", () => {
     await bridge.handleMessage({
       source: mockGuestWindow,
       data: {
-        polymaxAction: "storage.get",
-        polymaxRequestId: 202,
+        polydocksAction: "storage.get",
+        polydocksRequestId: 202,
         key: "pomodoro_sessions",
       },
     } as MessageEvent);
 
-    expect(bridgeResponse.polymaxResponseId).toBe(202);
+    expect(bridgeResponse.polydocksResponseId).toBe(202);
     expect(bridgeResponse.result).toEqual(sessionData);
 
     bridge.destroy();

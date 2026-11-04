@@ -26,8 +26,8 @@ import {
   type DockItemsSnapshot,
 } from "@/lib/dock/dockItems";
 
-const DOCK_LAYOUT_KEY = "polymax-dock-layout";
-const DOCK_ITEMS_KEY = "polymax-dock-items-v1";
+const DOCK_LAYOUT_KEY = "polydocks-dock-layout";
+const DOCK_ITEMS_KEY = "polydocks-dock-items-v1";
 
 function loadPinnedIds(): string[] {
   const stored = platformStorage.getItem<{ pinnedIds?: string[] }>(DOCK_LAYOUT_KEY);
@@ -55,7 +55,7 @@ function persistDockSnapshot(snapshot: DockItemsSnapshot): void {
   platformStorage.setItem(DOCK_ITEMS_KEY, snapshot);
 }
 
-const BESIDE_KEY = "polymax-tool-sidebar";
+const BESIDE_KEY = "polydocks-tool-sidebar";
 
 interface BesidePersisted {
   ids?: string[];

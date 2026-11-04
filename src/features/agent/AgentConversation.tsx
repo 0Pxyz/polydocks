@@ -702,7 +702,7 @@ export function AgentConversation({
     return (
       <AnimatePresence>
         <motion.div
-          layoutId="polymax-agent-surface"
+          layoutId="polydocks-agent-surface"
           initial={{ opacity: 0, y: reduceMotion ? 0 : 20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.95, transition: { duration: 0.16 } }}
@@ -982,7 +982,7 @@ export function AgentConversation({
 
   return (
     <motion.div
-      layoutId="polymax-agent-surface"
+      layoutId="polydocks-agent-surface"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: reduceMotion ? { duration: 0 } : spring.soft }}
       exit={{ opacity: 0, transition: { duration: 0.16 } }}

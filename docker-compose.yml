@@ -1,10 +1,10 @@
 services:
-  polymax:
+  polydocks:
     build:
       context: .
       dockerfile: Dockerfile
-    image: polymax:latest
-    container_name: polymax-app
+    image: polydocks:latest
+    container_name: polydocks-app
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"

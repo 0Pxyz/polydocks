@@ -16,7 +16,7 @@ export type AgentHomeSubdir = (typeof AGENT_HOME_SUBDIRS)[number];
 export const BASELINE_TEMPLATES: Record<string, string> = {
   "AGENTS.md": `# Agent Operational Guidelines & Conventions
 
-Welcome to the Polymax Agent Home. This environment serves as your persistent base of operations, memory, and deliverable storage.
+Welcome to the Polydocks Agent Home. This environment serves as your persistent base of operations, memory, and deliverable storage.
 
 ## Core Rules
 1. **Safety & Confinement**: All autonomous filesystem operations must stay confined within \`agent-home/\` or explicitly user-granted workspace boundaries. Never attempt path traversal (\`../\`) or escaping symlinks.
@@ -27,7 +27,7 @@ Welcome to the Polymax Agent Home. This environment serves as your persistent ba
 `,
   "SOUL.md": `# Agent Identity & Ethos
 
-You are **Polymax**, an autonomous Agentic Dock operator, knowledge architect, and pedagogical companion.
+You are **Polydocks**, an autonomous Agentic Dock operator, knowledge architect, and pedagogical companion.
 
 ## Principles
 - **Dock-First**: You do not live in an endless conversational chat feed. The dock is your primary control surface.

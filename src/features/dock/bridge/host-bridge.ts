@@ -36,7 +36,7 @@ export function createHostBridge(
   const tabId = options.tabId || options.pluginId || "default";
   const effectiveScope = options.workspaceId || "global";
   const effectiveEntityId = options.pluginId || options.tabId || "default";
-  const storagePrefix = options.storagePrefix || (options.workspaceId ? "polydocks" : "polymax");
+  const storagePrefix = options.storagePrefix || (options.workspaceId ? "polydocks" : "polydocks");
 
   const buildStorageKey = (key?: string) => {
     return `${storagePrefix}:${effectiveScope}:${effectiveEntityId}:${key || ""}`;
@@ -49,12 +49,12 @@ export function createHostBridge(
       // (e.g. an async getContext/onInvoke crossing a srcdoc reload). Log at
       // debug level — this used to fail silently and strand guest promises.
       console.debug(
-        `[polymax bridge] reply ${String(requestId)} dropped: guest window is gone`
+        `[polydocks bridge] reply ${String(requestId)} dropped: guest window is gone`
       );
       return;
     }
     const response: HostBridgeResponse = {
-      polymaxResponseId: requestId,
+      polydocksResponseId: requestId,
       result,
       error,
     };
@@ -73,14 +73,14 @@ export function createHostBridge(
     }
 
     const data = event.data as HostBridgeRequest;
-    if (!data || typeof data !== "object" || !data.polymaxAction) {
+    if (!data || typeof data !== "object" || !data.polydocksAction) {
       return false;
     }
 
-    const requestId = data.polymaxRequestId;
+    const requestId = data.polydocksRequestId;
 
     try {
-      switch (data.polymaxAction) {
+      switch (data.polydocksAction) {
         case "storage.get": {
           if (!data.key) {
             respond(requestId, null, "Missing storage key");
@@ -319,7 +319,7 @@ export function createHostBridge(
         }
 
         default:
-          respond(requestId, null, `Unknown bridge action "${data.polymaxAction}"`);
+          respond(requestId, null, `Unknown bridge action "${data.polydocksAction}"`);
           return true;
       }
     } catch (err: any) {
@@ -345,7 +345,7 @@ export function createHostBridge(
     pushTheme: (theme: string) => {
       const target = resolveWindowSource(targetWindowOrGetter);
       if (!target) return;
-      target.postMessage({ polymaxTheme: theme }, "*");
+      target.postMessage({ polydocksTheme: theme }, "*");
     },
     destroy: () => {
       if (typeof window !== "undefined" && typeof (window as any).removeEventListener === "function") {

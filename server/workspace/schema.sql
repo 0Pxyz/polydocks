@@ -1,4 +1,4 @@
--- Polymax Local SQLite Schema
+-- Polydocks Local SQLite Schema
 -- High-concurrency WAL mode enabled in runtime
 
 -- Unified enriched source store (contract plugin `sources`). Replaces the

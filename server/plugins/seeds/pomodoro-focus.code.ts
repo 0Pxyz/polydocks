@@ -8,7 +8,7 @@ export const POMODORO_CODE = `
     const LENGTHS = { work: 25 * 60, break: 5 * 60 };
 
     function bridge() {
-      return window.polymax || {};
+      return window.polydocks || {};
     }
 
     function App() {

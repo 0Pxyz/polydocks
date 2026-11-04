@@ -12,7 +12,7 @@ export interface MiniOrbProps {
 }
 
 /**
- * Polymax Agent Mini Orb (~20px SVG)
+ * Polydocks Agent Mini Orb (~20px SVG)
  * Mirrors the main chat Orb: dark sphere, accent horizon glow, specular highlight.
  * States:
  * - idle: slow breathing (3.5s)

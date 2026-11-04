@@ -79,8 +79,8 @@ Once it's running, ask Poly:
 ## Run it locally
 
 ```bash
-git clone https://github.com/0Pxyz/polymax.git
-cd polymax
+git clone https://github.com/0Pxyz/polydocks.git
+cd polydocks
 cp .env.example .env      # add your keys (table below)
 docker compose up         # app on http://localhost:3000
 ```

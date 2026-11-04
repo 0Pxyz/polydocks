@@ -83,7 +83,7 @@ Both `muse-spark-1.3` and `muse-wonder-1.0` are reasoning models (verified again
 - On Chat Completions, pass top-level `reasoning_effort` with one of `"minimal" | "low" | "medium" | "high" | "xhigh" | "max"`. Omitting it leaves depth to the model.
 - `"none"` returns **HTTP 400** on both models — never send it.
 - Reasoning tokens count toward the output-token budget and billing.
-- Polymax plumbing: `conversationStore.selectedEffort` (persisted in `polymax-agent-effort`; the picker UI was removed, the stored value and backend path stay) → `POST /api/agent { reasoningEffort }` (allowlisted in `server/index.ts`) → `runAgentLoop({ reasoningEffort })` → `reasoning_effort` on both the main and fallback `chat.completions.create` calls.
+- Polydocks plumbing: `conversationStore.selectedEffort` (persisted in `polydocks-agent-effort`; the picker UI was removed, the stored value and backend path stay) → `POST /api/agent { reasoningEffort }` (allowlisted in `server/index.ts`) → `runAgentLoop({ reasoningEffort })` → `reasoning_effort` on both the main and fallback `chat.completions.create` calls.
 
 ---
 
@@ -97,7 +97,7 @@ The agent synthesizes UI plugins under the `plugins` skill prompt
 2. **Design tokens only:** kit v2 components and theme tokens — no hex
    colors, inline styles, or raw form elements (validation rejects them
    with a clear error, max 2 fix retries).
-3. **Host bridge:** `window.polymax` for storage (`polymax.storage`),
+3. **Host bridge:** `window.polydocks` for storage (`polydocks.storage`),
    capabilities (`invoke`/`useCapability`), content, tasks, and theme.
 4. **Contract:** `apiVersion: 1` manifest (`id`, `title`, `icon`,
    `scope`); host owns mounting, hiding, and hibernation.

@@ -46,13 +46,13 @@ describe("buildFeatureSrcdoc: hostile code cannot break out of <script>", () => 
       id: "test-ready",
       title: "Ready Test",
     } as any);
-    expect(vanilla).toContain('polymaxAction: "ui.ready"');
+    expect(vanilla).toContain('polydocksAction: "ui.ready"');
 
     const react = buildReactSrcdoc("console.log(1);", ".a{color:red}", {
       id: "test-ready-react",
       title: "Ready Test",
     } as any, { js: getKitJs(), css: getKitCss(), tokens: getKitTokens(), csp: PLUGIN_CSP });
-    expect(react).toContain('polymaxAction: "ui.ready"');
+    expect(react).toContain('polydocksAction: "ui.ready"');
     // Balanced even with the 1MB production kit inlined.
     const opens = react.match(/<script(\s|>)/gi) || [];
     const closes = react.match(/<\/script\s*>/gi) || [];

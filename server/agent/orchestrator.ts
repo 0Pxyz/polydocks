@@ -136,7 +136,7 @@ export class KeywordRouter implements IntentRouter {
       const looksCompound =
         /[.?!;\n]/.test(rawTail.replace(/[.!?]+$/, "")) ||
         rawTail.split(/\s+/).filter(Boolean).length > 6 ||
-        /\b(change|theme|wallpaper|background|gif|research|tinyfish|build|create|make|plugin|dashboard|feed)\b/i.test(rawTail);
+        /\b(change|theme|wallpaper|background|gif|research|tinyfish|build|create|make|plugin|dashboard)\b/i.test(rawTail);
       if (!looksCompound) {
         const aliasHit = (Object.keys(DOCK_ID_ALIASES) as string[]).find((a) => rest.includes(` ${a} `) || rest.endsWith(` ${a}`));
         if (aliasHit) {
@@ -188,7 +188,7 @@ export class KeywordRouter implements IntentRouter {
       const isCompoundTurn =
         /[.?!;\n]/.test(text.replace(/[.!?]+$/, "")) ||
         text.split(/\s+/).filter(Boolean).length > 24 ||
-        /\b(theme|wallpaper|background|gif|research|tinyfish|build|create|make|plugin|dashboard|feed|install)\b/i.test(text);
+        /\b(theme|wallpaper|background|gif|research|tinyfish|build|create|make|plugin|dashboard|install)\b/i.test(text);
       if (!isCompoundTurn) {
         const mentions = findAliasMentions(text).filter((m) => state.dockIds.includes(m.id));
         if (mentions.length === 1) {

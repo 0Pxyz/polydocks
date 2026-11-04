@@ -1,8 +1,8 @@
-# Polymax: The Agentic Dock Knowledge Workspace
+# Polydocks: The Agentic Dock Knowledge Workspace
 > Autonomous mastery platform & persistent tool dock built for the Meta Global AI Developer Hackathon.
 
 ## System Overview
-Polymax is an agent-native operating environment. There is no chat sprawl and no infinite canvas.
+Polydocks is an agent-native operating environment. There is no chat sprawl and no infinite canvas.
 The UI is the Agentic Dock: a control surface pinned to the screen where every capability is a dock plugin.
 Topics are organized as physical cities on disk in `workspace/<city-id>/`.
 

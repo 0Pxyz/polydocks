@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { platformStorage } from "@/lib/platform/storage";
 import { useTabStateStore, clearTabState, resetTabStateForTests } from "./useTabState";
 
-const KEY = "polymax-tab-state";
+const KEY = "polydocks-tab-state";
 
 describe("useTabState store: namespaced, persisted keys", () => {
   beforeEach(() => {

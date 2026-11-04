@@ -260,7 +260,7 @@ export async function enrichSource(
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(20000),
-      headers: { "User-Agent": "PolyDocksBot/1.0 (+https://polymax.app)", Accept: "text/html" },
+      headers: { "User-Agent": "PolyDocksBot/1.0 (+https://polydocks.app)", Accept: "text/html" },
       redirect: "follow",
     } as any);
     const text = await res.text();

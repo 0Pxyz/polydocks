@@ -244,7 +244,7 @@ export const GUEST_BASE_CSS = `@layer base {
 
 /**
  * Builds the sandboxed iframe srcdoc containing the app design tokens, the
- * native vanilla `px-*` component kit, the window.polymax bridge runtime,
+ * native vanilla `px-*` component kit, the window.polydocks bridge runtime,
  * and the transpiled guest code.
  */
 export function buildFeatureSrcdoc(jsCode: string, manifest: FeatureManifest): string {
@@ -307,7 +307,7 @@ ${VANILLA_PX_CSS}
     input::placeholder, textarea::placeholder { color: var(--text-dim); }
   </style>
   <script>
-    // Polymax Host-Guest Sandboxed Bridge Protocol (single source of truth:
+    // Polydocks Host-Guest Sandboxed Bridge Protocol (single source of truth:
     // src/features/dock/bridge/guest-bridge.js, inlined so the sandbox runs
     // it with no external fetch).
 ${GUEST_BRIDGE_SCRIPT}
@@ -320,17 +320,17 @@ ${GUEST_BRIDGE_SCRIPT}
 ${escapeInlineScript(jsCode)}
       // Mounted without throwing: run the bridge ready handshake so the host
       // reveals the UI AND the guest learns the host is listening (the host
-      // replies to polymaxAction: "ui.ready"; with no ack the guest reports
+      // replies to polydocksAction: "ui.ready"; with no ack the guest reports
       // "bridge not responding" instead of hanging silently).
-      if (window.polymax && window.polymax.__signalReady) {
-        window.polymax.__signalReady();
+      if (window.polydocks && window.polydocks.__signalReady) {
+        window.polydocks.__signalReady();
       } else {
-        window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
+        window.parent.postMessage({ polydocksAction: "ui.ready" }, "*");
       }
     } catch (err) {
-      console.error('[Polymax Guest Error]', err);
+      console.error('[Polydocks Guest Error]', err);
       window.parent.postMessage({
-        polymaxAction: 'runtime.error',
+        polydocksAction: 'runtime.error',
         error: {
           message: err && err.message ? err.message : String(err),
           stack: err && err.stack ? err.stack : '',
@@ -351,7 +351,7 @@ ${escapeInlineScript(jsCode)}
  * Builds the sandboxed iframe srcdoc for React (TSX) guest code: the vendored
  * kit bundle (React + react-dom/client + 17 shadcn components, no external
  * scripts, origin isolation preserved), compiled kit + guest Tailwind CSS,
- * the window.polymax bridge with useCapability/openContent, and the CSP the
+ * the window.polydocks bridge with useCapability/openContent, and the CSP the
  * agent prompt promises. Guest code stays TSX in one file and mounts into #app.
  */
 export function buildReactSrcdoc(
@@ -383,7 +383,7 @@ ${guestCss}
 ${escapeInlineScript(kit.js)}
   </script>
   <script>
-    // Polymax Host-Guest Sandboxed Bridge Protocol (single source of truth:
+    // Polydocks Host-Guest Sandboxed Bridge Protocol (single source of truth:
     // src/features/dock/bridge/guest-bridge.js, inlined so the sandbox runs
     // it with no external fetch).
 ${GUEST_BRIDGE_SCRIPT}
@@ -396,17 +396,17 @@ ${GUEST_BRIDGE_SCRIPT}
 ${escapeInlineScript(guestJs)}
       // Mounted without throwing: run the bridge ready handshake so the host
       // reveals the UI AND the guest learns the host is listening (the host
-      // replies to polymaxAction: "ui.ready"; with no ack the guest reports
+      // replies to polydocksAction: "ui.ready"; with no ack the guest reports
       // "bridge not responding" instead of hanging silently).
-      if (window.polymax && window.polymax.__signalReady) {
-        window.polymax.__signalReady();
+      if (window.polydocks && window.polydocks.__signalReady) {
+        window.polydocks.__signalReady();
       } else {
-        window.parent.postMessage({ polymaxAction: "ui.ready" }, "*");
+        window.parent.postMessage({ polydocksAction: "ui.ready" }, "*");
       }
     } catch (err) {
-      console.error('[Polymax Guest Error]', err);
+      console.error('[Polydocks Guest Error]', err);
       window.parent.postMessage({
-        polymaxAction: 'runtime.error',
+        polydocksAction: 'runtime.error',
         error: {
           message: err && err.message ? err.message : String(err),
           stack: err && err.stack ? err.stack : '',

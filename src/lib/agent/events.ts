@@ -1,6 +1,6 @@
 /**
  * Maps backend contracts (which use "tab" and "tray")
- * to the Polymax UI architecture ("dock" and "experience").
+ * to the Polydocks UI architecture ("dock" and "experience").
  * Strictly enforces that no UI components handle raw backend vocabulary.
  */
 

@@ -8,7 +8,7 @@ import { pushThought } from "@/lib/agent/thoughtStream";
 import { useConversationStore } from "@/lib/agent/conversationStore";
 import { useOnboardingStore } from "@/lib/store/useOnboardingStore";
 
-const HINT_SEEN_KEY = "polymax-home-hint-seen";
+const HINT_SEEN_KEY = "polydocks-home-hint-seen";
 
 /**
  * Quiet rotating tips for returning users (the first-run Ctrl K hint is

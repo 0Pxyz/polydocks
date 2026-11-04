@@ -29,7 +29,7 @@ const CURATED: Item[] = [
 ];
 
 function bridge(): any {
-  return (window as any).polymax || (window as any).polydocks;
+  return (window as any).polydocks;
 }
 
 function toItems(raw: any): Item[] {
@@ -167,7 +167,7 @@ function App() {
               meta={`${x.src} · ${x.kind === "video" ? "Video" : "Article"}`}
               onOpen={() => openItem(x)}
               action={
-                <div className="flex justify-end">
+                <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="secondary" onClick={() => toggleRead(x.url)}>
                     {read[x.url] ? "Mark unread" : "Mark read"}
                   </Button>

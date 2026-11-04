@@ -17,7 +17,7 @@ export type EffectiveCaller =
 /**
  * Resolves the caller for a request. Priority:
  * 1. Better Auth session (cookie/bearer) -> authenticated user.
- * 2. Legacy local identity (`x-polymax-user` / query / body) -> local caller.
+ * 2. Legacy local identity (`x-polydocks-user` / query / body) -> local caller.
  *
  * Never throws: auth failures degrade to the local caller so the local
  * Docker sandbox and existing device-local flows keep working.
@@ -40,7 +40,7 @@ export async function getEffectiveCaller(headers: Headers): Promise<EffectiveCal
   } catch {
     // Degrade to local caller below.
   }
-  const header = headers.get("x-polymax-user");
+  const header = headers.get("x-polydocks-user");
   return {
     kind: "local",
     userId: resolveUserIdForMode({ header }, config.DEPLOY_MODE),

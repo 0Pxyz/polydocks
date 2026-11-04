@@ -39,7 +39,7 @@ function kindLabel(kind: string | null | undefined): string | null {
 /**
  * Sources feed (#352): the Browser surface's empty state (its manifest
  * entry is SourcesView). Cards carry title, canonical URL and site logo;
- * new saves stream in live via the polymax:source.added window event the
+ * new saves stream in live via the polydocks:source.added window event the
  * agent turn path already dispatches — no manual refresh, no polling.
  * Click opens the URL in the Browser surface (same surface, #350).
  */
@@ -86,10 +86,10 @@ export function SourcesView({ onOpenUrl, className = "" }: SourcesViewProps) {
         return [source, ...prev];
       });
     };
-    window.addEventListener("polymax:source.added", onAdded);
+    window.addEventListener("polydocks:source.added", onAdded);
     return () => {
       cancelled = true;
-      window.removeEventListener("polymax:source.added", onAdded);
+      window.removeEventListener("polydocks:source.added", onAdded);
     };
   }, []);
 

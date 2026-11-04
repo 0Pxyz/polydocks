@@ -7,7 +7,7 @@ describe("principle-based main prompt", () => {
     resetMainPromptCache();
     const { version, text } = getMainPrompt();
     expect(version).toBeGreaterThanOrEqual(1);
-    expect(text).toContain("You are the Polymax Agent");
+    expect(text).toContain("You are the Polydocks Agent");
     expect(text).toContain("## Mental model");
     expect(text).toContain("## Invariants");
     expect(text).toContain("## Decision style");

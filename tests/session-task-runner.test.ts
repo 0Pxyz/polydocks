@@ -69,7 +69,7 @@ describe("Persistent Work Sessions & Background Task Engine (Issue #76)", () => 
 
       await appendSessionTranscript(
         sessionId,
-        { step: 1, type: "agent.start", prompt: "Hello Polymax" },
+        { step: 1, type: "agent.start", prompt: "Hello Polydocks" },
         TEST_ROOT
       );
       await appendSessionTranscript(

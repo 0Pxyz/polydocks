@@ -52,7 +52,7 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
     it("persists model change to platformStorage and state", () => {
       useConversationStore.getState().setSelectedModel("muse-wonder-1.0");
       expect(useConversationStore.getState().selectedModel).toBe("muse-wonder-1.0");
-      expect(platformStorage.getItem("polymax-agent-model")).toBe("muse-wonder-1.0");
+      expect(platformStorage.getItem("polydocks-agent-model")).toBe("muse-wonder-1.0");
     });
   });
 
@@ -78,11 +78,11 @@ describe("Meta Models & Model Switcher (Issue #100)", () => {
     it("persists effort change to platformStorage and state", () => {
       useConversationStore.getState().setSelectedEffort("high");
       expect(useConversationStore.getState().selectedEffort).toBe("high");
-      expect(platformStorage.getItem("polymax-agent-effort")).toBe("high");
+      expect(platformStorage.getItem("polydocks-agent-effort")).toBe("high");
 
       useConversationStore.getState().setSelectedEffort("auto");
       expect(useConversationStore.getState().selectedEffort).toBe("auto");
-      expect(platformStorage.getItem("polymax-agent-effort")).toBe("auto");
+      expect(platformStorage.getItem("polydocks-agent-effort")).toBe("auto");
     });
   });
 });

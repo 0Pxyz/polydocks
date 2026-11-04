@@ -15,7 +15,7 @@ interface OrbProps {
 }
 
 /**
- * Polymax Agent Orb:
+ * Polydocks Agent Orb:
  * A dark horizon-light spherical orb inspired by the reference control sheet.
  * Reflects theme accent, audio reactivity, and states (idle, listening, thinking, speaking, error).
  */
@@ -65,7 +65,7 @@ export function Orb({
           ? "Something went wrong. Tap to retry"
           : state === "listening"
           ? "Listening… Tap to stop"
-          : "Polymax Agent"
+          : "Polydocks Agent"
       }
     >
       {/* Outer ambient glow halo */}

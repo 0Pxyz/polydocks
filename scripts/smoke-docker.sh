@@ -13,7 +13,7 @@
 # Exit code: 0 when every non-key step passes, 1 otherwise.
 set -euo pipefail
 
-IMG="polymax:smoke"
+IMG="polydocks:smoke"
 A="sbx-a-smoke"
 B="sbx-b-smoke"
 VA_DATA="sbx-a-data"
@@ -72,7 +72,7 @@ echo "$HEALTH" | grep -q '"mode":"local"' && pass "health mode=local" || fail "h
 echo "$HEALTH" | grep -q '"ok":true' && pass "health sqlite ok" || fail "health sqlite ok ($HEALTH)"
 
 echo "--- 4. fixed owner: spoofed caller still resolves to local ---"
-THREAD="$(curl -fs -H "x-polymax-user: mallory" "http://127.0.0.1:${PA}/api/agent/thread")"
+THREAD="$(curl -fs -H "x-polydocks-user: mallory" "http://127.0.0.1:${PA}/api/agent/thread")"
 echo "$THREAD" | grep -q '"userId":"local"' && pass "spoofed header resolves to fixed owner" || fail "fixed owner ($THREAD)"
 
 echo "--- 5a. memory write via API (no key needed) ---"
@@ -148,7 +148,7 @@ curl -fs "http://127.0.0.1:${PB}/api/plugins" | grep -q "smoke-widget" \
   && fail "isolation: B sees A plugin (LEAK)" || pass "isolation: B has no A plugin"
 curl -fs "http://127.0.0.1:${PB}/api/agent/memory" | grep -q "smoke entry sbx-a" \
   && fail "isolation: B sees A memory (LEAK)" || pass "isolation: B has no A memory"
-docker exec "$B" sh -c 'ls /app/data' | grep -qi "polymax" \
+docker exec "$B" sh -c 'ls /app/data' | grep -qi "polydocks" \
   && pass "B has its own DB file" || fail "B DB file missing"
 A_MOUNT="$(docker volume inspect "$VA_DATA" --format '{{.Mountpoint}}')"
 B_MOUNT="$(docker volume inspect "$VB_DATA" --format '{{.Mountpoint}}')"

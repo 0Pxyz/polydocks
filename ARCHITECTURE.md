@@ -4,13 +4,13 @@
 
 ## 1. Today (IMPLEMENTED)
 
-**Runtime.** One Bun + Hono process serves API + built front (`server/index.ts`). Local: `bun run dev` (Vite :5173 proxy → :3000). Prod: `Dockerfile` + `docker-compose.yml` (single service `polymax-app`, `127.0.0.1:3000`, volumes `./data:/app/data` + `agent-home-data:/app/agent-home`). No Modal SDK, no `server/sandbox*` — "sandbox" today means browser iframe + path-traversal guard (`server/system/filesystem.ts:35-97`).
+**Runtime.** One Bun + Hono process serves API + built front (`server/index.ts`). Local: `bun run dev` (Vite :5173 proxy → :3000). Prod: `Dockerfile` + `docker-compose.yml` (single service `polydocks-app`, `127.0.0.1:3000`, volumes `./data:/app/data` + `agent-home-data:/app/agent-home`). No Modal SDK, no `server/sandbox*` — "sandbox" today means browser iframe + path-traversal guard (`server/system/filesystem.ts:35-97`).
 
 **Agent.** `runAgentLoop` (`server/agent/loop.ts:223`), OpenAI SDK against `MODEL_BASE_URL`/`MODEL_ID` (`server/agent/llm.ts:9-14`), zod-validated calls with 2 retries, duplicate-call guard, SSE events (`tool.start/done`, `tray.open`, `tab.created`, `plugin.*`, `map.*`). Catalog: full + minimal verb surfaces (`server/agent/tools/index.ts`), skills in `server/agent/skills/*.md` (max 2 per turn). No `create_tool`, no shell executor, no `eval` in server.
 
-**Plugin system.** Manifest `apiVersion: 1` (`server/plugins/manifest.ts:85-129`), registry install/enable/disable + version archive (`server/plugins/registry.ts:47-171`), capability bus with risk policy, 30s timeout, `executions` audit (`server/plugins/bus.ts:182-541`), receipts (`server/agent/receipts.ts:33-112`), slop validator, SSRF guard (`server/plugins/ssrf.ts`), one real `spawn` site allowlisted with timeout/cap (`server/plugins/context.ts:219`). Guests: iframe `sandbox="allow-scripts"` srcdoc + `window.polymax` bridge. Host lifecycle: mount/hide/hibernate, `LIVE_TAB_LIMIT = 5` (`src/lib/tabs/tabHostStore.ts:44`).
+**Plugin system.** Manifest `apiVersion: 1` (`server/plugins/manifest.ts:85-129`), registry install/enable/disable + version archive (`server/plugins/registry.ts:47-171`), capability bus with risk policy, 30s timeout, `executions` audit (`server/plugins/bus.ts:182-541`), receipts (`server/agent/receipts.ts:33-112`), slop validator, SSRF guard (`server/plugins/ssrf.ts`), one real `spawn` site allowlisted with timeout/cap (`server/plugins/context.ts:219`). Guests: iframe `sandbox="allow-scripts"` srcdoc + `window.polydocks` bridge. Host lifecycle: mount/hide/hibernate, `LIVE_TAB_LIMIT = 5` (`src/lib/tabs/tabHostStore.ts:44`).
 
-**Data.** `bun:sqlite` at `DATA_DIR/polymax.db` (`server/workspace/db.ts:11-16`), 28 `CREATE TABLE` in `server/workspace/schema.sql`, idempotent, unversioned. Agent home files (`server/system/agentHome.ts`). Unified `sources` table keyed by workspace (`UNIQUE(workspace_id, url)`); retired knowledge-map tables dropped from the schema with a data-preserving boot migration (`server/workspace/db.ts`). Orphan `dock_items` table live with zero code references.
+**Data.** `bun:sqlite` at `DATA_DIR/polydocks.db` (`server/workspace/db.ts:11-16`), 28 `CREATE TABLE` in `server/workspace/schema.sql`, idempotent, unversioned. Agent home files (`server/system/agentHome.ts`). Unified `sources` table keyed by workspace (`UNIQUE(workspace_id, url)`); retired knowledge-map tables dropped from the schema with a data-preserving boot migration (`server/workspace/db.ts`). Orphan `dock_items` table live with zero code references.
 
 **Identity.** None: `resolveUserId` falls back to `"local"` (`server/identity.ts:11-39`), header is self-asserted. No route has real auth (per-plugin secrets are scoped server-side).
 
@@ -24,7 +24,7 @@ Microkernel core (enumerated in §4): runtime/routes, agent loop transport, perm
 
 | # | Gap | Evidence it is real |
 |---|---|---|
-| 1 | No per-user isolation or auth | `server/identity.ts`, single `polymax.db`, compose has no tenants |
+| 1 | No per-user isolation or auth | `server/identity.ts`, single `polydocks.db`, compose has no tenants |
 | 2 | Knowledge-map hardcoded in core | removed; experience parked on `future/city-experience` |
 | 3 | `plugins.install` missing from full agent surface | only `verbs/plugins.ts:53-65` (minimal) + HTTP/CLI |
 | 4 | Split-brain persistence (client pins / `dock_pins` / in-memory tab host) | `useDockStore.ts:10-30`, `schema.sql`, `tabHostStore.ts` |

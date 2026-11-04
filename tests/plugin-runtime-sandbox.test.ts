@@ -41,8 +41,8 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
   });
 
   it("exports valid guest bridge script exposing window.polydocks with theme and storage", () => {
-    expect(GUEST_BRIDGE_SCRIPT).toContain("window.polymax = {");
-    expect(GUEST_BRIDGE_SCRIPT).toContain("window.polydocks = window.polymax;");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("window.polydocks = {");
+    expect(GUEST_BRIDGE_SCRIPT).toContain("window.polydocks = window.polydocks;");
     expect(GUEST_BRIDGE_SCRIPT).toContain("invokeAction:");
     expect(GUEST_BRIDGE_SCRIPT).toContain("theme: {");
     expect(GUEST_BRIDGE_SCRIPT).toContain("accent: '#C8FF57'");
@@ -67,15 +67,15 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     await bridge.handleMessage({
       source: mockWindow,
       data: {
-        polymaxAction: "storage.set",
-        polymaxRequestId: 101,
+        polydocksAction: "storage.set",
+        polydocksRequestId: 101,
         key: "pomodoro_history",
         value: [{ session: 1, duration: 25 }],
       },
     } as MessageEvent);
 
     expect(sentResponse).not.toBeNull();
-    expect(sentResponse.polymaxResponseId).toBe(101);
+    expect(sentResponse.polydocksResponseId).toBe(101);
     expect(sentResponse.result).toBe(true);
 
     // Verify localStorage key format
@@ -88,25 +88,25 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     await bridge.handleMessage({
       source: mockWindow,
       data: {
-        polymaxAction: "storage.get",
-        polymaxRequestId: 102,
+        polydocksAction: "storage.get",
+        polydocksRequestId: 102,
         key: "pomodoro_history",
       },
     } as MessageEvent);
 
-    expect(sentResponse.polymaxResponseId).toBe(102);
+    expect(sentResponse.polydocksResponseId).toBe(102);
     expect(sentResponse.result).toEqual([{ session: 1, duration: 25 }]);
 
     // 3. Test getContext returns workspaceId and pluginId
     await bridge.handleMessage({
       source: mockWindow,
       data: {
-        polymaxAction: "getContext",
-        polymaxRequestId: 103,
+        polydocksAction: "getContext",
+        polydocksRequestId: 103,
       },
     } as MessageEvent);
 
-    expect(sentResponse.polymaxResponseId).toBe(103);
+    expect(sentResponse.polydocksResponseId).toBe(103);
     expect(sentResponse.result.workspaceId).toBe("ws-focus");
     expect(sentResponse.result.pluginId).toBe("pomodoro-tool");
 
@@ -147,7 +147,7 @@ describe("PolyDocks V2 Sandboxed Plugin Runtime & Host Bridge", () => {
     const html = await res.text();
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("Timer Active");
-    expect(html).toContain("window.polydocks = window.polymax;");
+    expect(html).toContain("window.polydocks = window.polydocks;");
     // Shared app tokens (including every theme override), not a forked palette.
     expect(html).toContain('[data-theme="cyber"]');
     expect(html).toContain("--bg: var(--background)");

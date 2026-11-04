@@ -28,7 +28,7 @@ export function useReducedMotion(): boolean {
 }
 
 /**
- * Shared spring transitions for Polymax UI
+ * Shared spring transitions for Polydocks UI
  */
 export const spring = {
   soft: {

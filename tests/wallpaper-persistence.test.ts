@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { useThemeStore, MAX_CUSTOM_WALLPAPERS } from "../src/lib/theme";
 import { platformStorage } from "../src/lib/platform/storage";
 
-const STORAGE_KEY = "polymax-theme-config";
+const STORAGE_KEY = "polydocks-theme-config";
 
 /**
  * Custom wallpaper persistence (#309): uploads join a durable list shown

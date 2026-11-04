@@ -27,7 +27,7 @@ const INITIAL_STATE = {
   completedQuests: [] as string[],
 };
 
-const STORAGE_KEY = "polymax-profile-state";
+const STORAGE_KEY = "polydocks-profile-state";
 
 function loadStoredProfile(): typeof INITIAL_STATE {
   if (typeof window === "undefined") return INITIAL_STATE;

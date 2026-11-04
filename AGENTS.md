@@ -16,7 +16,7 @@ The user downloads the app and receives their agent in a per-user sandbox. The a
 - The UI is the **Agentic Dock**: a persistent control surface pinned to the screen. A minimal status line sits above an expandable **dock of tools**.
 - Each icon is a **plugin surface** (first-party: Browser, Notes, Sources, Files, Terminal; or agent-generated) mounted into the viewport. No modals, no floating window chaos.
 - The **agent** (Meta Model API `muse-spark-1.3`) operates the dock: open, close, order, operate, modify. Per request: `find_capabilities` first, then store install, only then create. Never duplicate what exists; fix = inspect, then patch in place.
-- A plugin is a single file with a manifest, running sandboxed (`<iframe sandbox="allow-scripts" srcdoc>`, `postMessage` bridge `window.polymax`), talking to the app only through the bridge.
+- A plugin is a single file with a manifest, running sandboxed (`<iframe sandbox="allow-scripts" srcdoc>`, `postMessage` bridge `window.polydocks`), talking to the app only through the bridge.
 - **Pedagogical autonomy:** the agent questions, challenges, and surfaces authoritative primary sources; it never robs the user of learning by handing out pre-chewed answers.
 - **Dark only:** colors and fonts adhere strictly to design tokens in `src/styles/tokens.css`.
 - **Dual Run Modes:** zero-setup local runtime (`docker compose up`, single-tenant today) and, as target, per-user sandboxes. Until real isolation ships, the system is single-user local: no auth, no tenants (`server/identity.ts` falls back to `"local"`).
@@ -95,7 +95,7 @@ Tool families: dock (`dock.open/close/pin/unpin/list` verbs; `dock_search`, `doc
 
 Plugin tools emit reactive SSE events (`plugin.created`, `plugin.updated`, `plugin.published`, `plugin.operated`) so the UI mounts, opens, and refreshes tools in the dock.
 
-**Tabs and plugins created by the agent** are single self-contained units with a manifest `{ id, title, icon, scope }`, rendered in `<iframe sandbox="allow-scripts" srcdoc>`. They talk to the app only through the `postMessage` bridge: `polymax.storage.get/set`, `polymax.openUrl`, `polymax.getContext`. No external scripts, no direct DOM access to the host. Skill prompts: `server/agent/skills/plugins.md`, `server/agent/skills/dock.md`.
+**Tabs and plugins created by the agent** are single self-contained units with a manifest `{ id, title, icon, scope }`, rendered in `<iframe sandbox="allow-scripts" srcdoc>`. They talk to the app only through the `postMessage` bridge: `polydocks.storage.get/set`, `polydocks.openUrl`, `polydocks.getContext`. No external scripts, no direct DOM access to the host. Skill prompts: `server/agent/skills/plugins.md`, `server/agent/skills/dock.md`.
 
 ## 4b. Research with TinyFish
 
@@ -128,7 +128,7 @@ The agent works on the user's real files and, later, commands. `internal-docs/sy
 ## 4d. Plugin lifecycle (platform rule)
 
 Plugins never control their own lifecycle. Only the host mounts, hides and hibernates surfaces (mount on first open, keep alive hidden, hibernate the oldest above `LIVE_TAB_LIMIT` in `src/lib/tabs/tabHostStore.ts`); plugins never control their own lifecycle.
-- Contract (`docs/plugins/lifecycle.md`): durable state via `useTabState(tabId, key, initial)` (React) or `polymax.storage` (guests, rehydrate on boot); background work via `polymax.task.{start,update,done}` (continues hidden, host notifies on completion; hibernation marks tasks interrupted).
+- Contract (`docs/plugins/lifecycle.md`): durable state via `useTabState(tabId, key, initial)` (React) or `polydocks.storage` (guests, rehydrate on boot); background work via `polydocks.task.{start,update,done}` (continues hidden, host notifies on completion; hibernation marks tasks interrupted).
 - FORBIDDEN in plugin code (validation rejects with a clear error): `location.reload()`; conditional render on the active tab; active-derived keys. Render unconditionally — inactive tabs are hidden with CSS and keep running.
 - Generator prompts (`server/agent/skills/plugins.md`) must require this contract. Contract tests iterate the live registry (`server/plugins/lifecycle.ts`), so every present and future plugin is covered automatically.
 

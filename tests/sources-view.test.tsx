@@ -123,7 +123,7 @@ describe("sources feed (#352)", () => {
       expect(container.textContent || "").not.toContain("MDN Web Docs");
       await act(async () => {
         window.dispatchEvent(
-          new CustomEvent("polymax:source.added", {
+          new CustomEvent("polydocks:source.added", {
             detail: { id: "src_3", url: "https://developer.mozilla.org/x", title: "MDN Web Docs", site: "developer.mozilla.org", kind: "article" },
           })
         );

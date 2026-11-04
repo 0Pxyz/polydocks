@@ -20,7 +20,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-const SHOTS_DIR = "/tmp/polymax-audit/bridge-fix";
+const SHOTS_DIR = "/tmp/polydocks-audit/bridge-fix";
 const PORT = Number(process.env.SMOKE_PORT || 3821);
 const HEADLESS = process.env.SMOKE_HEADLESS !== "0";
 
@@ -38,7 +38,7 @@ async function main() {
   // copy of the real DB, or the Docker volume): no seeding, old compiled
   // srcdocs stay untouched, which also checks old-guest/new-host compat.
   const reuseDir = process.env.SMOKE_SEED === "0" ? process.env.SMOKE_DATA_DIR : undefined;
-  const dataDir = reuseDir || (await fs.mkdtemp(path.join(os.tmpdir(), "polymax-smoke-")));
+  const dataDir = reuseDir || (await fs.mkdtemp(path.join(os.tmpdir(), "polydocks-smoke-")));
   console.log(`[smoke] DATA_DIR=${dataDir}`);
   process.env.DATA_DIR = dataDir;
 
@@ -141,7 +141,7 @@ async function main() {
       // Skip first-launch onboarding deterministically.
       await context.addInitScript(() => {
         try {
-          window.localStorage.setItem("polymax_onboarding_completed_v2", "true");
+          window.localStorage.setItem("polydocks_onboarding_completed_v2", "true");
         } catch { /* ignore */ }
       });
       const page = await context.newPage();
@@ -173,8 +173,11 @@ async function main() {
 
       await step("open gtm-app-feed in the sandbox", async () => {
         await openFeed();
+        // Rows are ListRow buttons (title + meta + Mark read): clicking a
+        // row opens the native reader via onOpen. No per-row "Open in
+        // reader" button exists in the current fixture.
         const frame = page.frameLocator('iframe[title="GTM App Feed"], iframe[title="plugin-gtm-app-feed"]');
-        await frame.getByText("Open in reader").first().waitFor({ timeout: 30_000 });
+        await frame.getByRole("button", { name: /Mark read|Mark unread/ }).first().waitFor({ timeout: 30_000 });
         await shot("01-feed-mounted.png");
       });
 
@@ -183,8 +186,20 @@ async function main() {
 
       await step("video opens the native Reader embed", async () => {
         await frame().getByRole("tab", { name: "Videos" }).click();
-        await frame().getByText("Open in reader").first().click();
-        await page.getByRole("button", { name: /back/i }).waitFor({ timeout: 30_000 });
+        // Click the row TITLE (not the row center): the title always
+        // bubbles to the row onOpen, while the row center can land on
+        // padding/action zones that swallow the intent.
+        const row = frame().getByText("Winning Go-To-Market Plan for Early Stage Startups");
+        await row.waitFor({ timeout: 30_000 });
+        await page.waitForTimeout(800);
+        await row.click();
+        const back = page.getByRole("button", { name: /back/i });
+        try {
+          await back.waitFor({ timeout: 20_000 });
+        } catch {
+          await row.click();
+          await back.waitFor({ timeout: 30_000 });
+        }
         const embed = page.locator('iframe[src*="youtube.com/embed"], iframe[src*="player.vimeo.com"], video');
         await embed.first().waitFor({ timeout: 30_000 });
         const src = (await embed.first().getAttribute("src")) || "";
@@ -202,12 +217,12 @@ async function main() {
 
       await step("article opens the native Reader with content", async () => {
         await frame().getByRole("tab", { name: "Articles" }).click();
-        const buttons = frame().getByText("Open in reader");
-        const count = Math.min(await buttons.count(), 3);
+        // Same as video: click row titles, never row centers.
+        const titles = ["7 Steps to Create a Go-To-Market App Strategy"];
         let loaded = false;
         let lastError = "";
-        for (let i = 0; i < count && !loaded; i++) {
-          await buttons.nth(i).click();
+        for (const title of titles) {
+          await frame().getByText(title).click();
           try {
             await page.locator("article h1").waitFor({ timeout: 25_000 });
             const body = (await page.locator("article").innerText()).trim();

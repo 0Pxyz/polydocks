@@ -28,11 +28,11 @@ where a part exists. Gate rejects raw `<button>/<input>/<select>/
 
 ## Code, storage, verification
 
-One TSX file; imports `react`, `react-dom/client`, `@/components/ui/*`; mount `#app`. Bridge `window.polymax`: `storage`, `invoke`/`useCapability`, `openContent`, `task`, `theme.get`; sandboxed.
+One TSX file; imports `react`, `react-dom/client`, `@/components/ui/*`; mount `#app`. Bridge `window.polydocks`: `storage`, `invoke`/`useCapability`, `openContent`, `task`, `theme.get`; sandboxed.
 
 ## Host-owned lifecycle (read internal-docs/plugins/lifecycle.md first)
 
-State in `polymax.storage`, work in `polymax.task`; FORBIDDEN: `location.reload()`, active-tab rendering, active-derived keys.
+State in `polydocks.storage`, work in `polydocks.task`; FORBIDDEN: `location.reload()`, active-tab rendering, active-derived keys.
 
 ## Common mistakes
 

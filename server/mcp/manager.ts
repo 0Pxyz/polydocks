@@ -229,7 +229,7 @@ export class McpClientManager {
   }
 
   private async openClient(def: McpServerDef): Promise<{ client: Client; transport: { close?: () => Promise<void> | void } }> {
-    const client = new Client({ name: "polymax-client", version: "1.0.0" }, { capabilities: {} });
+    const client = new Client({ name: "polydocks-client", version: "1.0.0" }, { capabilities: {} });
     const headers: Record<string, string> = { ...def.headers };
     if (def.token) headers.Authorization = `Bearer ${def.token}`;
 

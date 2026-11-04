@@ -30,8 +30,8 @@ export type BridgeAction =
 export type BridgeTaskStatus = "running" | "done" | "error";
 
 export interface HostBridgeRequest {
-  polymaxAction: BridgeAction;
-  polymaxRequestId: number;
+  polydocksAction: BridgeAction;
+  polydocksRequestId: number;
   key?: string;
   value?: unknown;
   url?: string;
@@ -47,7 +47,7 @@ export interface HostBridgeRequest {
 }
 
 export interface HostBridgeResponse {
-  polymaxResponseId: number;
+  polydocksResponseId: number;
   result?: unknown;
   error?: string;
 }

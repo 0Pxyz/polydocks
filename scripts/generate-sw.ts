@@ -17,8 +17,8 @@ import { readdir, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-const SW_TEMPLATE = `/* Polymax service worker - generated at build time */
-const CACHE = "polymax-{{BUILD_ID}}";
+const SW_TEMPLATE = `/* Polydocks service worker - generated at build time */
+const CACHE = "polydocks-{{BUILD_ID}}";
 const PRECACHE_URLS = {{PRECACHE_URLS}};
 
 self.addEventListener("install", (event) => {

@@ -81,7 +81,7 @@ async function main() {
   const page = await ctx.newPage();
   page.on("pageerror", (e) => console.log(`[pageerror] ${String(e).slice(0, 160)}`));
   await page.addInitScript(() => {
-    localStorage.setItem("polymax_onboarding_completed_v2", "true");
+    localStorage.setItem("polydocks_onboarding_completed_v2", "true");
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(2500);

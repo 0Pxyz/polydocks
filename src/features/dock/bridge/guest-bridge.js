@@ -1,5 +1,5 @@
 /**
- * Polymax Guest Bridge Preamble
+ * Polydocks Guest Bridge Preamble
  *
  * Injected into every sandboxed iframe dynamic tab.
  * Implements bidirectional postMessage communication between host and guest.
@@ -10,16 +10,16 @@ export const GUEST_BRIDGE_SCRIPT = `
   const pendingRequests = new Map();
   let requestId = 0;
   // Default 10s per-request timeout (override with
-  // window.__POLYMAX_BRIDGE_TIMEOUT_MS). Without this, a host that never
+  // window.__POLYDOCKS_BRIDGE_TIMEOUT_MS). Without this, a host that never
   // replies (e.g. a stale bridge window) strands guest promises forever.
-  const REQUEST_TIMEOUT_MS = window.__POLYMAX_BRIDGE_TIMEOUT_MS || 10000;
+  const REQUEST_TIMEOUT_MS = window.__POLYDOCKS_BRIDGE_TIMEOUT_MS || 10000;
   // Ready-handshake ack window (override with
-  // window.__POLYMAX_BRIDGE_ACK_TIMEOUT_MS). Shorter than the request
+  // window.__POLYDOCKS_BRIDGE_ACK_TIMEOUT_MS). Shorter than the request
   // timeout so a dead bridge is reported while the host error row is live.
-  const READY_ACK_TIMEOUT_MS = window.__POLYMAX_BRIDGE_ACK_TIMEOUT_MS || 4000;
+  const READY_ACK_TIMEOUT_MS = window.__POLYDOCKS_BRIDGE_ACK_TIMEOUT_MS || 4000;
 
   // Active theme: the host owns it. Applied from the ui.ready ack and
-  // from live polymaxTheme pushes so the sandbox follows theme changes
+  // from live polydocksTheme pushes so the sandbox follows theme changes
   // without a reload. Names are restricted to the known theme ids.
   function applyTheme(name) {
     try {
@@ -31,15 +31,15 @@ export const GUEST_BRIDGE_SCRIPT = `
 
   window.addEventListener('message', function(event) {
     if (!event.data || typeof event.data !== 'object') return;
-    if (typeof event.data.polymaxTheme === 'string') {
-      applyTheme(event.data.polymaxTheme);
+    if (typeof event.data.polydocksTheme === 'string') {
+      applyTheme(event.data.polydocksTheme);
       return;
     }
-    const { polymaxResponseId, result, error } = event.data;
-    if (polymaxResponseId && pendingRequests.has(polymaxResponseId)) {
-      const { resolve, reject, timer } = pendingRequests.get(polymaxResponseId);
+    const { polydocksResponseId, result, error } = event.data;
+    if (polydocksResponseId && pendingRequests.has(polydocksResponseId)) {
+      const { resolve, reject, timer } = pendingRequests.get(polydocksResponseId);
       if (timer) clearTimeout(timer);
-      pendingRequests.delete(polymaxResponseId);
+      pendingRequests.delete(polydocksResponseId);
       if (error) reject(new Error(error));
       else resolve(result);
     }
@@ -64,8 +64,8 @@ export const GUEST_BRIDGE_SCRIPT = `
       }, ms);
       pendingRequests.set(id, { resolve, reject, timer });
       window.parent.postMessage({
-        polymaxAction: action,
-        polymaxRequestId: id,
+        polydocksAction: action,
+        polydocksRequestId: id,
         ...payload
       }, '*');
     });
@@ -73,7 +73,7 @@ export const GUEST_BRIDGE_SCRIPT = `
 
   function reportBridgeError(message) {
     window.parent.postMessage({
-      polymaxAction: 'runtime.error',
+      polydocksAction: 'runtime.error',
       error: {
         message: message,
         timestamp: new Date().toISOString()
@@ -84,7 +84,7 @@ export const GUEST_BRIDGE_SCRIPT = `
   // Startup handshake. The guest is ready AND learns whether the host is
   // listening: the host replies to the ready message (see host-bridge
   // runtime.ready/ui.ready). The ready post below carries
-  // polymaxAction: "ui.ready" so host new-build detection keeps matching.
+  // polydocksAction: "ui.ready" so host new-build detection keeps matching.
   // No ack within a few seconds means the bridge is dead: report
   // "bridge not responding" so the host shows its failed-to-load error row
   // ("Ask the agent to fix it") and records the experience error.
@@ -108,7 +108,7 @@ export const GUEST_BRIDGE_SCRIPT = `
   // Error capture & reporting to host runtime
   window.addEventListener('error', function(event) {
     window.parent.postMessage({
-      polymaxAction: 'runtime.error',
+      polydocksAction: 'runtime.error',
       error: {
         message: event.message || 'Unknown error',
         filename: event.filename || '',
@@ -123,7 +123,7 @@ export const GUEST_BRIDGE_SCRIPT = `
   window.addEventListener('unhandledrejection', function(event) {
     const reason = event.reason;
     window.parent.postMessage({
-      polymaxAction: 'runtime.error',
+      polydocksAction: 'runtime.error',
       error: {
         message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
         stack: reason && reason.stack ? reason.stack : '',
@@ -132,7 +132,7 @@ export const GUEST_BRIDGE_SCRIPT = `
     }, '*');
   });
 
-    window.polymax = {
+    window.polydocks = {
     storage: {
       get: (key) => sendHostRequest('storage.get', { key }),
       set: (key, value) => sendHostRequest('storage.set', { key, value }),
@@ -185,6 +185,6 @@ export const GUEST_BRIDGE_SCRIPT = `
       apply: (name) => { applyTheme(name); return Promise.resolve(true); },
     }
   };
-  window.polydocks = window.polymax;
+  window.polydocks = window.polydocks;
 })();
 `;

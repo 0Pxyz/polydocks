@@ -20,8 +20,8 @@ import { sanitizeUserId } from "../identity";
 export const BROWSER_MOUNT_PATH = "/api/browser/atrium";
 
 function tenantFromHeaders(headers: Headers): { tenantId: string; userId: string } {
-  const userId = sanitizeUserId(headers.get("x-polymax-user"));
-  const workspaceRaw = headers.get("x-polymax-workspace");
+  const userId = sanitizeUserId(headers.get("x-polydocks-user"));
+  const workspaceRaw = headers.get("x-polydocks-workspace");
   const workspace =
     typeof workspaceRaw === "string" && /^[a-zA-Z0-9:_-]{1,128}$/.test(workspaceRaw.trim())
       ? workspaceRaw.trim()

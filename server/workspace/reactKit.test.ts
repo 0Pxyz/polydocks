@@ -31,10 +31,10 @@ describe("React allowlist + vendored kit bundling", () => {
 
   it("bundles allowlisted imports to kit globals with normalized JSX runtime", () => {
     const js = bundleFeatureCode(REACT_SAMPLE);
-    expect(js).toContain("window.__polymaxKit.React");
-    expect(js).toContain("window.__polymaxKit.UI");
+    expect(js).toContain("window.__polydocksKit.React");
+    expect(js).toContain("window.__polydocksKit.UI");
     // Production JSX runtime: hashed helpers normalize to jsxs/jsx.
-    expect(js).toContain("window.__polymaxKit.jsxs");
+    expect(js).toContain("window.__polydocksKit.jsxs");
     expect(js).not.toMatch(/^\s*import\s/m);
     expect(js).not.toMatch(/\bjsxDEV_[A-Za-z0-9]+|\bjsx_[A-Za-z0-9]+|\bjsxs_[A-Za-z0-9]+/);
     expect(js).toContain("useState");
@@ -102,8 +102,8 @@ describe("React allowlist + vendored kit bundling", () => {
     // *string* "<script src=" inside react-dom/server output helpers).
     expect(srcdoc).not.toMatch(/<script[^>]*\bsrc\s*=\s*["']https?:/);
     expect(srcdoc).not.toMatch(/<link[^>]*\bhref\s*=\s*["']https?:/);
-    // Kit assigns globalThis.__polymaxKit (=== window.__polymaxKit in browsers).
-    expect(srcdoc).toContain("__polymaxKit");
+    // Kit assigns globalThis.__polydocksKit (=== window.__polydocksKit in browsers).
+    expect(srcdoc).toContain("__polydocksKit");
     expect(srcdoc).toContain("openContent");
     expect(srcdoc).toContain("useCapability");
     // Guest base layer: full-height chain, no native button chrome.
@@ -127,7 +127,7 @@ describe("React allowlist + vendored kit bundling", () => {
       manifest: { id: "react-kit-plug", title: "React Kit" },
       code: REACT_SAMPLE,
     });
-    expect(res.compiledSrcdoc).toContain("window.__polymaxKit");
+    expect(res.compiledSrcdoc).toContain("window.__polydocksKit");
     expect(res.compiledSrcdoc).toContain("Content-Security-Policy");
     const back = await readFeature(ws, "react-kit-plug");
     expect(back.code).toContain("useState");
@@ -136,7 +136,7 @@ describe("React allowlist + vendored kit bundling", () => {
 
   it("ships a production React build without development warnings", () => {
     const kit = getKitJs();
-    expect(kit).toContain("globalThis.__polymaxKit");
+    expect(kit).toContain("globalThis.__polydocksKit");
     expect(kit).not.toContain("Internal React error");
     expect(kit).not.toContain("Download the React DevTools");
     expect(kit).not.toContain("__DEV__");

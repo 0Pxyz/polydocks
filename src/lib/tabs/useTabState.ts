@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { create } from "zustand";
 import { platformStorage } from "@/lib/platform/storage";
 
-const TAB_STATE_KEY = "polymax-tab-state";
+const TAB_STATE_KEY = "polydocks-tab-state";
 
 type TabStateValues = Record<string, unknown>;
 

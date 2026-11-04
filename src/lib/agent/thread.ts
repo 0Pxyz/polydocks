@@ -9,7 +9,7 @@ import type { ChatAttachment } from "./attachments";
  * user scrolls back. Context windowing happens on the server.
  */
 
-const USER_ID_KEY = "polymax-agent-user-id";
+const USER_ID_KEY = "polydocks-agent-user-id";
 const USER_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 export interface ThreadMessageRecord {
@@ -68,7 +68,7 @@ export function getAgentUserId(): string {
 }
 
 function userHeaders(): Record<string, string> {
-  return { "X-Polymax-User": getAgentUserId() };
+  return { "X-Polydocks-User": getAgentUserId() };
 }
 
 function normalizeMessage(message: ThreadMessageRecord): ThreadMessageRecord {

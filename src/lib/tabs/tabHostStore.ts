@@ -10,7 +10,7 @@ import { create } from "zustand";
  *   streams, uploads, and players continue);
  * - above LIVE_LIMIT live plugin tabs, the host hibernates the least
  *   recently active one (unmounts the iframe; state restores from
- *   useTabState / polymax.storage on reopen, then a remount is expected).
+ *   useTabState / polydocks.storage on reopen, then a remount is expected).
  * Plugins never control their own lifecycle: no conditional rendering on
  * the active tab, no key that depends on the active tab.
  */

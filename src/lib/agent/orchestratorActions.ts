@@ -132,7 +132,7 @@ export async function applyOrchestratorAction(
 
     case "source.added": {
       if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("polymax:source.added", { detail: event.source }));
+        window.dispatchEvent(new CustomEvent("polydocks:source.added", { detail: event.source }));
       }
       break;
     }

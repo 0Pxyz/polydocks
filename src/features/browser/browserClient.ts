@@ -10,8 +10,8 @@ export interface BrowserSession {
 function headers(workspaceKey: string): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    "X-Polymax-User": getAgentUserId(),
-    "X-Polymax-Workspace": workspaceKey,
+    "X-Polydocks-User": getAgentUserId(),
+    "X-Polydocks-Workspace": workspaceKey,
   };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import app from "../index";
 
-describe("Polymax REST API Endpoints", () => {
+describe("Polydocks REST API Endpoints", () => {
   it("GET /api/health returns system and model status with latency < 5ms", async () => {
     const start = Date.now();
     const res = await app.fetch(new Request("http://localhost:3000/api/health"));

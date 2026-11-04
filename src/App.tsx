@@ -26,7 +26,7 @@ import { DOCK_CORE_CATALOG, MAIN_VIEW_STATIC_IDS } from "@/lib/dock/dockModel";
 import { platformStorage } from "@/lib/platform/storage";
 import { cn } from "@/lib/cn";
 
-const EXTRA_TOOLS_KEY = "polymax-extra-tools-v1";
+const EXTRA_TOOLS_KEY = "polydocks-extra-tools-v1";
 
 interface PersistedExtraTool {
   id: string;

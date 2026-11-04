@@ -19,7 +19,7 @@ const rootDir = path.resolve(__dirname, "..");
 const outDir = "/tmp/polydocks-demo";
 const baseUrl = process.env.CAPTURE_URL ?? "http://localhost:5173";
 const apiUrl = "http://localhost:3000";
-const headers = { "Content-Type": "application/json", "X-Polymax-User": "local" };
+const headers = { "Content-Type": "application/json", "X-Polydocks-User": "local" };
 
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -140,7 +140,7 @@ async function main() {
   const page = await ctx.newPage();
   page.on("pageerror", (e: any) => console.log(`[pageerror] ${String(e).slice(0, 140)}`));
   await page.addInitScript(() => {
-    localStorage.setItem("polymax_onboarding_completed_v2", "true");
+    localStorage.setItem("polydocks_onboarding_completed_v2", "true");
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForTimeout(2500);

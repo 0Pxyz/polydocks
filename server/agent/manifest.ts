@@ -22,7 +22,7 @@ import type { Permission, PluginManifest } from "../plugins/manifest";
 export const AGENT_MANIFEST: PluginManifest = {
   apiVersion: 1,
   id: "agent",
-  name: "Polymax Agent",
+  name: "Polydocks Agent",
   version: "1.0.0",
   description:
     "The privileged first-party operator: runs the agent loop over the shared tool registry under explicit permissions.",

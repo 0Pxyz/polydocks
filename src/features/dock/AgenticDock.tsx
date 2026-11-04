@@ -225,7 +225,7 @@ export function AgenticDock({
   }, []);
   const { dockStyle, dockPosition } = useThemeStore();
   const isBottom = dockPosition === "bottom";
-  // Running background tasks (registered via polymax.task) surface as a
+  // Running background tasks (registered via polydocks.task) surface as a
   // quiet dot on the owning tool: work continues with the tab hidden.
   // NOTE: select the stable tasks object (never build a fresh Set/Array in
   // the selector): an unstable selector identity retriggers subscribers on

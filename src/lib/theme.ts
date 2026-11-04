@@ -96,7 +96,7 @@ export interface ThemeConfigState {
   resetTheme: () => void;
 }
 
-const STORAGE_KEY = "polymax-theme-config";
+const STORAGE_KEY = "polydocks-theme-config";
 
 interface StoredThemeConfig {
   theme: ThemeId;
@@ -245,7 +245,7 @@ function persistConfig(config: StoredThemeConfig): boolean {
     try {
       // Dispatch custom event for plugins or dynamic iframes
       window.dispatchEvent(
-        new CustomEvent("polymax:theme-change", { detail: config })
+        new CustomEvent("polydocks:theme-change", { detail: config })
       );
     } catch {
       // Ignore event dispatch errors
@@ -257,10 +257,10 @@ function persistConfig(config: StoredThemeConfig): boolean {
 export const useThemeStore = create<ThemeConfigState>((set, get) => {
   const initial = loadInitialConfig();
 
-  // Expose on window.polymax for Agent plugins and dynamic tools
+  // Expose on window.polydocks for Agent plugins and dynamic tools
   if (typeof window !== "undefined") {
     const w = window as unknown as {
-      polymax?: {
+      polydocks?: {
         theme?: {
           setTheme: (theme: ThemeId) => void;
           setCustomAccentColor: (color: string | null) => void;
@@ -281,8 +281,8 @@ export const useThemeStore = create<ThemeConfigState>((set, get) => {
       };
     };
 
-    w.polymax = w.polymax || {};
-    w.polymax.theme = {
+    w.polydocks = w.polydocks || {};
+    w.polydocks.theme = {
       setTheme: (theme) => get().setTheme(theme),
       setCustomAccentColor: (c) => get().setCustomAccentColor(c),
       setWallpaper: (url, opts) => get().setWallpaper(url, opts),

@@ -5,7 +5,7 @@ import path from "node:path";
 import { generateServiceWorkerFile } from "../scripts/generate-sw";
 
 function makeFakeDist(): { dist: string; readSw: () => string } {
-  const dist = mkdtempSync(path.join(tmpdir(), "polymax-sw-"));
+  const dist = mkdtempSync(path.join(tmpdir(), "polydocks-sw-"));
   mkdirSync(path.join(dist, "assets"));
   writeFileSync(path.join(dist, "index.html"), "<html></html>");
   writeFileSync(path.join(dist, "assets", "main.abc123.js"), "[]");
@@ -26,13 +26,13 @@ describe("generateServiceWorkerFile", () => {
       sw.match(/const PRECACHE_URLS = (\[.*?\]);/)?.[1] ?? "[]"
     );
     expect(precacheUrls.some((url) => url.startsWith("/api"))).toBe(false);
-    expect(sw.startsWith("/* Polymax service worker")).toBe(true);
+    expect(sw.startsWith("/* Polydocks service worker")).toBe(true);
 
     rmSync(dist, { recursive: true, force: true });
   });
 
   test("fails loudly when the build has no index.html", async () => {
-    const dist = mkdtempSync(path.join(tmpdir(), "polymax-sw-empty-"));
+    const dist = mkdtempSync(path.join(tmpdir(), "polydocks-sw-empty-"));
     await expect(generateServiceWorkerFile(dist)).rejects.toThrow("index.html");
     rmSync(dist, { recursive: true, force: true });
   });
@@ -40,9 +40,9 @@ describe("generateServiceWorkerFile", () => {
   test("cache id is stable while the output is unchanged", async () => {
     const { dist, readSw } = makeFakeDist();
     await generateServiceWorkerFile(dist);
-    const first = (await readSw()).match(/polymax-([0-9a-f]+)/)?.[1];
+    const first = (await readSw()).match(/polydocks-([0-9a-f]+)/)?.[1];
     await generateServiceWorkerFile(dist);
-    const second = (await readSw()).match(/polymax-([0-9a-f]+)/)?.[1];
+    const second = (await readSw()).match(/polydocks-([0-9a-f]+)/)?.[1];
     expect(first).toBe(second);
 
     rmSync(dist, { recursive: true, force: true });

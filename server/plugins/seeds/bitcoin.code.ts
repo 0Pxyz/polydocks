@@ -20,7 +20,7 @@ export const BITCOIN_CODE = `
     const SIGN = { USD: "$", EUR: "€", GBP: "£" };
 
     function bridge() {
-      return window.polymax || {};
+      return window.polydocks || {};
     }
     async function storeGet(key) {
       try {

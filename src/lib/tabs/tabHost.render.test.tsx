@@ -54,7 +54,7 @@ function renderHost(activeId: string, ids: string[]) {
 describe("TabHost: hidden, never unmounted (0 remounts)", () => {
   beforeEach(() => {
     resetTabStateForTests();
-    platformStorage.removeItem("polymax-tab-state");
+    platformStorage.removeItem("polydocks-tab-state");
     document.body.innerHTML = "";
     for (const k of Object.keys(mounts)) delete mounts[k];
   });

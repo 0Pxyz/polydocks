@@ -12,7 +12,7 @@ describe("Docker Container Isolation & Persistent Agent-Home Security Hardening 
 
     // Named volumes block
     expect(rawYaml).toMatch(/volumes:\s*\n\s+agent-home-data:/);
-    // Polymax service volume mounts
+    // Polydocks service volume mounts
     expect(rawYaml).toContain("agent-home-data:/app/agent-home");
     expect(rawYaml).toContain("./data:/app/data");
 
@@ -26,7 +26,7 @@ describe("Docker Container Isolation & Persistent Agent-Home Security Hardening 
       if (jsonStart !== -1) {
         const compose = JSON.parse(res.stdout.slice(jsonStart));
         expect(compose.volumes["agent-home-data"]).toBeDefined();
-        const volumes = compose.services.polymax.volumes;
+        const volumes = compose.services.polydocks.volumes;
         const hasAgentHome = volumes.some((v: any) => v.target === "/app/agent-home" && v.source === "agent-home-data");
         expect(hasAgentHome).toBe(true);
       }
@@ -54,7 +54,7 @@ describe("Docker Container Isolation & Persistent Agent-Home Security Hardening 
       const jsonStart = res.stdout.indexOf("{");
       if (jsonStart !== -1) {
         const compose = JSON.parse(res.stdout.slice(jsonStart));
-        const limits = compose.services.polymax.deploy?.resources?.limits;
+        const limits = compose.services.polydocks.deploy?.resources?.limits;
         expect(limits).toBeDefined();
         expect(limits.pids).toBe(100);
       }

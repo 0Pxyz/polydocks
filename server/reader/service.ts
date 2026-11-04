@@ -218,7 +218,7 @@ export async function loadReaderContent(rawUrl: string): Promise<ReaderContent> 
       res = await fetch(hopCheck.url.toString(), {
         signal: controller.signal,
         redirect: "manual",
-        headers: { "User-Agent": "PolymaxReader/1.0", Accept: "text/html,application/xhtml+xml" },
+        headers: { "User-Agent": "PolydocksReader/1.0", Accept: "text/html,application/xhtml+xml" },
       });
       const loc = res.headers.get("location");
       if (res.status >= 300 && res.status < 400 && loc) {

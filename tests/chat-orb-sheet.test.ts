@@ -23,7 +23,7 @@ describe("chat capsule sheet (voice-first, footer picker)", () => {
   const sheet = sheetBlock();
 
   test("capsule header shows agent status with a live dot, no Thinking label", () => {
-    expect(sheet).not.toContain("Polymax Agent");
+    expect(sheet).not.toContain("Polydocks Agent");
     expect(sheet).not.toContain("Thinking");
     // A live dot communicates work while streaming; words are redundant.
     expect(sheet).toContain("animate-ping");

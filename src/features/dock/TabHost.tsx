@@ -22,7 +22,7 @@ interface TabHostProps {
  * React state is untouched). Hibernated tabs are NOT rendered here at all:
  * callers consult the tab host store and render a lightweight restore
  * placeholder instead, which remounts on activation (state restores from
- * useTabState / polymax.storage).
+ * useTabState / polydocks.storage).
  *
  * No AnimatePresence around kept tabs: exit animations unmount, which
  * defeats the contract. Enter animations belong inside each surface.

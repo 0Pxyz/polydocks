@@ -51,7 +51,7 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const open = async (url: string) => {
     setRead((r) => ({ ...r, [url]: true }));
-    try { await (window as any).polymax.openContent(url); }
+    try { await (window as any).polydocks.openContent(url); }
     catch { setNotice("Could not open this link right now — try again."); }
   };
   return (
@@ -75,7 +75,7 @@ function App() {
   const save = async () => {
     if (!title.trim()) { setError("Give this item a title first."); return; }
     setError(undefined);
-    await (window as any).polymax.storage.set("capture:last", { title, body, kind });
+    await (window as any).polydocks.storage.set("capture:last", { title, body, kind });
   };
   return (
     <FormPanel title="Capture" error={error} onSubmit={save} submitLabel="Save">
@@ -120,10 +120,10 @@ function App() {
   const [body, setBody] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { (window as any).polymax.storage.get("notes:draft").then((v: any) => { if (v) { setTitle(v.title || ""); setBody(v.body || ""); } }).catch(() => {}); }, []);
+  useEffect(() => { (window as any).polydocks.storage.get("notes:draft").then((v: any) => { if (v) { setTitle(v.title || ""); setBody(v.body || ""); } }).catch(() => {}); }, []);
   const save = async () => {
     setSaving(true);
-    await (window as any).polymax.storage.set("notes:draft", { title, body });
+    await (window as any).polydocks.storage.set("notes:draft", { title, body });
     setSaving(false);
     setSaved(true);
   };

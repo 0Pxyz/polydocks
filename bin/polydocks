@@ -628,7 +628,7 @@ async function handleAgentRun(
   };
 
   let mockLlmClient: any = undefined;
-  if (process.env.POLYMAX_CLI_MOCK_LLM === "true") {
+  if (process.env.POLYDOCKS_CLI_MOCK_LLM === "true") {
     mockLlmClient = {
       chat: {
         completions: {
@@ -637,7 +637,7 @@ async function handleAgentRun(
               {
                 message: {
                   role: "assistant",
-                  content: `Polymax agent processed: "${prompt}"`,
+                  content: `Polydocks agent processed: "${prompt}"`,
                 },
               },
             ],

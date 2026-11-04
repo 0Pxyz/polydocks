@@ -3,7 +3,7 @@ import { HOME_DOCK_TOOLS } from "../src/features/dock/AgenticDock";
 import { useOnboardingStore, ONBOARDING_COMPLETED_KEY } from "../src/lib/store/useOnboardingStore";
 import { platformStorage } from "../src/lib/platform/storage";
 
-describe("Polymax UX Polish & Native Experiences", () => {
+describe("Polydocks UX Polish & Native Experiences", () => {
   beforeEach(() => {
     platformStorage.clear();
     useOnboardingStore.getState().resetOnboarding();

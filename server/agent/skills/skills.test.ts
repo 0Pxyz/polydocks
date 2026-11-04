@@ -211,7 +211,7 @@ describe("App overview skill (always loaded, ~700 token budget)", () => {
   it("maps concepts to homes and states the surface rule", async () => {
     const content = stripSkillMetadata(await loadSkill("app-overview"));
     expect(content).toContain("plugin_files");
-    expect(content).toContain("window.polymax");
+    expect(content).toContain("window.polydocks");
     expect(content).toContain("dock.list");
     expect(content).toContain("find_capabilities");
     expect(content).toContain("search_web");

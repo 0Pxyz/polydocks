@@ -183,7 +183,7 @@ async function main() {
     await tctx.addInitScript((t) => {
       try {
         localStorage.setItem(
-          "polymax-theme-config",
+          "polydocks-theme-config",
           JSON.stringify({
             theme: t,
             customAccentColor: null,

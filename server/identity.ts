@@ -1,7 +1,7 @@
 /**
  * Lightweight local identity for the single-agent runtime.
  *
- * Polymax does not ship external auth. Each browser/device receives a stable,
+ * Polydocks does not ship external auth. Each browser/device receives a stable,
  * anonymous user id that scopes its agent thread, so two users on the same
  * server never share a transcript. The id is opaque and never used for
  * authentication or authorization: filesystem and tool grants still enforce

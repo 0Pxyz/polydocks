@@ -36,7 +36,7 @@ describe("Issue #163 — progressive context and capability discovery", () => {
     // Fast path carries the fixed core only: base prompt + guidelines.
     // The app map is on-demand now (#209): pulled via read_skill when
     // the model needs it, never injected up front.
-    expect(fastCapture.system).toContain("Polymax Agent");
+    expect(fastCapture.system).toContain("Polydocks Agent");
     expect(fastCapture.system).not.toContain("App Map");
 
     const fullCapture = { system: "" };

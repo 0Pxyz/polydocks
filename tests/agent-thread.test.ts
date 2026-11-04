@@ -29,7 +29,7 @@ function requestThread(path = "/api/agent/thread", init?: RequestInit) {
     new Request(`http://localhost:3000${path}`, {
       ...init,
       headers: {
-        "X-Polymax-User": TEST_USER,
+        "X-Polydocks-User": TEST_USER,
         ...(init?.headers as Record<string, string> | undefined),
       },
     })

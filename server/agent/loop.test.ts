@@ -15,7 +15,7 @@ describe("Agent Loop & Tool Orchestration Engine", () => {
               {
                 message: {
                   role: "assistant",
-                  content: "Welcome to Polymax! You are currently exploring Quantum Computing.",
+                  content: "Welcome to Polydocks! You are currently exploring Quantum Computing.",
                 },
               },
             ],

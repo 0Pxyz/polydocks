@@ -228,22 +228,22 @@ export function rewriteKitImports(tsCode: string): string {
 
   const preamble: string[] = [];
   if (needsReact || /<[A-Za-z]/.test(out)) {
-    preamble.push(`const React = window.__polymaxKit.React;`);
+    preamble.push(`const React = window.__polydocksKit.React;`);
     if (!/\bFragment\b/.test(tsCode.replace(/import\s+[^;]*?from\s+["']react["']\s*;?/g, ""))) {
-      preamble.push(`const Fragment = window.__polymaxKit.React.Fragment;`);
+      preamble.push(`const Fragment = window.__polydocksKit.React.Fragment;`);
     }
   }
   for (const b of reactBindings) {
-    if (b !== "React") preamble.push(`const ${b} = window.__polymaxKit.React;`);
+    if (b !== "React") preamble.push(`const ${b} = window.__polydocksKit.React;`);
   }
   if (reactNamed.size > 0) {
-    preamble.push(`const { ${[...reactNamed].join(", ")} } = window.__polymaxKit.React;`);
+    preamble.push(`const { ${[...reactNamed].join(", ")} } = window.__polydocksKit.React;`);
   }
   if (needsCreateRoot) {
-    preamble.push(`const { createRoot } = window.__polymaxKit.ReactDOMClient;`);
+    preamble.push(`const { createRoot } = window.__polydocksKit.ReactDOMClient;`);
   }
   if (uiNamed.size > 0) {
-    preamble.push(`const { ${[...uiNamed].join(", ")} } = window.__polymaxKit.UI;`);
+    preamble.push(`const { ${[...uiNamed].join(", ")} } = window.__polydocksKit.UI;`);
   }
 
   return `${preamble.join("\n")}\n${out}`;
@@ -301,9 +301,9 @@ export function bundleFeatureCode(tsCode: string): string {
   // transpiler emits version-hashed identifiers (jsxDEV_<hash> in dev,
   // jsx_<hash>/jsxs_<hash> in production); all resolve to the same kit fns.
   js = js
-    .replace(/\bjsxDEV_[A-Za-z0-9]+/g, "window.__polymaxKit.jsxDEV")
-    .replace(/\bjsxs_[A-Za-z0-9]+/g, "window.__polymaxKit.jsxs")
-    .replace(/\bjsx_[A-Za-z0-9]+/g, "window.__polymaxKit.jsx");
+    .replace(/\bjsxDEV_[A-Za-z0-9]+/g, "window.__polydocksKit.jsxDEV")
+    .replace(/\bjsxs_[A-Za-z0-9]+/g, "window.__polydocksKit.jsxs")
+    .replace(/\bjsx_[A-Za-z0-9]+/g, "window.__polydocksKit.jsx");
   if (/\bjsxDEV_[A-Za-z0-9]+|\bjsxs_[A-Za-z0-9]+|\bjsx_[A-Za-z0-9]+/.test(js)) {
     throw new Error("Security Violation: Unresolved JSX runtime after kit normalization.");
   }

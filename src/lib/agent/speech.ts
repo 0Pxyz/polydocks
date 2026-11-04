@@ -1,5 +1,5 @@
 /**
- * Web Speech API and Web Audio integration for hands-free Polymax agent interaction.
+ * Web Speech API and Web Audio integration for hands-free Polydocks agent interaction.
  * Gracefully falls back if microphone permission is denied or unsupported.
  */
 

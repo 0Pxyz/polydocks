@@ -65,7 +65,7 @@ async function backendLiterals(): Promise<Set<string>> {
   await visit(path.resolve("server"));
   const bridge = await fs.readFile(GUEST_BRIDGE, "utf-8");
   for (const m of bridge.matchAll(/["'`]([A-Za-z][\w./-]*\.[A-Za-z][\w./-]*)["'`]/g)) lits.add(m[1]);
-  lits.add("window.polymax");
+  lits.add("window.polydocks");
   lits.add("window.polydocks");
   return lits;
 }

@@ -69,20 +69,20 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
 
     await bridge.handleMessage({
       source: guestWin,
-      data: { polymaxAction: "storage.set", polymaxRequestId: 1, key: "read", value: { a: 1 } },
+      data: { polydocksAction: "storage.set", polydocksRequestId: 1, key: "read", value: { a: 1 } },
     } as any);
     expect(guestWin.receivedMessages[0]).toEqual({
-      polymaxResponseId: 1,
+      polydocksResponseId: 1,
       result: true,
       error: undefined,
     });
 
     await bridge.handleMessage({
       source: guestWin,
-      data: { polymaxAction: "storage.get", polymaxRequestId: 2, key: "read" },
+      data: { polydocksAction: "storage.get", polydocksRequestId: 2, key: "read" },
     } as any);
     expect(guestWin.receivedMessages[1]).toEqual({
-      polymaxResponseId: 2,
+      polydocksResponseId: 2,
       result: { a: 1 },
       error: undefined,
     });
@@ -106,12 +106,12 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
 
     await bridge.handleMessage({
       source: guestWin,
-      data: { polymaxAction: "openContent", polymaxRequestId: 7, url: "https://example.com/article" },
+      data: { polydocksAction: "openContent", polydocksRequestId: 7, url: "https://example.com/article" },
     } as any);
 
     expect(opened).toBe("https://example.com/article");
     expect(guestWin.receivedMessages[0]).toEqual({
-      polymaxResponseId: 7,
+      polydocksResponseId: 7,
       result: true,
       error: undefined,
     });
@@ -129,7 +129,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
     const stranger = new MockGuestWindow() as any;
     const handled = await bridge.handleMessage({
       source: stranger,
-      data: { polymaxAction: "storage.set", polymaxRequestId: 3, key: "x", value: 1 },
+      data: { polydocksAction: "storage.set", polydocksRequestId: 3, key: "x", value: 1 },
     } as any);
 
     expect(handled).toBe(false);
@@ -144,7 +144,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
 
     const handled = await bridge.handleMessage({
       source: attackerWin,
-      data: { polymaxAction: "storage.set", polymaxRequestId: 4, key: "x", value: 1 },
+      data: { polydocksAction: "storage.set", polydocksRequestId: 4, key: "x", value: 1 },
     } as any);
 
     expect(handled).toBe(false);
@@ -175,7 +175,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
       const liveWin = guestWin;
       const handled = await bridge.handleMessage({
         source: liveWin,
-        data: { polymaxAction: "getContext", polymaxRequestId: 5 },
+        data: { polydocksAction: "getContext", polydocksRequestId: 5 },
       } as any);
 
       expect(handled).toBe(true);
@@ -221,7 +221,7 @@ describe("Host bridge live-window resolution (bridge-fix regression)", () => {
 
     // A stale dispatch through B's listener handles exactly once.
     const [listener] = [...listeners.get("message")!];
-    listener({ source: guestWin, data: { polymaxAction: "openContent", polymaxRequestId: 9, url: "https://example.com/x" } });
+    listener({ source: guestWin, data: { polydocksAction: "openContent", polydocksRequestId: 9, url: "https://example.com/x" } });
     await new Promise((r) => setTimeout(r, 10));
     expect(handled).toBe(1);
 

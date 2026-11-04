@@ -73,7 +73,7 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       const code = `
         const root = document.getElementById('app');
         root.innerHTML = '<h1>Stoic Flashcards</h1>';
-        window.polymax.storage.set('count', 1);
+        window.polydocks.storage.set('count', 1);
       `;
 
       const result = (await create_plugin.execute(
@@ -95,15 +95,15 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       expect(result.pluginId).toBe(testExpId);
     });
 
-    it("injects runtime error listener and window.polymax.invoke into generated srcdoc", () => {
+    it("injects runtime error listener and window.polydocks.invoke into generated srcdoc", () => {
       const srcdoc = buildFeatureSrcdoc("console.log('hi');", {
         id: "test_doc",
         title: "Test Doc",
       });
 
-      expect(srcdoc).toContain("polymaxAction: 'runtime.error'");
+      expect(srcdoc).toContain("polydocksAction: 'runtime.error'");
       expect(srcdoc).toContain("invoke: (capabilityId, input)");
-      expect(srcdoc).toContain("window.polymax = {");
+      expect(srcdoc).toContain("window.polydocks = {");
     });
   });
 
@@ -187,15 +187,15 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       await bridge.handleMessage({
         source: fakeWindow,
         data: {
-          polymaxAction: "capability.invoke",
-          polymaxRequestId: 99,
+          polydocksAction: "capability.invoke",
+          polydocksRequestId: 99,
           capabilityId: "bridge_test.greet",
           input: { name: "Marcus" },
         },
       } as MessageEvent);
 
       expect(bridgeResponse).not.toBeNull();
-      expect(bridgeResponse.polymaxResponseId).toBe(99);
+      expect(bridgeResponse.polydocksResponseId).toBe(99);
       expect(bridgeResponse.result).toEqual({ reply: "Hello, Marcus!" });
       expect(bridgeResponse.error).toBeUndefined();
     });
@@ -218,15 +218,15 @@ describe("Experience Manifests, Error Reporting & promote_to_plugin (Issue #49)"
       await bridge.handleMessage({
         source: fakeWindow,
         data: {
-          polymaxAction: "capability.invoke",
-          polymaxRequestId: 101,
+          polydocksAction: "capability.invoke",
+          polydocksRequestId: 101,
           capabilityId: "writing.write_file",
           input: { path: "hack.txt", content: "evil" },
         },
       } as MessageEvent);
 
       expect(bridgeResponse).not.toBeNull();
-      expect(bridgeResponse.polymaxResponseId).toBe(101);
+      expect(bridgeResponse.polydocksResponseId).toBe(101);
       expect(bridgeResponse.error).toContain("Permission denied: Capability \"writing.write_file\" is not declared");
     });
   });

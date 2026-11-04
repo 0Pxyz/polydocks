@@ -12,7 +12,7 @@ import {
 import { useDockStore, loadBeside } from "../src/lib/store/useDockStore";
 import { platformStorage } from "../src/lib/platform/storage";
 
-const BESIDE_KEY = "polymax-tool-sidebar";
+const BESIDE_KEY = "polydocks-tool-sidebar";
 
 function resetBesideStorage() {
   platformStorage.removeItem(BESIDE_KEY);

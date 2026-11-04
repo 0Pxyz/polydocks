@@ -24,8 +24,8 @@ import { DOCK_TOOL_DESCRIPTIONS } from "@/lib/dock/dockModel";
 import { chatPlacement } from "@/lib/dock/dockItems";
 import type { OrbState } from "@/features/agent/Orb";
 
-const ORCH_SESSION_KEY = "polymax-orchestrator-session";
-const JOB_EVENT_CURSOR_KEY = "polymax-job-event-cursor";
+const ORCH_SESSION_KEY = "polydocks-orchestrator-session";
+const JOB_EVENT_CURSOR_KEY = "polydocks-job-event-cursor";
 
 let taskEventSource: EventSource | null = null;
 let taskStreamSession: string | null = null;
@@ -287,10 +287,10 @@ interface ConversationStoreState {
 /** Opened-source view: rendered inside the Sources plugin area, never as an overlay. */
 export type OpenedSourceView = NonNullable<ConversationStoreState["readerView"]>;
 
-const SIDE_WIDTH_KEY = "polymax-agent-side-width";
-const SOUND_KEY = "polymax-agent-sound";
-const MODEL_KEY = "polymax-agent-model";
-const EFFORT_KEY = "polymax-agent-effort";
+const SIDE_WIDTH_KEY = "polydocks-agent-side-width";
+const SOUND_KEY = "polydocks-agent-sound";
+const MODEL_KEY = "polydocks-agent-model";
+const EFFORT_KEY = "polydocks-agent-effort";
 
 function getInitialEffort(): ReasoningEffort {
   const stored = platformStorage.getItem<string>(EFFORT_KEY);
@@ -1045,7 +1045,7 @@ export const useConversationStore = create<ConversationStoreState>((set, get) =>
 
           case "source.added": {
             if (typeof window !== "undefined") {
-              window.dispatchEvent(new CustomEvent("polymax:source.added", { detail: event.source }));
+              window.dispatchEvent(new CustomEvent("polydocks:source.added", { detail: event.source }));
             }
             break;
           }

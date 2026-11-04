@@ -18,7 +18,7 @@ Theme tokens only, no hardcoded colors, no gradients, no external URLs; validate
 
 ## Bridge (guest side)
 
-Guests reach the host through `window.polymax`: `storage.get/set/remove`, `openContent` (native reader), `openUrl`, `useCapability`/`invoke` (declared capabilities only), `ui.expand/collapse`, `task.start/update/done`, `theme.get/apply`. Never raw `window.open` or ad-hoc iframes.
+Guests reach the host through `window.polydocks`: `storage.get/set/remove`, `openContent` (native reader), `openUrl`, `useCapability`/`invoke` (declared capabilities only), `ui.expand/collapse`, `task.start/update/done`, `theme.get/apply`. Never raw `window.open` or ad-hoc iframes.
 
 ## Routes (same handlers as your tools)
 

@@ -78,3 +78,6 @@ agent-home/*
 *.db
 *.db-wal
 *.db-shm
+
+# Private product/team docs (never public, never judge-facing)
+internal-docs/

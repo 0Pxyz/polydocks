@@ -1,5 +1,5 @@
 /**
- * Secret Redaction Utility for Polymax Capability Bus.
+ * Secret Redaction Utility for Polydocks Capability Bus.
  * Ensures canary secrets, credentials, and API keys are automatically redacted
  * and never leak into execution logs, SSE streams, prompts, or error stacks.
  */

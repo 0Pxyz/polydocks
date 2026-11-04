@@ -8,7 +8,7 @@ if (!fs.existsSync(config.DATA_DIR)) {
   fs.mkdirSync(config.DATA_DIR, { recursive: true });
 }
 
-const dbPath = path.join(config.DATA_DIR, "polymax.db");
+const dbPath = path.join(config.DATA_DIR, "polydocks.db");
 
 /**
  * Primary SQLite database instance
