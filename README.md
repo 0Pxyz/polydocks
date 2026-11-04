@@ -4,7 +4,10 @@
 
 *Software that adapts to your work.*
 
-[![PolyDocks showcase: the agent drives the dock](docs/assets/showcase-poster.png)](docs/assets/showcase.mp4)
+
+https://github.com/user-attachments/assets/cd41319e-3f54-4234-9d26-47bf2588c470
+
+
 *Watch the showcase (1:08): the scripted product tour plays the whole workspace — dock, themes, research feed, reader, dashboard, notes — with zero model calls. Click to play.*
 
 > 🎬 Watch: [Full product walkthrough](docs/assets/showcase.mp4)
