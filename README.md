@@ -4,7 +4,8 @@
 
 *Software that adapts to your work.*
 
-![Poly opens a note by title, selecting it in the dock](docs/assets/hero.gif)
+![Scripted product tour: Poly drives the dock, zero tokens](docs/assets/tour.gif)
+*The scripted product tour plays the whole workspace — dock, themes, research feed, reader, dashboard, notes — with zero model calls. Press play and watch.*
 
 > 🎬 Watch: [Full product walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4)
 
@@ -31,7 +32,7 @@ PolyDocks is an agentic workspace where AI doesn't stop at using existing tools.
 *Poly researches the web: the prompt ghost-types into the composer while the feed fills up beside the stage.*
 
 ![A tool Poly built](docs/assets/tour-build.png)
-*Creations the agent built, next to the reader with a video open: generated, themed, live in the dock. Roll back if you don't like it.*
+*The Bitcoin viewer Poly built: live prices, chart, currency switch — generated, themed, live in the dock. Roll back if you don't like it.*
 
 ![Notes that survive reload](docs/assets/notes-app.png)
 *Title and body autosave with a visible save state; flush on exit keeps the last keystrokes.*
