@@ -130,14 +130,6 @@ Once running, try:
 
 Checks: `bun run check` (typecheck + lint + test + build). Contributor rules: [AGENTS.md](AGENTS.md).
 
-## Project status / Hackathon
-
-Built for the **Meta Global AI Developer Hackathon**. All product code is original work from the competition period (origin ledger: `internal-docs/NEW_WORK.md`), MIT licensed.
-
-What the demo proves (one continuous take, script in `internal-docs/demo-script.md`): theme change, TinyFish research into a browsable feed, three Poly-built plugins (breathing exercise, focus timer with persistence, a brief composing Sources + Notes through the bus), an edit with rollback, approval cards, plugin manager toggles, dock rearrangement, and a reload where everything is still there.
-
-**Runs today:** single-user local runtime (`docker compose up`). **Not built yet:** per-user sandboxes, auth/multi-tenancy, remote tool store. Until those ship, do not expose the server beyond localhost.
-
 ---
 
 Demo video: [full walkthrough](docs/assets/showcase.mp4) · Vision: [docs/product-philosophy.md](docs/product-philosophy.md) · License: [MIT](LICENSE)
