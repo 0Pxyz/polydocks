@@ -177,6 +177,13 @@ const INITIAL_DOCK_STATE = {
   openIds: [] as string[],
 };
 
+/** Tools that must stay main-only: agent has its own panel, maps its own
+ *  surface, and the onboarding stage breaks when squeezed into the beside
+ *  panel (tour loses main focus, choreography fights over besideSelected).
+ *  Browser/notes stay allowed here: the scripted tour mounts them beside
+ *  the stage on purpose. Single source for the store-level guard. */
+const BESIDE_BLOCKED_IDS = new Set(["agent", "maps", "onboarding"]);
+
 export const useDockStore = create<DockState>((set, get) => {
   const initialDock = loadDockSnapshot();
   const legacy = deriveLegacy(initialDock);
@@ -193,6 +200,8 @@ export const useDockStore = create<DockState>((set, get) => {
     openBeside: (toolId) =>
       set((state) => {
         if (!toolId || toolId === "agent") return state;
+        // Main-only surfaces never belong in the beside panel.
+        if (BESIDE_BLOCKED_IDS.has(toolId)) return state;
         // Ensure the record exists and is not closed; never steal main focus.
         let dock = state.dock;
         const record = dock.items[toolId];
@@ -468,6 +477,13 @@ export const useDockStore = create<DockState>((set, get) => {
           const target = params?.id ?? state.dock.focusedId;
           if (!target || target === "agent") {
             return { ok: false, message: "Nothing suitable to open beside." };
+          }
+          // Main-only surfaces (onboarding stage) are rejected here so
+          // verb/CLI paths can't bypass the UI eligibility check either.
+          // Browser/notes stay allowed: the scripted tour mounts them
+          // beside the stage on purpose.
+          if (BESIDE_BLOCKED_IDS.has(target)) {
+            return { ok: false, message: `"${target}" stays in the main view.` };
           }
           if (state.besideIds.includes(target)) {
             get().closeBeside(target);

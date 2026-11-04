@@ -531,12 +531,15 @@ export default function App() {
         }
         if (matched.action.id === "sidebar.beside") {
           // Same store path as the agent/CLI verb. Opening never steals
-          // focus; there is nothing to focus back to.
+          // focus; there is nothing to focus back to. The onboarding stage
+          // is ignored so the shortcut can never shove it into the side
+          // panel (browser/notes stay keyboard-ineligible via
+          // isBesideEligible, tour-only beside).
           e.preventDefault();
           const focused = useDockStore.getState().dock.focusedId;
           if (focused && isBesideEligible(focused, besideDynamicIds)) {
             handleOpenBeside(focused);
-          } else {
+          } else if (!focused) {
             dock.runDockAction("sidebar.beside");
           }
           return;
