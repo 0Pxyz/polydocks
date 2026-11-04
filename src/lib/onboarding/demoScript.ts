@@ -130,8 +130,8 @@ export async function typePromptText(
   prompt: string,
   opts?: { tickMs?: number; charsPerTick?: number }
 ): Promise<void> {
-  const tickMs = opts?.tickMs ?? 30;
-  const charsPerTick = opts?.charsPerTick ?? 6;
+  const tickMs = opts?.tickMs ?? 50;
+  const charsPerTick = opts?.charsPerTick ?? 2;
   if (reducedMotion()) {
     setDraftText(prompt);
     await sleep(300);
@@ -342,16 +342,16 @@ async function runAction(step: OnboardingStep, action: DemoAction): Promise<void
     case "type":
       await typeGhostText(action.text);
       await gate(step);
-      await sleep(reducedMs(400));
+      await sleep(reducedMs(600));
       return;
     case "open":
       openTool(action.id);
-      await sleep(reducedMs(900));
+      await sleep(reducedMs(1600));
       return;
     case "beside":
       showBeside(action.id);
       spotTo(`[data-dock-tool-id="${action.id}"]`);
-      await sleep(reducedMs(1200));
+      await sleep(reducedMs(1600));
       return;
     case "theme": {
       try {
@@ -361,7 +361,7 @@ async function runAction(step: OnboardingStep, action: DemoAction): Promise<void
       } catch {
         pushThought("Theme store unavailable in this context");
       }
-      await sleep(reducedMs(900));
+      await sleep(reducedMs(2000));
       return;
     }
     case "wallpaper": {
@@ -370,7 +370,7 @@ async function runAction(step: OnboardingStep, action: DemoAction): Promise<void
       } catch {
         pushThought("Theme store unavailable in this context");
       }
-      await sleep(reducedMs(900));
+      await sleep(reducedMs(1500));
       return;
     }
     case "feedItems": {
@@ -383,7 +383,7 @@ async function runAction(step: OnboardingStep, action: DemoAction): Promise<void
         } catch {
           // One bad item never stops the feed.
         }
-        await sleep(reducedMs(600));
+        await sleep(reducedMs(1100));
       }
       return;
     }
@@ -405,7 +405,7 @@ async function runAction(step: OnboardingStep, action: DemoAction): Promise<void
       } catch {
         // Reader store unavailable — the browser still shows the feed.
       }
-      await sleep(reducedMs(900));
+      await sleep(reducedMs(1500));
       return;
     }
     case "note": {
@@ -427,25 +427,25 @@ async function runAction(step: OnboardingStep, action: DemoAction): Promise<void
       } catch {
         // Notes unavailable — the surface still opens honestly empty.
       }
-      await sleep(reducedMs(600));
+      await sleep(reducedMs(1200));
       return;
     }
     case "memoryDemo":
       // Demo-only animation: never written to the user's real memory.
       pushThought(`Demo memory saved (demo only): ${action.text}`);
-      await sleep(reducedMs(1200));
+      await sleep(reducedMs(2200));
       return;
     case "dashboard":
       showBeside("demo-dashboard");
       spotTo('[data-tour="dashboard"]');
-      await sleep(reducedMs(1500));
+      await sleep(reducedMs(2000));
       return;
     case "wait":
       await sleep(reducedMs(action.ms));
       return;
     case "spot":
       spotTo(action.selector);
-      await sleep(reducedMs(500));
+      await sleep(reducedMs(800));
       return;
     case "closeBeside":
       clearDemoBeside();
@@ -482,14 +482,14 @@ async function typeGhostText(text: string): Promise<void> {
     return;
   }
   setDraft("");
-  for (let i = 0; i < text.length; i += 6) {
+  for (let i = 0; i < text.length; i += 2) {
     if (demoCancelled || !isDemoAutoplay()) throw new Error("demo-cancelled");
     // Fresh read every tick: the store replaces its state object on each
     // set, so a cached snapshot would always look "taken over".
     const cur = getDraft();
     if (cur !== null && cur !== text.slice(0, i)) throw new Error("demo-cancelled");
-    setDraft(text.slice(0, i + 6));
-    await sleep(30);
+    setDraft(text.slice(0, i + 2));
+    await sleep(50);
   }
 }
 
@@ -787,9 +787,9 @@ function stepActions(step: OnboardingStep): DemoAction[] {
         { kind: "say", text: "Meet Poly — this dock is operated, not decorated." },
         { kind: "spot", selector: '[data-dock-tool-id="store"]' },
         { kind: "beside", id: "store" },
-        { kind: "wait", ms: 1800 },
+        { kind: "wait", ms: 2200 },
         { kind: "beside", id: "creations" },
-        { kind: "wait", ms: 1800 },
+        { kind: "wait", ms: 2200 },
         { kind: "closeBeside" },
       ];
     case "customize":
@@ -834,9 +834,9 @@ function stepActions(step: OnboardingStep): DemoAction[] {
         { kind: "say", text: "Video center stage, notes riding shotgun." },
         { kind: "open", id: "browser" },
         { kind: "reader", item: video },
-        { kind: "wait", ms: 2000 },
+        { kind: "wait", ms: 3000 },
         { kind: "beside", id: "notes" },
-        { kind: "wait", ms: 2500 },
+        { kind: "wait", ms: 3000 },
         { kind: "closeBeside" },
       ];
     }
@@ -845,9 +845,9 @@ function stepActions(step: OnboardingStep): DemoAction[] {
         ...type,
         { kind: "say", text: "The dashboard mounts widget by widget, from the feed." },
         { kind: "beside", id: "creations" },
-        { kind: "wait", ms: 1500 },
-        { kind: "dashboard" },
         { kind: "wait", ms: 2500 },
+        { kind: "dashboard" },
+        { kind: "wait", ms: 3500 },
         { kind: "closeBeside" },
       ];
     case "remember":
@@ -861,7 +861,7 @@ function stepActions(step: OnboardingStep): DemoAction[] {
           body: "Goal: hackathon demo. Setup: calm dark workspace, donut GIF background, research feed + dashboard.",
         },
         { kind: "beside", id: "notes" },
-        { kind: "wait", ms: 2200 },
+        { kind: "wait", ms: 3000 },
         { kind: "closeBeside" },
       ];
     case "handoff":
@@ -904,7 +904,7 @@ export async function runDemoStep(step: OnboardingStep): Promise<boolean> {
   pushThought("Poly is on it…");
   try {
     const reduce = reducedMotion();
-    await pause(reduce ? 150 : 700);
+    await pause(reduce ? 200 : 1000);
     await runActions(step, stepActions(step));
     trace(step, "done");
     return true;

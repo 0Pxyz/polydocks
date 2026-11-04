@@ -24,19 +24,19 @@ PolyDocks is an agentic workspace where AI doesn't stop at using existing tools.
 
 ## See it
 
-![The dock](docs/assets/dock.png)
-*The dock bar holds every panel Poly opens; the Orb is Poly. Jump tools with Ctrl+Shift+1 to 9, or press Ctrl+K and ask.*
+![The dock](docs/assets/tour-dock.png)
+*The dock bar holds every panel; the Orb is Poly. The scripted product tour plays here — token-free, replayable. Jump tools with Ctrl+Shift+1 to 9, or press Ctrl+K and ask.*
 
-![Poly at work](docs/assets/agent-working.png)
-*The scripted product tour drives the real dock — ghost-typed prompt, settings open beside the stage, themes cycling live. Zero tokens.*
+![Poly at work](docs/assets/tour-research.png)
+*Poly researches the web: the prompt ghost-types into the composer while the feed fills up beside the stage.*
 
-![A tool Poly built](docs/assets/plugin-built.png)
+![A tool Poly built](docs/assets/tour-build.png)
 *Creations the agent built, next to the reader with a video open: generated, themed, live in the dock. Roll back if you don't like it.*
 
-![Notes that survive reload](docs/assets/notes.png)
+![Notes that survive reload](docs/assets/notes-app.png)
 *Title and body autosave with a visible save state; flush on exit keeps the last keystrokes.*
 
-![Research that stays](docs/assets/browser.png)
+![Research that stays](docs/assets/feed-browser.png)
 *The browser next to the sources feed: everything Poly reads is saved to the workspace with its brand mark.*
 
 ## How Poly uses Meta technologies
