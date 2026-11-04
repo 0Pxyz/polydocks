@@ -10,9 +10,12 @@ import { DOCK_CORE_CATALOG } from "../src/lib/dock/dockModel";
  */
 describe("taxonomy audit (#362)", () => {
   const root = path.resolve(import.meta.dir, "..");
-  const report = fs.readFileSync(path.join(root, "internal-docs/plugin-taxonomy-audit.md"), "utf-8");
+  const reportPath = path.join(root, "internal-docs/plugin-taxonomy-audit.md");
+  // Private team doc (gitignored): skip on public checkouts.
+  const report = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, "utf-8") : null;
+  const docIt = report ? it : it.skip;
 
-  it("covers the six capabilities and the recommendation matrix", () => {
+  docIt("covers the six capabilities and the recommendation matrix", () => {
     for (const cap of ["Tasks", "Notes", "Files", "Research", "Code/Terminal", "Plugin Store"]) {
       expect(report).toContain(cap);
     }
@@ -21,13 +24,13 @@ describe("taxonomy audit (#362)", () => {
     }
   });
 
-  it("names every first-party plugin with a verdict", () => {
+  docIt("names every first-party plugin with a verdict", () => {
     for (const id of ["browser", "notes", "sources", "sandbox", "files", "onboarding", "kit-gallery", "inspect"]) {
       expect(report).toContain(`\`${id}\``);
     }
   });
 
-  it("dock claims match the real catalog", () => {
+  docIt("dock claims match the real catalog", () => {
     const ids = DOCK_CORE_CATALOG.map((d) => d.id);
     expect(ids).toContain("browser");
     expect(ids).toContain("notes");
