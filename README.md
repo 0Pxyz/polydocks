@@ -105,4 +105,4 @@ Details: [internal-docs/tinyfish.md](internal-docs/tinyfish.md) · contributor r
 
 ## Links
 
-Demo video: [full walkthrough](docs/assets/showcase.mp4) · Judge's guide: [docs/hackathon.md](docs/hackathon.md) · Vision: [docs/product-philosophy.md](docs/product-philosophy.md) · Working material: [internal-docs/](internal-docs/) · License: [MIT](LICENSE)
+Demo video: [full walkthrough](docs/assets/showcase.mp4) · Judge's guide: [docs/hackathon.md](docs/hackathon.md) · Vision: [docs/product-philosophy.md](docs/product-philosophy.md) · License: [MIT](LICENSE)
