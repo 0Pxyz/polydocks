@@ -25,13 +25,13 @@ PolyDocks is an agentic workspace where AI doesn't stop at using existing tools.
 ## See it
 
 ![The dock](docs/assets/dock.png)
-*The dock bar holds every panel Poly opened — here the Bitcoin tool it built, live with real prices.*
+*The dock bar holds every panel Poly opens; the Orb is Poly. Jump tools with Ctrl+Shift+1 to 9, or press Ctrl+K and ask.*
 
 ![Poly at work](docs/assets/agent-working.png)
-*Short thoughts rise as Poly searches, reads, and opens things. Finished work lands as panels, not chat logs.*
+*The scripted product tour drives the real dock — ghost-typed prompt, settings open beside the stage, themes cycling live. Zero tokens.*
 
 ![A tool Poly built](docs/assets/plugin-built.png)
-*The Bitcoin viewer: generated, themed, live in the dock. Roll back if you don't like it.*
+*Creations the agent built, next to the reader with a video open: generated, themed, live in the dock. Roll back if you don't like it.*
 
 ![Notes that survive reload](docs/assets/notes.png)
 *Title and body autosave with a visible save state; flush on exit keeps the last keystrokes.*
