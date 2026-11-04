@@ -18,17 +18,23 @@ import { useDockStore } from "@/lib/store/useDockStore";
 import { shouldPauseTourOnTakeover } from "@/lib/onboarding/tourTakeover";
 import { useThemeStore } from "@/lib/theme";
 import {
+  clearDemoMarks,
+  consumeDemoAdopted,
+  markDemoAdopted,
   isDemoAutoplay,
   isDemoBusy,
+  startDemoAutoplay,
   stopDemoAutoplay,
   restoreThemeSnapshot,
   restoreDockSnapshot,
+  snapshotThemeOnce,
   deleteDemoData,
   runDemoStep,
   snapshotStep,
   undoDemoStep,
   subscribeSpot,
   getSpotSelector,
+  resolveSpotRect,
   isLiveAuto,
   stopLiveAuto,
   runLiveAutoStep,
@@ -71,6 +77,9 @@ export function LiveOnboarding() {
   // streaming, a demo script is playing, or any scripted turn is in
   // flight (view- or engine-started), the tick reschedules instead of
   // advancing — a step change mid-run would silently kill the script.
+  // Handoff never auto-wipes: timing out there adopts the workspace
+  // (same as "Keep"), so the demo's theme/feed/notes survive unless the
+  // user explicitly cleans up.
   const isStreaming = useConversationStore((s) => s.isStreaming);
   const [demoPlaying, setDemoPlaying] = useState(false);
   useEffect(() => {
@@ -85,6 +94,8 @@ export function LiveOnboarding() {
       if (currentStepIndex < ONBOARDING_STEPS.length - 1) {
         nextStep();
       } else {
+        clearDemoMarks();
+        markDemoAdopted();
         completeDemo();
       }
     };
@@ -99,8 +110,16 @@ export function LiveOnboarding() {
   // paused, the timer reschedules); resume continues where it stopped.
   // Pause must NOT stop autoplay — stopping cancels the in-flight script
   // and the tour could never resume (the engine only kicks on step entry).
+  //
+  // Teardown runs ONLY on the open → closed transition (never on mount,
+  // where isOpen is already false), and is skipped when the user adopted
+  // the workspace (Keep / handoff timeout): the theme, dock and demo
+  // data stay exactly as the tour left them.
+  const wasOpenRef = useRef(isOpen);
   useEffect(() => {
-    if (!isOpen) {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (wasOpen && !isOpen && !consumeDemoAdopted()) {
       stopDemoAutoplay();
       stopLiveAuto();
       restoreThemeSnapshot();
@@ -175,18 +194,33 @@ export function LiveOnboarding() {
     // Drop pending thought callbacks on step change/close so no ghost
     // reasoning fires after the user moved on or skipped.
     //
-    // Demo autoplay: token-free scripted run (no model). The Play button
-    // starts the chain; each step entry continues it until handoff, pause
-    // or skip. Handoff has no script — the timer completes the tour.
-    if (isDemoAutoplay() && currentStep !== "idle" && currentStep !== "handoff") {
+    // Demo autoplay: token-free scripted run (no model). The tour is
+    // self-driving: the script starts with the tour so every step
+    // performs its action (ghost-typed prompt, live theme/dock/feed
+    // changes) instead of showing an empty stage. The Play button only
+    // re-kicks the current step; the engine chains the rest until
+    // handoff, pause or skip. Handoff has no script — the timer
+    // completes the tour.
+    if (!isLiveAuto() && currentStep !== "idle" && currentStep !== "handoff") {
+      if (!isDemoAutoplay()) {
+        stopLiveAuto();
+        snapshotThemeOnce();
+        snapshotDockOnce();
+        startDemoAutoplay();
+      }
       const store = useOnboardingStore.getState();
-      stopLiveAuto();
-      snapshotDockOnce();
+      // Re-entry guard: the step may have changed while the script ran
+      // (user pressed next/prev or arrows mid-script, firing a second
+      // run in parallel). Only the run matching the current step may
+      // advance — otherwise a stale run skips a step and the timer is
+      // released while the new run is still in flight.
+      const stepAtStart = currentStep;
       setDemoPlaying(true);
-      void runDemoStep(currentStep).then(
+      void runDemoStep(stepAtStart).then(
         (ran) => {
           setDemoPlaying(false);
           if (!ran || !isDemoAutoplay()) return;
+          if (useOnboardingStore.getState().currentStep !== stepAtStart) return;
           store.nextStep();
         },
         (err) => {
@@ -246,11 +280,19 @@ export function LiveOnboarding() {
     prevStep();
   };
 
-  // Keyboard navigation: Esc to skip, arrows to navigate, Space to toggle pause
+  // Keyboard navigation: Esc to skip, arrows to navigate, Space to toggle pause.
+  // Never steals keys while typing: chat inputs own their keys (Space must
+  // reach the composer so the draft stays editable), and a focused button
+  // keeps its native Space activation.
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing =
+        !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      if (typing && e.key !== "Escape") return;
+      if (e.key === " " && t?.closest?.("button")) return;
       if (e.key === "Escape") {
         e.preventDefault();
         skipDemo();
@@ -307,10 +349,9 @@ export function LiveOnboarding() {
       <motion.div
         initial={{ opacity: 0, y: yOffset }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: yOffset }}
         transition={spring.soft}
         className={cn(
-          "flex w-full gap-3 px-4 py-2 bg-[var(--bg-void)]/95 border border-white/10 shadow-2xl backdrop-blur-xl justify-between",
+          "onboarding-tour-pill flex w-full gap-3 px-4 py-2 bg-[var(--bg-void)]/95 border border-white/10 shadow-2xl backdrop-blur-xl justify-between",
           isResearch ? "flex-col rounded-2xl gap-1.5" : "flex-row items-center rounded-full"
         )}
       >
@@ -433,31 +474,48 @@ export function LiveOnboarding() {
  * moves to whatever the demo is driving (dock tool, composer, dashboard).
  * Pointer-transparent and below the tour pill; static under reduced
  * motion. Driven by demoScript.spotTo — cleared at every step end.
+ *
+ * The box is re-resolved on an interval (not cached): beside open/close
+ * and chat sheet changes reflow the dock without scroll/resize events,
+ * and a cached rect floats over empty space as a ghost ring. A missing
+ * or zero-size target hides the ring instead.
  */
 function DemoSpotlight() {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const isReduced = prefersReducedMotion();
 
   useEffect(() => {
+    let alive = true;
+    let lastKey = "";
     const update = () => {
-      const sel = getSpotSelector();
-      if (!sel) {
-        setRect(null);
+      if (!alive) return;
+      const box = resolveSpotRect(getSpotSelector());
+      if (!box) {
+        if (lastKey !== "") {
+          lastKey = "";
+          setRect(null);
+        }
         return;
       }
-      const el = document.querySelector(sel);
-      setRect(el ? el.getBoundingClientRect() : null);
+      const key = `${Math.round(box.x)}:${Math.round(box.y)}:${Math.round(box.width)}:${Math.round(box.height)}`;
+      if (key !== lastKey) {
+        lastKey = key;
+        setRect(new DOMRect(box.x, box.y, box.width, box.height));
+      }
     };
     update();
     const unsub = subscribeSpot(update);
+    const iv = setInterval(update, isReduced ? 2000 : 500);
     window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);
     return () => {
+      alive = false;
       unsub();
+      clearInterval(iv);
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, []);
+  }, [isReduced]);
 
   if (!rect || rect.width === 0) return null;
   const pad = 6;
@@ -489,7 +547,8 @@ const ONBOARDING_CHIP_CSS = `
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
+/* Scoped to the tour pill: never touches app-wide animations. */
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; }
+  .onboarding-tour-pill *, .onboarding-tour-stage * { animation: none !important; }
 }
 `;

@@ -520,31 +520,24 @@ function openTool(id: string): void {
 const demoBesideIds: string[] = [];
 
 /**
- * Demo surfaces open BESIDE the tour stage (never in place of it): the
- * onboarding design keeps the stage visible while settings, tools, feed
- * or notes appear next to it. Falls back to a main-view open where the
- * beside panel is unavailable.
+ * Demo surfaces open CENTERED in the main view (never in place of the
+ * tour narrative, which lives in the bottom chat). The beside panel is
+ * parked for the tour until its open/layout flakiness is fixed — showing
+ * here keeps the stage visible in the dock while settings, tools, feed
+ * or notes take the main view one at a time.
  */
 function showBeside(id: string): void {
-  try {
-    const dock = useDockStore.getState();
-    if (typeof dock.openBeside === "function") {
-      dock.openBeside(id);
-      if (!demoBesideIds.includes(id)) demoBesideIds.push(id);
-      return;
-    }
-  } catch {
-    // Store unavailable (tests) — narration still carries the tour.
-  }
   openTool(id);
+  if (!demoBesideIds.includes(id)) demoBesideIds.push(id);
 }
 
-/** Close only the beside tabs this demo opened. */
+/** Close only the center tabs this demo opened (never the user's own). */
 function clearDemoBeside(): void {
   try {
     const dock = useDockStore.getState();
     for (const id of demoBesideIds.splice(0)) {
-      if (typeof dock.closeBeside === "function") dock.closeBeside(id);
+      if (dockSnapshot?.openIds.includes(id)) continue;
+      dock.closeTool(id);
     }
   } catch {
     demoBesideIds.length = 0;
@@ -582,6 +575,22 @@ export async function deleteDemoData(): Promise<void> {
       // Already gone or unreachable — trace still clears.
     }
   }
+}
+
+/** Adopt-the-demo flag: set when the user keeps the workspace (Keep
+ *  button or handoff timeout). The tour-close teardown consumes it and
+ *  skips the restore/delete pass, so the theme, dock and demo data stay
+ *  exactly as the tour left them. */
+let demoAdopted = false;
+
+export function markDemoAdopted(): void {
+  demoAdopted = true;
+}
+
+export function consumeDemoAdopted(): boolean {
+  const adopted = demoAdopted;
+  demoAdopted = false;
+  return adopted;
 }
 
 /** Adopt the demo state: keep everything, drop the restore markers. */
@@ -705,6 +714,32 @@ export async function cleanupDemo(): Promise<void> {
 
 let spotSelector: string | null = null;
 const spotListeners = new Set<() => void>();
+
+/**
+ * Resolve a live spotlight box for a selector. Null when the target is
+ * missing or has no box (hidden, unmounted, zero-size): the ring must
+ * hide instead of floating where the target used to be. Beside open/close
+ * and chat sheet changes reflow the dock without scroll/resize events,
+ * so callers must re-resolve instead of caching one rect.
+ */
+export function resolveSpotRect(selector: string | null): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null {
+  if (!selector) return null;
+  try {
+    if (typeof document === "undefined") return null;
+    const el = document.querySelector(selector);
+    if (!el || typeof (el as Element).getBoundingClientRect !== "function") return null;
+    const r = (el as Element).getBoundingClientRect();
+    if (!r || r.width === 0 || r.height === 0) return null;
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  } catch {
+    return null;
+  }
+}
 
 export function spotTo(selector: string | null): void {
   spotSelector = selector;

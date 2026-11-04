@@ -15,6 +15,8 @@ import {
   snapshotDockOnce,
   isDemoStepInFlight,
   clearDemoMarks,
+  markDemoAdopted,
+  undoDemoStep,
   cleanupDemo,
 } from "@/lib/onboarding/demoScript";
 import { Orb } from "@/features/agent/Orb";
@@ -147,7 +149,7 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
 
   return (
     <div
-      className="flex-1 w-full h-full overflow-y-auto flex flex-col items-center justify-center gap-2 px-6 py-8 font-sans select-none"
+      className="onboarding-tour-stage flex-1 w-full h-full overflow-y-auto flex flex-col items-center justify-center gap-2 px-6 py-8 font-sans select-none"
       aria-label="Product walkthrough"
     >
       {/* Live thought line */}
@@ -221,13 +223,14 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
               type="button"
               onClick={() => {
                 clearDemoMarks();
+                markDemoAdopted();
                 completeDemo();
                 onDismiss?.();
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[var(--accent-lime)]/15 text-[var(--accent-lime)] hover:bg-[var(--accent-lime)]/25 transition-colors cursor-pointer"
               title="Keep the demo theme, feed, notes and layout"
             >
-              Manter este workspace
+              Keep this workspace
             </button>
             <button
               type="button"
@@ -240,7 +243,7 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
               className="inline-flex items-center px-3 py-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors cursor-pointer"
               title="Restore the pre-tour look and delete demo sources and notes"
             >
-              Limpar demo
+              Clean up demo
             </button>
           </div>
         </div>
@@ -272,7 +275,11 @@ export function OnboardingPluginView({ onDismiss }: OnboardingPluginViewProps) {
           </button>
           <button
             type="button"
-            onClick={prevStep}
+            onClick={() => {
+              // Undo this step's visual changes first, like the tour pill.
+              undoDemoStep();
+              prevStep();
+            }}
             disabled={currentStepIndex === 0}
             className="p-1.5 rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:pointer-events-none hover:bg-white/10 transition-colors cursor-pointer"
             title="Previous step"

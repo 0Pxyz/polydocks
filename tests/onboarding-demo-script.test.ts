@@ -230,8 +230,9 @@ describe("demo script runner", () => {
       resolve(__dirname, "../src/features/onboarding/OnboardingPluginView.tsx"),
       "utf8"
     );
-    expect(view).toContain("Manter este workspace");
-    expect(view).toContain("Limpar demo");
+    expect(view).toContain("Keep this workspace");
+    expect(view).toContain("Clean up demo");
+    expect(view).toContain("markDemoAdopted");
     expect(view).toContain("cleanupDemo");
     expect(view).toContain("clearDemoMarks");
   });
