@@ -4,8 +4,8 @@
 
 *Software that adapts to your work.*
 
-![Scripted product tour: Poly drives the dock, zero tokens](docs/assets/tour.gif)
-*The scripted product tour plays the whole workspace — dock, themes, research feed, reader, dashboard, notes — with zero model calls. Press play and watch.*
+[![PolyDocks showcase: the agent drives the dock](docs/assets/showcase-poster.png)](docs/assets/showcase.mp4)
+*Watch the showcase (1:08): the scripted product tour plays the whole workspace — dock, themes, research feed, reader, dashboard, notes — with zero model calls. Click to play.*
 
 > 🎬 Watch: [Full product walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4)
 
