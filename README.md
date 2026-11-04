@@ -7,7 +7,7 @@
 [![PolyDocks showcase: the agent drives the dock](docs/assets/showcase-poster.png)](docs/assets/showcase.mp4)
 *Watch the showcase (1:08): the scripted product tour plays the whole workspace — dock, themes, research feed, reader, dashboard, notes — with zero model calls. Click to play.*
 
-> 🎬 Watch: [Full product walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4)
+> 🎬 Watch: [Full product walkthrough](docs/assets/showcase.mp4)
 
 Most AI assistants are limited to the tools they are given. They answer inside a chat box and forget everything when you close the tab. PolyDocks starts from a different idea: **software should adapt to people's needs, not the other way around** — so the workspace itself is operated by the agent. You give Poly a task. It can research the web, rearrange your dock, run code in a sandbox — and when no existing tool fits, it can **create a new plugin, run it, and bring it directly into your workspace**. The bet is simple — what if an agent could build the tools it needs? That is PolyDocks.
 
@@ -105,4 +105,4 @@ Details: [internal-docs/tinyfish.md](internal-docs/tinyfish.md) · contributor r
 
 ## Links
 
-Demo video: [full walkthrough](docs/media/videos/polydocks-product-walkthrough.mp4) · Judge's guide: [docs/hackathon.md](docs/hackathon.md) · Vision: [docs/product-philosophy.md](docs/product-philosophy.md) · Working material: [internal-docs/](internal-docs/) · License: [MIT](LICENSE)
+Demo video: [full walkthrough](docs/assets/showcase.mp4) · Judge's guide: [docs/hackathon.md](docs/hackathon.md) · Vision: [docs/product-philosophy.md](docs/product-philosophy.md) · Working material: [internal-docs/](internal-docs/) · License: [MIT](LICENSE)
