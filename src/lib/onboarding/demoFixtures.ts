@@ -50,12 +50,11 @@ export const DEMO_FIXTURES: DemoFixtureItem[] = [
   },
   {
     kind: "video",
-    title: "How to Get Your First Customers | Startup School",
-    site: "YouTube · YC",
-    url: "https://www.youtube.com/watch?v=hyYCn_kAngI",
-    hook: "Video — plays in the native reader.",
-    body: "# Demo summary\n\nY Combinator's Startup School session on getting early customers: do things that don't scale, talk to users, and charge from day one.",
-    durationSec: 754,
+    title: "AI Agents, Clearly Explained",
+    site: "YouTube",
+    url: "https://www.youtube.com/watch?v=FwOTs4UxQS4",
+    hook: "Video — what makes an agent different from a chatbot or workflow.",
+    body: "# Demo summary\n\nJeff Su draws the line between passive chatbots, fixed human-set workflows, and true agents that reason, act with tools, and iterate toward a goal on their own — the same loop Poly runs for every task.",
   },
   {
     kind: "article",
